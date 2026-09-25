@@ -79,8 +79,8 @@ jobs:
       # (`npm run build`) as part of that separate command, unaffected by
       # --ignore-scripts on this install.
       - run: npm ci --ignore-scripts
-      - run: mkdir -p ../fiscus-pack ../fiscus-install
-      - run: npm pack --pack-destination ../fiscus-pack
+      - run: mkdir -p ../segreant-pack ../segreant-install
+      - run: npm pack --pack-destination ../segreant-pack
       # Software bill of materials for the RUNTIME tree, from npm's own
       # generator (no dependency added to make one). The zero-runtime-dependency
       # rule is asserted against the SBOM, not against a sentence: a runtime
@@ -90,32 +90,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run --silent sbom > fiscus-runtime.cdx.json
-          node scripts/check-sbom.mjs fiscus-runtime.cdx.json
+          npm run --silent sbom > segreant-runtime.cdx.json
+          node scripts/check-sbom.mjs segreant-runtime.cdx.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: fiscus-runtime-sbom
-          path: fiscus-runtime.cdx.json
+          name: segreant-runtime-sbom
+          path: segreant-runtime.cdx.json
           if-no-files-found: error
           retention-days: 30
-      - working-directory: ../fiscus-install
-        run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
-      - working-directory: ../fiscus-install
-        run: ./node_modules/.bin/fiscus --help
+      - working-directory: ../segreant-install
+        run: npm install --ignore-scripts --no-package-lock ../segreant-pack/segreant-*.tgz
+      - working-directory: ../segreant-install
+        run: ./node_modules/.bin/segreant --help
       # Prove the packed executable, compiled dashboard, static HTML, and isolated
       # synthetic ledger work together. The trial is intentionally synthetic and
       # must remain review-only — this is a package/runtime proof, not model evidence.
       - name: Packaged demo dashboard smoke
-        working-directory: ../fiscus-install
+        working-directory: ../segreant-install
         shell: bash
         run: |
           set -euo pipefail
-          export FISCUS_HOME="$PWD/.fiscus-home"
-          ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --json >scope-preview.json
-          ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --project-ref proj_ci_package --apply --json >scope-active.json
-          ./node_modules/.bin/fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
-          ./node_modules/.bin/fiscus demo >/dev/null
-          ./node_modules/.bin/fiscus start --demo --port 18090 --dashboard-port 18091 >fiscus-dashboard.log 2>&1 &
+          export SEGREANT_HOME="$PWD/.segreant-home"
+          ./node_modules/.bin/segreant billing scope set --account-ref ci-package-smoke --json >scope-preview.json
+          ./node_modules/.bin/segreant billing scope set --account-ref ci-package-smoke --project-ref proj_ci_package --apply --json >scope-active.json
+          ./node_modules/.bin/segreant billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
+          ./node_modules/.bin/segreant demo >/dev/null
+          ./node_modules/.bin/segreant start --demo --port 18090 --dashboard-port 18091 >segreant-dashboard.log 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 40); do
@@ -261,13 +261,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: fiscus
-          POSTGRES_PASSWORD: fiscus-ci-only
-          POSTGRES_DB: fiscus_team
+          POSTGRES_USER: segreant
+          POSTGRES_PASSWORD: segreant-ci-only
+          POSTGRES_DB: segreant_team
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U fiscus -d fiscus_team"
+          --health-cmd "pg_isready -U segreant -d segreant_team"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 20
@@ -295,7 +295,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Real PostgreSQL integration test
         env:
-          DATABASE_URL: postgres://fiscus:fiscus-ci-only@localhost:5432/fiscus_team
+          DATABASE_URL: postgres://segreant:segreant-ci-only@localhost:5432/segreant_team
         run: npm run test:postgres
 
   # The pull_request event's default checkout is GitHub's synthetic merge ref.

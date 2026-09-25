@@ -1,19 +1,19 @@
-# Fiscus team server
+# Segreant team server
 
-A separate, optional, BYO-Postgres server for Fiscus's team tier. **Fiscus
+A separate, optional, BYO-Postgres server for Segreant's team tier. **Segreant
 hosts nothing** — you run this on infrastructure you already own and trust: your
 server, your Postgres, eventually your SSO. See
 [`docs/TEAM-TIER-DESIGN.md`](../docs/TEAM-TIER-DESIGN.md) in the main repo for
 the full design reasoning.
 
 This is a genuinely separate package (its own `package.json`) so the main
-`fiscus` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
+`segreant` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
 Postgres driver) and `jose` (JWS verification for OIDC ID tokens, D-223)
 live only here.
 
 ## What this does today
 
-Developers run `fiscus team push --url <this-server-url>` to sign and push a
+Developers run `segreant team push --url <this-server-url>` to sign and push a
 numeric-only, per-project value/RoI snapshot (no prompt/response content, no raw
 request log). This server verifies each push's ed25519 signature against a
 registered developer key and stores it in Postgres. Re-sending the exact signed
@@ -43,7 +43,7 @@ chooses, with no claim/verification step tying it to whoever logs in.
 ```sh
 cd team-server
 npm install
-DATABASE_URL="postgres://user:pass@host:5432/fiscus_team" \
+DATABASE_URL="postgres://user:pass@host:5432/segreant_team" \
 TEAM_SERVER_ADMIN_TOKEN="<a long random secret>" \
 PORT=8092 \
 npm start
@@ -76,13 +76,13 @@ OIDC_DASHBOARD_ALLOWED_SUBJECTS="alice@example.com,finance-lead@example.com"
 Whitespace around configured entries is ignored, but comparisons with the
 verified token `sub` are exact and case-sensitive. A missing or blank setting
 returns `503` for dashboard aggregate routes; a genuine, verified OIDC token
-for a subject outside the list returns `403`. Fiscus intentionally does not
+for a subject outside the list returns `403`. Segreant intentionally does not
 infer group membership or generic roles from provider-specific claims. `GET
 /me` remains an identity-verification endpoint and does not use this list.
 
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
-this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Fiscus provides the
+this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Segreant provides the
 software, never the operation" framing. OIDC discovery/JWKS retrieval is
 HTTPS-only except for literal loopback test endpoints, follows no redirects,
 limits response bodies, and requires discovered JWKS to remain on the issuer
@@ -94,7 +94,7 @@ that intentionally publish keys on another origin.
 Each developer publishes their rollup-signing identity once:
 
 ```sh
-fiscus team push --pubkey
+segreant team push --pubkey
 ```
 
 An admin then registers it with the team server:
@@ -123,7 +123,7 @@ never grants aggregate access.
 |---|---|---|---|
 | `/health` | GET | none | Liveness check. |
 | `/developers` | POST | admin bearer token | Register a developer's rollup-signing public key. |
-| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `fiscus team push` calls. Exact signed replays return `200` with `replayed: true`; a new record returns `201`. |
+| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `segreant team push` calls. Exact signed replays return `200` with `replayed: true`; a new record returns `201`. |
 | `/me` | GET | OIDC bearer ID token | Verifies your SSO login and echoes back the verified identity. |
 | `/dashboard/projects` | GET | OIDC bearer ID token | Team-wide totals per project (units, cost, realized value, RoI Index). Any project with fewer than `TEAM_SERVER_MIN_COHORT` contributing developers reports `suppressed: true` with no numbers. |
 | `/dashboard/developers` | GET | OIDC bearer ID token | A k-anonymized distribution (median/p25/p75) of per-developer spend and realization. `enabled: false` unless `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN=true`; `suppressed: true` below the cohort floor either way. Never a named list. |

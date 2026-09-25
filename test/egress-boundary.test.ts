@@ -273,9 +273,9 @@ test('rules reject wildcard-adjacent and credential-bearing forms', () => {
 });
 
 test('a loopback request succeeds through the sole transport and writes redacted hash-chained receipts', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   let received = '';
   const server = http.createServer((req, res) => {
     req.setEncoding('utf8');
@@ -331,16 +331,16 @@ test('a loopback request succeeds through the sole transport and writes redacted
     assert.match(ledger, /response_received/);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('a denied egress is receipted but never reaches a network dial', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-denied-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-denied-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   try {
     await assert.rejects(
       egressFetchWithConfig(LOCKED, 'https://example.com/never-dialled', {
@@ -354,16 +354,16 @@ test('a denied egress is receipted but never reaches a network dial', async () =
     assert.doesNotMatch(ledger, /example\.com/);
     assert.equal(verifyEgressReceipts().ok, true);
   } finally {
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('the transport returns a redirect response without following its target', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-redirect-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-redirect-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   const requests: string[] = [];
   const server = http.createServer((req, res) => {
     requests.push(req.url ?? '');
@@ -389,8 +389,8 @@ test('the transport returns a redirect response without following its target', a
     assert.equal(verifyEgressReceipts().ok, true);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 });

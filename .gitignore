@@ -4,11 +4,11 @@ node_modules/
 *.db-journal
 *.db-wal
 *.db-shm
-.fiscus/
-.fiscus-home/
-.fiscus-build.lock/
-.fiscus-build-*/
-.fiscus-ws-*/
+.segreant/
+.segreant-home/
+.segreant-build.lock/
+.segreant-build-*/
+.segreant-ws-*/
 dist/
 .DS_Store
 .env
@@ -34,5 +34,5 @@ docs/planning/
 # Local agent-lane worktree copies. Orchestration scratch, never a release input.
 .agent-worktrees/
 
-# Local SBOM output (`npm run sbom > fiscus-runtime.cdx.json`); CI uploads its own copy as an artifact.
+# Local SBOM output (`npm run sbom > segreant-runtime.cdx.json`); CI uploads its own copy as an artifact.
 *.cdx.json

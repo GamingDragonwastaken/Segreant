@@ -17,7 +17,7 @@ const D = (char: string): string => 'sha256:' + char.repeat(64);
 
 function draft(overrides: Partial<SequentialProtocolDraft> = {}): SequentialProtocolDraft {
   return {
-    type: 'fiscus.sequential-inference',
+    type: 'segreant.sequential-inference',
     version: 1,
     protocolId: 'protocol:rate-study',
     createdAtMs: 1_700_000_000_000,

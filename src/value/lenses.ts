@@ -69,7 +69,7 @@ export interface RoIInterval {
  *
  * `grossRatio` is not an identified treatment effect. A separate,
  * pre-registered randomized study must estimate incremental net benefit directly
- * before Fiscus may make an economic causal claim. The cost still includes tokens
+ * before Segreant may make an economic causal claim. The cost still includes tokens
  * + measured time-with-AI at the disclosed labor rate, so it cannot be inflated
  * by ignoring human supervision.
  */
@@ -169,7 +169,7 @@ export interface RoIOptions {
    *
    * The Acceptance lens goes dark when no proposal could be matched, and its
    * note used to give a CAUSE -- "no proposals captured (e.g. streaming-only)".
-   * That sentence is false on a ledger whose proposals Fiscus captured and then
+   * That sentence is false on a ledger whose proposals Segreant captured and then
    * deleted on the operator's own retention policy, and it sends them to
    * instrument what they had already instrumented.
    *

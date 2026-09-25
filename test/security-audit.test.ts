@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { auditSecurityTree } from '../scripts/check-security.mjs';
 
 test('security audit rejects production secrets and dynamic string execution without scanning fixtures as authority', () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-security-audit-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-security-audit-'));
   try {
     mkdirSync(join(root, 'src'), { recursive: true });
     mkdirSync(join(root, 'test'), { recursive: true });

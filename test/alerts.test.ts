@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { detectAlerts, computeAlerts, type AlertInputs } from '../src/alerts/detect.ts';
 import { buildWebhookPayload, notifyWebhook } from '../src/alerts/notify.ts';
 import { Store } from '../src/store/db.ts';
-import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,15 +26,15 @@ function base(over: Partial<AlertInputs> = {}): AlertInputs {
 
 const ids = (inp: AlertInputs) => detectAlerts(inp).map((a) => a.id);
 
-async function withIsolatedFiscusHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-alert-test-'));
-  process.env.FISCUS_HOME = home;
+async function withIsolatedSegreantHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-alert-test-'));
+  process.env.SEGREANT_HOME = home;
   try {
     return await fn(home);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
   }
 }
 
@@ -97,7 +97,7 @@ test('alerts: sorted by severity (critical → warn → info)', () => {
 test('webhook payload carries ONLY alert metadata — no field that could hold a prompt/code/key', () => {
   const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25, blocked24h: 2, estimatedShare: 0.9 }));
   const payload = buildWebhookPayload(alerts, 'warn');
-  assert.equal(payload.source, 'fiscus');
+  assert.equal(payload.source, 'segreant');
   assert.ok(payload.alerts.every((a) => a.severity !== 'info'), 'info filtered at minSeverity warn');
   for (const a of payload.alerts) {
     assert.deepEqual(Object.keys(a).sort(), ['detail', 'id', 'metric', 'severity', 'title']);
@@ -111,7 +111,7 @@ test('buildWebhookPayload filters below minSeverity', () => {
 });
 
 test('notifyWebhook POSTs the metadata payload and reports delivery', async () => {
-  await withIsolatedFiscusHome(async () => {
+  await withIsolatedSegreantHome(async () => {
     let received: { source?: string; alerts?: Array<{ id: string }> } | null = null;
     const server = http.createServer(async (req, res) => {
       const chunks: Buffer[] = [];
@@ -130,7 +130,7 @@ test('notifyWebhook POSTs the metadata payload and reports delivery', async () =
       assert.equal(r.delivered, true);
       assert.equal(r.status, 200);
       assert.ok(r.posted >= 1);
-      assert.equal(received!.source, 'fiscus');
+      assert.equal(received!.source, 'segreant');
       assert.equal(received!.alerts![0]!.id, 'budget-exhausted');
     } finally {
       await new Promise<void>((res) => server.close(() => res()));
@@ -139,7 +139,7 @@ test('notifyWebhook POSTs the metadata payload and reports delivery', async () =
 });
 
 test('notifyWebhook never throws on an unreachable URL — returns delivered:false', async () => {
-  await withIsolatedFiscusHome(async () => {
+  await withIsolatedSegreantHome(async () => {
     const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
     const r = await notifyWebhook('http://127.0.0.1:1/nope', alerts, { minSeverity: 'warn', timeoutMs: 300 });
     assert.equal(r.delivered, false);
@@ -149,7 +149,7 @@ test('notifyWebhook never throws on an unreachable URL — returns delivered:fal
 });
 
 test('notifyWebhook preserves receipt refusal and repair guidance before any socket', async () => {
-  await withIsolatedFiscusHome(async (home) => {
+  await withIsolatedSegreantHome(async (home) => {
     const receipts = home;
     mkdirSync(receipts, { recursive: true });
     writeFileSync(join(receipts, 'egress-receipts.jsonl'), '{"bad":true}\n', 'utf8');
@@ -192,7 +192,7 @@ test('computeAlerts: reads the store + config end-to-end (soft cap + throttling)
     project: 'default', taskWeight: 1, inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0,
     cacheReadTokens: 0, reasoningTokens: 0, costUsd: 0, estimated: false, streamed: false, statusCode: 429, durationMs: 0,
   });
-  const config: FiscusConfig = { ...DEFAULT_CONFIG, budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 50, dailySoftUsd: 10 } };
+  const config: SegreantConfig = { ...DEFAULT_CONFIG, budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 50, dailySoftUsd: 10 } };
   const alerts = computeAlerts(store, config, { now });
   const got = alerts.map((a) => a.id);
   assert.ok(got.includes('budget-soft'), 'soft cap crossed');

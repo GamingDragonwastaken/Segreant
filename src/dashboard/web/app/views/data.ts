@@ -55,7 +55,7 @@ export function dataView(): Node {
       h('h1', { class: 'view-title', text: 'Data' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Local acquisition routes: native tool-log importers, provider connections, and the bounded filesystem detector.'
-        : 'Where your AI usage comes from. Fiscus reads what your tools have already recorded on this machine — it does not need your passwords.' })),
+        : 'Where your AI usage comes from. Segreant reads what your tools have already recorded on this machine — it does not need your passwords.' })),
 
     () => {
       const err = error();
@@ -89,7 +89,7 @@ export function dataView(): Node {
           found.length === 0
             ? h('p', { class: 'drawer-muted', text: () => (isPrecise()
                 ? 'No supported tool logs were located in their default paths.'
-                : 'We could not find recorded usage from any of the tools Fiscus knows how to read.') })
+                : 'We could not find recorded usage from any of the tools Segreant knows how to read.') })
             : h('div', { class: 'facts' },
                 ...found.map((i) => h('div', { class: 'fact' },
                   h('span', { class: 'fact-key' },
@@ -101,7 +101,7 @@ export function dataView(): Node {
             ? h('details', { class: 'more' },
                 h('summary', { text: () => (isPrecise()
                   ? `${count(missing.length)} supported tool(s) not present`
-                  : `${count(missing.length)} other tools Fiscus supports, not found here`) }),
+                  : `${count(missing.length)} other tools Segreant supports, not found here`) }),
                 h('div', { class: 'facts' },
                   ...missing.map((i) => h('div', { class: 'fact fact-off' },
                     h('span', { class: 'fact-key' },
@@ -116,7 +116,7 @@ export function dataView(): Node {
           h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Detect what is on this machine' : 'Look around this computer') }),
           h('p', { class: 'view-plain', text: () => (isPrecise()
             ? 'A bounded walk of your home directory for AI tools and git repositories. Imports nothing; records the result as the baseline for change reporting.'
-            : 'Fiscus can look through your files for AI tools and projects. This detection reads local paths; local imports remain local, while provider requests follow the configured egress boundary.') }),
+            : 'Segreant can look through your files for AI tools and projects. This detection reads local paths; local imports remain local, while provider requests follow the configured egress boundary.') }),
 
           h('div', { class: 'cmd-row' },
             h('button', {
@@ -125,7 +125,7 @@ export function dataView(): Node {
               text: () => (scanning() ? 'Looking…' : isPrecise() ? 'Run detection' : 'Look around'),
               onclick: runDetect,
             }),
-            h('code', { class: 'cmd', text: 'fiscus scan' })),
+            h('code', { class: 'cmd', text: 'segreant scan' })),
 
           // Detection is the one deliberate, operator-triggered read on this
           // screen, and it reported nothing to anyone who was not watching the
@@ -187,7 +187,7 @@ export function dataView(): Node {
         o && !empty
           ? h('div', { class: 'card' },
               h('div', { class: 'card-head' },
-                h('span', { class: 'card-title', text: () => (isPrecise() ? 'Currently held' : 'What Fiscus has so far') })),
+                h('span', { class: 'card-title', text: () => (isPrecise() ? 'Currently held' : 'What Segreant has so far') })),
               h('div', { class: 'stat', text: count(o.summary.requests) }),
               h('span', { class: 'basis', text: () => (isPrecise()
                 ? `recorded requests totalling ${usd(o.summary.costUsd)} of metered cost`

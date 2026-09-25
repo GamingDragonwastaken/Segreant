@@ -245,7 +245,7 @@ test('every required field the GUI declares exists in the payload the server sen
   try {
     for (const endpoint of endpoints) {
       const res = await fetch(`${srv.base}${concretePath(endpoint.path, kernelNode)}`, {
-        headers: { 'x-fiscus-local': '1' },
+        headers: { 'x-segreant-local': '1' },
       });
       assert.equal(
         res.status,
@@ -282,7 +282,7 @@ test('every required field the GUI declares exists in the payload the server sen
       const contract = DASHBOARD_PAYLOAD_CONTRACTS.find((candidate) => candidate.routeId === routeId && candidate.method === 'POST');
       const route = DASHBOARD_API_CONTRACTS.find((candidate) => candidate.id === routeId);
       assert.ok(contract && route, `${routeId} needs both contracts`);
-      const res = await fetch(`${srv.base}${route!.path}`, { method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' }, body: '{}' });
+      const res = await fetch(`${srv.base}${route!.path}`, { method: 'POST', headers: { 'x-segreant-local': '1', 'content-type': 'application/json' }, body: '{}' });
       assert.equal(res.status, 200, `POST ${route!.path} returned ${res.status}`);
       const payload: unknown = await res.json();
       checkPayloadContract(contract!, payload, `${contract!.responseType} (POST ${route!.path})`, problems);

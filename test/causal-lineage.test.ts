@@ -27,7 +27,7 @@ const COMMIT = 'a'.repeat(40);
 
 function protocol(studyId: string): CommittedCausalStudyProtocolV2 {
   const draft: CausalStudyProtocolDraftV2 = {
-    type: 'fiscus.causal-study',
+    type: 'segreant.causal-study',
     version: 2,
     studyId,
     seriesId: 'series:' + studyId.slice(studyId.indexOf(':') + 1),
@@ -150,7 +150,7 @@ function appendFixture(store: Store, studyId: string): {
   const decision = assignment.block.decisions[0]!;
   const assignedArm = committed.arms.find((arm) => arm.armId === decision.assignedArmId)!;
   const verifierMaterial = {
-    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    type: 'segreant.causal-ordinary-ledger-verifier' as const,
     version: 2 as const,
     state: 'unresolved' as const,
     checkedAtMs: null,
@@ -159,7 +159,7 @@ function appendFixture(store: Store, studyId: string): {
     reasonCodes: ['task4_not_implemented' as const],
   };
   const executionMaterial: Omit<CausalExecutionRecordV2, 'eventHash'> = {
-    type: 'fiscus.causal-execution',
+    type: 'segreant.causal-execution',
     version: 2,
     executionId: 'execution:lineage',
     decisionId: decision.decisionId,
@@ -204,7 +204,7 @@ function appendFixture(store: Store, studyId: string): {
   decodeCausalExecutionV2(execution);
   assert.equal(store.appendCausalExecutionV2(execution), 'created');
   const outcomeMaterial = {
-    type: 'fiscus.causal-terminal-outcome' as const,
+    type: 'segreant.causal-terminal-outcome' as const,
     version: 2 as const,
     outcomeId: 'outcome:lineage',
     decisionId: decision.decisionId,
@@ -247,7 +247,7 @@ function appendFixture(store: Store, studyId: string): {
     costStale: false,
   });
   const bindingMaterial = {
-    type: 'fiscus.causal-lineage-binding' as const,
+    type: 'segreant.causal-lineage-binding' as const,
     version: 2 as const,
     bindingId: 'lineage:lineage',
     studyId,
@@ -288,7 +288,7 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
     };
     const arm = committed.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
     const verifierMaterial = {
-      type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+      type: 'segreant.causal-ordinary-ledger-verifier' as const,
       version: 2 as const,
       state: 'unresolved' as const,
       checkedAtMs: null,
@@ -297,7 +297,7 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
       reasonCodes: ['task4_not_implemented' as const],
     };
     const executionMaterial: Omit<CausalExecutionRecordV2, 'eventHash'> = {
-      type: 'fiscus.causal-execution',
+      type: 'segreant.causal-execution',
       version: 2,
       executionId: `execution:lineage-${index}`,
       decisionId: decision.decisionId,
@@ -339,7 +339,7 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
     decodeCausalExecutionV2(execution);
     assert.equal(store.appendCausalExecutionV2(execution), 'created');
     const outcomeMaterial = {
-      type: 'fiscus.causal-terminal-outcome' as const,
+      type: 'segreant.causal-terminal-outcome' as const,
       version: 2 as const,
       outcomeId: `outcome:lineage-${index}`,
       decisionId: decision.decisionId,
@@ -400,7 +400,7 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
       costStale: false,
     });
     const bindingMaterial = {
-      type: 'fiscus.causal-lineage-binding' as const,
+      type: 'segreant.causal-lineage-binding' as const,
       version: 2 as const,
       bindingId: `lineage:lineage-${index}`,
       studyId: committed.studyId,

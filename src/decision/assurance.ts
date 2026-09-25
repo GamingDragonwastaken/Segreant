@@ -27,7 +27,7 @@
  *
  * A DAL is not a probability, not a confidence interval, not a score, and not an
  * authorization. `authorizesAction` is permanently `false`: meeting a level says
- * the evidence requirement for a class of consequence was met, not that Fiscus
+ * the evidence requirement for a class of consequence was met, not that Segreant
  * may act. Execution remains outside this module, as `CONTEXT.md` requires.
  *
  * ## Why `decisionFitness` is not in the ladder
@@ -235,7 +235,7 @@ const DAL1_RULES: readonly AxisRule[] = Object.freeze([
     observed: (p) => p.integrity,
   },
   {
-    // The four claims Fiscus refuses to collapse are metered usage, provider-billed
+    // The four claims Segreant refuses to collapse are metered usage, provider-billed
     // cost, allocated cost and realized value. `mixed` means an input already
     // collapsed two of them, so no level above the floor is available to it.
     axis: 'monetaryBasis',

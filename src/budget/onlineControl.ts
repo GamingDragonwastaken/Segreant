@@ -1,5 +1,5 @@
 /**
- * WP-J02 — constrained online control for Fiscus's own daily spend cap.
+ * WP-J02 — constrained online control for Segreant's own daily spend cap.
  *
  * This is deliberately a narrow action adapter, not a generic provider router.
  * The operator delegates one bounded target (budget.dailyUsd) through a versioned

@@ -15,7 +15,7 @@ function g(cwd: string, args: string[], env: Record<string, string> = {}): void 
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-persistence-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-persistence-'));
   g(dir, ['init', '-q']);
   g(dir, ['config', 'user.email', 't@t.co']);
   g(dir, ['config', 'user.name', 'tester']);

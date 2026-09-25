@@ -6,8 +6,8 @@
  */
 
 import type { Store, ProviderConnection } from '../store/db.ts';
-import type { FiscusConfig, BudgetConfig } from '../config.ts';
-import { fiscusHome, configPath, dbPath, validateBudgetConfig } from '../config.ts';
+import type { SegreantConfig, BudgetConfig } from '../config.ts';
+import { segreantHome, configPath, dbPath, validateBudgetConfig } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 
@@ -24,8 +24,8 @@ export interface SettingsSnapshot {
   budget: BudgetConfig;
   enforcement: BudgetEnforcementDescriptor;
   egress: {
-    mode: FiscusConfig['egress']['mode'];
-    rules: FiscusConfig['egress']['rules'];
+    mode: SegreantConfig['egress']['mode'];
+    rules: SegreantConfig['egress']['rules'];
     receipts: ReturnType<typeof verifyEgressReceipts> & { path: string };
     scope: string;
   };
@@ -34,14 +34,14 @@ export interface SettingsSnapshot {
 
 export function buildSettingsSnapshot(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   version: string,
   windowDays = 14,
 ): SettingsSnapshot {
   const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
   return {
     version,
-    home: fiscusHome(),
+    home: segreantHome(),
     configPath: configPath(),
     dbPath: dbPath(),
     proxyPort: config.port,
@@ -55,7 +55,7 @@ export function buildSettingsSnapshot(
       mode: config.egress.mode,
       rules: config.egress.rules,
       receipts: { path: egressReceiptPath(), ...verifyEgressReceipts() },
-      scope: 'Fiscus-process HTTP(S) transport only; not other apps, direct clients, OS networking, or provider retention.',
+      scope: 'Segreant-process HTTP(S) transport only; not other apps, direct clients, OS networking, or provider retention.',
     },
     connections: store.recentProviderConnections(sinceMs),
   };
@@ -87,12 +87,12 @@ const BUDGET_KEYS = new Set([
 ]);
 
 /** Read-modify-write, mirroring cmdBudget's pattern in src/cli/showCmd.ts. Never mutates config. */
-export function applySettingsPatch(config: FiscusConfig, patch: SettingsPatch): FiscusConfig {
+export function applySettingsPatch(config: SegreantConfig, patch: SettingsPatch): SegreantConfig {
   if (!isRecord(patch)) throw new SettingsValidationError('patch must be an object');
   for (const key of Object.keys(patch)) {
     if (!PATCH_KEYS.has(key)) throw new SettingsValidationError(`unsupported patch key: ${key}`);
   }
-  const next: FiscusConfig = { ...config, budget: { ...config.budget } };
+  const next: SegreantConfig = { ...config, budget: { ...config.budget } };
   if ('metadataOnly' in patch && typeof patch.metadataOnly !== 'boolean') {
     throw new SettingsValidationError('metadataOnly must be boolean');
   }

@@ -81,7 +81,7 @@ export interface CausalStudyKernelIssuance {
 const CAUSAL_ASSUMPTIONS = Object.freeze([
   'A scoped local intention-to-treat result for the registered eligible population and study period. It is not a forecast and does not transport to another population.',
   'ITT conditions on fixed eligible units and bounded potential outcomes, with uniform randomization within each registered complete balanced block, independent randomization across blocks, and no interference. Observed noncompliance stays in its assigned arm; per-protocol and CACE/LATE effects are not identified by this result.',
-  'Fiscus verifies retained protocol, assignment, execution and outcome lineage locally. That is not an independent audit and not a provider-invoice certification.',
+  'Segreant verifies retained protocol, assignment, execution and outcome lineage locally. That is not an independent audit and not a provider-invoice certification.',
 ]);
 
 function timestamp(value: number, label: string): ReturnType<typeof instant> {
@@ -176,7 +176,7 @@ export function buildCausalStudyKernelIssuance(
   const validTime = studyInterval(data);
   const studyId = data.protocol.studyId;
   const studyScope = scope({
-    ledger: 'fiscus-causal',
+    ledger: 'segreant-causal',
     studyId,
     protocolHash: data.protocol.protocolHash,
   });
@@ -200,8 +200,8 @@ export function buildCausalStudyKernelIssuance(
   const assignmentEvidence = evidence({
     id: `evidence:causal:assignment:${studyId}`,
     evidenceType: 'causal.assignment',
-    sourceIdentity: 'fiscus:causal-randomization',
-    sourceClass: 'fiscus_local_randomized_assignment',
+    sourceIdentity: 'segreant:causal-randomization',
+    sourceClass: 'segreant_local_randomized_assignment',
     payload: {
       studyId,
       protocolHash: data.protocol.protocolHash,
@@ -250,8 +250,8 @@ export function buildCausalStudyKernelIssuance(
   const outcomeEvidence = evidence({
     id: `evidence:causal:outcomes:${studyId}`,
     evidenceType: 'causal.outcomes',
-    sourceIdentity: 'fiscus:causal-outcomes',
-    sourceClass: 'fiscus_local_execution_and_outcome_records',
+    sourceIdentity: 'segreant:causal-outcomes',
+    sourceClass: 'segreant_local_execution_and_outcome_records',
     payload: {
       studyId,
       protocolHash: data.protocol.protocolHash,

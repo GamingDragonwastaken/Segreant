@@ -68,11 +68,11 @@ test('measure-next stays qualitative when acquisition cost or a prior is absent'
 });
 
 test('epistemic UX CLI is a bounded review-only consumer', () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-epistemic-ux-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-epistemic-ux-'));
   const options = join(root, 'ux.json');
   try {
     writeFileSync(options, JSON.stringify(input()));
-    const stdout = execFileSync(process.execPath, ['bin/fiscus.mjs', 'evidence', 'ux', '--options', options, '--json'], {
+    const stdout = execFileSync(process.execPath, ['bin/segreant.mjs', 'evidence', 'ux', '--options', options, '--json'], {
       cwd: process.cwd(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

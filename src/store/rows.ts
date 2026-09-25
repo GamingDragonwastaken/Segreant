@@ -20,7 +20,7 @@ import {
  * default, so a selected column holds a string from its vocabulary or the row
  * is damaged. `undefined` means the query did not select the column and reads
  * as the sentinel; `null`, a number, or a string outside the vocabulary was
- * never written by any Fiscus path and refuses rather than reading as the
+ * never written by any Segreant path and refuses rather than reading as the
  * sentinel — laundering corruption into "unknown" would hide it behind the one
  * label the column exists to keep honest (D-251).
  */
@@ -32,7 +32,7 @@ export function vocabularyValue<const T extends readonly string[]>(
 ): T[number] {
   if (value === undefined) return fallback;
   if (typeof value === 'string' && (vocabulary as readonly string[]).includes(value)) return value as T[number];
-  throw new Error(`ledger integrity: column ${column} holds an unrecognized value ${JSON.stringify(value)}; no Fiscus writer produces it, so the row is damaged or tampered`);
+  throw new Error(`ledger integrity: column ${column} holds an unrecognized value ${JSON.stringify(value)}; no Segreant writer produces it, so the row is damaged or tampered`);
 }
 
 /**

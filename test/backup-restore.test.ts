@@ -35,8 +35,8 @@ function request(): RequestRow {
 }
 
 test('Store backup creates a verified snapshot and redacted manifest without changing the active ledger', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-'));
-  const source = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-'));
+  const source = join(dir, 'segreant.db');
   const backup = join(dir, 'backups', 'snapshot.sqlite');
   const store = new Store(source);
   store.insertRequest(request());
@@ -59,7 +59,7 @@ test('Store backup creates a verified snapshot and redacted manifest without cha
 });
 
 test('Store restore preview is read-only and apply restores into a new verified path', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-restore-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-restore-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');
@@ -84,7 +84,7 @@ test('Store restore preview is read-only and apply restores into a new verified 
 });
 
 test('backup inspection fails closed for a corrupt source', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-corrupt-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-corrupt-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const store = new Store(source);
@@ -102,7 +102,7 @@ test('backup inspection fails closed for a corrupt source', () => {
 });
 
 test('restore refuses an existing destination without changing it', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-existing-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-existing-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const existing = join(dir, 'existing.sqlite');
@@ -122,7 +122,7 @@ test('restore refuses an existing destination without changing it', () => {
 });
 
 test('restore refuses a valid but manifestless SQLite file', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-manifestless-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-manifestless-'));
   const source = join(dir, 'source.sqlite');
   const manual = join(dir, 'manual.sqlite');
   const destination = join(dir, 'restored.sqlite');
@@ -144,7 +144,7 @@ test('restore refuses a valid but manifestless SQLite file', () => {
 });
 
 test('backup inspection fails closed when its manifest is tampered with', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-manifest-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-manifest-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const store = new Store(source);
@@ -169,7 +169,7 @@ test('backup artifacts receive restrictive owner-only mode bits where supported'
     t.skip('Windows ACL inheritance does not expose POSIX mode bits; choose a private destination and review ACLs');
     return;
   }
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-mode-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-mode-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const store = new Store(source);
@@ -183,7 +183,7 @@ test('backup artifacts receive restrictive owner-only mode bits where supported'
 });
 
 test('backup and restore reject symlinked source and destination paths when supported', (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-links-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-links-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const sourceLink = join(dir, 'source-link.sqlite');
@@ -231,7 +231,7 @@ function rewriteManifestForArtifact(path: string, updates: Record<string, unknow
 }
 
 test('restore refuses a manifest-consistent backup with a corrupted economic payload before publishing', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-economic-corrupt-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-economic-corrupt-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');
@@ -268,7 +268,7 @@ test('restore refuses a manifest-consistent backup with a corrupted economic pay
 });
 
 test('restore rejects an incompatible newer schema version without writing a destination', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-newer-schema-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-newer-schema-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');
@@ -295,7 +295,7 @@ test('restore rejects an incompatible newer schema version without writing a des
 });
 
 test('a verified old-schema backup restores and migrates append-only data without losing the legacy row', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-old-schema-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-old-schema-'));
   const legacyPath = join(dir, 'legacy.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');
@@ -353,7 +353,7 @@ test('a verified old-schema backup restores and migrates append-only data withou
 });
 
 test('a legacy manifest without schemaVersion remains inspectable using the database version', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-legacy-manifest-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-legacy-manifest-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const store = new Store(source);
@@ -386,7 +386,7 @@ test('a legacy manifest without schemaVersion remains inspectable using the data
 
 function kernelEvidence() {
   return evidence({
-    id: 'evidence:backup-fixture', evidenceType: 'ops.feed', sourceIdentity: 'fiscus:local', sourceClass: 'fiscus_local_records',
+    id: 'evidence:backup-fixture', evidenceType: 'ops.feed', sourceIdentity: 'segreant:local', sourceClass: 'segreant_local_records',
     payload: { value: 'backup-fixture' }, scope: scope({ account: 'acct-1' }), grain: grain(['day', 'project']),
     occurredAt: '2026-08-01T00:00:00.000Z', observedAt: '2026-08-01T00:00:00.000Z', finalizedAt: null,
     integrity: 'verified', authenticity: 'pinned', completeness: { status: 'complete', method: 'local_scan' },
@@ -395,7 +395,7 @@ function kernelEvidence() {
 }
 
 test('restore refuses a manifest-consistent backup with a corrupted epistemic payload before publishing', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-epistemic-corrupt-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-epistemic-corrupt-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');
@@ -429,7 +429,7 @@ test('restore refuses a manifest-consistent backup with a corrupted epistemic pa
 });
 
 test('a backup carrying every epistemic node kind restores and replays each node through the kernel readers', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-epistemic-replay-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-backup-epistemic-replay-'));
   const source = join(dir, 'source.sqlite');
   const backup = join(dir, 'backup.sqlite');
   const restored = join(dir, 'restored.sqlite');

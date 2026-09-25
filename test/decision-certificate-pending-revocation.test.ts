@@ -34,7 +34,7 @@
  *
  * WHY THE THREE KERNEL CLAIM READERS ARE NOT TOUCHED. `Store.billingKernelClaims`
  * and its two siblings are the other consumer, and `pendingIds` is unreachable
- * from them: every node they serve is issued by Fiscus's own issuance path,
+ * from them: every node they serve is issued by Segreant's own issuance path,
  * which never attaches a revocation envelope, and an operator revocation goes
  * through `appendRevocation`, which has no `effectiveAt` and is effective when
  * recorded. The last test here pins that, so the omission rests on a measured

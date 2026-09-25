@@ -1,17 +1,17 @@
 /**
- * `fiscus usage` told an operator to do the thing they had already done.
+ * `segreant usage` told an operator to do the thing they had already done.
  *
  * THE COUNTEREXAMPLE, MEASURED FIRST. Two requests tagged with a session id,
  * sixty days old. `computeUsageRoI` over a ninety-day window returned one unit
- * and $2.00. `fiscus prune` then deleted them on the operator's own retention
+ * and $2.00. `segreant prune` then deleted them on the operator's own retention
  * policy, and the same call over the same window returned zero units and $0.00
- * — at which point `fiscus usage --days 90` prints:
+ * — at which point `segreant usage --days 90` prints:
  *
  *     No sessions without code signals in range.
- *     Tag sessions with X-Fiscus-Session-Id to measure them.
+ *     Tag sessions with X-Segreant-Session-Id to measure them.
  *
  * The first sentence is a claim about the world that is false, and the second
- * is an INSTRUCTION to do what the operator already did and Fiscus already
+ * is an INSTRUCTION to do what the operator already did and Segreant already
  * measured. This is D-170's defect with an errand attached: the metering step
  * there was marked NOT DONE for someone who had done it, and here the surface
  * goes further and tells them how to start.
@@ -38,10 +38,10 @@
  *
  * WHAT THIS DOES NOT ESTABLISH. That the dashboard discloses it: `/api/value`
  * assembles its own payload and does not carry this field, so the GUI is still
- * silent and that remains open. Nor that `fiscus team push` is covered — a
+ * silent and that remains open. Nor that `segreant team push` is covered — a
  * rollup built over a truncated window understates a SHARED total and its
  * receiver cannot tell, which is a bigger finding on a signed protocol and is
- * not made here. Nor anything about traffic that never reached Fiscus, which is
+ * not made here. Nor anything about traffic that never reached Segreant, which is
  * the separate and permanent limit of a local meter.
  *
  * Recorded at D-174.
@@ -55,13 +55,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-usage-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-usage-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { computeUsageRoI } from '../src/value/usage.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CLI = join(ROOT, 'bin', 'fiscus.mjs');
+const CLI = join(ROOT, 'bin', 'segreant.mjs');
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.now();
 
@@ -70,7 +70,7 @@ function runCli(args: string[], db: string, home: string): Promise<{ code: numbe
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: db, FISCUS_HOME: home, NODE_OPTIONS: '' }, timeout: 180_000 },
+      { env: { ...process.env, SEGREANT_DB: db, SEGREANT_HOME: home, NODE_OPTIONS: '' }, timeout: 180_000 },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -152,8 +152,8 @@ test('a window entirely inside the retained period says nothing extra', () => {
 });
 
 test('an empty usage report over a truncated window does not send the operator to tag what they tagged', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-usage-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-usage-cli-'));
+  const db = join(dir, 'segreant.db');
   try {
     const store = new Store(db);
     prunedSession(store);
@@ -163,7 +163,7 @@ test('an empty usage report over a truncated window does not send the operator t
     assert.equal(result.code, 0, result.stderr);
     assert.doesNotMatch(
       result.stdout,
-      /Tag sessions with X-Fiscus-Session-Id/,
+      /Tag sessions with X-Segreant-Session-Id/,
       'the errand is only honest when the emptiness was not produced by a deletion',
     );
     assert.match(result.stdout, /retention|deleted/i, 'and the reason the window is empty must be stated');
@@ -175,13 +175,13 @@ test('an empty usage report over a truncated window does not send the operator t
 test('an empty usage report over an intact window keeps the instruction that helps', async () => {
   // The guard against fixing this by deleting the sentence. On a ledger with
   // nothing in it and no prune on record, the errand is exactly right.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-usage-cli-clean-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-usage-cli-clean-'));
+  const db = join(dir, 'segreant.db');
   try {
     new Store(db).close();
     const result = await runCli(['usage', '--days', '90'], db, dir);
     assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stdout, /Tag sessions with X-Fiscus-Session-Id/);
+    assert.match(result.stdout, /Tag sessions with X-Segreant-Session-Id/);
     assert.doesNotMatch(result.stdout, /retention|deleted by/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -189,8 +189,8 @@ test('an empty usage report over an intact window keeps the instruction that hel
 });
 
 test('a non-empty usage report over a truncated window discloses beside its figures', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-usage-cli-partial-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-usage-cli-partial-'));
+  const db = join(dir, 'segreant.db');
   try {
     const store = new Store(db);
     prunedSession(store);

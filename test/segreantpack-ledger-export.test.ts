@@ -1,14 +1,14 @@
 /**
- * `.fiscuspack` has a producer: the epistemic ledger, through `fiscus pack`.
+ * `.segreantpack` has a producer: the epistemic ledger, through `segreant pack`.
  *
  * WP-G05 left "CLI/API integration" open with the module reachable from no
  * product path. `exportLedgerPack` (D-229) binds every ledger node by digest,
  * carries the payloads as one attachment, states omissions and redactions in
- * the manifest instead of dropping records, and signs on request; `fiscus
+ * the manifest instead of dropping records, and signs on request; `segreant
  * pack export|verify|inspect` is the operator face.
  *
  * Checked here: a round trip through the in-tree verifier AND the standalone
- * verifier (`standalone/fiscuspack-verifier.mjs`, no producer import); every
+ * verifier (`standalone/segreantpack-verifier.mjs`, no producer import); every
  * included reference digest matches the record as stored; confidential
  * evidence travels without its payload and the redaction names it; a byte
  * budget turns the tail of the ledger into a stated omission rather than a
@@ -34,7 +34,7 @@ import { grain } from '../src/epistemic/grain.ts';
 import { scope } from '../src/epistemic/scope.ts';
 import { canonicalJson } from '../src/epistemic/serialization.ts';
 import { exportLedgerPack, LEDGER_PACK_RECORDS_PATH } from '../src/pack/export.ts';
-import { generateFiscusPackKeyPair, serializeFiscusPack, verifyFiscusPack } from '../src/pack/index.ts';
+import { generateSegreantPackKeyPair, serializeSegreantPack, verifySegreantPack } from '../src/pack/index.ts';
 
 const T0 = '2026-08-01T00:00:00.000Z';
 const T1 = '2026-08-02T00:00:00.000Z';
@@ -43,7 +43,7 @@ const GRAIN = grain(['day', 'project']);
 
 function record(id: string, sensitivity: EvidenceInput['sensitivity'], value: string) {
   return evidence({
-    id, evidenceType: 'ops.feed', sourceIdentity: 'fiscus:local', sourceClass: 'fiscus_local_records',
+    id, evidenceType: 'ops.feed', sourceIdentity: 'segreant:local', sourceClass: 'segreant_local_records',
     payload: { value }, scope: SCOPE, grain: GRAIN, occurredAt: T0, observedAt: T0, finalizedAt: null,
     integrity: 'verified', authenticity: 'pinned', completeness: { status: 'complete', method: 'local_scan' },
     measurementModelRef: null, monetaryBasis: null, schemaVersion: 1, sensitivity, redaction: 'none',
@@ -76,18 +76,18 @@ test('the exported pack verifies in-tree and with the standalone verifier, and e
   assert.equal(summary.included, 4, 'three evidence nodes and one claim');
   assert.equal(summary.omitted, 0);
 
-  const encoded = serializeFiscusPack(pack);
-  const local = verifyFiscusPack(encoded);
+  const encoded = serializeSegreantPack(pack);
+  const local = verifySegreantPack(encoded);
   assert.equal(local.ok, true, local.errors.join('; '));
   assert.equal(local.integrity, 'verified');
   assert.equal(local.authenticity, 'not_established');
   assert.equal(local.truth, 'not_evaluated');
   assert.equal(local.attachments.status, 'complete');
 
-  const dir = mkdtempSync(join(tmpdir(), 'fiscuspack-ledger-'));
-  const file = join(dir, 'ledger.fiscuspack.json');
+  const dir = mkdtempSync(join(tmpdir(), 'segreantpack-ledger-'));
+  const file = join(dir, 'ledger.segreantpack.json');
   writeFileSync(file, encoded);
-  const standalone = JSON.parse(execFileSync(process.execPath, [join(import.meta.dirname, '..', 'standalone', 'fiscuspack-verifier.mjs'), file], { encoding: 'utf8' }));
+  const standalone = JSON.parse(execFileSync(process.execPath, [join(import.meta.dirname, '..', 'standalone', 'segreantpack-verifier.mjs'), file], { encoding: 'utf8' }));
   assert.equal(standalone.ok, true, JSON.stringify(standalone.errors));
 
   for (const reference of pack.manifest.includedRecords) {
@@ -118,21 +118,21 @@ test('a byte budget turns the tail of the ledger into a stated omission, and the
   assert.equal(omittedIds.length, summary.omitted);
   for (const id of omittedIds) assert.ok(!pack.manifest.includedRecords.some((r) => r.id === id), `${id} is omitted and must not also be included`);
   assert.match(pack.manifest.omissions[0]!.reason, /byte budget/);
-  assert.equal(verifyFiscusPack(serializeFiscusPack(pack)).ok, true);
+  assert.equal(verifySegreantPack(serializeSegreantPack(pack)).ok, true);
 });
 
 test('a signed pack is integrity-verified with the embedded key and authentic only with the trust anchor', () => {
-  const keys = generateFiscusPackKeyPair();
+  const keys = generateSegreantPackKeyPair();
   const { pack, summary } = exportLedgerPack({ ledger: ledgerWith(2), packId: 'pack:test', createdAt: T1, signingKey: keys.privateKey });
   assert.equal(summary.signed, true);
-  const encoded = serializeFiscusPack(pack);
-  const embeddedOnly = verifyFiscusPack(encoded);
+  const encoded = serializeSegreantPack(pack);
+  const embeddedOnly = verifySegreantPack(encoded);
   assert.equal(embeddedOnly.ok, true);
   assert.equal(embeddedOnly.signature.status, 'valid');
   assert.equal(embeddedOnly.authenticity, 'not_established');
-  const pinned = verifyFiscusPack(encoded, { trustedPublicKey: keys.publicKey });
+  const pinned = verifySegreantPack(encoded, { trustedPublicKey: keys.publicKey });
   assert.equal(pinned.authenticity, 'verified');
-  const wrong = verifyFiscusPack(encoded, { trustedPublicKey: generateFiscusPackKeyPair().publicKey });
+  const wrong = verifySegreantPack(encoded, { trustedPublicKey: generateSegreantPackKeyPair().publicKey });
   assert.equal(wrong.authenticity, 'not_established');
   assert.equal(wrong.ok, false);
 });

@@ -1,12 +1,12 @@
-# Fiscus guide
+# Segreant guide
 
 The complete operator reference: every command, the budget and attribution
 model, Return on Intelligence, provider billing evidence, reconciliation,
 allocation, privacy, and recovery. The [README](../README.md) is the short
 version; [GETTING-STARTED.md](GETTING-STARTED.md) is the first-run walkthrough.
 
-Commands are written as `fiscus <verb>`. From a cloned checkout that is not
-linked onto your `PATH`, run the same thing as `npm run fiscus -- <verb>`.
+Commands are written as `segreant <verb>`. From a cloned checkout that is not
+linked onto your `PATH`, run the same thing as `npm run segreant -- <verb>`.
 
 **Contents:** [Egress control](#egress-control) · [Commands](#commands) · [Budgets](#budgets) ·
 [Attribution headers](#attribution-headers) ·
@@ -24,12 +24,12 @@ linked onto your `PATH`, run the same thing as `npm run fiscus -- <verb>`.
 
 ## Egress control
 
-Fiscus starts in **local-locked** mode. Before a cloud provider can receive
+Segreant starts in **local-locked** mode. Before a cloud provider can receive
 routed traffic, grant only the exact route you intend to use. For the default
 OpenAI Responses/Chat API path:
 
 ```bash
-fiscus egress apply --apply --mode controlled_cloud \
+segreant egress apply --apply --mode controlled_cloud \
   --id openai-inference --purpose provider_inference \
   --data-class provider_request --method POST \
   --origin https://api.openai.com --path-prefix /v1/
@@ -38,25 +38,25 @@ fiscus egress apply --apply --mode controlled_cloud \
 For Anthropic, add a second exact rule (this preserves the OpenAI rule):
 
 ```bash
-fiscus egress apply --apply --mode controlled_cloud \
+segreant egress apply --apply --mode controlled_cloud \
   --id anthropic-inference --purpose provider_inference \
   --data-class provider_request --method POST \
   --origin https://api.anthropic.com --path-prefix /v1/
 ```
 
-Use `fiscus egress status` to inspect the active mode/rules and
-`fiscus egress verify` to verify the local receipt chain. Return to
-`local_locked` with `fiscus egress apply --apply --mode local_locked`. These
-controls govern Fiscus's own HTTP(S) transport; they are not a machine-wide
+Use `segreant egress status` to inspect the active mode/rules and
+`segreant egress verify` to verify the local receipt chain. Return to
+`local_locked` with `segreant egress apply --apply --mode local_locked`. These
+controls govern Segreant's own HTTP(S) transport; they are not a machine-wide
 firewall or a provider-data-retention guarantee. A genuinely absent receipt
 file may establish the first genesis record; a present empty, malformed,
 truncated, hash-invalid, unreadable, or lock-failed history blocks the request
 before DNS or dial and is never silently reset with a null predecessor. Repair
-or restore the history, then rerun `fiscus egress verify`. If a lock is stale,
-first confirm that no Fiscus writer is active, then remove only that lock; Fiscus
+or restore the history, then rerun `segreant egress verify`. If a lock is stale,
+first confirm that no Segreant writer is active, then remove only that lock; Segreant
 never auto-deletes an abandoned lock or restarts the history as genesis.
 
-When working from a checkout, `npm start` and `npm run fiscus` rebuild the full
+When working from a checkout, `npm start` and `npm run segreant` rebuild the full
 Node/browser output before launching; this keeps an ignored, stale `dist/`
 tree from silently running older source.
 
@@ -65,118 +65,118 @@ tree from silently running older source.
 Onboarding — where you are, and how spend gets in with no wiring at all:
 
 ```
-fiscus guide                 Where you are + the single next step, read from your
-                                real state — also what bare `fiscus` shows  (--json)
-fiscus scan [path]           One-command setup: find the AI tools + git repos on
+segreant guide                 Where you are + the single next step, read from your
+                                real state — also what bare `segreant` shows  (--json)
+segreant scan [path]           One-command setup: find the AI tools + git repos on
                                 this machine, preview a plan (read-only). --setup
                                 imports every detected tool and correlates every repo
                                 into per-project RoI, plus a read-only inventory of
                                 other AI tools seen (not yet imported). --deep widens
                                 the walk.
-fiscus import <tool|all>     NATIVE metering, no routing — reads the usage a tool
+segreant import <tool|all>     NATIVE metering, no routing — reads the usage a tool
                                 already logs locally (works on subscriptions the proxy
                                 can never see). Tools: claude-code, opencode, codex.
                                 Idempotent; --watch keeps it live.  (--days N, --json)
-fiscus discover              Correlate already-imported projects into per-project
+segreant discover              Correlate already-imported projects into per-project
                                 RoI without re-importing — `scan --setup`'s other half
-fiscus connect <tool>        Wire a tool through the proxy as a connected source
+segreant connect <tool>        Wire a tool through the proxy as a connected source
                                 (opencode, antigravity, or any OpenAI-compatible API)
-fiscus sources                Spend by connected source, at its honest depth
+segreant sources                Spend by connected source, at its honest depth
                                 (--all for all-time, --json)
 ```
 
 Metering, governance, and value:
 
 ```
-fiscus start                 Start the proxy (:8090) + dashboard (:8091)
-fiscus egress status         Inspect Fiscus-process egress mode, exact cloud rules,
+segreant start                 Start the proxy (:8090) + dashboard (:8091)
+segreant egress status         Inspect Segreant-process egress mode, exact cloud rules,
                                 and local receipt-chain health. `egress plan`
                                 previews a change; `egress apply --apply` persists it.
-fiscus today | week | month  Show spend for a window        (--json)
-fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
+segreant today | week | month  Show spend for a window        (--json)
+segreant roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
-fiscus saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours —
+segreant saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours —
                                 honestly banded, split by task type (--window D, --json)
-fiscus frontier --repo <p>   Compare models on like tasks; lower-cost same-outcome trials + local headroom
-fiscus usage                 RoI for usage without code signals (chat/research),
+segreant frontier --repo <p>   Compare models on like tasks; lower-cost same-outcome trials + local headroom
+segreant usage                 RoI for usage without code signals (chat/research),
                                 scored from reported outcomes
-fiscus judge                 Score a real session's AI-assisted efficiency —
+segreant judge                 Score a real session's AI-assisted efficiency —
                                 algorithmic by default; opt into a local/hosted LLM
                                 judge via config.judge.*. Full-content tiers read
                                 the session's own on-disk transcript ephemerally
                                 (Claude Code, opencode, Codex — bounded excerpt,
                                 nothing persisted)
                                 (--session <id>, --window D, --project <name>, --json)
-fiscus team                  Per-user value extraction — opt-in, distribution-only,
+segreant team                  Per-user value extraction — opt-in, distribution-only,
                                 k-anonymous (--me <user> for your own view, --json)
-fiscus team push --url <u>   Cross-machine: sign + push this window's per-project
-                                value/RoI to a team server YOU run (Fiscus hosts
+segreant team push --url <u>   Cross-machine: sign + push this window's per-project
+                                value/RoI to a team server YOU run (Segreant hosts
                                 nothing). --dry-run to preview, --pubkey to publish
                                 this machine's rollup identity (--window D, --project
                                 <name>, --json)
-fiscus budget --recommend    Evidence-limited cap recommendation from usage +
+segreant budget --recommend    Evidence-limited cap recommendation from usage +
                                 realized value (applies a cap only; no routing or
                                 budget reallocation)
-fiscus alerts                Governance alerts — spikes, throttling, runaway, value
+segreant alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
                                 Deliver to your webhook: --set-webhook <url>, then --notify
                                 (cron it; metadata only — never prompts/code/keys)
-fiscus export                Export the request ledger for BI (--csv|--json, --days N|
+segreant export                Export the request ledger for BI (--csv|--json, --days N|
                                 --all, --out <file>); dashboard has a ↓ CSV button too
-fiscus realize --repo <path> Realization Standard — % of spend that became
+segreant realize --repo <path> Realization Standard — % of spend that became
                                 verified durable outcomes      (--window D, --json)
-fiscus report --kind K       Wire an outcome gate: tested|merged|shipped|incident
+segreant report --kind K       Wire an outcome gate: tested|merged|shipped|incident
                                 --commit <hash> [--verdict pass|fail] [--detail "…"]
-fiscus exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
+segreant exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
                                 `npm test`); every run reports its own exit code
-fiscus receipt --repo <path> Emit signed value receipts (--pubkey to publish your
+segreant receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
-fiscus yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
-fiscus budget ...            Set caps (see below)
-fiscus audit --repo <path>   Cost per commit from git history (--limit N, --json)
+segreant yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
+segreant budget ...            Set caps (see below)
+segreant audit --repo <path>   Cost per commit from git history (--limit N, --json)
 ```
 
 Operations:
 
 ```
-fiscus init                  Write default config + print setup steps
-fiscus doctor                First-run health check — config, DB, proxy, caps, pricing
-fiscus config                Show config and file paths      (--json)
-fiscus pricing --refresh     Update the rate card from the community price feed
+segreant init                  Write default config + print setup steps
+segreant doctor                First-run health check — config, DB, proxy, caps, pricing
+segreant config                Show config and file paths      (--json)
+segreant pricing --refresh     Update the rate card from the community price feed
                                 (--auto opts into a refresh check on start when stale)
-fiscus pricing --coverage    Read-only per-model historical rate-card and match
+segreant pricing --coverage    Read-only per-model historical rate-card and match
                                 evidence (--days N or --all; --json for automation)
-fiscus reprice               Re-cost estimated rows against the current rate card
+segreant reprice               Re-cost estimated rows against the current rate card
                                 (only rows the card now resolves exactly; dry-run
                                 by default, --apply writes)
-fiscus baseline              Show the Lift manual-minutes population prior: source,
+segreant baseline              Show the Lift manual-minutes population prior: source,
                                 age, task-type count (--json). Update it: baseline
                                 --refresh --url <manifest> — no default source exists;
                                 unlike pricing, METR publishes research, not a feed
-fiscus project               Spend by project with aliases applied (--json). Tool
+segreant project               Spend by project with aliases applied (--json). Tool
                                 launch dirs fragment one real project across labels;
                                 merge them: project merge <label...> --into <name>
                                 (query-time only, raw rows untouched — undo with
                                 project unalias <label>). --coverage reports how
                                 each label was obtained — declared, path-inferred,
                                 or never attributed at all
-fiscus prune                 Prune old rows and compact the DB
-fiscus backup --out <file>  Create a verified local SQLite ledger snapshot
-fiscus pack export --out <file>
-                                Write the epistemic ledger as a .fiscuspack: every
+segreant prune                 Prune old rows and compact the DB
+segreant backup --out <file>  Create a verified local SQLite ledger snapshot
+segreant pack export --out <file>
+                                Write the epistemic ledger as a .segreantpack: every
                                 record bound by digest, omissions and redactions
                                 stated ([--sign <private-key.pem>]); pack verify
                                 <file> [--trust <key>] and pack inspect <file>
                                 check the bytes and read the manifest — truth is
                                 never evaluated
-fiscus plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+segreant plugin run --manifest <file> --request <file> --exec <path> --scope k=v
                                 One bounded exchange with a plugin process; preview
                                 the kernel Evidence it would append (self-asserted,
                                 completeness unknown), --apply to append it
-fiscus restore --from <file> --out <file>
+segreant restore --from <file> --out <file>
                                 Preview a snapshot, or create a new verified
                                 database with --apply (never overwrites the active ledger)
-fiscus demo                  Seed isolated, labeled synthetic data so every surface
+segreant demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve starts the dashboard
                                 on it; --clear removes it). Append --demo to today,
                                 alerts, usage, or start to view the demo data.
@@ -185,7 +185,7 @@ fiscus demo                  Seed isolated, labeled synthetic data so every surf
 ### Budgets
 
 ```bash
-fiscus budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
+segreant budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
 ```
 
 By default the cap enforces on **live proxy spend only** — the traffic it can
@@ -193,13 +193,13 @@ actually block. Imported subscription usage (Claude Code/opencode/codex logs) is
 metered and shown everywhere, but doesn't trip the cap: it's sunk cost observed
 after the fact, and letting it block live traffic froze a proxy that had spent
 almost nothing. Prefer one cap over total observed spend?
-`fiscus budget --include-imported on`.
+`segreant budget --include-imported on`.
 
 | Flag | Meaning |
 |---|---|
 | `--daily N` | Hard daily cap — requests are blocked once today's spend hits `N`. |
 | `--soft N` | Soft daily threshold — a warning header is added past `N` (no block). |
-| `--session N` | Hard per-session cap (`X-Fiscus-Session-Id`). |
+| `--session N` | Hard per-session cap (`X-Segreant-Session-Id`). |
 | `--runaway N` | Block when spend in the sliding window exceeds `N` (loop guard). |
 | `--window S` | Runaway window length in seconds (default 60). |
 
@@ -212,24 +212,24 @@ Group spend by project, developer/team, session, or task by sending custom
 headers (your agent or a wrapper script sets these):
 
 ```
-X-Fiscus-Project: backend-refactor
-X-Fiscus-User: alice@team          # per-developer / per-team FinOps
-X-Fiscus-Session-Id: <uuid>
-X-Fiscus-Task-Weight: 1.5
+X-Segreant-Project: backend-refactor
+X-Segreant-User: alice@team          # per-developer / per-team FinOps
+X-Segreant-Session-Id: <uuid>
+X-Segreant-Task-Weight: 1.5
 ```
 
-Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
+Spend then rolls up by user in `segreant today`, the dashboard's "By user"
 card, and the CSV export. Unset → reported as `unassigned`. These headers are
 stripped before the request is forwarded upstream; the provider receives the
-request without Fiscus's local attribution labels.
+request without Segreant's local attribution labels.
 
 **These labels are assertions, not verified identity.** Anything on this machine
-that can reach the proxy can set them, so Fiscus records *how* each project label
+that can reach the proxy can set them, so Segreant records *how* each project label
 was obtained alongside the label itself:
 
 | Basis | Meaning |
 | --- | --- |
-| `client_declared` | An `X-Fiscus-Project` header — or a `/fiscus/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
+| `client_declared` | An `X-Segreant-Project` header — or a `/segreant/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
 | `tool_log_repo_resolved` | The tool recorded a working directory, and it resolved to a git repository on this machine. The label is that repository's root name. |
 | `tool_log_inferred` | Derived from a working directory the tool recorded, which is not inside a git repository. |
 | `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
@@ -242,23 +242,23 @@ record the working directory a session ran in, which is routinely a
 subdirectory — so the old basename rule split one repository's spend across
 `web`, `api`, `packages`, and merged unrelated repositories that share a common
 leaf name. The importers now ask git for the working-tree root, which produces
-the same label `fiscus realize` computes for that repo and records
+the same label `segreant realize` computes for that repo and records
 `tool_log_repo_resolved`. Outside a repository it degrades to the previous
 behaviour and says so. Existing rows are never rewritten, so an import that
-relabels reports it and points at `fiscus project alias` — the ledger records
+relabels reports it and points at `segreant project alias` — the ledger records
 what it recorded.
 
 **A client with no headers can still declare a project.** Antigravity's
 custom-provider form has a base URL and no custom-headers field, so
-`X-Fiscus-Project` is simply unavailable to it. The proxy therefore also accepts
-the project as a path prefix — `http://localhost:8090/fiscus/backend-api/v1` —
+`X-Segreant-Project` is simply unavailable to it. The proxy therefore also accepts
+the project as a path prefix — `http://localhost:8090/segreant/backend-api/v1` —
 which it strips before forwarding, so the provider sees an unchanged request.
-The header wins if both are sent. Fiscus offers the URL and will not configure
+The header wins if both are sent. Segreant offers the URL and will not configure
 it: a provider entry is IDE-wide, so one baked-in project would mislabel every
 other repository. It is your declaration, recorded as `client_declared`, and
 never verified.
 
-`fiscus connect opencode` sets the project header for you **only when the config
+`segreant connect opencode` sets the project header for you **only when the config
 it edits is project-scoped** — an `opencode.json(c)` in the repo itself, which by
 construction applies to that project alone. For a global config it deliberately
 sets nothing and says so: one label baked into a config that governs every
@@ -266,12 +266,12 @@ directory would be wrong in all the others, and a confidently wrong project is
 worse than an honest blank. To attribute a globally-configured tool, keep an
 `opencode.json` in the repo and re-run connect there.
 
-Inspect the split with `fiscus project --coverage` (`--json` for the full result);
+Inspect the split with `segreant project --coverage` (`--json` for the full result);
 it also appears under each bar of the dashboard's "By project" card and as an
 `attributionBasis` column in the CSV export. Recording the basis changes no
 totals — the same spend rolls up the same way. This is deliberately **not**
 chargeback-grade attribution: that would require a verified collector identity,
-which Fiscus does not have.
+which Segreant does not have.
 
 ---
 
@@ -279,7 +279,7 @@ which Fiscus does not have.
 
 Capping waste is the floor. The question that matters is **how much you actually
 get from the AI** — and neither "tokens consumed" nor "lines of code" ever
-answered it. Fiscus's core is **Return on Intelligence (RoI)**: an
+answered it. Segreant's core is **Return on Intelligence (RoI)**: an
 evidence-limited measurement of realized AI value. The current implementation
 and evidence are strongest for instrumented coding-agent workflows; the
 underlying accounting model is intended to extend to broader AI usage, but that
@@ -308,7 +308,7 @@ The two faces are deliberately **never multiplied**. The dollar scenario and
 the Lift lens answer distinct but observational questions; multiplying them
 would turn an index-scale lens into a financial causal claim. A
 supervision-time denominator prevents a token-only calculation from presenting
-an implausible scenario as evidence. Fiscus refuses to print a dollar scenario
+an implausible scenario as evidence. Segreant refuses to print a dollar scenario
 until it has measured supervision time to divide by. A causal net benefit result
 requires a registered randomized study with a frozen protocol, pre-exposure
 assignment, execution/outcome lineage, a predeclared quality guardrail, and a
@@ -334,7 +334,7 @@ The four lenses, each answering a different real question (full definitions in
 
 A lens with no signal reads `uninstrumented` and is excluded — never faked — and
 the report shows your lens coverage. The path to a higher number is to wire more
-signal, not to game one. `fiscus roi --repo .`
+signal, not to game one. `segreant roi --repo .`
 
 ### The Realization substrate
 
@@ -355,19 +355,19 @@ unit is *realized* when it reaches the end with no failure. From that:
 
 What makes it a *standard* and not a dashboard: every realized unit emits a
 **Value Receipt** — an ed25519-signed, portable record of `cost → gate verdicts →
-outcome` that anyone can verify without access to your source (`fiscus
+outcome` that anyone can verify without access to your source (`segreant
 receipt`). And `unknown` is never `fault`: a gate you haven't wired stays
 `unknown` and the report shows your instrumentation coverage ("3 of 8 gates
 wired"). The path to a higher number is to wire more gates — not to game one.
 
 ```bash
-fiscus realize --repo .            # the funnel + the three headline numbers
-fiscus report --kind tested --commit HEAD   # wire an outcome gate
-fiscus receipt --repo .            # emit signed value receipts
+segreant realize --repo .            # the funnel + the three headline numbers
+segreant report --kind tested --commit HEAD   # wire an outcome gate
+segreant receipt --repo .            # emit signed value receipts
 ```
 
 The full model is in **[docs/THE-STANDARD.md](THE-STANDARD.md)**. The older
-**AI Yield** (`fiscus yield`) remains as a compatibility command for one
+**AI Yield** (`segreant yield`) remains as a compatibility command for one
 *artifact-persistence lens* — retained introduced lines per dollar. It is not a
 quality grade and does not establish correctness, maintainability, business
 value, or AI/human contribution. The Standard, not this lens, is the headline.
@@ -377,7 +377,7 @@ first Yield-only attempt were rebuilt is in [docs/RESEARCH-REVIEW.md §3](RESEAR
 ## Budget controls and model trials
 
 **Current evidence boundary (supersedes the historic generic-allocation wording
-below):** Fiscus does **not** issue a default reallocation instruction across
+below):** Segreant does **not** issue a default reallocation instruction across
 unlike task types or projects. Raw RoI cells are not causal or generally
 comparable, so the CLI and dashboard withhold those actions. The current
 actionable decision support is the within-task, review-only cheaper-model trial
@@ -387,7 +387,7 @@ below; any generic raw allocation arithmetic is retained only as an explicitly
 Measuring RoI informs the controls and experiments below. It does not turn raw
 historical rankings into a default budget-allocation action:
 
-- **A value-aware cap** — `fiscus budget --recommend` derives a daily budget
+- **A value-aware cap** — `segreant budget --recommend` derives a daily budget
   from real usage (p90 of active days, after at least seven active days),
   tightened when realized value is low, with projected monthly waste called
   out.
@@ -396,7 +396,7 @@ historical rankings into a default budget-allocation action:
   RoI — *which team's AI spend is paying off* — without a single repository on
   their machine. The person who holds the budget finally gets to see whether it
   worked.
-- **Cheaper-model trials** — `fiscus frontier` compares models only within the
+- **Cheaper-model trials** — `segreant frontier` compares models only within the
   same task type. It surfaces a lower-cost candidate only when it has no worse
   observed realized-outcome rate across at least three mature units per model.
   Each model is priced by **its own attributed spend**, never by the whole
@@ -447,7 +447,7 @@ re-measured after any operator-led trial.
 ## How it works
 
 ```
-IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
+IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Segreant proxy (:8090)
                                                        │ price locally, log to SQLite
                                                        ▼ forward, keys untouched
                                                   api.anthropic.com / api.openai.com
@@ -463,7 +463,7 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
 
 The rate card is a local list-price estimate. Every newly calculated ledger row
 retains the exact rate-card SHA-256, source kind, and exact/family/fallback
-match path that produced it; `fiscus reprice --apply` keeps an append-only
+match path that produced it; `segreant reprice --apply` keeps an append-only
 before/after event instead of silently overwriting the estimate. Tool-reported
 and demo values are labelled separately. None of these labels claim
 provider-invoiced, discounted, credited, taxed, or reconciled cost.
@@ -476,7 +476,7 @@ outcomes are independent of price and are never touched, so a reprice cannot
 change whether work realized. Snapshots written before that basis was recorded
 cannot be reproduced faithfully; rather than guess, they keep their original
 amounts, are marked as carrying pre-reprice costs on the CLI and the dashboard,
-and are excluded from cheaper-model comparison until `fiscus realize` recomputes
+and are excluded from cheaper-model comparison until `segreant realize` recomputes
 them. Seeded demo units are neither: their costs are asserted by the seed, not
 summed from the ledger, so a ledger reprice leaves them alone.
 
@@ -489,17 +489,17 @@ Full design in **[docs/ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ### Provider billing evidence (local import v1)
 
-Fiscus can now retain a separate, immutable ledger of **operator-supplied
+Segreant can now retain a separate, immutable ledger of **operator-supplied
 OpenAI provider-cost evidence**. This is the first step beyond a local price
 card: it gives a finance owner a source digest, account reference, source
 period, coverage declaration, and provider-declared positive/negative charge lines without
 turning them into proxy requests.
 
 ```powershell
-fiscus billing import --file .\openai-costs.fiscus.json       # validate/dry-run
-fiscus billing import --file .\openai-costs.fiscus.json --apply
-fiscus billing status
-fiscus billing export --csv --out .\provider-cost-evidence.csv
+segreant billing import --file .\openai-costs.segreant.json       # validate/dry-run
+segreant billing import --file .\openai-costs.segreant.json --apply
+segreant billing status
+segreant billing export --csv --out .\provider-cost-evidence.csv
 ```
 
 If you operate the local proxy, you may additionally attach an **operator-declared,
@@ -507,8 +507,8 @@ unverified** account/project reference to future OpenAI-proxy rows that use the
 exact configured upstream:
 
 ```powershell
-fiscus billing scope set --account-ref finops-production --project-ref proj_123 # preview
-fiscus billing scope set --account-ref finops-production --project-ref proj_123 --apply
+segreant billing scope set --account-ref finops-production --project-ref proj_123 # preview
+segreant billing scope set --account-ref finops-production --project-ref proj_123 --apply
 ```
 
 It is local routing provenance, not provider authentication or reconciliation:
@@ -525,22 +525,22 @@ schema, idempotency rules, retention model, and the gate before reconciliation.
 ### Optional OpenAI Costs observation (read-only, preview first)
 
 With an active local declaration for the exact `https://api.openai.com` endpoint
-and an exact OpenAI `proj_...` project reference, Fiscus can make one explicit,
+and an exact OpenAI `proj_...` project reference, Segreant can make one explicit,
 read-only observation of the documented Organization Costs daily buckets:
 
 ```powershell
 # Validates only — no credential lookup, no network request, no database write.
-fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-08
+segreant billing openai-costs preview --from 2026-01-01 --to 2026-01-08
 
 # Dry pull is also a preview. --apply is required before any network call.
 # The process-only OPENAI_ADMIN_API_KEY is never written to config or SQLite.
 $env:OPENAI_ADMIN_API_KEY = '...'
-fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
-fiscus billing openai-costs status
+segreant billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
+segreant billing openai-costs status
 
 # Reads only the newest complete local provider snapshot and local request ledger.
 # It performs no network request, credential lookup, database write, or variance calculation.
-fiscus billing openai-costs coverage
+segreant billing openai-costs coverage
 ```
 
 The connector uses only `GET https://api.openai.com/v1/organization/costs`, with
@@ -557,18 +557,18 @@ verification and cannot see off-path usage.
 
 ### Reconciliation (project-day grain)
 
-Once a complete snapshot exists, Fiscus compares it with local metering at the
+Once a complete snapshot exists, Segreant compares it with local metering at the
 **only grain where the two join** — the project-day total:
 
 ```powershell
-fiscus billing reconcile                        # read-only
-fiscus billing reconcile --apply                # record it as an immutable derived run
-fiscus billing reconcile --json --materiality 1.00
+segreant billing reconcile                        # read-only
+segreant billing reconcile --apply                # record it as an immutable derived run
+segreant billing reconcile --json --materiality 1.00
 ```
 
 ```text
 Provider reported   $70.20
-Fiscus metered      $66.60   (local rate-card estimate)
+Segreant metered      $66.60   (local rate-card estimate)
 Unexplained         +$3.60
 ```
 
@@ -593,14 +593,14 @@ an *upper bound* on it, not a measurement), line items do not join to requests,
 and local amounts are rate-card estimates. Reconciled cost stays out of request
 totals, budget enforcement, RoI, and model recommendations.
 
-**Two routes to the provider side, and Fiscus says which one you used.** A
+**Two routes to the provider side, and Segreant says which one you used.** A
 read-only Costs pull needs an Admin key and is the better evidence. If you can
 download a bill but cannot mint a key, import it and adopt it instead — no
 credential, no network request:
 
 ```powershell
-fiscus billing import --file .\your-costs-export.fiscus.json --apply
-fiscus billing openai-costs adopt --import-id <id> --apply
+segreant billing import --file .\your-costs-export.segreant.json --apply
+segreant billing openai-costs adopt --import-id <id> --apply
 ```
 
 The arithmetic is identical. The evidence is not: an adopted observation is
@@ -611,7 +611,7 @@ over. Adoption takes whole UTC days for your declared project only, and reports
 what it excluded — an account-level credit dropped in silence would surface later
 as a residual that never existed.
 
-Full walkthrough, including exactly which credential is needed and what Fiscus
+Full walkthrough, including exactly which credential is needed and what Segreant
 will not do with it: **[docs/PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md)**.
 
 ### Cost-centre allocation
@@ -620,11 +620,11 @@ Who an organization has **decided** owns the money — which is not the same
 question as which folder the spend arrived under:
 
 ```powershell
-fiscus alloc centre eng --name "Engineering" --owner cto
-fiscus alloc rule backend --method direct --centre eng --match-project backend-api
-fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" --match-project web-frontend
-fiscus alloc rule infra --method proportional_to_direct --centre "shared:0" --match-project shared-infra
-fiscus alloc run --from 2026-08-01 --to 2026-09-01 [--apply] [--json]
+segreant alloc centre eng --name "Engineering" --owner cto
+segreant alloc rule backend --method direct --centre eng --match-project backend-api
+segreant alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" --match-project web-frontend
+segreant alloc rule infra --method proportional_to_direct --centre "shared:0" --match-project shared-infra
+segreant alloc run --from 2026-08-01 --to 2026-09-01 [--apply] [--json]
 ```
 
 ```text
@@ -660,7 +660,7 @@ Full model, including the three methods and what is deliberately not built:
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
-Fiscus can meter more than two vendors. The simplest way: point
+Segreant can meter more than two vendors. The simplest way: point
 `upstreams.openai` at any compatible base — **OpenRouter** (which itself fronts
 Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
 model servers, **DeepSeek**, **Mistral** — and configured traffic is metered,
@@ -673,9 +673,9 @@ that estimate as the configured upstream's billed, discounted, credited, taxed,
 or reconciled amount.
 
 Do **not** switch providers per request through a routing header. Configure one
-trusted OpenAI-compatible upstream in Fiscus instead; use separate Fiscus
+trusted OpenAI-compatible upstream in Segreant instead; use separate Segreant
 processes when you need separate upstreams. The legacy
-`X-Fiscus-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
+`X-Segreant-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
 destination could forward provider authorization to an untrusted URL.
 
 ---
@@ -688,7 +688,7 @@ what was corrected (the cost formula, the MITM design, model ids), and what was
 deliberately left out (a per-developer "efficiency score" that would just
 recreate the metric-gaming it's meant to stop).
 
-Cost-reduction percentages depend on your baseline waste. Fiscus's job is to
+Cost-reduction percentages depend on your baseline waste. Segreant's job is to
 make that baseline visible and give you the controls to act — not to promise a
 number.
 
@@ -697,26 +697,26 @@ number.
 ## Privacy
 
 - Read the exact controls and outbound paths in **[docs/DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)**.
-- Fiscus operates locally and sends no Fiscus telemetry or analytics by default.
-- When you route a request through the proxy, your configured AI provider receives the normal provider request; Fiscus does not store provider API keys.
+- Segreant operates locally and sends no Segreant telemetry or analytics by default.
+- When you route a request through the proxy, your configured AI provider receives the normal provider request; Segreant does not store provider API keys.
 - Provider API keys pass through to the provider and are **never stored**.
 - **Locally stored, not transmitted:** to detect First-Pass Acceptance (whether
-  the AI's proposed edit matches what you actually committed), Fiscus
+  the AI's proposed edit matches what you actually committed), Segreant
   temporarily stores the AI's proposed code **on your own disk**
-  (`~/.fiscus/fiscus.db`) for up to `proposalRetentionDays` (default 30
+  (`~/.segreant/segreant.db`) for up to `proposalRetentionDays` (default 30
   days) — long enough to correlate against a later git commit, never
   transmitted anywhere. Set `metadataOnly: true` in your config to disable
   this and store only token/cost metadata (Acceptance tracking turns off).
-  `fiscus prune`, or the dashboard Settings page, purges it early on demand.
+  `segreant prune`, or the dashboard Settings page, purges it early on demand.
 
 - All cost computation happens on-device against a local pricing table.
 - The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
-  or Fiscus analytics. This does not remove the explicit provider and
+  or Segreant analytics. This does not remove the explicit provider and
   operator-configured outbound paths described in the data-boundary disclosure.
-- The local store lives under `~/.fiscus` (`%USERPROFILE%\.fiscus` on
+- The local store lives under `~/.segreant` (`%USERPROFILE%\.segreant` on
   Windows) under your OS file permissions.
 - **The one thing that can leave the device is opt-in and metadata-only:** if you
-  set an alert webhook (`fiscus alerts --set-webhook <url>`), Fiscus POSTs
+  set an alert webhook (`segreant alerts --set-webhook <url>`), Segreant POSTs
   alert summaries — severity, title, a short metric like `$35.00 / $30.00` — to
   *your* endpoint. By construction it sends nothing else: no prompts, no code, no
   keys. Off by default.
@@ -727,25 +727,25 @@ Create a consistent, integrity-checked snapshot without stopping the local
 service:
 
 ```text
-fiscus backup --out .\backups\fiscus-2026-08-28.sqlite --json
+segreant backup --out .\backups\segreant-2026-08-28.sqlite --json
 ```
 
 The command uses SQLite `VACUUM INTO`, verifies quick/foreign-key integrity, and
 writes a redacted `.manifest.json` containing the artifact hash and schema
 fingerprint. Backups may contain retained local proposals or causal assignment
-material; they are sensitive local files and are not encrypted by Fiscus.
+material; they are sensitive local files and are not encrypted by Segreant.
 
 Inspect a backup without writing anything, then restore it into a new path:
 
 ```text
-fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --json
-fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --apply --json
+segreant restore --from .\backups\segreant-2026-08-28.sqlite --out .\recovered\segreant.sqlite --json
+segreant restore --from .\backups\segreant-2026-08-28.sqlite --out .\recovered\segreant.sqlite --apply --json
 ```
 
-Restore accepts only a verified Fiscus-created backup artifact with its
+Restore accepts only a verified Segreant-created backup artifact with its
 integrity manifest, refuses an existing destination, and never overwrites the
 active ledger.
-Point a later isolated run at the recovered file with `FISCUS_DB` only after
+Point a later isolated run at the recovered file with `SEGREANT_DB` only after
 inspecting the verification result. This is a local recovery artifact, not an
 independent audit attestation or provider-billing record.
 
@@ -755,13 +755,13 @@ When a local run needs to be handed off for review, generate a redacted,
 read-only diagnostic bundle:
 
 ```text
-fiscus diagnostics --json
-fiscus diagnostics --json --out .\support\fiscus-diagnostics.json
+segreant diagnostics --json
+segreant diagnostics --json --out .\support\segreant-diagnostics.json
 ```
 
 The bundle includes a correlation operation ID, probe durations and error
 classes, runtime/configuration/schema/egress/pricing health, and resource
-observations. It replaces the Fiscus home with `<FISCUS_HOME>/…` and excludes
+observations. It replaces the Segreant home with `<SEGREANT_HOME>/…` and excludes
 prompts, source, credentials, raw ledger rows, and provider response bodies.
 The export is atomic and refuses to overwrite an existing file; it never sends
 telemetry or mutates the active ledger/configuration.

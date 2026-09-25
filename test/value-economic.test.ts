@@ -25,10 +25,10 @@ function git(cwd: string, args: string[], env: Record<string, string> = {}): voi
 }
 
 function repo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-value-economic-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-value-economic-'));
   git(dir, ['init', '-q']);
-  git(dir, ['config', 'user.email', 'value@fiscus.test']);
-  git(dir, ['config', 'user.name', 'fiscus-test']);
+  git(dir, ['config', 'user.email', 'value@segreant.test']);
+  git(dir, ['config', 'user.name', 'segreant-test']);
   return dir;
 }
 
@@ -117,20 +117,20 @@ test('commit attribution marks a mixed exact/legacy window incomplete instead of
 test('the effective request read model preserves dimensions, alias scope, and correction lineage', () => {
   const store = new Store(':memory:');
   try {
-    store.setProjectAlias('fiscus-alias', 'fiscus');
-    store.insertRequest({ ...request('fiscus-alias', 'exact', money('1.234567', 'USD', 'list')), sessionId: 's1', source: 'codex', user: 'ada' });
+    store.setProjectAlias('segreant-alias', 'segreant');
+    store.insertRequest({ ...request('segreant-alias', 'exact', money('1.234567', 'USD', 'list')), sessionId: 's1', source: 'codex', user: 'ada' });
     store.insertRequest(request('other', 'other', money('9', 'USD', 'list'), 9));
 
     const rows = store.economicRequestRowsInRange(
       Date.parse('2026-06-01T10:00:00Z'),
       Date.parse('2026-06-01T11:00:00Z'),
-      { project: 'fiscus' },
+      { project: 'segreant' },
     );
     assert.equal(rows.length, 1);
     const row = rows[0]!;
     assert.equal(row.requestId, 'exact');
-    assert.equal(row.project, 'fiscus-alias');
-    assert.equal(row.projectCanonical, 'fiscus');
+    assert.equal(row.project, 'segreant-alias');
+    assert.equal(row.projectCanonical, 'segreant');
     assert.equal(row.sessionId, 's1');
     assert.equal(row.provider, 'anthropic');
     assert.equal(row.model, 'claude-opus-4-8');
@@ -209,9 +209,9 @@ test('realization rollup exposes exact effective spend coverage separately from 
 test('grouped session reads preserve exact effective coverage and legacy compatibility totals', () => {
   const store = new Store(':memory:');
   try {
-    store.insertRequest({ ...request('fiscus', 's1-exact', money('1.25', 'USD', 'list'), 1.25), sessionId: 's1', user: 'ada' });
-    store.insertRequest({ ...request('fiscus', 's1-legacy', undefined, 2), sessionId: 's1', user: 'ada' });
-    store.insertRequest({ ...request('fiscus', 's2-exact', money('0.75', 'USD', 'list'), 0.75), sessionId: 's2', user: 'lin' });
+    store.insertRequest({ ...request('segreant', 's1-exact', money('1.25', 'USD', 'list'), 1.25), sessionId: 's1', user: 'ada' });
+    store.insertRequest({ ...request('segreant', 's1-legacy', undefined, 2), sessionId: 's1', user: 'ada' });
+    store.insertRequest({ ...request('segreant', 's2-exact', money('0.75', 'USD', 'list'), 0.75), sessionId: 's2', user: 'lin' });
     const start = Date.parse('2026-06-01T10:00:00Z');
     const end = Date.parse('2026-06-01T11:00:00Z');
 
@@ -238,7 +238,7 @@ test('grouped session reads preserve exact effective coverage and legacy compati
 test('non-coding usage reports exact session economics without changing outcome classification', () => {
   const store = new Store(':memory:');
   try {
-    store.insertRequest({ ...request('fiscus', 'usage-exact', money('0.333333', 'USD', 'list'), 0.333333), sessionId: 'usage-session', user: 'ada' });
+    store.insertRequest({ ...request('segreant', 'usage-exact', money('0.333333', 'USD', 'list'), 0.333333), sessionId: 'usage-session', user: 'ada' });
     const report = computeUsageRoI(store, {
       startMs: Date.parse('2026-06-01T10:00:00Z'),
       endMs: Date.parse('2026-06-01T11:00:00Z'),
@@ -260,7 +260,7 @@ test('non-coding usage reports exact session economics without changing outcome 
 test('per-user value rows retain exact effective spend coverage under the existing privacy aggregation', () => {
   const store = new Store(':memory:');
   try {
-    store.insertRequest({ ...request('fiscus', 'cohort-exact', money('0.125', 'USD', 'list'), 0.125), sessionId: 'cohort-session', user: 'ada' });
+    store.insertRequest({ ...request('segreant', 'cohort-exact', money('0.125', 'USD', 'list'), 0.125), sessionId: 'cohort-session', user: 'ada' });
     const rows = userValueRows(store, {
       startMs: Date.parse('2026-06-01T10:00:00Z'),
       endMs: Date.parse('2026-06-01T11:00:00Z'),
@@ -278,8 +278,8 @@ test('per-user value rows retain exact effective spend coverage under the existi
 test('model-grouped effective reads keep provider/model identity and exact own-spend coverage', () => {
   const store = new Store(':memory:');
   try {
-    store.insertRequest({ ...request('fiscus', 'model-a', money('0.000001', 'USD', 'list'), 0.000001), sessionId: 'model-session', provider: 'anthropic', model: 'claude-opus-4-8' });
-    store.insertRequest({ ...request('fiscus', 'model-b', money('2', 'USD', 'list'), 2), sessionId: 'model-session', provider: 'openai', model: 'gpt-4o' });
+    store.insertRequest({ ...request('segreant', 'model-a', money('0.000001', 'USD', 'list'), 0.000001), sessionId: 'model-session', provider: 'anthropic', model: 'claude-opus-4-8' });
+    store.insertRequest({ ...request('segreant', 'model-b', money('2', 'USD', 'list'), 2), sessionId: 'model-session', provider: 'openai', model: 'gpt-4o' });
     const models = store.economicModelUnits(Date.parse('2026-06-01T10:00:00Z'), Date.parse('2026-06-01T11:00:00Z'));
     const anthropic = models.find((row) => row.provider === 'anthropic');
     if (anthropic === undefined || anthropic.economic === undefined) throw new Error('anthropic exact model row is missing');
@@ -305,8 +305,8 @@ function modelRow(
     sessionId: null,
     provider,
     model,
-    project: 'fiscus',
-    projectCanonical: 'fiscus',
+    project: 'segreant',
+    projectCanonical: 'segreant',
     source: 'proxy',
     user: null,
     via: 'proxy',
@@ -367,8 +367,8 @@ test('daily effective series preserves per-bucket exact coverage for budget advi
   const store = new Store(':memory:');
   try {
     const ts = Date.parse('2026-06-01T10:30:00Z');
-    store.insertRequest({ ...request('fiscus', 'series-exact', money('1.5', 'USD', 'list'), 1.5), tsEpochMs: ts, via: 'proxy' });
-    store.insertRequest({ ...request('fiscus', 'series-legacy', undefined, 2.5), tsEpochMs: ts + 1000, via: 'proxy' });
+    store.insertRequest({ ...request('segreant', 'series-exact', money('1.5', 'USD', 'list'), 1.5), tsEpochMs: ts, via: 'proxy' });
+    store.insertRequest({ ...request('segreant', 'series-legacy', undefined, 2.5), tsEpochMs: ts + 1000, via: 'proxy' });
     const series = store.economicSeries(Date.parse('2026-06-01T00:00:00Z'), Date.parse('2026-06-02T00:00:00Z'), 86_400_000, true);
     assert.equal(series.length, 1);
     assert.equal(series[0]!.costUsd, 4);
@@ -384,8 +384,8 @@ test('budget advice consumes exact effective buckets and discloses unresolved le
   const store = new Store(':memory:');
   try {
     const now = Date.parse('2026-06-02T00:00:00Z');
-    store.insertRequest({ ...request('fiscus', 'budget-exact', money('0.125', 'USD', 'list'), 0.125), tsEpochMs: now - 60_000, via: 'proxy' });
-    store.insertRequest({ ...request('fiscus', 'budget-legacy', undefined, 4), tsEpochMs: now - 30_000, via: 'proxy' });
+    store.insertRequest({ ...request('segreant', 'budget-exact', money('0.125', 'USD', 'list'), 0.125), tsEpochMs: now - 60_000, via: 'proxy' });
+    store.insertRequest({ ...request('segreant', 'budget-legacy', undefined, 4), tsEpochMs: now - 30_000, via: 'proxy' });
     const config = structuredClone(DEFAULT_CONFIG);
     const advice = budgetAdvice(store, config, { nowMs: now, windowDays: 2 });
     if (advice.economic === undefined) throw new Error('budget advice is missing economic coverage');

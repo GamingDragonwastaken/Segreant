@@ -154,8 +154,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         // The server refuses every mutating route without this header. It is a
         // CSRF guard, and a good one: a cross-origin page cannot set a custom
         // header without a preflight this server never answers, so a malicious
-        // site cannot drive the operator's local Fiscus by loading an image.
-        'x-fiscus-local': '1',
+        // site cannot drive the operator's local Segreant by loading an image.
+        'x-segreant-local': '1',
         ...(init?.body ? { 'content-type': 'application/json' } : {}),
         ...init?.headers,
       },
@@ -163,7 +163,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     // The server is on localhost, so a network failure means it stopped — worth
     // saying plainly rather than rendering an empty screen that looks like zero.
-    throw new ApiError('Fiscus is not responding. Is it still running?', 0, path);
+    throw new ApiError('Segreant is not responding. Is it still running?', 0, path);
   }
 
   if (!response.ok) {

@@ -2,7 +2,7 @@
  * Hash-chained local receipts. A genuinely absent history may establish genesis;
  * a present history must validate completely before it can be extended. This
  * detects accidental edits/truncation and fails closed before dial. The lock
- * coordinates cooperative Fiscus writers; path identity checks catch ordinary
+ * coordinates cooperative Segreant writers; path identity checks catch ordinary
  * replacement races, but a machine administrator can still replace local files
  * outside that cooperation boundary. Persistence is synchronous, not an fsync
  * or power-loss durability guarantee.
@@ -24,7 +24,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { fiscusHome, type EgressDataClass, type EgressPurpose } from '../config.ts';
+import { segreantHome, type EgressDataClass, type EgressPurpose } from '../config.ts';
 import type { EgressTargetClass } from './policy.ts';
 
 export type EgressReceiptEvent = 'preflight_allowed' | 'preflight_denied' | 'dial_started' | 'response_received' | 'transport_failed';
@@ -147,20 +147,20 @@ export function setReceiptContentionLockLstatForTests(hook: ((path: string) => S
 }
 
 export function egressReceiptPath(): string {
-  return join(fiscusHome(), 'egress-receipts.jsonl');
+  return join(segreantHome(), 'egress-receipts.jsonl');
 }
 
 function receiptLockPath(): string {
-  return join(fiscusHome(), 'egress-receipts.lock');
+  return join(segreantHome(), 'egress-receipts.lock');
 }
 
 function receiptCheckpointPath(): string {
-  return join(fiscusHome(), 'egress-receipts.checkpoint.json');
+  return join(segreantHome(), 'egress-receipts.checkpoint.json');
 }
 
 /**
  * A receipt line's predecessor must be the actual immediately preceding line.
- * Appending without a lock makes two Fiscus processes race that invariant and
+ * Appending without a lock makes two Segreant processes race that invariant and
  * silently fork the hash chain, so every append/verification obtains the same
  * short-lived exclusive local lock. A stale lock fails closed rather than being
  * guessed away after a crash.
@@ -225,11 +225,11 @@ function releaseReceiptLock(fd: number, lockPath: string, acquiredIdentity: Rece
 }
 
 function withReceiptLock<T>(fn: () => T): T {
-  const home = fiscusHome();
+  const home = segreantHome();
   try {
     mkdirSync(home, { recursive: true });
   } catch (error) {
-    throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while preparing the Fiscus home');
+    throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while preparing the Segreant home');
   }
   const lockPath = receiptLockPath();
   let fd: number | null = null;
@@ -355,8 +355,8 @@ function schemaErrors(value: unknown, line: number): string[] {
   if (typeof value.id !== 'string' || value.id.length === 0) failures.push('line ' + line + ': id must be a non-empty string');
   if (!isIsoTimestamp(value.at)) failures.push('line ' + line + ': at must be a canonical ISO date string');
   if (!RECEIPT_EVENTS.includes(value.event as EgressReceiptEvent)) failures.push('line ' + line + ': event is not a supported receipt event');
-  if (!RECEIPT_PURPOSES.includes(value.purpose as EgressPurpose)) failures.push('line ' + line + ': purpose is not a supported Fiscus purpose');
-  if (!RECEIPT_DATA_CLASSES.includes(value.dataClass as EgressDataClass)) failures.push('line ' + line + ': dataClass is not a supported Fiscus data class');
+  if (!RECEIPT_PURPOSES.includes(value.purpose as EgressPurpose)) failures.push('line ' + line + ': purpose is not a supported Segreant purpose');
+  if (!RECEIPT_DATA_CLASSES.includes(value.dataClass as EgressDataClass)) failures.push('line ' + line + ': dataClass is not a supported Segreant data class');
   if (typeof value.method !== 'string' || !/^[A-Z]+$/.test(value.method)) failures.push('line ' + line + ': method must be a non-empty uppercase token');
   if (!RECEIPT_TARGET_CLASSES.includes(value.targetClass as EgressTargetClass | 'denied')) failures.push('line ' + line + ': targetClass is not supported');
   if (value.ruleId !== null && typeof value.ruleId !== 'string') failures.push('line ' + line + ': ruleId must be a string or null');
@@ -443,7 +443,7 @@ function checkpointPayload(value: Omit<ReceiptCheckpoint, 'checkpointHash'>): st
 
 /**
  * A checkpoint is intentionally informational, not an authority: a same-user
- * process can edit every file in the Fiscus home. Each process therefore earns
+ * process can edit every file in the Segreant home. Each process therefore earns
  * an in-memory trusted state only after one complete chain validation; a new
  * process always starts with that validation, then reuses the state while the
  * file identity remains stable.
@@ -545,7 +545,7 @@ function checkpointPathPresent(): boolean {
  * an absent history is local proof that audit records were removed — and
  * genesis is precisely the claim that nothing preceded this chain. Previously
  * the absence alone decided, so an operator (or anything running as them) could
- * delete the history and have `fiscus egress verify` report a valid chain and
+ * delete the history and have `segreant egress verify` report a valid chain and
  * a receipt count, with no surviving trace that a longer history had existed.
  *
  * Reading the checkpoint to REFUSE is not the same as trusting it to
@@ -838,7 +838,7 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
 /**
  * The sentence that used to be missing.
  *
- * `fiscus egress verify` printed a green "Receipt chain valid" beside
+ * `segreant egress verify` printed a green "Receipt chain valid" beside
  * "Receipts: 0" on a home that had never sent anything, and exited 0. The check
  * was correct; the reading it invited was not. A hash chain over an empty set
  * verifies vacuously, and the absence of a record is not a finding about what
@@ -881,7 +881,7 @@ function coverageOf(
       coveredFrom: null,
       coveredThrough: null,
       establishes: 'Nothing. No receipt has been recorded on this machine, and no period is covered.',
-      doesNotEstablish: 'That nothing left this machine. An empty history is the absence of a record, not a record of absence: it reads identically whether Fiscus never forwarded anything or was never the thing that forwarded it.',
+      doesNotEstablish: 'That nothing left this machine. An empty history is the absence of a record, not a record of absence: it reads identically whether Segreant never forwarded anything or was never the thing that forwarded it.',
     };
   }
 
@@ -892,7 +892,7 @@ function coverageOf(
     coveredFrom,
     coveredThrough,
     establishes: 'That the ' + inspection.receiptCount + ' retained receipt(s) chain unbroken from genesis' + window + ', and that each was written by the single chokepoint every declared egress path passes through.',
-    doesNotEstablish: 'That every outbound call is in it. A call that appended no receipt leaves no trace here, so this bounds what Fiscus recorded and not what the machine sent. It says nothing about what a provider retained, and a valid chain is not a judgement that the traffic it records was authorized.',
+    doesNotEstablish: 'That every outbound call is in it. A call that appended no receipt leaves no trace here, so this bounds what Segreant recorded and not what the machine sent. It says nothing about what a provider retained, and a valid chain is not a judgement that the traffic it records was authorized.',
   };
 }
 

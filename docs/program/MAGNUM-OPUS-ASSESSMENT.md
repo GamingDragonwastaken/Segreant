@@ -1,9 +1,9 @@
-# Fiscus — A Whole-Project Assessment
+# Segreant — A Whole-Project Assessment
 
 **Author:** Claude (Fable 5.1), acting as strategist and architect for the reconstruction program.
 **Written:** 2026-09-09, against branch `gpt56/magnum-opus-reconstruction` at `7032e4c` (CI-verified, eight of eight jobs).
 **Method:** six read-only survey lanes with fixed output schemas (product & positioning; epistemic kernel; money path & store; product surfaces; engineering system; program method), each told to cite `file:line`, separate verified from inferred, and score on one ladder — then my own reading of the dossier, the kernel append boundaries, and the last twenty decision records. Lane claims I could check, I checked; where I could not, this document says so.
-**What this is:** an opinion with evidence, written to be argued with. **What it is not:** a decision record, a plan that replaces `FISCUS_EXECUTION_DOSSIER_III.md`, or a claim of completion. Every proposal here that changes product behaviour is a proposal until the owner decides.
+**What this is:** an opinion with evidence, written to be argued with. **What it is not:** a decision record, a plan that replaces `SEGREANT_EXECUTION_DOSSIER_III.md`, or a claim of completion. Every proposal here that changes product behaviour is a proposal until the owner decides.
 
 The ladder used throughout, from the program's own quality standard:
 
@@ -15,7 +15,7 @@ correct → competent → professional → excellent → exceptional → field-l
 
 ## 0. The verdict in one page
 
-Fiscus is an **excellent** piece of work with a **field-leading** idea inside it, held below its ceiling by three things that are each fixable: the kernel's central proof obligation is discharged by an unchecked token; a third of the kernel never runs and the two claims the product makes most often have no issuer in it; and the program's own knowledge — twenty-six instances of one defect class, a dozen hard-won rules — lives as prose that a future maintainer will not read.
+Segreant is an **excellent** piece of work with a **field-leading** idea inside it, held below its ceiling by three things that are each fixable: the kernel's central proof obligation is discharged by an unchecked token; a third of the kernel never runs and the two claims the product makes most often have no issuer in it; and the program's own knowledge — twenty-six instances of one defect class, a dozen hard-won rules — lives as prose that a future maintainer will not read.
 
 The idea worth the whole project is not the ten-axis profile or the append-only DAG. It is this: **a machine-checked census of every place in a repository where the authority to strengthen a claim is exercised, with a test that walks the real import graph, refuses to be vacuous, and compares the published description of itself cell by cell.** That is a soundness argument about the *codebase*, not about the data. I have not seen it executed at this quality outside formal-methods tooling, and it is the mechanism that makes every honest limitation in this repository survive the next commit. Everything below is in service of letting that idea, and the accounting discipline it protects, outlive the people and agents who built it.
 
@@ -36,7 +36,7 @@ The distance from here to magnum opus is not a matter of more features. It is fo
 ## 1. The charter of this assessment
 
 ```text
-MISSION:        Say where Fiscus stands, what would make it a once-in-a-lifetime piece of work,
+MISSION:        Say where Segreant stands, what would make it a once-in-a-lifetime piece of work,
                 and what has to change so that the work survives years of hands it cannot choose.
 DELIVERABLE:    This document, committed and CI-verified like any other packet; and the defect
                 packets it spawned (D-189 onward), built under the program's own TDD rule.
@@ -71,17 +71,17 @@ DISTINCTION:     Not a dashboard. A kernel whose refusals are machine-checked ag
 CRITIC:          The dossier's own — statistician, accountant, database engineer, security engineer,
                  formal-methods researcher, operator. Each rejects hand-waving in their own domain.
 WEAK LINKS:      Nominal obligations; unreached code; prose-coupled knowledge; onboarding.
-EVIDENCE:        Property tests over the lattice laws; an external verifier that reads Fiscus
-                 evidence without Fiscus; one published, pre-registered causal study.
+EVIDENCE:        Property tests over the lattice laws; an external verifier that reads Segreant
+                 evidence without Segreant; one published, pre-registered causal study.
 ```
 
 ---
 
-## 2. What Fiscus is, as I understand it
+## 2. What Segreant is, as I understand it
 
 A local-first ledger and control layer for AI spend that refuses to collapse four different claims into one number: what was *metered* through a proxy or imported from tool logs, what a provider *billed*, what an *allocation* rule assigned, and what the spend *realized* as surviving work. Each claim has its own evidence standard, its own provenance columns that default to `legacy_unknown` and are never backfilled, and — increasingly — its own record in an append-only epistemic ledger whose rules refuse a claim stronger than the evidence beneath it. The product surfaces (a ~44-verb CLI and a seven-view dashboard with a four-band "spine") exist to show those claims *with their basis*, and the program that is rebuilding it is run by AI agents under an owner's dossier, recording every decision as a falsifiable entry with a counterexample.
 
-The sentence that matters: **Fiscus is an argument that an AI cost tool can be honest, and the argument is being made in code that checks itself.** Whether it becomes a landmark depends on whether that self-checking becomes unavoidable, portable, and legible to people who never read this repository.
+The sentence that matters: **Segreant is an argument that an AI cost tool can be honest, and the argument is being made in code that checks itself.** Whether it becomes a landmark depends on whether that self-checking becomes unavoidable, portable, and legible to people who never read this repository.
 
 ---
 
@@ -154,7 +154,7 @@ way the danger ran.
 
 ### 4.7 The product story contradicts itself where a newcomer first reads it
 
-PRODUCT.md names a persona who "will never open a terminal" and says the GUI "must be sufficient on its own"; GETTING-STARTED.md is 100% CLI and, in its first sixty seconds, tells the reader not to trust `npx fiscus` and then leads with `npx fiscus demo`. README narrows the scope to "AI coding-agent spend"; PRODUCT.md widens it to "all AI spend". The registry is honest — 16 of 53 capability rows are `full` — against a product claim of "full parity". A plugin host of 1,453 lines has zero consumers outside its own tests. None of these is a lie; all of them are the kind of drift the program refuses in numbers and tolerates in prose.
+PRODUCT.md names a persona who "will never open a terminal" and says the GUI "must be sufficient on its own"; GETTING-STARTED.md is 100% CLI and, in its first sixty seconds, tells the reader not to trust `npx segreant` and then leads with `npx segreant demo`. README narrows the scope to "AI coding-agent spend"; PRODUCT.md widens it to "all AI spend". The registry is honest — 16 of 53 capability rows are `full` — against a product claim of "full parity". A plugin host of 1,453 lines has zero consumers outside its own tests. None of these is a lie; all of them are the kind of drift the program refuses in numbers and tolerates in prose.
 
 ### 4.8 The program's knowledge is prose, and prose does not survive
 
@@ -173,7 +173,7 @@ PRODUCT.md names a persona who "will never open a terminal" and says the GUI "mu
 
 ## 5. How I would build it
 
-If I were starting Fiscus today with what this repository has learned, I would keep more than I would change — and the changes are about *where* things sit, not *what* they are.
+If I were starting Segreant today with what this repository has learned, I would keep more than I would change — and the changes are about *where* things sit, not *what* they are.
 
 **Keep, unchanged in spirit:** the four-way distinction as the organizing principle; exact decimal money with basis as identity; `legacy_unknown` never backfilled; read-only by default with `--apply`; fail-closed enforcement; zero runtime dependencies at the root; append-only economic events with additive corrections; the Belnap four-valued state; the issuance map as executable architecture; per-module CONTEXT.md contracts; decision records with a counterexample and a "does not establish" section.
 
@@ -187,7 +187,7 @@ If I were starting Fiscus today with what this repository has learned, I would k
 
 **Change the product's front door, not its rooms.** One first-contact path that actually works (`npm install && npm run demo`, as README already has), the ~44 verbs behind `guide`/`scan` for newcomers, the spine's three stacked hedge paragraphs collapsed into one expandable evidence-status affordance, and PRODUCT.md's non-terminal persona either served by a GUI-first path or removed until it is. The precise/plain toggle stays — it changes verbosity, not claims, and the surfaces lane was right that it is not a symptom.
 
-**Add what escapes the tool.** A published, versioned evidence format — Value Receipts and reconciliation records as a schema other software can verify without Fiscus (WP-G05/G06's `.fiscuspack` and independent verifier are exactly this) — is the move that turns a good tool into a reference. SPDX and in-toto are the precedents: the format outlived the first implementation.
+**Add what escapes the tool.** A published, versioned evidence format — Value Receipts and reconciliation records as a schema other software can verify without Segreant (WP-G05/G06's `.segreantpack` and independent verifier are exactly this) — is the move that turns a good tool into a reference. SPDX and in-toto are the precedents: the format outlived the first implementation.
 
 **What I would not build:** a hosted service (the local-first choice is the product's honesty guarantee, and the team-server exists for the org case); a universal trust score (the dossier forbids it and it is the collapse the whole system refuses); a bundler or ORM to save a few hundred hand-rolled lines (the audit surface of `typescript` + `@types/node` is worth more than the convenience); a second causal system beside the first (WP-E02 says retire duplicates, and it is right).
 
@@ -223,7 +223,7 @@ Each row states the critic who must be satisfied and the evidence that would sat
 - **Evidence:** a stranger runs the deletion-sweep checklist on a different codebase and finds an instance; a decision entry is validated by schema rather than regex; `ACTIVE-EXECUTION.md` under 100 lines with nothing lost.
 
 ### 6.6 The one artifact that would change the field's view
-- **Run and publish the pre-registered causal study** that `CAUSAL-EVIDENCE-PROTOCOL.md` scaffolds, with a positive lower bound on causal net benefit *or an honest null* — and publish the evidence format it was computed from so anyone can re-verify. METR's single number became citable; Fiscus's would be citable *and* reproducible from signed evidence. That is the difference between a good tool and a landmark, and it is an external gate the owner controls (§12).
+- **Run and publish the pre-registered causal study** that `CAUSAL-EVIDENCE-PROTOCOL.md` scaffolds, with a positive lower bound on causal net benefit *or an honest null* — and publish the evidence format it was computed from so anyone can re-verify. METR's single number became citable; Segreant's would be citable *and* reproducible from signed evidence. That is the difference between a good tool and a landmark, and it is an external gate the owner controls (§12).
 
 ---
 
@@ -343,7 +343,7 @@ The remaining dossier packets continue in dependency order after these; this ass
 - I would not delete `src/decision/` or `abstract.ts`. I would move what nothing runs to where its status is honest.
 - I would not write another remaining-work audit. This document is the last of its kind I intend to produce; from here the work is packets.
 - I would not compress the decision log by summarizing entries. The counterexamples are the value; the structure around them is what changes.
-- I would not build a hosted Fiscus.
+- I would not build a hosted Segreant.
 
 ---
 
@@ -352,7 +352,7 @@ The remaining dossier packets continue in dependency order after these; this ass
 1. **The commit-time rule breaks a legitimate issuer nobody enumerated.** Mitigation: the issuance map lists every issuer; run the RED suite against each of the four live canonical paths before enforcing.
 2. **The witness-obligation change is under-scoped and a wide predicate later contradicts the narrow one.** Mitigation: the narrow rule (`supported` only) is a strict subset of any wider rule; record in D-190 that content checks are pending so nobody reads it as complete.
 3. **Records reform stalls at the schema and the prose keeps growing.** Mitigation: land the front-matter test first so new entries cannot be added without it; back-fill second.
-4. **The method document is written and never used outside the repo.** Mitigation: write it as a checklist with no Fiscus vocabulary in the steps; test it on `team-server/` as a first foreign codebase.
+4. **The method document is written and never used outside the repo.** Mitigation: write it as a checklist with no Segreant vocabulary in the steps; test it on `team-server/` as a first foreign codebase.
 5. **Unreached kernel code is moved and then wanted.** Mitigation: `git mv` is reversible and the tests move with it; the deadline is a decision, not a deletion.
 6. **A future agent reads this document as authority over the dossier.** Mitigation: the header says it is not, and the dossier's authority hierarchy (§1) puts it below every program register.
 

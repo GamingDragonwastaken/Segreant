@@ -13,12 +13,12 @@ function git(cwd: string, args: string[]): void {
 }
 
 test('realization: an unbound project-window test assertion cannot certify a different code commit', async () => {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-evidence-binding-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-evidence-binding-'));
   const store = new Store(':memory:');
   try {
     git(repo, ['init', '-q']);
     git(repo, ['config', 'user.email', 'test@example.invalid']);
-    git(repo, ['config', 'user.name', 'Fiscus test']);
+    git(repo, ['config', 'user.name', 'Segreant test']);
     writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
     git(repo, ['add', '.']);
     git(repo, ['commit', '-qm', 'feat: a real commit']);

@@ -41,7 +41,7 @@ centre.
 The bounded operator consumer is:
 
 ```text
-fiscus capital evaluate --options <file> --json
+segreant capital evaluate --options <file> --json
 ```
 
 The options file is a local review snapshot. The command has no Store write,

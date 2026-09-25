@@ -28,8 +28,8 @@ function readJsonFile(file: string): unknown {
 
 function usage(): void {
   console.log('');
-  console.log('  Fiscus capital — review-only exact AI-capital decomposition');
-  console.log('  fiscus capital evaluate --options <file> [--json]');
+  console.log('  Segreant capital — review-only exact AI-capital decomposition');
+  console.log('  segreant capital evaluate --options <file> [--json]');
   console.log('');
   console.log('  The supplied snapshot is checked for commitment/spend conservation,');
   console.log('  showback boundaries, counterfactual opportunity gaps, and policy-relative');

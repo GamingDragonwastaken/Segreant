@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 
 test('retention policy changes are append-only evidence separate from deletion rows', () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-retention-policy-'));
-  const prior = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-retention-policy-'));
+  const prior = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   try {
-    const store = new Store(join(home, 'fiscus.db'));
+    const store = new Store(join(home, 'segreant.db'));
     try {
       assert.deepEqual(store.retentionPolicyChanges(), []);
       assert.equal(store.recordRetentionPolicyChange('requests', 180, 90, 1_000, 'settings'), 'created');
@@ -29,8 +29,8 @@ test('retention policy changes are append-only evidence separate from deletion r
       store.close();
     }
   } finally {
-    if (prior === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = prior;
+    if (prior === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = prior;
     rmSync(home, { recursive: true, force: true });
   }
 });

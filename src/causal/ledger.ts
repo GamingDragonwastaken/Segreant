@@ -100,7 +100,7 @@ function requestPricingDigest(row: CausalLedgerEvidenceRowV2): string {
   const costMicros = micros(row.costUsd);
   if (costMicros === null) throw new Error('request cost is not representable in fixed-point USD');
   return 'sha256:' + sha256(
-    'fiscus.causal.request-cost-lineage\n2\n' + canonicalJson({
+    'segreant.causal.request-cost-lineage\n2\n' + canonicalJson({
       requestId: row.requestId,
       tsEpochMs: row.tsEpochMs,
       provider: row.provider,
@@ -146,7 +146,7 @@ function manifestHash(
     })),
     priceLineageDigests: [...expected.priceLineageDigests].sort(),
   };
-  return 'sha256:' + sha256('fiscus.causal.ordinary-ledger-manifest\n2\n' + canonicalJson(material));
+  return 'sha256:' + sha256('segreant.causal.ordinary-ledger-manifest\n2\n' + canonicalJson(material));
 }
 
 function uniqueReasons(reasons: CausalLedgerReasonCodeV2[]): CausalLedgerReasonCodeV2[] {
@@ -241,7 +241,7 @@ export function verifyCausalLedgerEvidence(
 
   const evidenceManifestHash = manifestHash(input.requests, expected);
   const verifierMaterial = {
-    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    type: 'segreant.causal-ordinary-ledger-verifier' as const,
     version: 2 as const,
     state: 'verified' as const,
     checkedAtMs: input.checkedAtMs,

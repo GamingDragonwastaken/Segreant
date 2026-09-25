@@ -46,7 +46,7 @@ Internet-facing production fitness.
 
 ## Promotion criterion
 
-Record the exact Fiscus commit, infrastructure revision, database version, OIDC
+Record the exact Segreant commit, infrastructure revision, database version, OIDC
 issuer, TLS endpoint, backup/restore evidence, and synthetic full-flow result.
 Until those artifacts exist, describe this package as an experimental/operator-run
 team service, not an enterprise production control plane.

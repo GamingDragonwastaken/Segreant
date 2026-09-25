@@ -3,8 +3,8 @@
  *
  * The store has no native module or external database service dependency. A
  * packaged distribution still has a build step; this module persists the local
- * ledger under ~/.fiscus. Provider forwarding and optional outbound paths are
- * governed by the declared Fiscus-process egress boundary elsewhere.
+ * ledger under ~/.segreant. Provider forwarding and optional outbound paths are
+ * governed by the declared Segreant-process egress boundary elsewhere.
  *
  * Timestamps are stored twice: an ISO string for humans and an epoch-ms integer
  * for fast range/window queries. Day boundaries are computed in JS (local time)
@@ -221,10 +221,10 @@ export interface RequestRow {
   streamed: boolean;
   statusCode: number | null;
   durationMs: number | null;
-  user?: string | null; // developer/team attribution (x-fiscus-user header); null = unassigned
-  source?: string | null; // connected tool/feed attribution (x-fiscus-source header); null = direct
+  user?: string | null; // developer/team attribution (x-segreant-user header); null = unassigned
+  source?: string | null; // connected tool/feed attribution (x-segreant-source header); null = direct
   cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
-  // link that lets Fiscus find the git repo behind a project and auto-correlate
+  // link that lets Segreant find the git repo behind a project and auto-correlate
   // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
   via?: 'proxy' | 'import'; // how the row entered the ledger: live proxy traffic
   // (blockable, marginal API cost) vs a native importer reading a tool's own logs
@@ -984,7 +984,7 @@ export class Store {
 
   /**
    * Real sessions with request activity in a window, newest-activity first —
-   * what `fiscus judge` enumerates so it judges sessions that actually happened
+   * what `segreant judge` enumerates so it judges sessions that actually happened
    * (aliases folded into the project family, same as every other project read).
    * `tool` comes from the sessions table when the session was upserted by an
    * importer/proxy, else 'unknown' — never guessed from the request rows.
@@ -1271,7 +1271,7 @@ export class Store {
   /**
    * Does the ledger hold ANY spend tagged with this exact project key? It separates
    * data that IS characterized by project (native imports, or proxy traffic tagged
-   * with x-fiscus-project) from untagged 'default' proxy traffic. Attribution uses it
+   * with x-segreant-project) from untagged 'default' proxy traffic. Attribution uses it
    * to decide whether scoping a commit's window to its project is meaningful — so a
    * project-blind store keeps its original window-wide behavior, no regression.
    */
@@ -1284,8 +1284,8 @@ export class Store {
   }
 
   // ---- Project aliasing ------------------------------------------------------
-  // Tool launch cwds fragment one real project across labels ("fiscus" vs
-  // "fiscus-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
+  // Tool launch cwds fragment one real project across labels ("segreant" vs
+  // "segreant-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
   // time; raw ledger rows are never rewritten, so the underlying record stays
   // honest and an alias can be removed without loss. The mapping is kept FLAT
   // (an alias always points at a real canonical, never at another alias).
@@ -1352,7 +1352,7 @@ export class Store {
    * The interconnectedness map: for each project the ledger has a working directory
    * for, its REPRESENTATIVE cwd (the path most requests came from — a project's dir
    * is stable, so the mode is robust to the odd one-off subdir), the TOOLS (sources)
-   * that produced its spend, and its cost/requests. This is what lets Fiscus find
+   * that produced its spend, and its cost/requests. This is what lets Segreant find
    * the git repo behind a project AND say which AI tool coded it — repo↔project↔tool,
    * the thing that makes native per-project RoI possible with no --repo and no wiring.
    * Only rows carrying a cwd participate (imports set it; untagged proxy traffic is
@@ -1500,7 +1500,7 @@ export class Store {
       .all(startMs, endMs) as unknown as SpendBucket[];
   }
 
-  /** Spend grouped by developer/team (x-fiscus-user); null is reported as 'unassigned'. */
+  /** Spend grouped by developer/team (x-segreant-user); null is reported as 'unassigned'. */
   byUser(startMs: number, endMs: number): SpendBucket[] {
     return this.db
       .prepare(
@@ -1514,9 +1514,9 @@ export class Store {
   }
 
   /**
-   * Spend grouped by connected source/feed (x-fiscus-source); null reads as
-   * 'direct'. A source is one AI tool deliberately routed through Fiscus — the
-   * unit the product meters. The tag is set by `fiscus connect <tool>` and
+   * Spend grouped by connected source/feed (x-segreant-source); null reads as
+   * 'direct'. A source is one AI tool deliberately routed through Segreant — the
+   * unit the product meters. The tag is set by `segreant connect <tool>` and
    * stripped before the request leaves the machine, so the provider never sees it.
    */
   bySource(startMs: number, endMs: number): SpendBucket[] {
@@ -1951,7 +1951,7 @@ export class Store {
   }
 
   /**
-   * NON-CODING sessions with their attributed user (the x-fiscus-user tag) and
+   * NON-CODING sessions with their attributed user (the x-segreant-user tag) and
    * cost, for per-user value. Scoped to sessions WITHOUT code proposals, because
    * only those have outcomes we can honestly attribute to a user: their outcome
    * is reported against the session (which carries the user tag). Coding value is
@@ -3052,10 +3052,10 @@ export class Store {
    * Privacy control: delete every stored proposal immediately, regardless of age.
    *
    * RECORDED, like every other deletion (D-179). This is the most total erasure
-   * Fiscus offers, and until it was recorded it was the one erasure no consumer
+   * Segreant offers, and until it was recorded it was the one erasure no consumer
    * could see: `retentionFloor()` reported "no prune on record" for a ledger
    * whose proposals had all been deleted, so the Acceptance lens told operators
-   * their proposals were never captured after Fiscus captured and deleted them.
+   * their proposals were never captured after Segreant captured and deleted them.
    *
    * The boundary written is NOW, because that is what was deleted -- everything
    * up to this moment. It is written ONLY when a row actually went: the boundary
@@ -3080,7 +3080,7 @@ export class Store {
 
   /**
    * Which provider(s)/model(s) have routed traffic through the proxy recently — the
-   * dashboard Settings page's "connection status". Never a literal API key; Fiscus
+   * dashboard Settings page's "connection status". Never a literal API key; Segreant
    * never sees one (src/proxy/server.ts only forwards per-request headers).
    */
   recentProviderConnections(sinceMs: number): ProviderConnection[] {

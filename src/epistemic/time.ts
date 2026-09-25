@@ -9,7 +9,7 @@ export interface TimeInterval {
 export interface BitemporalCoordinates {
   /** When the represented fact/event is valid in the modeled world. */
   readonly validTime: TimeInterval;
-  /** When Fiscus learned/recorded the evidence. */
+  /** When Segreant learned/recorded the evidence. */
   readonly observedAt: Instant;
 }
 

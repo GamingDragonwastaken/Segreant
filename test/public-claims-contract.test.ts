@@ -21,7 +21,7 @@ test('the current capability and evidence contract contains the required boundar
   assert.match(contract, /## Not established or not offered/);
   assert.match(contract, /## Egress and retention matrix/);
   assert.match(contract, /## Change rule/);
-  assert.match(contract, /Fiscus has no Fiscus-hosted product telemetry by default/);
+  assert.match(contract, /Segreant has no Segreant-hosted product telemetry by default/);
 });
 
 test('current public privacy copy distinguishes local product data from provider traffic', () => {
@@ -35,7 +35,7 @@ test('current public privacy copy distinguishes local product data from provider
   assert.match(integrations, /forwards routed requests to the AI provider/i);
   assert.match(integrations, /DATA-BOUNDARIES\.md/);
   assert.doesNotMatch(faq, /Does my code or prompts ever leave my machine\?\s+No\./is);
-  assert.match(faq, /does not send your prompts or code to a Fiscus-operated telemetry service/i);
+  assert.match(faq, /does not send your prompts or code to a Segreant-operated telemetry service/i);
   assert.doesNotMatch(methodology, /No prompts, no code, no keys\s+are ever transmitted/i);
   assert.match(methodology, /configured AI provider/i);
   assert.doesNotMatch(architecture, /no prompt text, source code, or credentials ever leave the device/i);
@@ -51,8 +51,8 @@ test('public coverage and egress claims remain scoped to the supported path', ()
 
   assert.doesNotMatch(landing, /zero egress/i);
   assert.doesNotMatch(landing, /100%\s*<\/div><div class="lbl">of calls metered/i);
-  assert.match(landing, /when traffic is explicitly routed through Fiscus/i);
-  assert.doesNotMatch(registry, /only action in Fiscus that sends data off this machine/i);
+  assert.match(landing, /when traffic is explicitly routed through Segreant/i);
+  assert.doesNotMatch(registry, /only action in Segreant that sends data off this machine/i);
   assert.match(registry, /Other explicit outbound paths are documented in DATA-BOUNDARIES\.md/i);
   assert.match(readme, /CAPABILITY-EVIDENCE-CONTRACT\.md/);
   assert.doesNotMatch(readme, /works across \*any\* token usage/i);
@@ -96,13 +96,13 @@ test('ordinary value surfaces cannot revive causal break-even copy while the stu
   assert.match(protocol, /CLI\s+does not yet expose v2 protocol registration or assignment/i);
   assert.match(causalCli, /exposes retained version-1 status, inspection, and replay verification only/i);
   assert.match(causalCli, /Public causal mutations and version-2 projection are deferred/i);
-  assert.doesNotMatch(causalCli, /register without --apply|fiscus causal register --file/i);
+  assert.doesNotMatch(causalCli, /register without --apply|segreant causal register --file/i);
   assert.match(rootCli, /V1 is inspect-only/i);
   assert.match(rootCli, /all causal\s+mutations and v2 public projection remain deferred/i);
   assert.doesNotMatch(rootCli, /Registration\/assignment are local-only and require/i);
   assert.doesNotMatch(causalCli, /provider route.*=/i);
   assert.match(modern, /Version-2 studies and every causal mutation remain Store-only or deferred/i);
-  assert.doesNotMatch(modern, /fiscus causal register|use pre-exposure randomized assignment/i);
+  assert.doesNotMatch(modern, /segreant causal register|use pre-exposure randomized assignment/i);
 });
 
 /**

@@ -2,7 +2,7 @@
 
 A defect class, its twenty-one recorded instances, and the checklist that finds it in code you have never seen.
 
-This document is portable on purpose. The instances are from Fiscus; the checklist is not about Fiscus, and none of its steps use this project's vocabulary. If you have a system that computes numbers over stored records and shows them to someone, the checklist applies to you.
+This document is portable on purpose. The instances are from Segreant; the checklist is not about Segreant, and none of its steps use this project's vocabulary. If you have a system that computes numbers over stored records and shows them to someone, the checklist applies to you.
 
 ---
 

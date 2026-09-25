@@ -231,8 +231,8 @@ CREATE TABLE IF NOT EXISTS project_aliases (
 -- What retention deleted, so an absence can be told from a deletion.
 --
 -- prune used to run one DELETE, print a count, and leave nothing behind. A
--- period Fiscus never observed and a period Fiscus observed and then deleted
--- then read identically -- and fiscus guide read an empty ledger as "no
+-- period Segreant never observed and a period Segreant observed and then deleted
+-- then read identically -- and segreant guide read an empty ledger as "no
 -- traffic yet" and marked metering NOT DONE (D-170).
 --
 -- One row per prune rather than one row per stream: a boundary applied twice is
@@ -380,7 +380,7 @@ CREATE TABLE IF NOT EXISTS openai_cost_observation_runs (
   trust                    TEXT NOT NULL,
   raw_retention            TEXT NOT NULL,
   observations_stored      INTEGER NOT NULL,
-  -- How the figures reached Fiscus: read from the provider, or handed over by
+  -- How the figures reached Segreant: read from the provider, or handed over by
   -- an operator. Different evidence classes, so the reconciliation says which.
   source_kind              TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
@@ -556,7 +556,7 @@ CREATE TABLE IF NOT EXISTS causal_analysis_snapshots (
 -- Every reported look at a causal study, one row per inferential act.
 --
 -- WITHOUT THIS TABLE THE LOOK COUNT HAD NOWHERE TO LIVE, and the two surfaces
--- that reach an operator -- fiscus causal summary and GET /api/causal -- each
+-- that reach an operator -- segreant causal summary and GET /api/causal -- each
 -- reported a single-look conclusion as if it were the only one. The act chain
 -- in src/causal/inference-ledger.ts is what makes the count mean something:
 -- sequence and previous_act_digest are stored so a deleted row is detectable
@@ -968,7 +968,7 @@ export function assertDatabaseIntegrity(
  * every page valid while the column becomes unreachable — and the idempotent
  * migration would then re-add it with its default, silently resetting a
  * provenance column to the legacy sentinel for every row (found by byte-level
- * fault injection, D-251). Every identifier Fiscus writes is ASCII snake_case,
+ * fault injection, D-251). Every identifier Segreant writes is ASCII snake_case,
  * so a table or column name outside that alphabet is damage, refused before
  * any DDL can repair over it.
  */
@@ -977,13 +977,13 @@ function validateRetainedSchemaText(db: DatabaseSync): void {
   const objects = db.prepare("SELECT type, name, tbl_name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all() as Array<{ type: string; name: string; tbl_name: string }>;
   for (const object of objects) {
     if (!identifier.test(object.name) || !identifier.test(object.tbl_name)) {
-      throw new Error(`database integrity validation failed: ${object.type} name ${JSON.stringify(object.name)} is not an identifier Fiscus writes; the schema text is damaged`);
+      throw new Error(`database integrity validation failed: ${object.type} name ${JSON.stringify(object.name)} is not an identifier Segreant writes; the schema text is damaged`);
     }
     if (object.type !== 'table') continue;
     const columns = db.prepare(`PRAGMA table_info("${object.name}")`).all() as Array<{ name: string }>;
     for (const column of columns) {
       if (!identifier.test(column.name)) {
-        throw new Error(`database integrity validation failed: table ${object.name} column ${JSON.stringify(column.name)} is not an identifier Fiscus writes; the schema text is damaged`);
+        throw new Error(`database integrity validation failed: table ${object.name} column ${JSON.stringify(column.name)} is not an identifier Segreant writes; the schema text is damaged`);
       }
     }
   }

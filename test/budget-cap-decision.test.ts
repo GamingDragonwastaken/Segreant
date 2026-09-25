@@ -6,7 +6,7 @@
  * and `pendingInvalidationBy` were each tested and none was consumed by a
  * product path. `src/budget/recommend.ts` named itself the intended consumer.
  * This file pins the wiring at the pure advisor, at the kernel round-trip, and
- * at the terminal an operator meets (`fiscus budget --recommend`).
+ * at the terminal an operator meets (`segreant budget --recommend`).
  *
  * THE BAR THIS HONOURS (D-193). A recommendation that is acted on needs
  * `decisionFitness >= sufficient` AND `measurement >= proxy_validated`, and the
@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-cap-decision-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-cap-decision-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { recommendBudget } from '../src/budget/recommend.ts';
@@ -298,15 +298,15 @@ function request(id: string, tsEpochMs: number, costUsd: number): RequestRow {
 
 function runCli(args: string[], dbPath: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [CLI, ...args], { env: { ...process.env, FISCUS_DB: dbPath, NODE_OPTIONS: '' } }, (err, stdout, stderr) => {
+    execFile(process.execPath, [CLI, ...args], { env: { ...process.env, SEGREANT_DB: dbPath, NODE_OPTIONS: '' } }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
       resolve({ code, stdout: String(stdout), stderr: String(stderr) });
     });
   });
 }
 
-test('fiscus budget --recommend shows the decision review-only, and --apply is refused until it is certified at DAL-3', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-cap-cli-'));
+test('segreant budget --recommend shows the decision review-only, and --apply is refused until it is certified at DAL-3', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-cap-cli-'));
   const dbPath = join(home, 'cap.db');
   try {
     const seed = new Store(dbPath);
@@ -353,7 +353,7 @@ test('fiscus budget --recommend shows the decision review-only, and --apply is r
     assert.equal(again.code, 0, again.stderr);
     const after = JSON.parse(again.stdout) as { decision: { certificates: unknown[] } | null };
     assert.deepEqual(after.decision?.certificates, [], 'a refused apply must record no certificate');
-    const cfgPath = join(process.env.FISCUS_HOME!, 'config.json');
+    const cfgPath = join(process.env.SEGREANT_HOME!, 'config.json');
     const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) as { budget?: { dailyUsd?: number | null } } : {};
     assert.ok(cfg.budget?.dailyUsd === undefined || cfg.budget.dailyUsd === null, 'a refused apply must write no cap');
   } finally {

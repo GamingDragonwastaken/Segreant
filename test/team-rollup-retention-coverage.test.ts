@@ -3,11 +3,11 @@
  *
  * THE COUNTEREXAMPLE, MEASURED. A repository with one commit and $6.00 of spend
  * inside its attribution window. `computeRealization(..., { persist: true })`
- * wrote the snapshot, and `fiscus team push --dry-run --json` minted a body
- * carrying `units: 1, costUsd: 6`. `fiscus prune` then deleted the request rows
+ * wrote the snapshot, and `segreant team push --dry-run --json` minted a body
+ * carrying `units: 1, costUsd: 6`. `segreant prune` then deleted the request rows
  * on the operator's retention policy. The snapshot is NOT rewritten by a prune,
  * so nothing changed yet — and that is the trap. The next
- * `computeRealization(..., { persist: true })`, which every `fiscus realize` and
+ * `computeRealization(..., { persist: true })`, which every `segreant realize` and
  * every dashboard load performs, re-derives the unit against the pruned ledger
  * and persists `attributedCostUsd: 0` with `spendWindowTruncated: true`. The
  * rollup then reads:
@@ -49,7 +49,7 @@
  * body is that project's own question, not this one. Nor that the numbers are
  * right in any other way: coverage is a statement about what the signer
  * INCLUDED, never that what was included is true or provider-billed. Nor
- * anything about spend that never reached Fiscus.
+ * anything about spend that never reached Segreant.
  *
  * Recorded at D-181.
  */
@@ -78,7 +78,7 @@ function runCli(args: string[], home: string, db: string): Promise<{ code: numbe
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_HOME: home, FISCUS_DB: db, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_HOME: home, SEGREANT_DB: db, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -90,12 +90,12 @@ function runCli(args: string[], home: string, db: string): Promise<{ code: numbe
 }
 
 function makeRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-team-repo-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-team-repo-'));
   const git = (args: string[], env?: NodeJS.ProcessEnv) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe', env: env ?? process.env });
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.invalid']);
-  git(['config', 'user.name', 'Fiscus test']);
+  git(['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
   git(['add', '.']);
   const when = new Date(COMMIT_MS).toISOString();
@@ -122,14 +122,14 @@ function request(project: string): RequestRow {
 interface Fixture { home: string; db: string; repo: string; project: string }
 
 async function seed(prune: boolean): Promise<Fixture> {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-team-home-'));
-  const db = join(home, 'fiscus.db');
+  const home = mkdtempSync(join(tmpdir(), 'segreant-team-home-'));
+  const db = join(home, 'segreant.db');
   const repo = makeRepo();
   const store = new Store(db);
   try {
     const project = await projectName(repo);
     store.insertRequest(request(project));
-    // Persist once against the intact ledger, exactly as `fiscus realize` does.
+    // Persist once against the intact ledger, exactly as `segreant realize` does.
     await computeRealization(store, repo, { limit: 5, persist: true });
     if (prune) {
       assert.equal(store.prune(NOW - 30 * DAY), 1, 'retention deletes the spend, not the unit');
@@ -214,7 +214,7 @@ test('truncated outranks unknown, and unknown outranks complete', () => {
   // never zero. Reading `undefined` as "none affected" is the inference this
   // entire line of work exists to refuse.
   assert.equal(rollupSpendCoverage([{}]), 'unknown');
-  // And an empty push has nothing to qualify. `fiscus team push` refuses to
+  // And an empty push has nothing to qualify. `segreant team push` refuses to
   // mint an empty body before this is ever consulted; `complete` here is the
   // vacuous truth, not a claim.
   assert.equal(rollupSpendCoverage([]), 'complete');

@@ -27,7 +27,7 @@ export interface DesignEstimatorDefinition {
 export const DESIGN_ESTIMATOR_REGISTRY: readonly DesignEstimatorDefinition[] = Object.freeze([
   Object.freeze({
     id: 'blocked_equal_itt_hoeffding_v1', version: 1,
-    protocolType: 'fiscus.causal-study', protocolVersion: 1,
+    protocolType: 'segreant.causal-study', protocolVersion: 1,
     status: 'retained_analysis', estimandId: 'randomized_itt',
     assignment: 'blocked_randomized_equal_allocation',
     estimator: 'blocked_stratified_assigned_arm_difference_hoeffding_bonferroni',
@@ -35,21 +35,21 @@ export const DESIGN_ESTIMATOR_REGISTRY: readonly DesignEstimatorDefinition[] = O
   }),
   Object.freeze({
     id: 'blocked_equal_itt_v2_deferred', version: 1,
-    protocolType: 'fiscus.causal-study', protocolVersion: 2,
+    protocolType: 'segreant.causal-study', protocolVersion: 2,
     status: 'deferred', estimandId: null,
     assignment: 'blocked_randomized_equal_allocation', estimator: null,
     limitation: 'V2 qualification is structural only; analysis projection and causal issuance remain deferred. No v1 evidence-root translation is allowed.',
   }),
   Object.freeze({
     id: 'paired_return_v1', version: 1,
-    protocolType: 'fiscus.paired-causal-return', protocolVersion: 1,
+    protocolType: 'segreant.paired-causal-return', protocolVersion: 1,
     status: 'archived', estimandId: null,
-    assignment: 'fiscus_local_csprng_per_pair', estimator: 'paired_bounded_return',
+    assignment: 'segreant_local_csprng_per_pair', estimator: 'paired_bounded_return',
     limitation: 'Archived research-only operator-attested method; no migration to canonical causal evidence or issuance.',
   }),
   Object.freeze({
     id: 'sequential_bernoulli_v1', version: 1,
-    protocolType: 'fiscus.sequential-inference', protocolVersion: 1,
+    protocolType: 'segreant.sequential-inference', protocolVersion: 1,
     status: 'noncausal', estimandId: null,
     assignment: 'fixed', estimator: 'anytime_bernoulli_rate',
     limitation: 'Standalone accumulated Bernoulli-rate inference, not an assigned-arm causal contrast or causal issuance path.',

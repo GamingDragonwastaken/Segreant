@@ -15,7 +15,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 
-export const CAUSAL_EXPERIMENT_TYPE = 'fiscus.paired-causal-return' as const;
+export const CAUSAL_EXPERIMENT_TYPE = 'segreant.paired-causal-return' as const;
 export const CAUSAL_EXPERIMENT_VERSION = 1 as const;
 
 export type CausalArm = 'ai' | 'control';
@@ -48,7 +48,7 @@ export interface PairedCausalExperimentPlan {
   confidenceLevel: number;
   laborRatePerHour: number;
   randomization: {
-    method: 'fiscus_local_csprng_per_pair';
+    method: 'segreant_local_csprng_per_pair';
     materialHex: string;
     materialSha256: string;
   };
@@ -154,7 +154,7 @@ function errorResult(errors: string[], planHash: string | null = null, pairCount
       breakEven: 'not_established',
       limitations: [
         'No causal estimate was produced because the declared paired randomized protocol did not validate.',
-        'Ordinary Fiscus usage, spend, and outcome records remain observational unless a validated experiment is supplied.',
+        'Ordinary Segreant usage, spend, and outcome records remain observational unless a validated experiment is supplied.',
       ],
     },
   };
@@ -230,10 +230,10 @@ function parsePlan(value: unknown): ParsedPlan {
   }
   if (!isFiniteNumber(value.confidenceLevel) || value.confidenceLevel <= 0 || value.confidenceLevel >= 1) errors.push('plan.confidenceLevel must be between 0 and 1');
   if (!isFiniteNumber(value.laborRatePerHour) || value.laborRatePerHour <= 0) errors.push('plan.laborRatePerHour must be positive');
-  if (!isRecord(value.randomization) || value.randomization.method !== 'fiscus_local_csprng_per_pair' ||
+  if (!isRecord(value.randomization) || value.randomization.method !== 'segreant_local_csprng_per_pair' ||
       typeof value.randomization.materialHex !== 'string' || !/^[a-f0-9]+$/i.test(value.randomization.materialHex) || value.randomization.materialHex.length % 2 !== 0 ||
       typeof value.randomization.materialSha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(value.randomization.materialSha256)) {
-    errors.push('plan.randomization must contain Fiscus local CSPRNG material and its SHA-256 commitment');
+    errors.push('plan.randomization must contain Segreant local CSPRNG material and its SHA-256 commitment');
   }
   const candidates = parseCandidates(value.candidates, errors);
   const assignments = parseAssignments(value.assignments, errors);
@@ -288,7 +288,7 @@ function parseObservations(value: unknown): ParsedObservations {
 
 /**
  * Produces a transparent, pre-specified paired allocation. The material is
- * retained so Fiscus can independently replay the allocation later; it is not
+ * retained so Segreant can independently replay the allocation later; it is not
  * a claim that an operator could not rewrite a local file before sharing it.
  */
 export function createPairedCausalExperiment(input: PairedCausalExperimentInput): PairedCausalExperimentPlan {
@@ -312,7 +312,7 @@ export function createPairedCausalExperiment(input: PairedCausalExperimentInput)
     confidenceLevel,
     laborRatePerHour: input.laborRatePerHour,
     randomization: {
-      method: 'fiscus_local_csprng_per_pair',
+      method: 'segreant_local_csprng_per_pair',
       materialHex: Buffer.from(material).toString('hex'),
       materialSha256: sha256(material),
     },
@@ -406,7 +406,7 @@ export function analyzePairedCausalExperiment(planInput: unknown, observationsIn
       grade: 'operator_attested_randomized_paired_estimate',
       breakEven,
       limitations: [
-        'Fiscus verified the declared paired allocation, plan hash binding, no-AI control cost, fixed outcome bounds, and arithmetic locally.',
+        'Segreant verified the declared paired allocation, plan hash binding, no-AI control cost, fixed outcome bounds, and arithmetic locally.',
         'The estimate assumes random assignment was followed, no cross-unit interference, comparable paired tasks, complete outcome recording, and a consistent pre-specified value measure.',
         'The plan and observations are local operator-attested artifacts. This result is not independently audited, provider-billed, organization-authorized, or a recommendation to change spend.',
       ],

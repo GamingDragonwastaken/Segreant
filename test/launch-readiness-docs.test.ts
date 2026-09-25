@@ -11,7 +11,7 @@
  *
  * Checked: every file exists; every backticked or linked repository path
  * resolves against `git ls-files` by suffix (the D-198 rule — a false positive
- * in a gate over documentation is worse than a miss); every `fiscus <verb>`
+ * in a gate over documentation is worse than a miss); every `segreant <verb>`
  * names a verb `src/cli.ts` dispatches (the D-166 rule); SECURITY.md carries
  * no e-mail address, because the reporting path is owner-reserved and a
  * placeholder must not be silently filled with a person's address.
@@ -56,7 +56,7 @@ function resolves(files: readonly string[], reference: string): boolean {
 
 /** Backticked repository paths and markdown link targets, both relative-only. */
 const PATH_REFERENCE = /`([A-Za-z0-9_./-]+\.(?:ts|mjs|md|json|yml|yaml))`|\]\(((?!https?:|#)[A-Za-z0-9_./-]+\.(?:md|ts|mjs|json|yml|yaml))(?:#[^)]*)?\)/g;
-const VERB_REFERENCE = /`fiscus ([a-z][a-z0-9-]*)/g;
+const VERB_REFERENCE = /`segreant ([a-z][a-z0-9-]*)/g;
 
 function dispatchActions(): Set<string> {
   const cli = read('src/cli.ts');
@@ -87,14 +87,14 @@ test('every repository path a launch document names is a tracked file', () => {
   assert.deepEqual(missing, [], 'a launch document names a file that is not tracked');
 });
 
-test('every `fiscus <verb>` a launch document names is dispatched by the CLI', () => {
+test('every `segreant <verb>` a launch document names is dispatched by the CLI', () => {
   const verbs = dispatchActions();
   const unknown: string[] = [];
   let checked = 0;
   for (const doc of LAUNCH_DOCS) {
     for (const match of read(doc).matchAll(VERB_REFERENCE)) {
       checked += 1;
-      if (!verbs.has(match[1]!)) unknown.push(`${doc}: \`fiscus ${match[1]}\``);
+      if (!verbs.has(match[1]!)) unknown.push(`${doc}: \`segreant ${match[1]}\``);
     }
   }
   assert.ok(checked >= 5, `only ${checked} command mentions matched; the pattern has stopped reading the documents`);

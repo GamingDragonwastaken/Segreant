@@ -30,12 +30,12 @@ test('complexity has no operational production surface before research prerequis
   assert.equal(
     /\bcase\s+['"]lab['"]/.test(cli),
     false,
-    'fiscus lab must not be dispatched in production without satisfying the promotion gate',
+    'segreant lab must not be dispatched in production without satisfying the promotion gate',
   );
   assert.equal(
     /\bcase\s+['"]complexity['"]/.test(cli),
     false,
-    'fiscus complexity must not be dispatched as a top-level CLI command',
+    'segreant complexity must not be dispatched as a top-level CLI command',
   );
 
   const dashboardRoutes = DASHBOARD_API_CONTRACTS.map((c) => c.path);

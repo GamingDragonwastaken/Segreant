@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { ANYTIME_VALIDITY_DOMAIN, anytimeRateInterval, type AnytimeInterval } from '../value/anytime.ts';
 
-export const SEQUENTIAL_INFERENCE_TYPE = 'fiscus.sequential-inference' as const;
+export const SEQUENTIAL_INFERENCE_TYPE = 'segreant.sequential-inference' as const;
 export const SEQUENTIAL_INFERENCE_VERSION = 1 as const;
 
 const ID_RE = /^[a-z][a-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._-]{0,126}$/;

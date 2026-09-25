@@ -4,7 +4,7 @@ One page for a new person or agent session. If it disagrees with the code or
 with [docs/program/ACTIVE-EXECUTION.md](ACTIVE-EXECUTION.md), those
 win and this page is stale; fix it.
 
-## What Fiscus is
+## What Segreant is
 
 A local-first ledger and spend guard for AI coding agents. It meters traffic
 through a local proxy or from tools' own logs, enforces budgets (fail-closed),
@@ -26,11 +26,12 @@ the product and [PRODUCT.md](../../PRODUCT.md) for who it is for.
   getting real users, not more internal packets. The ordered checklist and the
   open owner decisions are in
   [ACTIVE-EXECUTION.md](ACTIVE-EXECUTION.md#current-phase-pre-launch).
-- **Blocking owner decision:** the name. `fiscus` on npm belongs to an
-  unrelated project in the AI-agents-and-money space
-  ([NAME-COLLISION-REVIEW.md](../NAME-COLLISION-REVIEW.md)). Nothing is
-  published until that is decided. Until then, never tell anyone to run
-  `npx fiscus`.
+- **Name:** decided. The product is **Segreant** (D-290,
+  [NAMING-DECISION.md](NAMING-DECISION.md)); the old name collided with an
+  unrelated AI-payments project on npm
+  ([NAME-COLLISION-REVIEW.md](../NAME-COLLISION-REVIEW.md)). `segreant` is
+  unclaimed on npm until the owner publishes, so never tell anyone to run
+  `npx segreant` before then.
 - **Not done, and not claimable:** npm publication, a GitHub release, real
   provider-bill reconciliation, a causal study, outside users, independent
   security review. [EXTERNAL-GATES.md](EXTERNAL-GATES.md) says what
@@ -61,6 +62,6 @@ Consequential changes go to `main` through a pull request.
 
 ## Environment
 
-The only overrides are `FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO`. Use a
-scratch `FISCUS_HOME` when exercising the CLI so your own ledger is untouched.
-The ledger lives at `~/.fiscus/fiscus.db`.
+The only overrides are `SEGREANT_HOME`, `SEGREANT_DB` and `SEGREANT_DEMO`. Use a
+scratch `SEGREANT_HOME` when exercising the CLI so your own ledger is untouched.
+The ledger lives at `~/.segreant/segreant.db`.

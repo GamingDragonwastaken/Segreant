@@ -33,7 +33,7 @@ test('listOpencodeProviders: reports each provider and whether it is wrappable (
 test('wrapOpencodeProvider: routes an existing provider through the proxy, preserves its key, returns the real upstream', () => {
   const res = wrapOpencodeProvider(REAL_CONFIG, 'featherless', 8090);
   assert.equal(res.ok, true);
-  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1'); // → Fiscus upstream
+  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1'); // → Segreant upstream
   const obj = JSON.parse(res.merged!);
   assert.equal(obj.provider.featherless.options.baseURL, 'http://localhost:8090'); // now the proxy
   assert.equal(obj.provider.featherless.options.apiKey, '{env:FW}', 'the user key is untouched');
@@ -45,7 +45,7 @@ test('wrapOpencodeProvider: idempotent — re-wrapping an already-proxied provid
   const twice = wrapOpencodeProvider(once, 'featherless', 8090);
   assert.equal(twice.ok, true);
   assert.equal(twice.alreadyWrapped, true);
-  assert.equal(twice.originalBaseUrl, undefined); // don't clobber the Fiscus upstream on re-run
+  assert.equal(twice.originalBaseUrl, undefined); // don't clobber the Segreant upstream on re-run
 });
 
 test('wrapOpencodeProvider: refuses a hosted/managed provider (no baseURL) with an honest error', () => {
@@ -82,12 +82,12 @@ test('stripJsonc: removes // and /* */ comments and trailing commas, but never t
   assert.deepEqual(parsed.list, [1, 2, 3]);
 });
 
-test('mergeOpencodeConfig: empty config gets a fresh Fiscus source provider', () => {
+test('mergeOpencodeConfig: empty config gets a fresh Segreant source provider', () => {
   const res = mergeOpencodeConfig('', 8090);
   assert.equal(res.ok, true);
   assert.equal(res.alreadyConnected, false);
   const obj = JSON.parse(res.merged!);
-  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode');
+  assert.equal(obj.provider.segreant.options.headers[SOURCE_HEADER], 'opencode');
 });
 
 test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other providers; only adds the tag', () => {
@@ -95,7 +95,7 @@ test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other provi
     // my opencode config
     "provider": {
       "featherless": { "npm": "@ai-sdk/openai-compatible", "options": { "apiKey": "{env:FW}" } },
-      "fiscus": {
+      "segreant": {
         "npm": "@ai-sdk/openai-compatible",
         "options": { "baseURL": "http://localhost:8090", "apiKey": "{env:MY_SECRET}" }
       },
@@ -106,8 +106,8 @@ test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other provi
   assert.equal(res.alreadyConnected, false); // header wasn't there yet
   const obj = JSON.parse(res.merged!);
   assert.equal(obj.provider.featherless.options.apiKey, '{env:FW}', 'other providers preserved');
-  assert.equal(obj.provider.fiscus.options.apiKey, '{env:MY_SECRET}', 'the user key is NOT clobbered');
-  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode', 'source tag added');
+  assert.equal(obj.provider.segreant.options.apiKey, '{env:MY_SECRET}', 'the user key is NOT clobbered');
+  assert.equal(obj.provider.segreant.options.headers[SOURCE_HEADER], 'opencode', 'source tag added');
 });
 
 test('mergeOpencodeConfig: idempotent — an already-tagged config reports alreadyConnected', () => {
@@ -116,7 +116,7 @@ test('mergeOpencodeConfig: idempotent — an already-tagged config reports alrea
   assert.equal(res.ok, true);
   assert.equal(res.alreadyConnected, true);
   const obj = JSON.parse(res.merged!);
-  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode');
+  assert.equal(obj.provider.segreant.options.headers[SOURCE_HEADER], 'opencode');
 });
 
 test('mergeOpencodeConfig: unparseable input fails safe (ok:false) so the caller prints instead of writing garbage', () => {
@@ -148,20 +148,20 @@ test('resolveOpencodeConfigPath: OPENCODE_CONFIG → project-level → global (m
   assert.equal(resolveOpencodeConfigPath({ cwd, home, exists: () => false }), null);
 });
 
-// ---- antigravity connector (through the real CLI, isolated FISCUS_HOME) ----
+// ---- antigravity connector (through the real CLI, isolated SEGREANT_HOME) ----
 
 test('connect antigravity --write points the OpenAI upstream at the Gemini endpoint', async () => {
   const { execFile } = await import('node:child_process');
   const { mkdtempSync, readFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-connect-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-connect-'));
   const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 
   const out = await new Promise<{ code: number; stdout: string }>((resolve) => {
     execFile(
       process.execPath,
       [CLI, 'connect', 'antigravity', '--write'],
-      { env: { ...process.env, FISCUS_HOME: home, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_HOME: home, NODE_OPTIONS: '' } },
       (err, stdout) => resolve({ code: err ? 1 : 0, stdout: String(stdout) }),
     );
   });
@@ -215,7 +215,7 @@ test('connect: a project-scoped config tags the project; a global one deliberate
 test('connect: merging into a project-scoped config writes the project header', () => {
   const res = mergeOpencodeConfig(REAL_CONFIG, 4000, 'backend-api');
   assert.ok(res.ok);
-  const headers = JSON.parse(res.merged!).provider.fiscus.options.headers;
+  const headers = JSON.parse(res.merged!).provider.segreant.options.headers;
   assert.equal(headers[PROJECT_HEADER], 'backend-api');
 });
 
@@ -225,7 +225,7 @@ test('connect: an already-tagged config still MISSING its project header is not 
   const tagged = mergeOpencodeConfig(REAL_CONFIG, 4000).merged!;
   const again = mergeOpencodeConfig(tagged, 4000, 'backend-api');
   assert.equal(again.alreadyConnected, false, 'a missing project label is a real change');
-  assert.equal(JSON.parse(again.merged!).provider.fiscus.options.headers[PROJECT_HEADER], 'backend-api');
+  assert.equal(JSON.parse(again.merged!).provider.segreant.options.headers[PROJECT_HEADER], 'backend-api');
   // And once it matches, it really is a no-op.
   assert.equal(mergeOpencodeConfig(again.merged!, 4000, 'backend-api').alreadyConnected, true);
 });

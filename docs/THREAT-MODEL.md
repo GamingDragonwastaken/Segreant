@@ -1,18 +1,18 @@
 # Threat model
 
-This states what Fiscus defends, against whom, and what its integrity
+This states what Segreant defends, against whom, and what its integrity
 mechanisms do and do not prove. It is a companion to
 [`DATA-BOUNDARIES.md`](DATA-BOUNDARIES.md) (what may leave the machine) and
 [`SECURITY.md`](../SECURITY.md) (how to report a break of either).
 
 ## Assets
 
-- **The local ledger** (`~/.fiscus/fiscus.db`) — metering rows, cost/pricing
+- **The local ledger** (`~/.segreant/segreant.db`) — metering rows, cost/pricing
   lineage, budget state, allocation and reconciliation history
   (`src/store/CONTEXT.md`).
-- **Provider credentials in flight.** Fiscus proxies them to the configured
+- **Provider credentials in flight.** Segreant proxies them to the configured
   upstream but does not store them (`docs/DATA-BOUNDARIES.md`).
-  `x-fiscus-openai-base` is deliberately ignored so a request cannot redirect a
+  `x-segreant-openai-base` is deliberately ignored so a request cannot redirect a
   caller's credential to an attacker-chosen destination.
   `OPENAI_ADMIN_API_KEY`, read only for an explicit applied
   `billing openai-costs pull`, is never persisted, printed, or logged.
@@ -22,17 +22,17 @@ mechanisms do and do not prove. It is a companion to
   `docs/DATA-BOUNDARIES.md`.
 - **The egress receipt chain** (`egress-receipts.*`) — the local record that an
   outbound request was policy-checked before it was dialled.
-- **`.fiscuspack` bundles and their signatures** — portable evidence bundles
-  (`docs/program/PACKET-INVENTORY.md`'s `WP-G05` row; `signFiscusPack()` /
-  `verifyFiscusPack()`).
+- **`.segreantpack` bundles and their signatures** — portable evidence bundles
+  (`docs/program/PACKET-INVENTORY.md`'s `WP-G05` row; `signSegreantPack()` /
+  `verifySegreantPack()`).
 
 ## Trust boundaries
 
-Per `docs/DATA-BOUNDARIES.md`: the Fiscus process boundary is what this
+Per `docs/DATA-BOUNDARIES.md`: the Segreant process boundary is what this
 document and its egress-rule table govern. Outside it — the configured AI
 provider, the operating system, other local processes, a machine
 administrator, a browser extension in the operator's browser — is explicitly
-**not** covered. "Local-first" is a claim about Fiscus's own defaults, not a
+**not** covered. "Local-first" is a claim about Segreant's own defaults, not a
 machine-wide isolation guarantee.
 
 ## Adversaries considered
@@ -69,7 +69,7 @@ machine-wide isolation guarantee.
   the receipt file and the running process is outside the guarantee").
 - **A signature proves the bundle was not altered after signing and, with a
   supplied trust anchor, who signed it. It does not prove the claims inside
-  the bundle are true.** `.fiscuspack` embedded-key verification is
+  the bundle are true.** `.segreantpack` embedded-key verification is
   integrity-only unless the caller supplies a matching trust anchor
   (`PACKET-INVENTORY.md`'s `WP-G05` row) — **signature != truth**, the same
   distinction the money-claims rule draws for cost figures.
@@ -87,12 +87,12 @@ machine-wide isolation guarantee.
 
 | Threat | Mitigation | Where |
 | --- | --- | --- |
-| Credential redirected to an attacker-chosen destination | `x-fiscus-openai-base` ignored; egress refuses non-loopback targets before DNS in `local_locked` mode | `docs/DATA-BOUNDARIES.md` |
+| Credential redirected to an attacker-chosen destination | `x-segreant-openai-base` ignored; egress refuses non-loopback targets before DNS in `local_locked` mode | `docs/DATA-BOUNDARIES.md` |
 | Invalid config silently disabling budget enforcement | Budget/settings persistence fails closed | `CLAUDE.md` rule 5, `docs/RELEASE-GATE.md`'s "Budget fail-closed integrity" row |
 | Upstream redirect used to exfiltrate a follow-up request | `Location` stripped from proxied redirect responses | `docs/DATA-BOUNDARIES.md` |
-| Publication-lock race between two Fiscus processes | Stale-lock detection requiring no active writer before removal | `docs/program/DECISION-LOG.md` (D-072 and follow-ups) |
+| Publication-lock race between two Segreant processes | Stale-lock detection requiring no active writer before removal | `docs/program/DECISION-LOG.md` (D-072 and follow-ups) |
 | Tampered append-only trigger | Startup integrity check against configured pragmas and trigger authority | `src/store/CONTEXT.md`, D-113, D-139 |
-| Forged or altered `.fiscuspack` bundle | Canonical-bytes signing/verification, separate integrity/authenticity/truth outcomes | `docs/program/PACKET-INVENTORY.md` `WP-G05` |
+| Forged or altered `.segreantpack` bundle | Canonical-bytes signing/verification, separate integrity/authenticity/truth outcomes | `docs/program/PACKET-INVENTORY.md` `WP-G05` |
 | A rollup over-claiming its coverage | Explicit `RollupScope`, server-side containment re-check (never trusts the client) | D-199 |
 
 ## Gaps — open packets, not silent holes
@@ -100,15 +100,15 @@ machine-wide isolation guarantee.
 - **Runtime sandboxing of plugins is not enforced.** `WP-G03` (Plugin
   isolation) is `PARTIAL`: filesystem, direct-network, credential-access, CPU,
   memory, and descriptor hard limits remain explicitly unenforced.
-- **An independent `.fiscuspack` verifier does not exist yet.** `WP-G06` is
+- **An independent `.segreantpack` verifier does not exist yet.** `WP-G06` is
   `NOT_STARTED`.
 - **The team server has no production security review.** TLS termination,
   secrets rotation, real PostgreSQL/OIDC validation, and k-anonymity against
   repeated queries are enumerated as unmet infrastructure requirements in
   `docs/RELEASE-GATE.md`'s separate team-server gate.
 - **A machine administrator, or anyone with local filesystem write access to
-  the ledger, receipt chain, or a `.fiscuspack` file plus its trust anchor, is
+  the ledger, receipt chain, or a `.segreantpack` file plus its trust anchor, is
   outside every guarantee above.** This is stated once here rather than
   repeated per row, because it is the load-bearing limit of a local-first
-  design: Fiscus defends against a hostile network and a malformed input, not
+  design: Segreant defends against a hostile network and a malformed input, not
   against the machine's own owner or root.

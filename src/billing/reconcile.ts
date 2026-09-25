@@ -24,7 +24,7 @@
  *     traffic to one endpoint belongs to one project. Nothing here proves it.
  *     Every number below is conditional on that declaration being true.
  *   - `off_path_provider_usage_is_not_observable` — usage that never passed
- *     through Fiscus cannot be seen, only inferred from the residual.
+ *     through Segreant cannot be seen, only inferred from the residual.
  *
  * So the output is never `reconciled`. It is `reconciled_with_residual`: a
  * variance, per day, with a structural reason, under stated conditions. A
@@ -79,7 +79,7 @@ export interface ReconciliationDayLine {
   providerReportedMicros: number;
   localCapturedMicros: number;
   localRequestCount: number;
-  /** provider − local. Positive means the provider reported more than Fiscus saw. */
+  /** provider − local. Positive means the provider reported more than Segreant saw. */
   differenceMicros: number;
   residualReason: ResidualReason;
   material: boolean;
@@ -95,12 +95,12 @@ export type SnapshotStability =
  * Where the provider side of the comparison came from. This is a real
  * difference in evidence class, not a bookkeeping detail:
  *
- *   - `provider_api_pull` — Fiscus read the figures from the provider itself
+ *   - `provider_api_pull` — Segreant read the figures from the provider itself
  *     over a read-only Costs call. Nobody stood between the provider and the
  *     number.
  *   - `operator_supplied_export` — a person exported a report and handed it to
- *     Fiscus. Fiscus validated its shape and digested the file, but nothing in
- *     it was obtained from the provider by Fiscus, so its authenticity rests
+ *     Segreant. Segreant validated its shape and digested the file, but nothing in
+ *     it was obtained from the provider by Segreant, so its authenticity rests
  *     entirely on the operator. It reconciles, and it must never be displayed
  *     as though the provider had confirmed it.
  *   - `legacy_unknown` — recorded before this distinction existed. Unknown
@@ -118,11 +118,11 @@ export type ProviderSourceKind =
  * reader must be able to see.
  *
  * `provider_report_is_operator_supplied_and_unverified` is present when a person
- * handed Fiscus the provider's figures.
+ * handed Segreant the provider's figures.
  *
  * `local_ledger_truncated_by_retention` is present when retention deleted
  * request rows from inside this period. It is the only condition on this list
- * that Fiscus itself CAUSED and RECORDED rather than merely being unable to
+ * that Segreant itself CAUSED and RECORDED rather than merely being unable to
  * exclude, which is why its countermodel is `realized` rather than `live`
  * (D-173).
  */
@@ -214,10 +214,10 @@ export function reconciliationClaimProfile(): ClaimProfile {
 
 /**
  * What a residual can and cannot say about spend that never passed through
- * Fiscus (AII-002).
+ * Segreant (AII-002).
  *
  * Write P for the provider's reported total on the declared scope, L for what
- * Fiscus metered on it, T for the true billed cost of the traffic that DID pass
+ * Segreant metered on it, T for the true billed cost of the traffic that DID pass
  * through, and O for the true billed cost of the traffic that did not. The
  * provider bills both, so P = T + O, and the residual is
  *
@@ -236,7 +236,7 @@ export function reconciliationClaimProfile(): ClaimProfile {
  * absence from an observation that specifically undermines the inference.
  *
  * RETENTION BREAKS THE ONE QUANTITY THIS CAN OBSERVE, AND ONLY IN ONE DIRECTION
- * (D-173). `fiscus prune` deletes request rows on the operator's own policy. It
+ * (D-173). `segreant prune` deletes request rows on the operator's own policy. It
  * changes neither P, T nor O — it changes what can be COMPUTED for L. The
  * surviving ledger yields `L' = L - D` for a deleted on-path amount `D >= 0`
  * that no surviving row records, so the computed residual is `R' = R + D`.
@@ -296,11 +296,11 @@ export function offPathBoundFromResidual(
  */
 const OFF_PATH_BOUND_WORDS: Readonly<Record<OffPathBound, string>> = Object.freeze({
   upper_bound_conditional:
-    'Upper bound on spend that never passed through Fiscus — conditional on your route declaration and on the local rate-card estimate not exceeding the true on-path billed cost. Not a measurement of off-path spend.',
+    'Upper bound on spend that never passed through Segreant — conditional on your route declaration and on the local rate-card estimate not exceeding the true on-path billed cost. Not a measurement of off-path spend.',
   none_local_estimate_exceeds_provider:
     'No upper bound on off-path spend: the local rate-card estimate exceeds the provider total for this scope, so over-estimation has absorbed an unknown amount of it. A residual at or below zero is not evidence that nothing went off-path.',
   unknown_local_total_truncated_by_retention:
-    'This residual bounds nothing: retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount and the difference is inflated by traffic Fiscus metered and then deleted. Reconcile a period that starts at or after the retention boundary, or lengthen retention before relying on this figure.',
+    'This residual bounds nothing: retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount and the difference is inflated by traffic Segreant metered and then deleted. Reconcile a period that starts at or after the retention boundary, or lengthen retention before relying on this figure.',
 });
 
 /** Every bound state, so a caller can sweep them without maintaining a second list. */
@@ -534,7 +534,7 @@ export function reconcileOpenAiCosts(input: {
     unstableDayStartMs,
     providerSourceKind: sourceKind,
     // The fifth condition appears only when it is true. A reader who sees four
-    // is looking at figures Fiscus read from the provider; a reader who sees
+    // is looking at figures Segreant read from the provider; a reader who sees
     // five is looking at figures a person handed it. The sixth appears only
     // when retention deleted rows from inside the period.
     conditions: [
@@ -629,7 +629,7 @@ export interface ReconciliationReadiness {
    * `coverage` sums the entire ledger with no period bound, so the only honest
    * condition is whether ANY deletion has happened — including one that removed
    * nothing, since a boundary was still applied and completeness is no longer
-   * something Fiscus can vouch for.
+   * something Segreant can vouch for.
    */
   localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }

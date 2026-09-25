@@ -50,7 +50,7 @@ function observationsFor(input = plan()): CausalObservation[] {
   ]);
 }
 
-test('a Fiscus-created plan replays its exact paired randomization and binds observations to its hash', () => {
+test('a Segreant-created plan replays its exact paired randomization and binds observations to its hash', () => {
   const created = plan();
   assert.equal(created.assignments[0]!.aiUnitId, 'p1-a');
   assert.equal(created.assignments[1]!.aiUnitId, 'p2-b');

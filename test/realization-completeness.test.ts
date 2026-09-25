@@ -18,10 +18,10 @@ function git(cwd: string, args: string[]): void {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-realization-completeness-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-realization-completeness-'));
   git(dir, ['init', '-q']);
   git(dir, ['config', 'user.email', 'test@example.invalid']);
-  git(dir, ['config', 'user.name', 'Fiscus test']);
+  git(dir, ['config', 'user.name', 'Segreant test']);
   writeFileSync(join(dir, 'app.ts'), 'export const answer = 42;\n');
   git(dir, ['add', '.']);
   git(dir, ['commit', '-qm', 'feat: complete boundary test', '--date=2026-01-01T10:00:00Z'],);
@@ -116,7 +116,7 @@ test('a witness for only one negative channel leaves the clean predicate unresol
 // ---------------------------------------------------------------------------
 
 test('a real repository scan witnesses its own revert coverage — and only that channel', async () => {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-revert-witness-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-revert-witness-'));
   const store = new Store(':memory:');
   try {
     git(repo, ['init', '-q']);

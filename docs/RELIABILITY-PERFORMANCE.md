@@ -1,6 +1,6 @@
 # Reliability and performance observations
 
-This document is the M14 measurement checkpoint for Fiscus. It is deliberately
+This document is the M14 measurement checkpoint for Segreant. It is deliberately
 not a service-level objective: budgets are chosen only after repeated runs on
 the intended release machine, with its Node version, storage, and workload.
 The harness uses synthetic in-memory ledgers, a loopback-only dashboard server,
@@ -42,7 +42,7 @@ workload becomes empty or loses the dependency it claims to exercise.
 
 This is the first H06 truth-boundary slice: canonical construction and
 validation are measured, while persistent ledger append, graph replay/as-of,
-revocation closure and `.fiscuspack` verification are measured by the two
+revocation closure and `.segreantpack` verification are measured by the two
 sections below. Exact projections, allocation, dashboard contract validation
 and proxy streaming are not benchmarked; those are the four surfaces still
 outside the harness, stated here so the list cannot pass for coverage. The
@@ -74,15 +74,15 @@ bounded across the scale ladder to maintain sub-second to low-second determinism
 full SQLite schema, digest, and DAG validation invariants. The published counts are
 contract-tested quality gates, not latency budgets.
 
-## Revocation closure and `.fiscuspack` round-trip boundary
+## Revocation closure and `.segreantpack` round-trip boundary
 
-The `revocationClosure` and `fiscuspackRoundTrip` operations (D-238) share
+The `revocationClosure` and `segreantpackRoundTrip` operations (D-238) share
 one ledger per scale: a fan-out graph of one shared root Evidence cited by
 every Claim beside that Claim's own leaf Evidence (`small: 25` pairs, up to
 `100x: 200`). Two revocations are recorded — one leaf and the shared root —
 and the graph is built once so that what is timed is the READ:
 `revocationProjection()` for closure, and `exportLedgerPack` →
-`serializeFiscusPack` → `verifyFiscusPack` for the pack. The quality block
+`serializeSegreantPack` → `verifySegreantPack` for the pack. The quality block
 requires the root's closure to reach every Claim and exactly one other leaf
 (`nodesRevoked = pairs + 2`), no pending entries, the whole graph packed with
 nothing omitted, and the verifier's own verdict `ok` with `integrity:
@@ -128,7 +128,7 @@ claim that every machine or real workload meets a latency target.
 
 ## Boundaries and next measurement
 
-- The harness creates and removes its own temporary `FISCUS_HOME`, regardless of
+- The harness creates and removes its own temporary `SEGREANT_HOME`, regardless of
   the caller's environment, and reports `isolatedHome: true`,
   `externalNetworkAttempted: false`, and `credentialRead: false` in its JSON.
 - The receipt verifier has its own bounded-memory streaming path, capped error
@@ -142,7 +142,7 @@ claim that every machine or real workload meets a latency target.
   release runner and add a deliberate regression margin to each selected
   operation. Record the machine profile and dataset generator revision with
   the chosen budgets.
-- `fiscus diagnostics --json` provides a separate redacted handoff bundle with
+- `segreant diagnostics --json` provides a separate redacted handoff bundle with
   operation IDs, probe durations/error classes, database/schema/egress/pricing
   state, and no-network/no-credential/no-prompt/source/ledger-row-export
   assertions. It is read-only;

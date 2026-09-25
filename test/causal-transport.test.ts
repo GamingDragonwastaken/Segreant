@@ -17,7 +17,7 @@ const HASH_B = 'b'.repeat(64);
 
 function bridge(overrides: Partial<CausalTransportDeclaration> = {}): CausalTransportDeclaration {
   return {
-    type: 'fiscus.causal-transport',
+    type: 'segreant.causal-transport',
     version: 1,
     bridgeId: 'bridge-1',
     sourceProtocolHash: `sha256:${HASH_A}`,
@@ -101,11 +101,11 @@ test('a changed treatment or measurement coordinate remains visible in the bridg
 });
 
 test('causal transport CLI is a bounded review-only consumer', () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-causal-transport-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-causal-transport-'));
   const options = join(root, 'bridge.json');
   try {
     writeFileSync(options, JSON.stringify(bridge()));
-    const stdout = execFileSync(process.execPath, ['bin/fiscus.mjs', 'causal', 'transport', '--options', options, '--json'], {
+    const stdout = execFileSync(process.execPath, ['bin/segreant.mjs', 'causal', 'transport', '--options', options, '--json'], {
       cwd: process.cwd(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

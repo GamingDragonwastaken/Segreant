@@ -21,19 +21,19 @@ test('FOCUS compatibility projection emits v1.4-shaped billed rows with explicit
   assert.equal(row.BilledCost, 1.234567);
   assert.equal(row.EffectiveCost, null);
   assert.equal(row.AllocatedCost, null);
-  assert.equal(row.FiscusCostBasis, 'billed');
-  assert.equal(row.FiscusEffectiveCostStatus, 'unmapped');
-  assert.equal(row.FiscusAllocatedCostStatus, 'unmapped');
+  assert.equal(row.SegreantCostBasis, 'billed');
+  assert.equal(row.SegreantEffectiveCostStatus, 'unmapped');
+  assert.equal(row.SegreantAllocatedCostStatus, 'unmapped');
 });
 
 test('FOCUS compatibility projection preserves exact lineage and does not invent invoice or allocation provenance', () => {
   const row = billingEvidenceToFocus([record])[0]!;
-  assert.deepEqual(row.FiscusSourceLineage, {
+  assert.deepEqual(row.SegreantSourceLineage, {
     recordId: 'record:focus:1', sourceRecordId: 'line-1', sourceRecordSha256: 'a'.repeat(64),
     importId: 'import-1', exportId: 'export-1', sourceSystem: 'operator-export', trust: 'operator_supplied_unverified',
   });
   assert.equal(row.InvoiceIssuerName, null);
-  assert.equal(row.FiscusAllocationSource, null);
+  assert.equal(row.SegreantAllocationSource, null);
   assert.equal(Object.isFrozen(row), true);
 });
 

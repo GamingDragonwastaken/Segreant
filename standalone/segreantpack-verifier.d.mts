@@ -1,9 +1,9 @@
-export declare const FISCUS_PACK_SCHEMA: 'fiscuspack';
-export declare const FISCUS_PACK_VERSION: 1;
-export declare const FISCUS_PACK_MANIFEST_SCHEMA: 'fiscuspack.manifest';
-export declare const FISCUS_PACK_MANIFEST_VERSION: 1;
+export declare const SEGREANT_PACK_SCHEMA: 'segreantpack';
+export declare const SEGREANT_PACK_VERSION: 1;
+export declare const SEGREANT_PACK_MANIFEST_SCHEMA: 'segreantpack.manifest';
+export declare const SEGREANT_PACK_MANIFEST_VERSION: 1;
 
-export interface FiscusPackLimits {
+export interface SegreantPackLimits {
   readonly maxEnvelopeBytes: number;
   readonly maxManifestBytes: number;
   readonly maxIncludedRecords: number;
@@ -24,13 +24,13 @@ export interface FiscusPackLimits {
   readonly maxAttachmentBytes: number;
 }
 
-export interface VerifyFiscusPackOptions {
-  readonly limits?: Partial<FiscusPackLimits>;
+export interface VerifySegreantPackOptions {
+  readonly limits?: Partial<SegreantPackLimits>;
   /** Canonical base64 SPKI, PEM, or DER bytes for an out-of-band anchor. */
   readonly trustedPublicKey?: string | Uint8Array;
 }
 
-export interface FiscusPackVerificationResult {
+export interface SegreantPackVerificationResult {
   readonly ok: boolean;
   readonly errors: readonly string[];
   readonly manifestDigest: string | null;
@@ -50,12 +50,12 @@ export interface FiscusPackVerificationResult {
     readonly declared: number;
     readonly present: number;
   };
-  readonly limits: FiscusPackLimits;
+  readonly limits: SegreantPackLimits;
 }
 
-export declare const DEFAULT_FISCUS_PACK_LIMITS: FiscusPackLimits;
+export declare const DEFAULT_SEGREANT_PACK_LIMITS: SegreantPackLimits;
 export declare function isSafeRelativeAttachmentPath(value: unknown): value is string;
-export declare function verifyFiscusPack(
+export declare function verifySegreantPack(
   input: unknown,
-  options?: VerifyFiscusPackOptions,
-): FiscusPackVerificationResult;
+  options?: VerifySegreantPackOptions,
+): SegreantPackVerificationResult;

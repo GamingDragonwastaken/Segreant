@@ -1007,7 +1007,7 @@ export class EconomicLedger {
    * WHAT REMAINS PERMITTED, which is the whole legitimate use. A reopen happens
    * after the close, and evidence recorded after that carries a later
    * `recordedAt`. `occurredAt` is untouched and may sit anywhere inside the
-   * period — that is what a reopen is for. It is `recordedAt`, the time Fiscus
+   * period — that is what a reopen is for. It is `recordedAt`, the time Segreant
    * recorded the event, that may not be backdated across a close. Recorded at
    * D-100.
    */
@@ -1053,7 +1053,7 @@ export class EconomicLedger {
         throw new Error(
           'economic period ' + period.startMs + '/' + period.endMs + ' was closed through '
           + new Date(floor).toISOString() + '; an in-period event recorded at or before that instant would '
-          + 'falsify a recorded close. Record it at the time Fiscus observed it — occurredAt still carries '
+          + 'falsify a recorded close. Record it at the time Segreant observed it — occurredAt still carries '
           + 'when it happened.',
         );
       }

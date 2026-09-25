@@ -39,7 +39,7 @@ const BINDING_KEYS = [
 const BINDING_WITH_DIGEST_KEYS = [...BINDING_KEYS, 'bindingDigest'] as const;
 
 type BindingMaterial = {
-  type: 'fiscus.causal-lineage-binding';
+  type: 'segreant.causal-lineage-binding';
   version: 2;
   bindingId: string;
   studyId: string;
@@ -148,7 +148,7 @@ function canonicalBindingMaterial(binding: BindingMaterial): string {
 
 /** Digest used by the append-only sidecar and by resolver tests. */
 export function causalLineageBindingDigestV2(binding: BindingMaterial): string {
-  return 'sha256:' + sha256('fiscus.causal.lineage-binding\n2\n' + canonicalBindingMaterial(binding));
+  return 'sha256:' + sha256('segreant.causal.lineage-binding\n2\n' + canonicalBindingMaterial(binding));
 }
 
 /**
@@ -157,12 +157,12 @@ export function causalLineageBindingDigestV2(binding: BindingMaterial): string {
  * cwd, source, prompt, and token text/content fields.
  */
 export function causalRequestPricingDigestV2(input: CausalRequestPricingDigestInputV2): string {
-  return 'sha256:' + sha256('fiscus.causal.request-cost-lineage\n2\n' + canonicalJson(input));
+  return 'sha256:' + sha256('segreant.causal.request-cost-lineage\n2\n' + canonicalJson(input));
 }
 
 /** Derive the digest for the immutable scalar realization snapshot only. */
 export function causalRealizationSnapshotDigestV2(input: CausalRealizationSnapshotInputV2): string {
-  return 'sha256:' + sha256('fiscus.causal.realization-snapshot\n2\n' + canonicalJson(input));
+  return 'sha256:' + sha256('segreant.causal.realization-snapshot\n2\n' + canonicalJson(input));
 }
 
 function validBindingShape(value: unknown): value is CausalLineageBindingV2 {
@@ -210,7 +210,7 @@ function validBindingShape(value: unknown): value is CausalLineageBindingV2 {
     }
     const values = Object.fromEntries([...descriptors.entries()].map(([key, descriptor]) => [key, descriptor.value])) as Record<string, unknown>;
     const realizationCommitHash = values.realizationCommitHash;
-    if (values.type !== 'fiscus.causal-lineage-binding' || values.version !== 2
+    if (values.type !== 'segreant.causal-lineage-binding' || values.version !== 2
         || !isCausalIdentifier(values.bindingId) || !isCausalIdentifier(values.studyId)
         || !isDigest(values.protocolHash) || !isCausalIdentifier(values.decisionId)
         || !isCausalIdentifier(values.executionId) || !isCausalIdentifier(values.outcomeId)
@@ -404,7 +404,7 @@ function inBounds(value: number | null, bounds: { low: number; high: number }): 
 
 function decisionEventHashV2(decision: Record<string, unknown>): string {
   const { eventHash: _ignored, ...material } = decision;
-  return 'sha256:' + sha256('fiscus.causal.decision\n2\n' + canonicalJson(material));
+  return 'sha256:' + sha256('segreant.causal.decision\n2\n' + canonicalJson(material));
 }
 
 /** Provider scope declarations currently have a concrete OpenAI key, while
@@ -418,7 +418,7 @@ function declaredProviderKey(provider: string): string | null {
 function commitSubjectDigest(subject: unknown): string | null {
   if (subject === null || subject === undefined) return null;
   if (typeof subject !== 'string' || subject.length > 4096 || subject.includes('\0')) return null;
-  return 'sha256:' + sha256('fiscus.causal.commit-subject\n1\n' + subject);
+  return 'sha256:' + sha256('segreant.causal.commit-subject\n1\n' + subject);
 }
 
 function emptyBindingDigest(value: unknown): string | null {
@@ -495,7 +495,7 @@ export function validateCausalLineageBindingV2(
         || decisionRow.studyId !== binding.studyId
         || decisionRow.unitIdDigest !== binding.unitIdDigest
         || decisionRow.eventHash !== decision.eventHash
-        || decision.type !== 'fiscus.causal-decision' || decision.version !== 2
+        || decision.type !== 'segreant.causal-decision' || decision.version !== 2
         || decision.decisionId !== binding.decisionId || decision.studyId !== binding.studyId
         || decision.protocolHash !== binding.protocolHash || decision.unitIdDigest !== binding.unitIdDigest
         || decision.eventHash !== decisionRow.eventHash

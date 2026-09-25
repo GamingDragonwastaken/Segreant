@@ -14,7 +14,7 @@ not a SemVer promise this project has been through a cycle of yet.
   a verb the CLI does not have (D-205 tightened this to verb, subcommand, and
   flag, not just the first word).
 - **The GUI's local API routes**, declared once in `src/dashboard/contracts.ts`
-  (path, methods, which methods require the `x-fiscus-local: 1` header, and
+  (path, methods, which methods require the `x-segreant-local: 1` header, and
   response type) and consumed by both the server and the browser app.
 - **The SQLite schema generation** produced by `migrate()` in
   `src/store/schema.ts`. `CURRENT_SCHEMA_VERSION` is checked on open: a
@@ -24,7 +24,7 @@ not a SemVer promise this project has been through a cycle of yet.
   never a destructive rewrite — `CONTEXT.md`'s "Schema migrations are additive
   and guarded" rule).
 - **The backup manifest format**, `src/store/backup.ts`. A manifest is
-  `{ version: 1, kind: 'fiscus-ledger-backup', ... }`; restoring checks the
+  `{ version: 1, kind: 'segreant-ledger-backup', ... }`; restoring checks the
   version, kind, and a required-table contract against the paired SQLite
   artifact before trusting it, and refuses a manifest that does not match.
 
@@ -37,7 +37,7 @@ its replacement and removal version, before the old form is removed.
 **This is a stated policy, not a claim that it has been exercised yet** —
 nothing on the stable list above has needed a breaking change since this
 document existed. One precedent from before this policy is worth being honest
-about: an old environment-variable name for `FISCUS_HOME` was removed outright
+about: an old environment-variable name for `SEGREANT_HOME` was removed outright
 — "not deprecated, not read, not warned about" (`src/config.ts`) — because
 letting two spellings of one precedence-sensitive setting coexist had already
 caused a real defect (an ambient value silently outranking the name tests used

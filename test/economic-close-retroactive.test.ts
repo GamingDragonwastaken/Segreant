@@ -44,7 +44,7 @@
  * an ordinary late append is unaffected, which is why the existing reopen test
  * in `test/economic-close.test.ts` passed throughout. `occurredAt` still carries
  * the event's own time and may sit anywhere inside the period; it is
- * `recordedAt`, the time Fiscus recorded it, that may not be backdated across a
+ * `recordedAt`, the time Segreant recorded it, that may not be backdated across a
  * close. Recorded at D-100.
  */
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * A dependency-free FiscusPack verifier.
+ * A dependency-free SegreantPack verifier.
  *
- * This file intentionally does not import the Fiscus producer, store, or
+ * This file intentionally does not import the Segreant producer, store, or
  * runtime.  It is a small executable reference for consumers that receive a
  * pack as bytes or already-parsed JSON.  The only imported modules are
  * Node's standard-library crypto and (for the command-line adapter) read-only
@@ -13,15 +13,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const FISCUS_PACK_SCHEMA = 'fiscuspack';
-export const FISCUS_PACK_VERSION = 1;
-export const FISCUS_PACK_MANIFEST_SCHEMA = 'fiscuspack.manifest';
-export const FISCUS_PACK_MANIFEST_VERSION = 1;
+export const SEGREANT_PACK_SCHEMA = 'segreantpack';
+export const SEGREANT_PACK_VERSION = 1;
+export const SEGREANT_PACK_MANIFEST_SCHEMA = 'segreantpack.manifest';
+export const SEGREANT_PACK_MANIFEST_VERSION = 1;
 
 // These are explicit values rather than imports from the application.  The
 // limits are part of the wire verifier contract and are deliberately bounded
 // independently of any producer configuration.
-export const DEFAULT_FISCUS_PACK_LIMITS = Object.freeze({
+export const DEFAULT_SEGREANT_PACK_LIMITS = Object.freeze({
   maxEnvelopeBytes: 1 * 1024 * 1024,
   maxManifestBytes: 1 * 1024 * 1024,
   maxIncludedRecords: 100_000,
@@ -314,8 +314,8 @@ function validateManifest(value, limits, errors) {
   }
   rejectUnexpectedKeys(value, MANIFEST_KEYS, 'manifest', errors);
   requireKeys(value, MANIFEST_KEYS.filter((key) => key !== 'signature'), 'manifest', errors);
-  if (value.schema !== FISCUS_PACK_MANIFEST_SCHEMA) errors.push(`manifest.schema must be ${FISCUS_PACK_MANIFEST_SCHEMA}`);
-  if (value.version !== FISCUS_PACK_MANIFEST_VERSION) errors.push(`manifest.version must be ${FISCUS_PACK_MANIFEST_VERSION}`);
+  if (value.schema !== SEGREANT_PACK_MANIFEST_SCHEMA) errors.push(`manifest.schema must be ${SEGREANT_PACK_MANIFEST_SCHEMA}`);
+  if (value.version !== SEGREANT_PACK_MANIFEST_VERSION) errors.push(`manifest.version must be ${SEGREANT_PACK_MANIFEST_VERSION}`);
   if (!validIdentifier(value.packId, limits.maxIdentifierChars)) errors.push('manifest.packId is invalid');
   if (!validIsoTimestamp(value.createdAt)) errors.push('manifest.createdAt must be an ISO-8601 UTC timestamp');
   validateRecordReferences(value.includedRecords, limits, errors);
@@ -384,8 +384,8 @@ function validateEnvelope(value, limits, errors) {
   }
   rejectUnexpectedKeys(value, TOP_LEVEL_KEYS, 'pack envelope', errors);
   requireKeys(value, ['schema', 'version', 'manifest', 'manifestDigest'], 'pack envelope', errors);
-  if (value.schema !== FISCUS_PACK_SCHEMA) errors.push(`pack envelope.schema must be ${FISCUS_PACK_SCHEMA}`);
-  if (value.version !== FISCUS_PACK_VERSION) errors.push(`pack envelope.version must be ${FISCUS_PACK_VERSION}`);
+  if (value.schema !== SEGREANT_PACK_SCHEMA) errors.push(`pack envelope.schema must be ${SEGREANT_PACK_SCHEMA}`);
+  if (value.version !== SEGREANT_PACK_VERSION) errors.push(`pack envelope.version must be ${SEGREANT_PACK_VERSION}`);
   if (!validDigest(value.manifestDigest)) errors.push('pack envelope.manifestDigest is invalid');
   validateManifest(value.manifest, limits, errors);
   if (isRecord(value.manifest)) validateInlineAttachments(value.attachments, value.manifest.attachments, limits, errors);
@@ -434,7 +434,7 @@ function digest(value) {
 }
 
 function resolveLimits(overrides = {}) {
-  return Object.freeze({ ...DEFAULT_FISCUS_PACK_LIMITS, ...(isRecord(overrides) ? overrides : {}) });
+  return Object.freeze({ ...DEFAULT_SEGREANT_PACK_LIMITS, ...(isRecord(overrides) ? overrides : {}) });
 }
 
 function validateLimits(value) {
@@ -524,7 +524,7 @@ function asTrustedPublicKey(input) {
 }
 
 /**
- * Verify a FiscusPack envelope without persistence, generation, filesystem
+ * Verify a SegreantPack envelope without persistence, generation, filesystem
  * access, network calls, or application imports.
  *
  * `trustedPublicKey` is optional and must be an out-of-band Ed25519 SPKI
@@ -533,7 +533,7 @@ function asTrustedPublicKey(input) {
  * a matching supplied anchor can establish authenticity. Semantic truth and
  * completeness of named records are intentionally never evaluated here.
  */
-export function verifyFiscusPack(input, options = {}) {
+export function verifySegreantPack(input, options = {}) {
   const limits = resolveLimits(options?.limits);
   const limitErrors = validateLimits(limits);
   if (limitErrors.length > 0) return invalidResult(limitErrors, limits);
@@ -681,18 +681,18 @@ function runCli() {
       try {
         limits = JSON.parse(args[index + 1] ?? '');
       } catch {
-        process.stderr.write('fiscuspack verifier: --limits must be valid JSON\n');
+        process.stderr.write('segreantpack verifier: --limits must be valid JSON\n');
         process.exitCode = 2;
         return;
       }
       index += 1;
     } else if (arg === '--help' || arg === '-h') {
-      process.stdout.write('Usage: fiscuspack-verify [PACK.json|-] [--trusted-key BASE64|PEM] [--limits JSON]\n');
+      process.stdout.write('Usage: segreantpack-verify [PACK.json|-] [--trusted-key BASE64|PEM] [--limits JSON]\n');
       return;
     } else if (inputPath === null) {
       inputPath = arg;
     } else {
-      process.stderr.write(`fiscuspack verifier: unexpected argument ${arg}\n`);
+      process.stderr.write(`segreantpack verifier: unexpected argument ${arg}\n`);
       process.exitCode = 2;
       return;
     }
@@ -703,11 +703,11 @@ function runCli() {
       ? readFileSync(0)
       : readFileSync(inputPath);
   } catch (error) {
-    process.stderr.write(`fiscuspack verifier: cannot read input: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`segreantpack verifier: cannot read input: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;
     return;
   }
-  const result = verifyFiscusPack(input, { ...(trustedPublicKey === undefined ? {} : { trustedPublicKey }), ...(limits === undefined ? {} : { limits }) });
+  const result = verifySegreantPack(input, { ...(trustedPublicKey === undefined ? {} : { trustedPublicKey }), ...(limits === undefined ? {} : { limits }) });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.ok ? 0 : 1;
 }

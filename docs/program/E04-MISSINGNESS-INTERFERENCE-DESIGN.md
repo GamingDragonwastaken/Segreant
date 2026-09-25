@@ -22,7 +22,7 @@ labels a `none_declared` interference assumption as an assumption rather than
 as measured absence. The bounded operator consumer is:
 
 ```text
-fiscus causal design --options <file> --json
+segreant causal design --options <file> --json
 ```
 
 Focused RED-first coverage is 6/6, including the packaged CLI path; root

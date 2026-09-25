@@ -105,7 +105,7 @@ export interface IndependentCausalProducerInputV2 {
 }
 
 export interface IndependentCausalProducerEvidenceV2 {
-  algorithm: 'fiscus.causal.independent-unit';
+  algorithm: 'segreant.causal.independent-unit';
   version: 2;
   identityMaterial: 'retained_git_commit_scalars';
   unitIdDigest: string;
@@ -258,18 +258,18 @@ function micros(value: number): number | null {
 function commitSubjectDigest(subject: unknown): string | null {
   if (subject === null || subject === undefined) return null;
   if (typeof subject !== 'string' || subject.length > MAX_SUBJECT_CHARS || subject.includes('\0')) return null;
-  return 'sha256:' + sha256('fiscus.causal.commit-subject\n1\n' + subject);
+  return 'sha256:' + sha256('segreant.causal.commit-subject\n1\n' + subject);
 }
 
 function decisionEventHash(value: Record<string, unknown>): string {
   const { eventHash: _ignored, ...material } = value;
-  return 'sha256:' + sha256('fiscus.causal.decision\n2\n' + canonicalJson(material));
+  return 'sha256:' + sha256('segreant.causal.decision\n2\n' + canonicalJson(material));
 }
 
 function parseDecision(row: StoredDecisionRow, input: IndependentCausalProducerInputV2): CausalDecisionRecordV2 | null {
   const value = canonicalRecord(row.decisionJson);
   if (!value || !exactRecord(value, DECISION_KEYS)
-      || value.type !== 'fiscus.causal-decision' || value.version !== 2
+      || value.type !== 'segreant.causal-decision' || value.version !== 2
       || !isCausalIdentifier(value.decisionId) || !isCausalIdentifier(value.studyId)
       || !isCausalIdentifier(value.blockId) || !isCausalIdentifier(value.assignedArmId)
       || !digest(value.protocolHash) || !digest(value.unitIdDigest)
@@ -574,7 +574,7 @@ export function prepareIndependentCausalLineageBindingV2(
       costStale: realization.costStale === 1,
     });
     const bindingMaterial = {
-      type: 'fiscus.causal-lineage-binding' as const,
+      type: 'segreant.causal-lineage-binding' as const,
       version: 2 as const,
       // Tuple identity (D-241): causal identifiers admit ':', so a delimiter join
       // let two (study, decision) pairs share one binding id.
@@ -596,7 +596,7 @@ export function prepareIndependentCausalLineageBindingV2(
     if (reasons.length > 0) return invalidAssessment(reasons, ledger, unitIdDigest);
     if (!ledger || ledger.evidenceManifestHash === null) return invalidAssessment(['ordinary_ledger_unverified'], ledger, unitIdDigest);
     const evidence: IndependentCausalProducerEvidenceV2 = {
-      algorithm: 'fiscus.causal.independent-unit',
+      algorithm: 'segreant.causal.independent-unit',
       version: 2,
       identityMaterial: 'retained_git_commit_scalars',
       unitIdDigest,

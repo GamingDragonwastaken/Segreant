@@ -44,7 +44,7 @@
  */
 
 import type { Store } from '../store/db.ts';
-import { isDemo, DEFAULT_CONFIG, type FiscusConfig } from '../config.ts';
+import { isDemo, DEFAULT_CONFIG, type SegreantConfig } from '../config.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
 import { projectName } from '../git/correlate.ts';
 import {
@@ -158,7 +158,7 @@ export interface ValueSpine {
  */
 export async function valueSpine(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: ValueSpineOptions,
 ): Promise<ValueSpine | null> {
   const windowDays = opts.windowDays ?? 14;
@@ -296,7 +296,7 @@ export async function valueSpine(
  */
 export function usageValue(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: { windowDays?: number; nowMs?: number } = {},
 ): UsageReport {
   const now = opts.nowMs ?? Date.now();
@@ -379,7 +379,7 @@ function budgetCapDecisionInputs(
  */
 export function budgetAdvice(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: {
     windowDays?: number;
     nowMs?: number;
@@ -452,7 +452,7 @@ export interface ValueReport {
  */
 export async function valueReport(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: ValueReportOptions,
 ): Promise<ValueReport> {
   const now = opts.nowMs ?? Date.now();

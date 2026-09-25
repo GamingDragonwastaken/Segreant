@@ -42,7 +42,7 @@ function meteredRequest(): RequestRow {
 function runCli(args: string[], dbPath: string, env: Record<string, string | undefined> = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, ...args], {
-      env: { ...process.env, FISCUS_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
+      env: { ...process.env, SEGREANT_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
     }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (err as unknown as { code: number }).code : err ? 1 : 0;
@@ -139,9 +139,9 @@ test('chunked OpenAI Costs responses are bounded before arrayBuffer materializat
 });
 
 test('default OpenAI Costs transport refuses a corrupt receipt history before DNS or socket creation', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-receipt-refusal-'));
-  const previousHome = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-openai-costs-receipt-refusal-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   const { store } = scopedStore();
   try {
     const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
@@ -152,8 +152,8 @@ test('default OpenAI Costs transport refuses a corrupt receipt history before DN
     );
   } finally {
     store.close();
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
@@ -208,8 +208,8 @@ test('direct Costs snapshots are immutable, failures are retained, and neither c
 });
 
 test('CLI preview never reads a credential or calls the network; dry pull is also non-operational', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-cli-'));
-  const dbPath = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-openai-costs-cli-'));
+  const dbPath = join(dir, 'segreant.db');
   const store = new Store(dbPath);
   try {
     store.setOpenAiScope({ billingAccountRef: 'finance-cli', providerProjectRef: 'proj_fixture', upstreamBase: 'https://api.openai.com' });
@@ -251,8 +251,8 @@ test('CLI preview never reads a credential or calls the network; dry pull is als
 });
 
 test('CLI billing preserves receipt refusal category and repair action instead of collapsing to network failure', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-cli-receipt-'));
-  const dbPath = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-openai-costs-cli-receipt-'));
+  const dbPath = join(dir, 'segreant.db');
   const home = join(dir, 'home');
   const store = new Store(dbPath);
   try {
@@ -266,7 +266,7 @@ test('CLI billing preserves receipt refusal category and repair action instead o
     const result = await runCli(
       ['billing', 'openai-costs', 'pull', '--from', '2026-01-01', '--to', '2026-01-03', '--apply', '--json'],
       dbPath,
-      { FISCUS_HOME: home, OPENAI_ADMIN_API_KEY: 'credential-is-not-retained' },
+      { SEGREANT_HOME: home, OPENAI_ADMIN_API_KEY: 'credential-is-not-retained' },
     );
     assert.equal(result.code, 1, result.stderr);
     const payload = JSON.parse(result.stdout) as { run: { failureCode?: string }; action?: string; error?: string };

@@ -66,7 +66,7 @@ export function allocationView(): Node {
           h('p', { text: () => (isPrecise()
             ? 'kind: derived_cost_allocation · trust: derived_allocation_of_local_estimates'
             : 'These figures are worked out by rules you wrote, applied to costs we estimated ourselves.') }),
-          h('p', { class: 'excl-lede', text: () => (isPrecise() ? 'Deliberately excluded from:' : 'Fiscus deliberately refuses to let this feed:') }),
+          h('p', { class: 'excl-lede', text: () => (isPrecise() ? 'Deliberately excluded from:' : 'Segreant deliberately refuses to let this feed:') }),
           h('ul', { class: 'excl' },
             ...(d.excludedFrom ?? []).map((id) =>
               h('li', { text: EXCLUSION_WORDS[id] ?? id.replace(/_/g, ' ') }))),
@@ -123,7 +123,7 @@ export function allocationView(): Node {
               h('h2', { text: () => (isPrecise() ? 'No allocation model defined' : 'Nothing is being split yet') }),
               h('p', { text: () => (isPrecise()
                 ? `${centres.length} cost centre${centres.length === 1 ? '' : 's'} and ${rules.length} rule${rules.length === 1 ? '' : 's'} recorded. Both are required before a run can produce a split.`
-                : 'To split spend across teams or projects, Fiscus needs at least one cost centre to attribute to, and one rule that decides what goes where.') })),
+                : 'To split spend across teams or projects, Segreant needs at least one cost centre to attribute to, and one rule that decides what goes where.') })),
 
         section(() => (isPrecise() ? 'Actions on this layer' : 'Things you can do with this'),
           h('div', { class: 'actions' },

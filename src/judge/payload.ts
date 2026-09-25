@@ -8,13 +8,13 @@
  * store-integrated convenience wrapper lives in judge/orchestrate.ts, mirroring
  * how value/lift.ts stays pure and value/realization.ts bridges it to the store.
  *
- * IMPORTANT — what "structural" means here in practice: Fiscus's store never
+ * IMPORTANT — what "structural" means here in practice: Segreant's store never
  * persists prompt text or the AI's response text (src/store/db.ts's RequestRow
  * has no content field; ProposalRow stores only the proposed file diffs for the
  * Acceptance lens). So this summary is genuinely ALL the session-level signal
  * the STORE holds. The full-content judge tiers get more only via
  * judge/transcript.ts, which reads the tool's own on-disk session log
- * ephemerally at judge time — still nothing persisted by Fiscus.
+ * ephemerally at judge time — still nothing persisted by Segreant.
  */
 
 import type { ProposalCaptureCoverage, RequestRow, ProposalRow } from '../store/db.ts';

@@ -14,7 +14,7 @@
  * No test caught it because every real-socket test dialled an IP literal,
  * which skips `lookup` entirely, and every hostname test used the dial hook.
  * This one uses a hostname and no hook. Found 2026-09-25 by an end-to-end
- * `fiscus team push --url http://localhost:8092` against a live team server.
+ * `segreant team push --url http://localhost:8092` against a live team server.
  */
 
 import { test } from 'node:test';
@@ -29,9 +29,9 @@ import { egressFetchWithConfig } from '../src/egress/transport.ts';
 const LOCKED: EgressConfig = { mode: 'local_locked', rules: [] };
 
 test('a permitted request to a hostname (not an IP literal) is dialled over a real socket', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-hostname-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-hostname-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   const server = http.createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('reached');
@@ -50,8 +50,8 @@ test('a permitted request to a hostname (not an IP literal) is dialled over a re
     assert.equal(await response.text(), 'reached');
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 });

@@ -1256,7 +1256,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     reasons.push('duplicate V2 assignment decision');
   }
   for (const decision of decisions) {
-    if (decision.type !== 'fiscus.causal-decision'
+    if (decision.type !== 'segreant.causal-decision'
         || decision.version !== 2
         || decision.studyId !== protocol.studyId
         || decision.protocolHash !== protocol.protocolHash
@@ -1321,7 +1321,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     const decision = decisionById.get(execution.decisionId);
     const arm = decision && protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId);
     const valid = decision !== undefined && arm !== undefined
-      && execution.type === 'fiscus.causal-execution'
+      && execution.type === 'segreant.causal-execution'
       && execution.version === 2
       && execution.studyId === protocol.studyId
       && execution.protocolHash === protocol.protocolHash
@@ -1378,7 +1378,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     const decision = decisionById.get(outcome.decisionId);
     const execution = executionByDecision.get(outcome.decisionId);
     const lineageValid = decision !== undefined && execution !== undefined
-      && outcome.type === 'fiscus.causal-terminal-outcome'
+      && outcome.type === 'segreant.causal-terminal-outcome'
       && outcome.version === 2
       && outcome.studyId === protocol.studyId
       && outcome.protocolHash === protocol.protocolHash
@@ -1777,7 +1777,7 @@ export function causalInferenceLedger(
 /**
  * Report the study, recording the look.
  *
- * WHY A READ PATH WRITES. Fiscus is read-only by default and `--apply`
+ * WHY A READ PATH WRITES. Segreant is read-only by default and `--apply`
  * persists, and this does not breach that. An inferential act is not a change
  * to the operator's data, to provider routing, or to budgets — it is an audit
  * record of something that already happened, in the same category as an egress
@@ -2083,7 +2083,7 @@ function domainHash(domain: string, material: unknown): string {
 
 function blockRoot(protocol: CommittedCausalStudyProtocolV2, blockId: string): string {
   return 'sha256:' + sha256(canonicalJson({
-    domain: 'fiscus.causal.assignment-block-root',
+    domain: 'segreant.causal.assignment-block-root',
     version: 1,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -2093,7 +2093,7 @@ function blockRoot(protocol: CommittedCausalStudyProtocolV2, blockId: string): s
 
 function materialDigest(material: Uint8Array): string {
   return 'sha256:' + createHash('sha256')
-    .update(Buffer.from('fiscus.causal.randomization-material\n1\n'))
+    .update(Buffer.from('segreant.causal.randomization-material\n1\n'))
     .update(uint64Be(material.byteLength))
     .update(material)
     .digest('hex');
@@ -2107,7 +2107,7 @@ function decisionId(
   unitIdDigest: string,
 ): string {
   return 'decision:' + sha256(canonicalJson({
-    domain: 'fiscus.causal.decision-id',
+    domain: 'segreant.causal.decision-id',
     version: 1,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -2144,7 +2144,7 @@ function shuffledArms(
   let counter = 0;
   const nextWord = (): number => {
     const digestBytes = createHash('sha256')
-      .update(Buffer.from('fiscus.causal.assignment-shuffle\n2\n'))
+      .update(Buffer.from('segreant.causal.assignment-shuffle\n2\n'))
       .update(uint64Be(material.byteLength))
       .update(material)
       .update(uint64Be(Buffer.byteLength(context)))
@@ -2185,7 +2185,7 @@ function allocationHash(
   }>,
   randomizationMaterialDigest: string,
 ): string {
-  return domainHash('fiscus.causal.assignment-allocation', {
+  return domainHash('segreant.causal.assignment-allocation', {
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
     blockId,
@@ -2209,8 +2209,8 @@ function planHash(
     decisionIds: string[];
   },
 ): string {
-  return domainHash('fiscus.causal.assignment-plan', {
-    type: 'fiscus.causal-assignment-plan',
+  return domainHash('segreant.causal.assignment-plan', {
+    type: 'segreant.causal-assignment-plan',
     version: 2,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -2233,7 +2233,7 @@ function planHash(
 
 function decisionHash(decision: Record<string, unknown>): string {
   const { eventHash: _eventHash, ...material } = decision;
-  return domainHash('fiscus.causal.decision', material);
+  return domainHash('segreant.causal.decision', material);
 }
 
 function validateDerivationInput(protocol: CommittedCausalStudyProtocolV2, input: unknown): string[] {
@@ -2308,7 +2308,7 @@ function deriveCausalAssignmentBlockV2Internal(
   for (let index = 0; index < assignments.length; index += 1) {
     const assignment = assignments[index]!;
     const materialDecision: Omit<CausalDecisionRecordV2, 'eventHash'> = {
-      type: 'fiscus.causal-decision',
+      type: 'segreant.causal-decision',
       version: 2,
       decisionId: decisionIds[index]!,
       studyId: protocol.studyId,
@@ -2336,7 +2336,7 @@ function deriveCausalAssignmentBlockV2Internal(
 
   return {
     plan: {
-      type: 'fiscus.causal-assignment-plan',
+      type: 'segreant.causal-assignment-plan',
       version: 2,
       studyId: protocol.studyId,
       blockId: input.blockId,
@@ -2358,7 +2358,7 @@ function deriveCausalAssignmentBlockV2Internal(
 
 function validatePlanShape(plan: unknown, errors: string[]): plan is Record<string, unknown> {
   if (!exactRecord(plan, PLAN_KEYS, 'v2 assignment plan', errors)) return false;
-  if (plan.type !== 'fiscus.causal-assignment-plan') errors.push('v2 assignment plan type is invalid');
+  if (plan.type !== 'segreant.causal-assignment-plan') errors.push('v2 assignment plan type is invalid');
   if (plan.version !== 2) errors.push('v2 assignment plan version is invalid');
   for (const [field, value] of [['studyId', plan.studyId], ['blockId', plan.blockId]] as const) {
     if (!safeId(value)) errors.push('v2 assignment plan ' + field + ' is invalid');
@@ -2389,7 +2389,7 @@ function validatePlanShape(plan: unknown, errors: string[]): plan is Record<stri
 function validateDecisionShape(decision: unknown, index: number, errors: string[]): decision is Record<string, unknown> {
   const label = 'v2 assignment decision[' + String(index) + ']';
   if (!exactRecord(decision, DECISION_KEYS, label, errors)) return false;
-  if (decision.type !== 'fiscus.causal-decision') errors.push(label + ' type is invalid');
+  if (decision.type !== 'segreant.causal-decision') errors.push(label + ' type is invalid');
   if (decision.version !== 2) errors.push(label + ' version is invalid');
   for (const [field, value] of [
     ['decisionId', decision.decisionId], ['studyId', decision.studyId],
@@ -2643,7 +2643,7 @@ function validateManifestShape(value: unknown): asserts value is CausalAssignmen
   if (!exactRecord(value, MANIFEST_KEYS, 'v2 assignment manifest', errors)) {
     fail('CAUSAL_INTEGRITY_FAILURE', errors.join('; '));
   }
-  if (value.type !== 'fiscus.causal-assignment-manifest' || value.version !== 2
+  if (value.type !== 'segreant.causal-assignment-manifest' || value.version !== 2
       || !safeId(value.studyId) || !digest(value.protocolHash)
       || !positiveSafeInteger(value.planCount) || !positiveSafeInteger(value.decisionCount)
       || !positiveSafeInteger(value.unitCount) || !digest(value.assignmentManifestHash)
@@ -2759,7 +2759,7 @@ function manifestFromBlocks(
     planHash: decision.planHash,
   })));
   const material = {
-    type: 'fiscus.causal-assignment-manifest' as const,
+    type: 'segreant.causal-assignment-manifest' as const,
     version: 2 as const,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -2769,7 +2769,7 @@ function manifestFromBlocks(
     plans,
     decisions,
   };
-  return { ...material, assignmentManifestHash: domainHash('fiscus.causal.assignment-manifest', material) };
+  return { ...material, assignmentManifestHash: domainHash('segreant.causal.assignment-manifest', material) };
 }
 
 function scanAssignmentArtifacts(

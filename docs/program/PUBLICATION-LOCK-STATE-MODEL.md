@@ -41,12 +41,12 @@ intended", because no other process can see that.
 
 | State | Observable | Recovered by |
 | --- | --- | --- |
-| `ABSENT` | no `.fiscus-build.lock` | n/a — acquirable |
+| `ABSENT` | no `.segreant-build.lock` | n/a — acquirable |
 | `CREATED_OWNERLESS` | directory present, no valid record in any form | age > `OWNERLESS_LOCK_STALE_MS` (10s) |
 | `TEMP_OWNER_WRITTEN` | `.owner-<token>.tmp` parses; no `owner.json` | owner PID liveness |
 | `OWNED` | `owner.json` parses | owner PID liveness |
 | `OWNER_QUARANTINED` | `.owner-quarantine.json` parses; no `owner.json` | owner PID liveness |
-| `DIRECTORY_QUARANTINED` | canonical path free; `.fiscus-build.lock.quarantine-*` at the root | `reapOrphanQuarantines` on the next acquisition |
+| `DIRECTORY_QUARANTINED` | canonical path free; `.segreant-build.lock.quarantine-*` at the root | `reapOrphanQuarantines` on the next acquisition |
 | `RELEASED` | the generation is gone | n/a — terminal |
 
 Two structural notes, both load-bearing:
@@ -84,7 +84,7 @@ but has stopped acting on it — because release gave up and returned. Call it
 `HELD_BY_ABANDONER`. It satisfies no staleness rule: `processIsAlive` says the
 owner is there. It is not on any timer: timers only govern token-less
 directories. **No transition out of it exists.** Contenders wait the full
-`LOCK_WAIT_MS` and then report `timed out waiting for another Fiscus build`
+`LOCK_WAIT_MS` and then report `timed out waiting for another Segreant build`
 about a build that finished minutes earlier — which is precisely the message CI
 run `33507233437` produced (**failure**, ubuntu/macOS/candidate-head), and
 precisely why it named the wrong problem.
@@ -206,7 +206,7 @@ recovery) use it, and it is what makes the claim exclusive.
 - **Abandonment after** — `HELD_BY_ABANDONER`. Unrecoverable. This was give-up
   path (b)/(c) of the old release.
 
-### T5 `OWNER_QUARANTINED` to `DIRECTORY_QUARANTINED` — `renameSync(buildLock, .fiscus-build.lock.quarantine-<pid>-<uuid>)`
+### T5 `OWNER_QUARANTINED` to `DIRECTORY_QUARANTINED` — `renameSync(buildLock, .segreant-build.lock.quarantine-<pid>-<uuid>)`
 
 - **Atomic** — yes, and the target name is unique, which is the point of the
   whole two-step. After it, the canonical path is `ABSENT` and a contender may

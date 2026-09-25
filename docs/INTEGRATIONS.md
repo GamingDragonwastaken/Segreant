@@ -1,20 +1,20 @@
-# Integrations — wiring Fiscus to your tools
+# Integrations — wiring Segreant to your tools
 
-Fiscus meters and caps AI spend by sitting **in the path** as a local proxy.
+Segreant meters and caps AI spend by sitting **in the path** as a local proxy.
 There is no per-tool plugin to install: any tool that (1) speaks the OpenAI or
 Anthropic HTTP API and (2) lets you set a **base URL** is wired by configuration
 alone. One running proxy meters *every* such tool at once — your IDE, your CLI
 agent, and your scripts. The proxy forwards routed requests to the AI provider
 you configure, so those requests can contain prompts, source snippets, tool
-payloads, and provider credentials. Fiscus has no Fiscus-hosted telemetry by
+payloads, and provider credentials. Segreant has no Segreant-hosted telemetry by
 default; read [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) for the complete egress
 and local-retention contract.
 
 ```
-your tool ──(base URL)──▶ Fiscus :8090 ──price · cap · log──▶ provider
+your tool ──(base URL)──▶ Segreant :8090 ──price · cap · log──▶ provider
 ```
 
-The mental model: **point the tool's base URL at Fiscus, and point Fiscus's
+The mental model: **point the tool's base URL at Segreant, and point Segreant's
 upstream at the provider.** That's the whole integration.
 
 ---
@@ -23,12 +23,12 @@ upstream at the provider.** That's the whole integration.
 
 | Knob | Where | What it does |
 |---|---|---|
-| Your tool's base URL | the tool's config / env | sends the tool's traffic to Fiscus instead of straight to the provider |
-| `upstreams.openai` / `upstreams.anthropic` | `~/.fiscus/config.json` | where Fiscus forwards, after metering |
-| `egress` rule | `fiscus egress apply --apply ...` | the exact cloud method/origin/path/data class Fiscus may forward |
+| Your tool's base URL | the tool's config / env | sends the tool's traffic to Segreant instead of straight to the provider |
+| `upstreams.openai` / `upstreams.anthropic` | `~/.segreant/config.json` | where Segreant forwards, after metering |
+| `egress` rule | `segreant egress apply --apply ...` | the exact cloud method/origin/path/data class Segreant may forward |
 
 For native OpenAI or Anthropic, the upstream defaults are correct, but a fresh
-Fiscus install is `local_locked` and deliberately refuses cloud forwarding until
+Segreant install is `local_locked` and deliberately refuses cloud forwarding until
 you add an exact `provider_inference` egress rule. This is a second deliberate
 consent step: it records that a provider can receive the routed payload. You
 touch the upstream setting only to meter an OpenAI-*compatible* provider that
@@ -37,24 +37,24 @@ isn't OpenAI (Gemini, OpenRouter, DeepSeek, Ollama, …).
 For example, before routing default OpenAI traffic:
 
 ```bash
-fiscus egress apply --apply --mode controlled_cloud \
+segreant egress apply --apply --mode controlled_cloud \
   --id openai-inference --purpose provider_inference \
   --data-class provider_request --method POST \
   --origin https://api.openai.com --path-prefix /v1/
 ```
 
-The receipt chain is local and redacted: `fiscus egress verify` checks its
+The receipt chain is local and redacted: `segreant egress verify` checks its
 integrity. A genuinely absent file may establish genesis, but any present
 invalid/unreadable history or lock/persistence failure refuses the routed
 request before DNS or dial and is not reset automatically; repair or restore it
 before retrying. If the bounded lock wait reports a stale lock, confirm that no
-Fiscus writer is active, remove only that lock, and rerun receipt verification;
+Segreant writer is active, remove only that lock, and rerun receipt verification;
 the transport never auto-deletes it. Neither a rule nor a valid receipt guarantees another
 process's network behaviour or the provider's retention policy.
 
 ### The base-URL `/v1` rule (read this once)
 
-Fiscus forwards the **incoming path** onto the upstream base. So the upstream
+Segreant forwards the **incoming path** onto the upstream base. So the upstream
 base must contain the provider's version segment, and the tool's base URL must
 *not* duplicate it:
 
@@ -72,10 +72,10 @@ off the tool's base URL.**
 ## Metering Gemini on the free tier (the $0 test)
 
 This is the recommended way to watch real agent traffic accrue without spending a
-cent — Gemini 2.5 Flash is free-tier, and it doubles as proof of Fiscus's
+cent — Gemini 2.5 Flash is free-tier, and it doubles as proof of Segreant's
 multi-provider pricing.
 
-**1. Point Fiscus's OpenAI upstream at Google.** `~/.fiscus/config.json`:
+**1. Point Segreant's OpenAI upstream at Google.** `~/.segreant/config.json`:
 
 ```json
 {
@@ -85,9 +85,9 @@ multi-provider pricing.
 }
 ```
 
-**2. Start the proxy:** `fiscus start` (proxy on :8090, dashboard on :8091).
+**2. Start the proxy:** `segreant start` (proxy on :8090, dashboard on :8091).
 
-**3. Set your key in the environment** — this is the one secret Fiscus never
+**3. Set your key in the environment** — this is the one secret Segreant never
 stores and never needs to see. Get a free key from Google AI Studio, then:
 
 ```powershell
@@ -99,13 +99,13 @@ Open a **new** terminal after `setx` so the variable is visible.
 
 **4. Run a tool through it** (opencode recipe below) with model
 `gemini-2.5-flash`. Traffic is metered into your real ledger; watch it at
-**http://localhost:8091** or with `fiscus today`.
+**http://localhost:8091** or with `segreant today`.
 
 **To revert to real OpenAI later:** set `upstreams.openai` back to
 `https://api.openai.com` (or delete `config.json` to restore all defaults).
 
 > **Pricing:** Gemini rates are built in and verified. Rates drift — keep them
-> current with `fiscus pricing --refresh` (see [pricing](#keeping-pricing-current)).
+> current with `segreant pricing --refresh` (see [pricing](#keeping-pricing-current)).
 
 ---
 
@@ -114,20 +114,20 @@ Open a **new** terminal after `setx` so the variable is visible.
 ### opencode
 
 opencode reads `~/.config/opencode/opencode.jsonc`. Add a provider (this is the
-exact shape Fiscus ships set up):
+exact shape Segreant ships set up):
 
 ```jsonc
 {
   "provider": {
-    "fiscus": {
-      "name": "Fiscus → Gemini (metered)",
+    "segreant": {
+      "name": "Segreant → Gemini (metered)",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "baseURL": "http://localhost:8090",
         "apiKey": "{env:GEMINI_API_KEY}"
       },
       "models": {
-        "gemini-2.5-flash": { "name": "Gemini 2.5 Flash (via Fiscus)" }
+        "gemini-2.5-flash": { "name": "Gemini 2.5 Flash (via Segreant)" }
       }
     }
   }
@@ -135,7 +135,7 @@ exact shape Fiscus ships set up):
 ```
 
 The `{env:GEMINI_API_KEY}` substitution keeps your key in the environment, never
-in the file. In opencode, run `/models` and pick the Fiscus provider's model.
+in the file. In opencode, run `/models` and pick the Segreant provider's model.
 
 ### aider
 
@@ -146,14 +146,14 @@ export OPENAI_API_KEY="$OPENAI_KEY"
 aider --model gpt-4o
 ```
 
-For Gemini-via-Fiscus, set `OPENAI_API_BASE="http://localhost:8090"` (no
+For Gemini-via-Segreant, set `OPENAI_API_BASE="http://localhost:8090"` (no
 `/v1`), `OPENAI_API_KEY` to your Gemini key, and `--model gemini-2.5-flash`.
 
 ### Cursor
 
 Settings → Models → **Override OpenAI Base URL** → `http://localhost:8090/v1`.
 Cursor's verification call must succeed, so the proxy must be running. Your key
-goes in Cursor as usual; Fiscus forwards it untouched.
+goes in Cursor as usual; Segreant forwards it untouched.
 
 ### Continue / Cline (VS Code)
 
@@ -187,16 +187,16 @@ client = OpenAI(base_url="http://localhost:8090/v1", api_key="…")
 ## Beyond one provider, from one proxy
 
 To meter several OpenAI-compatible providers without restarting, enable
-Do not route providers per request with `x-fiscus-openai-base`: current Fiscus
+Do not route providers per request with `x-segreant-openai-base`: current Segreant
 builds ignore that legacy header because the proxy forwards provider credentials.
 Set one trusted OpenAI-compatible destination in `upstreams.openai` instead.
 
 ```
-X-Fiscus-OpenAI-Base: https://openrouter.ai/api
+X-Segreant-OpenAI-Base: https://openrouter.ai/api
 ```
 
 It's **off by default on purpose** — that header forwards your provider key to the
-URL it names, so Fiscus only honors it when you opt in. For a single provider,
+URL it names, so Segreant only honors it when you opt in. For a single provider,
 just set `upstreams.openai` and skip the flag.
 
 **Pricing follows the model, not the wire.** A `gemini-*` model arriving over the
@@ -212,11 +212,11 @@ Pricing is a core dependability, and provider rates change. The table ships
 bundled (works offline) and can be refreshed in place:
 
 ```bash
-fiscus pricing             # source, age, model count, staleness
-fiscus pricing --refresh   # pull the latest rates (a plain GET; sends nothing about you)
+segreant pricing             # source, age, model count, staleness
+segreant pricing --refresh   # pull the latest rates (a plain GET; sends nothing about you)
 ```
 
-A refreshed table is written to `~/.fiscus/pricing/models.json` and overrides
+A refreshed table is written to `~/.segreant/pricing/models.json` and overrides
 the bundled one. A malformed download is rejected and your current table is kept
 — a bad refresh never downgrades your data.
 
@@ -228,6 +228,6 @@ the bundled one. A malformed download is rejected and your current table is kept
 |---|---|---|
 | `404` from the provider | double `/v1` (tool base URL **and** upstream both carry a version) | drop `/v1` from the tool base URL when the upstream already has a version segment |
 | `401 / 403` | key not in the environment, or wrong key for the upstream | confirm the env var is set in the shell that launched the tool; open a new shell after `setx` |
-| Tool's "verify" fails | proxy not running | `fiscus start`, then retry |
-| Cost shows `estimated` | model id not in the rate card | `fiscus pricing --refresh`, or check the model name |
-| Nothing in the dashboard | tool didn't route through the proxy | re-check the base URL; `fiscus today` to confirm requests land |
+| Tool's "verify" fails | proxy not running | `segreant start`, then retry |
+| Cost shows `estimated` | model id not in the rate card | `segreant pricing --refresh`, or check the model name |
+| Nothing in the dashboard | tool didn't route through the proxy | re-check the base URL; `segreant today` to confirm requests land |

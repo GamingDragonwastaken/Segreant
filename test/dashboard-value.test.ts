@@ -46,8 +46,8 @@ test('GET /api/value: payload always carries a reclaimed key (null when no git r
 });
 
 test('GET /api/value: a synthetic demo labels itself and exposes only a review-only cheaper-model trial', async () => {
-  const previousDemo = process.env.FISCUS_DEMO;
-  process.env.FISCUS_DEMO = '1';
+  const previousDemo = process.env.SEGREANT_DEMO;
+  process.env.SEGREANT_DEMO = '1';
   const store = new Store(':memory:');
   const now = new Date();
   now.setHours(12, 0, 0, 0);
@@ -69,8 +69,8 @@ test('GET /api/value: a synthetic demo labels itself and exposes only a review-o
   } finally {
     await srv.close();
     store.close();
-    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
-    else process.env.FISCUS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.SEGREANT_DEMO;
+    else process.env.SEGREANT_DEMO = previousDemo;
   }
 });
 
@@ -79,7 +79,7 @@ test('value dashboard reveals the observed mature-unit and realization evidence 
   assert.match(html, /mature units/);
   assert.match(html, /observed realization/);
   assert.match(html, /intervals overlap — keep this as a measured trial/);
-  assert.match(html, /Fiscus does <b>not<\/b> change routing/);
+  assert.match(html, /Segreant does <b>not<\/b> change routing/);
 });
 
 test('modern Value view discloses exact economic coverage instead of leaving the numeric cost basis implicit', () => {

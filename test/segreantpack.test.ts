@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createFiscusPackEnvelope,
-  createFiscusPackManifest,
+  createSegreantPackEnvelope,
+  createSegreantPackManifest,
   isSafeRelativeAttachmentPath,
   manifestDigest,
-  serializeFiscusPack,
-  type FiscusPackManifestInput,
+  serializeSegreantPack,
+  type SegreantPackManifestInput,
 } from '../src/pack/manifest.ts';
-import { verifyFiscusPack } from '../src/pack/verifier.ts';
+import { verifySegreantPack } from '../src/pack/verifier.ts';
 
-function fixture(overrides: Partial<FiscusPackManifestInput> = {}): FiscusPackManifestInput {
+function fixture(overrides: Partial<SegreantPackManifestInput> = {}): SegreantPackManifestInput {
   return {
     packId: 'pack:fixture-1',
     createdAt: '2026-09-04T00:00:00.000Z',
@@ -28,15 +28,15 @@ function fixture(overrides: Partial<FiscusPackManifestInput> = {}): FiscusPackMa
   };
 }
 
-function envelope(overrides: Partial<FiscusPackManifestInput> = {}) {
-  return createFiscusPackEnvelope(createFiscusPackManifest(fixture(overrides)));
+function envelope(overrides: Partial<SegreantPackManifestInput> = {}) {
+  return createSegreantPackEnvelope(createSegreantPackManifest(fixture(overrides)));
 }
 
 test('builds a versioned manifest and verifies its canonical content digest', () => {
   const pack = envelope();
-  assert.equal(pack.schema, 'fiscuspack');
+  assert.equal(pack.schema, 'segreantpack');
   assert.equal(pack.version, 1);
-  assert.equal(pack.manifest.schema, 'fiscuspack.manifest');
+  assert.equal(pack.manifest.schema, 'segreantpack.manifest');
   assert.equal(pack.manifest.version, 1);
   assert.deepEqual(pack.manifest.includedRecords.map((record) => [record.kind, record.id, record.digest]), [
     ['evidence', 'evidence:one', 'sha256:' + 'a'.repeat(64)],
@@ -44,11 +44,11 @@ test('builds a versioned manifest and verifies its canonical content digest', ()
   ]);
   assert.match(pack.manifestDigest, /^sha256:[a-f0-9]{64}$/);
 
-  const serialized = serializeFiscusPack(pack);
-  assert.equal(verifyFiscusPack(serialized).ok, true);
-  assert.equal(verifyFiscusPack(pack).manifestDigest, pack.manifestDigest);
+  const serialized = serializeSegreantPack(pack);
+  assert.equal(verifySegreantPack(serialized).ok, true);
+  assert.equal(verifySegreantPack(pack).manifestDigest, pack.manifestDigest);
 
-  const reordered = createFiscusPackManifest({
+  const reordered = createSegreantPackManifest({
     attachments: [],
     externalReferences: [],
     redactions: [],
@@ -61,7 +61,7 @@ test('builds a versioned manifest and verifies its canonical content digest', ()
 });
 
 test('manifest records omissions, redactions, external references, and non-truth-bearing signature metadata', () => {
-  const unsigned = createFiscusPackManifest(fixture({
+  const unsigned = createSegreantPackManifest(fixture({
     omissions: [{ kind: 'transcript', count: 4, ids: [], reason: 'operator excluded raw prompts' }],
     redactions: [{ kind: 'evidence', ids: ['evidence:one'], fields: ['payload.secret'], reason: 'credential minimization' }],
     externalReferences: [{
@@ -77,14 +77,14 @@ test('manifest records omissions, redactions, external references, and non-truth
     signature: 'opaque-signature-metadata',
     signedDigest: manifestDigest(unsigned),
   };
-  const signed = createFiscusPackEnvelope(createFiscusPackManifest(fixture({
+  const signed = createSegreantPackEnvelope(createSegreantPackManifest(fixture({
     omissions: unsigned.omissions,
     redactions: unsigned.redactions,
     externalReferences: unsigned.externalReferences,
     signature: signedMetadata,
   })));
 
-  const result = verifyFiscusPack(signed);
+  const result = verifySegreantPack(signed);
   assert.equal(result.ok, true);
   assert.equal(result.signature.status, 'metadata_only');
   assert.equal(result.signature.cryptographicVerification, 'not_performed');
@@ -108,27 +108,27 @@ test('tampering with manifest content or its envelope digest fails closed', () =
     id: 'evidence:altered',
     digest: originalRecord.digest,
   };
-  const alteredResult = verifyFiscusPack(alteredManifest);
+  const alteredResult = verifySegreantPack(alteredManifest);
   assert.equal(alteredResult.ok, false);
   assert.match(alteredResult.errors.join('\n'), /manifest digest/i);
 
   const alteredDigest = structuredClone(pack) as unknown as { manifestDigest: string };
   alteredDigest.manifestDigest = 'sha256:' + '0'.repeat(64);
-  const digestResult = verifyFiscusPack(alteredDigest);
+  const digestResult = verifySegreantPack(alteredDigest);
   assert.equal(digestResult.ok, false);
   assert.match(digestResult.errors.join('\n'), /digest/i);
 });
 
 test('resource limits bound raw parsing and manifest collections', () => {
-  const oversized = verifyFiscusPack('x'.repeat(129), { limits: { maxEnvelopeBytes: 128 } });
+  const oversized = verifySegreantPack('x'.repeat(129), { limits: { maxEnvelopeBytes: 128 } });
   assert.equal(oversized.ok, false);
   assert.match(oversized.errors.join('\n'), /envelope.*limit/i);
 
-  const tooManyRecords = verifyFiscusPack(envelope(), { limits: { maxIncludedRecords: 1 } });
+  const tooManyRecords = verifySegreantPack(envelope(), { limits: { maxIncludedRecords: 1 } });
   assert.equal(tooManyRecords.ok, false);
   assert.match(tooManyRecords.errors.join('\n'), /included record/i);
 
-  const tooDeep = verifyFiscusPack(envelope({
+  const tooDeep = verifySegreantPack(envelope({
     redactions: [{ kind: 'evidence', ids: ['evidence:one'], fields: ['payload'], reason: 'x' }],
   }), { limits: { maxCanonicalDepth: 2 } });
   assert.equal(tooDeep.ok, false);
@@ -151,7 +151,7 @@ test('attachment paths are relative and traversal-safe without filesystem access
       digest: 'sha256:' + 'd'.repeat(64),
     }],
   });
-  assert.equal(verifyFiscusPack(pack).ok, true);
+  assert.equal(verifySegreantPack(pack).ok, true);
 
   const source = readFileSync(join(import.meta.dirname, '..', 'src', 'pack', 'verifier.ts'), 'utf8');
   assert.doesNotMatch(source, /\b(?:Store|producer)\b/);
@@ -161,12 +161,12 @@ test('attachment paths are relative and traversal-safe without filesystem access
 test('unsupported versions, unknown envelope fields, invalid digests, and mismatched signatures are rejected', () => {
   const pack = envelope();
   const badVersion = { ...pack, version: 2 };
-  const versionResult = verifyFiscusPack(badVersion);
+  const versionResult = verifySegreantPack(badVersion);
   assert.equal(versionResult.ok, false);
   assert.match(versionResult.errors.join('\n'), /version/i);
 
   const extraField = { ...pack, unexpected: true };
-  const extraResult = verifyFiscusPack(extraField);
+  const extraResult = verifySegreantPack(extraField);
   assert.equal(extraResult.ok, false);
   assert.match(extraResult.errors.join('\n'), /unknown|unsupported/i);
 
@@ -174,12 +174,12 @@ test('unsupported versions, unknown envelope fields, invalid digests, and mismat
     manifest: { includedRecords: Array<{ kind: string; id: string; digest: string }> };
   };
   invalidRecord.manifest.includedRecords[0]!.digest = 'not-a-sha256';
-  const invalidResult = verifyFiscusPack(invalidRecord);
+  const invalidResult = verifySegreantPack(invalidRecord);
   assert.equal(invalidResult.ok, false);
   assert.match(invalidResult.errors.join('\n'), /digest/i);
 
-  const unsigned = createFiscusPackManifest(fixture());
-  const mismatchedSignature = createFiscusPackEnvelope(createFiscusPackManifest(fixture({
+  const unsigned = createSegreantPackManifest(fixture());
+  const mismatchedSignature = createSegreantPackEnvelope(createSegreantPackManifest(fixture({
     signature: {
       algorithm: 'ed25519',
       keyId: 'key:operator-1',
@@ -188,7 +188,7 @@ test('unsupported versions, unknown envelope fields, invalid digests, and mismat
     },
   })));
   assert.equal(manifestDigest(unsigned), mismatchedSignature.manifestDigest);
-  const signatureResult = verifyFiscusPack(mismatchedSignature);
+  const signatureResult = verifySegreantPack(mismatchedSignature);
   assert.equal(signatureResult.ok, false);
   assert.match(signatureResult.errors.join('\n'), /signature.*digest|signed digest/i);
 });

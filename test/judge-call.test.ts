@@ -1,6 +1,6 @@
 /**
  * The outbound judge HTTP call (src/judge/call.ts): strict-parsing and
- * adversarial coverage. This is the one place Fiscus itself acts as an LLM
+ * adversarial coverage. This is the one place Segreant itself acts as an LLM
  * API CLIENT (everywhere else it's a transparent metering proxy), so it gets
  * the same "assume nothing, verify everything" treatment as the receipt
  * signing code — a malformed or hostile response must never propagate an
@@ -16,13 +16,13 @@ import { join } from 'node:path';
 import { callJudgeApi, JudgeCallError, JUDGE_MULTIPLIER_FLOOR, JUDGE_MULTIPLIER_CAP } from '../src/judge/call.ts';
 import type { StructuralSessionSummary } from '../src/judge/payload.ts';
 
-const originalFiscusHome = process.env.FISCUS_HOME;
-const judgeTestHome = mkdtempSync(join(tmpdir(), 'fiscus-judge-call-home-'));
-process.env.FISCUS_HOME = judgeTestHome;
+const originalSegreantHome = process.env.SEGREANT_HOME;
+const judgeTestHome = mkdtempSync(join(tmpdir(), 'segreant-judge-call-home-'));
+process.env.SEGREANT_HOME = judgeTestHome;
 
 test.after(() => {
-  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = originalFiscusHome;
+  if (originalSegreantHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = originalSegreantHome;
   rmSync(judgeTestHome, { recursive: true, force: true });
 });
 
@@ -192,9 +192,9 @@ test('callJudgeApi: an unreachable endpoint throws network, not a crash', async 
 });
 
 test('callJudgeApi: corrupt receipt history is a typed pre-dial boundary refusal with repair guidance', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-judge-receipt-refusal-'));
-  const previousHome = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-judge-receipt-refusal-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
   try {
     await assert.rejects(
@@ -205,8 +205,8 @@ test('callJudgeApi: corrupt receipt history is a typed pre-dial boundary refusal
         && /repair\/restore.*receipt/i.test(err.message),
     );
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

@@ -9,7 +9,7 @@ Legend: ✅ verified · 🔧 corrected · ⚠️ unverifiable / illustrative · 
 ## 1. Technical claims
 
 ### 🔧 "Transparent MITM proxy" with a root CA
-The brief calls Fiscus a "transparent MITM proxy gateway" with a dynamically generated root CA, then *also* says developers set `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL`. Those are two different architectures. MITM (install a CA, decrypt all TLS) is unnecessary here because the target tools already accept a base URL, and it carries real costs: corporate device policies forbid it, endpoint protection flags it, and it's the exact surveillance posture the brief elsewhere disavows.
+The brief calls Segreant a "transparent MITM proxy gateway" with a dynamically generated root CA, then *also* says developers set `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL`. Those are two different architectures. MITM (install a CA, decrypt all TLS) is unnecessary here because the target tools already accept a base URL, and it carries real costs: corporate device policies forbid it, endpoint protection flags it, and it's the exact surveillance posture the brief elsewhere disavows.
 **Build**: base-URL reverse proxy is the core. No CA, no TLS interception. MITM is, at most, a future opt-in "advanced mode."
 
 ### 🔧 The cost formula and "reasoning multiplier"
@@ -39,7 +39,7 @@ Reasonable as a goal, but `node:sqlite` doesn't bundle SQLCipher, and adding it 
 
 ### ⚠️ Local proposal storage — a real trade-off, not a gap
 First-Pass Acceptance (whether an AI's proposed edit survives into a real commit) requires comparing the AI's proposed code against the eventual git diff. That comparison needs the proposed code to still be on disk when the matching commit lands, which can be days later. So `proposals.files_json` stores the AI's literal proposed lines in the local SQLite database — not hashed, not transmitted, but genuinely present in cleartext on disk for a bounded window.
-**Build**: `proposalRetentionDays` (default 30 days) bounds it; `fiscus prune` and the dashboard Settings page both purge it early on demand; `metadataOnly: true` disables the capture entirely at the cost of losing the Acceptance signal. This is an honest, disclosed trade-off, not a violation of "no prompt/code storage, ever" — that line describes non-transmission, not zero local persistence — but it went undocumented here until this pass. It's now called out in the README Privacy section and FAQ too.
+**Build**: `proposalRetentionDays` (default 30 days) bounds it; `segreant prune` and the dashboard Settings page both purge it early on demand; `metadataOnly: true` disables the capture entirely at the cost of losing the Acceptance signal. This is an honest, disclosed trade-off, not a violation of "no prompt/code storage, ever" — that line describes non-transmission, not zero local persistence — but it went undocumented here until this pass. It's now called out in the README Privacy section and FAQ too.
 
 ### ⚠️ "Over 1,000 distinct models" / auto-updating community pricing DB
 Aspirational. We ship a curated snapshot of the models that matter, clearly marking Anthropic as verified and OpenAI as community-maintained. Auto-update is listed as future work, not pretended-present.
@@ -50,7 +50,7 @@ Aspirational. We ship a curated snapshot of the models that matter, clearly mark
 
 ### ⚠️ "Up to 85% cost reduction" / the comparison-matrix deltas (30% churn, 25% flow, etc.)
 These are projections, not measured results. The actual reduction depends entirely on how wasteful a given baseline is. Stated as fact, they'd be the kind of overclaim that loses enterprise trust.
-**Build**: the landing page frames these as *modeled* and adds an explicit disclaimer that Fiscus provides visibility and controls, not a guaranteed percentage.
+**Build**: the landing page frames these as *modeled* and adds an explicit disclaimer that Segreant provides visibility and controls, not a guaranteed percentage.
 
 ### ⚠️ Named-company anecdotes (Uber exhausted its 2026 budget in 4 months; Meta/Microsoft/Shopify leaderboards; $2,100 on a $200 plan)
 I could not verify any of these specific figures. The *mechanism* they illustrate is real and defensible — Goodhart's Law on token metrics, agentic loops compounding cost, usage-based billing removing the ceiling. So I kept the mechanism and dropped the unverifiable specifics from public-facing copy. The landing page argues from the dynamics, not from claimed invoices.
@@ -75,7 +75,7 @@ The brief defines AES = (Δdiff × Q × U) / tokens, where **U is a "structural 
 2. **Keep adjacent measurements separate.** Spend, persistence, reverts, tests, incidents, and business outcomes answer different questions. Their co-location does not turn line retention into a quality score.
 3. **Coaching, not stack-rank.** Team trends and aggregates, never a per-developer ranking tied to comp.
 
-The compatibility lens built in `src/git/quality.ts` and surfaced by `fiscus yield` now names that boundary:
+The compatibility lens built in `src/git/quality.ts` and surfaced by `segreant yield` now names that boundary:
 
 - **Retained introduced lines per AI dollar** — a cost-normalized artifact-persistence lens. It describes retained repository content per attributed dollar; it is not a quality, correctness, value, or contribution measure.
 - **Effective Spend Ratio** — the compatibility projection of the share of attributed AI spend associated with commits meeting the configured retention threshold and revert check. It remains a spend/persistence association, not a quality claim.
@@ -92,7 +92,7 @@ Genuinely good and kept verbatim as a design principle: security/privacy → lat
 
 - Local-first, metadata-only privacy stance. ✅
 - SQLite as the local store. ✅ (used Node's built-in instead of a separate dependency)
-- `X-Fiscus-*` custom headers for project/session/task attribution. ✅
+- `X-Segreant-*` custom headers for project/session/task attribution. ✅
 - Soft + hard budget thresholds, runaway-loop guard. ✅
 - Graceful passthrough on failure. ✅
 - The CLI shape (`start`, daily summary, `audit`). ✅ (renamed/expanded)

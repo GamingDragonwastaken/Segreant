@@ -52,7 +52,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   if (flags.notify) {
     const url = typeof flags['notify-url'] === 'string' ? String(flags['notify-url']) : cfg.alerts.webhookUrl;
     if (!url) {
-      console.error('  No webhook configured. Set one with: fiscus alerts --set-webhook <url>  (or pass --notify-url <url>)');
+      console.error('  No webhook configured. Set one with: segreant alerts --set-webhook <url>  (or pass --notify-url <url>)');
       process.exitCode = 1;
       store.close();
       return;
@@ -79,7 +79,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   }
 
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — governance alerts'));
+  console.log(color(tty, C.bold, '  Segreant — governance alerts'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   if (alerts.length === 0) {
     console.log(color(tty, C.green, '  ✓ All clear — no active alerts.'));
@@ -117,7 +117,7 @@ export async function cmdDoctor(): Promise<void> {
 
   const mark = (good: boolean) => (good ? color(tty, C.green, '✓') : color(tty, C.yellow, '!'));
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — doctor'));
+  console.log(color(tty, C.bold, '  Segreant — doctor'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${mark(true)} Config      ${color(tty, C.gray, configPath())}`);
   console.log(`  ${mark(true)} Database    ${color(tty, C.gray, `${dbPath()}  (${num(sum30.requests)} req · ${usd(sum30.costUsd)} in 30d)`)}`);
@@ -125,9 +125,9 @@ export async function cmdDoctor(): Promise<void> {
     ? color(tty, C.green, `running on :${cfg.port}`)
     : proxyStatus.kind === 'blocked_by_egress'
       ? color(tty, C.yellow, `blocked by local egress (${proxyStatus.code}) — ${proxyStatus.action}`)
-      : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`);
+      : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "segreant start"`);
   console.log(`  ${mark(proxyUp)} Proxy       ${proxyMessage}`);
-  console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "fiscus budget --daily N")')}`);
+  console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "segreant budget --daily N")')}`);
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
   const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
@@ -137,7 +137,7 @@ export async function cmdDoctor(): Promise<void> {
   console.log(
     `  ${mark(!price.stale)} Rate card   ${
       price.stale
-        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) · ${priceEvidence} — refresh with "fiscus pricing --refresh"`)
+        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) · ${priceEvidence} — refresh with "segreant pricing --refresh"`)
         : `${priceEvidence}${priceAge} · ${price.modelCount} models`
     }`,
   );
@@ -146,7 +146,7 @@ export async function cmdDoctor(): Promise<void> {
   console.log(
     `  ${mark(!base.stale)} Baseline    ${
       base.stale
-        ? color(tty, C.yellow, `stale (${baseAge.trim()}) — refresh with "fiscus baseline --refresh --url <manifest>" if you have one to trust`)
+        ? color(tty, C.yellow, `stale (${baseAge.trim()}) — refresh with "segreant baseline --refresh --url <manifest>" if you have one to trust`)
         : `${base.source === 'cache' ? 'refreshed' : 'bundled'}${baseAge} · ${base.taskTypeCount} task-types`
     }`,
   );
@@ -158,7 +158,7 @@ export async function cmdDoctor(): Promise<void> {
   console.log(
     `  ${mark(criticals === 0 && coverage.complete)} Alerts      ${
       alerts.length
-        ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"`
+        ? `${num(alerts.length)} active (${criticals} critical) — see "segreant alerts"`
         : color(tty, coverage.complete ? C.green : C.yellow, `no alerts · ${coverage.summary}`)
     }`,
   );
@@ -177,7 +177,7 @@ export function cmdInit(): void {
   const cfg = mutateConfig((current) => current);
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus initialized'));
+  console.log(color(tty, C.bold, '  Segreant initialized'));
   console.log(`  Config: ${configPath()}`);
   console.log(`  Data:   ${dbPath()}`);
   console.log('');
@@ -191,7 +191,7 @@ export function cmdInit(): void {
   console.log(`    export ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`);
   console.log(`    export OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`);
   console.log('');
-  console.log(`  Then run: ${color(tty, C.green, 'fiscus start')}`);
+  console.log(`  Then run: ${color(tty, C.green, 'segreant start')}`);
   console.log('');
 }
 
@@ -241,7 +241,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
 
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — where you are') + (isDemo() ? color(tty, C.yellow, '   ● DEMO DATA') : ''));
+  console.log(color(tty, C.bold, '  Segreant — where you are') + (isDemo() ? color(tty, C.yellow, '   ● DEMO DATA') : ''));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${color(tty, C.bold, report.headline)}`);
   console.log('');
@@ -261,7 +261,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
 
   console.log('');
   if (report.hint) console.log(color(tty, C.gray, `  ${report.hint}`));
-  console.log(color(tty, C.gray, '  fiscus help — every command · fiscus doctor — health check'));
+  console.log(color(tty, C.gray, '  segreant help — every command · segreant doctor — health check'));
   console.log('');
 }
 

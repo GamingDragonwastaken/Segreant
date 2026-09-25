@@ -1,15 +1,15 @@
-# Fiscus Economic Control Foundation
+# Segreant Economic Control Foundation
 
 > Research design, not yet product truth. This document proposes the mathematical and
-> systems foundation for the next stage of Fiscus. A formula appearing here is not a
+> systems foundation for the next stage of Segreant. A formula appearing here is not a
 > release claim. Anything promoted into the product must acquire tests, provenance,
-> calibration evidence, and the same withholding rules as the rest of Fiscus.
+> calibration evidence, and the same withholding rules as the rest of Segreant.
 
 Status: research branch, 2026-08-18
 
 ## 0. Executive thesis
 
-Fiscus should not try to win by being another AI-cost dashboard, another gateway with
+Segreant should not try to win by being another AI-cost dashboard, another gateway with
 budget caps, or another prompt router. All three categories now exist in the market.
 The stronger product is an **evidence-constrained economic control plane for AI
 execution**:
@@ -47,7 +47,7 @@ observed association != causal effect != safe policy improvement != enforced pol
 
 ## 1. Why the original problem still matters, and why the moat must move
 
-The original Fiscus problem was correct: AI expenditure can be volatile, distributed
+The original Segreant problem was correct: AI expenditure can be volatile, distributed
 across providers and teams, difficult to attribute, and weakly connected to business
 outcomes. The FinOps Foundation's 2026 State of FinOps survey reports that 98% of its
 respondents now manage AI spend and describes AI cost management as the top skill gap;
@@ -64,7 +64,7 @@ controls.
 Therefore these features are important integrations, not a defensible thesis by
 themselves.
 
-The gap Fiscus can own is the layer above them:
+The gap Segreant can own is the layer above them:
 
 > **Given an organization's current evidence, workload, constraints, prices, and
 > business outcomes, what AI execution policy is economically justified; how certain
@@ -140,7 +140,7 @@ where:
 - `R` = policy, safety, reliability, compliance, or other risk dimensions;
 - `V` = realized business value when that quantity is actually measurable.
 
-Fiscus should estimate distributions or defensible intervals for these quantities,
+Segreant should estimate distributions or defensible intervals for these quantities,
 not only point estimates.
 
 ## 3. Why "task complexity" cannot be the routing law
@@ -173,7 +173,7 @@ Delta_NetValue(a,b|x) = E[V(a)-C(a) - (V(b)-C(b)) | x, D]
 
 Recent RouteLMT work reaches a related conclusion in machine translation: marginal gain
 from the expensive model is a better budget-allocation signal than absolute difficulty
-or absolute quality prediction. This does not prove the Fiscus design, but it is strong
+or absolute quality prediction. This does not prove the Segreant design, but it is strong
 support for rejecting a one-dimensional complexity router.
 
 Complexity remains in `x`; it does not become the objective.
@@ -186,7 +186,7 @@ throughput, self-hosted compute, storage, retrieval, tool calls, evaluator calls
 retries, fallbacks, and human supervision may materially change the economic result.
 
 FOCUS v1.3 already distinguishes concepts including List Cost, Contracted Cost, Billed
-Cost, and Effective Cost. Fiscus should interoperate with that vocabulary rather than
+Cost, and Effective Cost. Segreant should interoperate with that vocabulary rather than
 inventing incompatible financial semantics.
 
 A useful cost stack is:
@@ -215,7 +215,7 @@ C_full =
   + human_supervision_cost_if_instrumented
 ```
 
-Every component carries its basis and provenance. If a component is unknown, Fiscus
+Every component carries its basis and provenance. If a component is unknown, Segreant
 does not silently replace it with zero. It may report a known lower bound and name the
 missing terms.
 
@@ -231,7 +231,7 @@ quality or value.
 
 A coding workflow, support assistant, document generator, image generator, chatbot, and
 agent do not share the same objective outcome. Trying to force them into one raw metric
-would reproduce the mistake Fiscus was created to avoid.
+would reproduce the mistake Segreant was created to avoid.
 
 Instead, each use case supplies an `OutcomeAdapter`. Examples:
 
@@ -286,19 +286,19 @@ Use an explicit evidence ladder for causal/value claims:
 | D | matched/before-after/reference baseline | useful but weaker counterfactual |
 | E | model-derived/manual-equivalent/self-report | planning/supporting evidence, not causal proof |
 
-The exact grade names are a Fiscus design decision; the hierarchy is what matters. A
+The exact grade names are a Segreant design decision; the hierarchy is what matters. A
 claim such as `IncrementalValue = E[Y(1)-Y(0)]` should only be used when the design
 supports that interpretation.
 
 This matters because empirical AI-productivity evidence is heterogeneous. METR's 2025
 randomized study of experienced open-source developers found a slowdown in its studied
 setting. That result is valuable precisely because it warns against assuming AI use is
-productive; it is not a universal theorem that AI makes developers slower. Fiscus
+productive; it is not a universal theorem that AI makes developers slower. Segreant
 should learn each organization's result rather than import a preferred answer.
 
 ## 7. Keep the RoI score, but stop asking it to select policies
 
-Fiscus's geometric composite can remain valuable as a **descriptive,
+Segreant's geometric composite can remain valuable as a **descriptive,
 non-compensatory score** if its semantics are tightened. It should not be the universal
 objective function for routing.
 
@@ -332,7 +332,7 @@ CausalReturn = IncrementalValue / FullEconomicCost
 ```
 
 An alternative finance convention is `(IncrementalValue - FullEconomicCost) /
-FullEconomicCost`; Fiscus must choose and name the convention rather than using "ROI"
+FullEconomicCost`; Segreant must choose and name the convention rather than using "ROI"
 ambiguously.
 
 The decision engine should consume distributions/bounds and constraints directly. It
@@ -434,7 +434,7 @@ a_t = argmax_a [ reward_LCB(x_t,a) - lambda_t * cost_UCB(x_t,a) ]
 
 and update `lambda_t` as spend runs ahead of or behind the desired budget trajectory.
 
-This gives Fiscus a mathematically legitimate **dual price of intelligence budget**:
+This gives Segreant a mathematically legitimate **dual price of intelligence budget**:
 `lambda` is the opportunity cost of consuming one more unit of constrained budget under
 the stated optimization problem.
 
@@ -449,7 +449,7 @@ Agentic workflows can have retry loops, tool fan-out, fallback chains, and long 
 variability. A mean cost can look safe while a small tail probability destroys the
 budget.
 
-Fiscus should therefore report a cost distribution or empirical scenario distribution:
+Segreant should therefore report a cost distribution or empirical scenario distribution:
 
 ```text
 p50, p90, p99, max-observed, P(cost > cap), expected shortfall/CVaR
@@ -464,7 +464,7 @@ CVaR_alpha(C)
   = min_eta [ eta + 1/(1-alpha) * E[(C-eta)_+] ]
 ```
 
-For Fiscus, the "loss" can be workflow cost or budget overrun. The practical point is
+For Segreant, the "loss" can be workflow cost or budget overrun. The practical point is
 not financial jargon: an enterprise should be able to say "optimize normal cost, but do
 not accept a routing policy whose worst 1% of agent runs has uncontrolled spend."
 
@@ -510,7 +510,7 @@ explicitly modeled.
 ## 13. The Decision Ledger is the data asset the current frontier lacks
 
 Historical model comparisons are confounded when operators chose which model to use.
-A future policy cannot be evaluated honestly unless Fiscus records why and with what
+A future policy cannot be evaluated honestly unless Segreant records why and with what
 probability each action was selected.
 
 Introduce an immutable `DecisionRecord`:
@@ -539,11 +539,11 @@ or output content.
 
 A deterministic incumbent policy can record propensity `1` for its chosen action, but
 that makes the limitation obvious: alternatives with zero historical support cannot be
-reliably evaluated from those rows. Fiscus should say `no overlap` rather than invent a
+reliably evaluated from those rows. Segreant should say `no overlap` rather than invent a
 counterfactual.
 
 This ledger also creates the product's strongest audit surface: a human can ask "why did
-Fiscus spend $0.18 on this plan instead of $0.03 on that one?" and inspect the *ex-ante*
+Segreant spend $0.18 on this plan instead of $0.03 on that one?" and inspect the *ex-ante*
 reason, not a story reconstructed after the result was known.
 
 ## 14. Safe learning: observe -> simulate -> recommend -> canary -> enforce
@@ -582,7 +582,7 @@ Only after a safe-improvement gate passes.
 
 Off-policy confidence-sequence research is directly relevant: it provides
 nonparametric, anytime-valid bounds for off-policy evaluation and has been demonstrated
-for gated deployment of contextual-bandit systems. Fiscus already uses anytime-valid
+for gated deployment of contextual-bandit systems. Segreant already uses anytime-valid
 thinking elsewhere; this is where that machinery can become operationally decisive.
 
 ## 15. Regret budgets: optimize savings without silently spending quality
@@ -617,7 +617,7 @@ mode.
 
 ## 16. Exploration is a budgeted activity
 
-The current Fiscus planning curve assigns no budget to a context with no observed value.
+The current Segreant planning curve assigns no budget to a context with no observed value.
 That is safe against blind spending, but it also means an unseen plan can remain unseen
 forever even if it is superior.
 
@@ -634,7 +634,7 @@ The key product rule is:
 An enterprise should be able to see exactly how many dollars and requests were spent to
 learn whether a new plan was better.
 
-## 17. True Value of Information, and what Fiscus currently has
+## 17. True Value of Information, and what Segreant currently has
 
 The current `src/value/instrumentationSensitivity.ts` is valuable sensitivity analysis but is not yet Value of
 Information in the formal decision-theoretic sense. It inserts a disclosed reference
@@ -661,7 +661,7 @@ NetVOI(M) = EVSI(M) - Cost(M)
 
 where `M` is a possible measurement and `z` is its result.
 
-Fiscus must not invent a probability distribution only to compute an elegant EVSI. When
+Segreant must not invent a probability distribution only to compute an elegant EVSI. When
 priors/predictive distributions are not defensible, use a partial-identification /
 minimax-regret formulation. Let `Theta(D)` be the parameter set consistent with current
 evidence:
@@ -697,7 +697,7 @@ Empirical-Bayes shrinkage is valuable for thin cells. But `n/(n+kappa)` is the w
 placed on cell-local evidence versus the prior under that model; it is not a probability
 that the estimate is correct. Call it shrinkage weight/evidence weight. Avoid blanket
 claims that this exact empirical-Bayes estimator is guaranteed by Stein's theorem to
-beat raw estimates in every Fiscus setting.
+beat raw estimates in every Segreant setting.
 
 ### `src/value/frontier.ts` — strong evidence layer, not yet a policy learner
 
@@ -773,7 +773,7 @@ score cannot compensate for no overlap or stale prices.
 ## 20. Model/judge scores are evidence sources, not truth
 
 Some use cases need evaluators or LLM judges because objective outcomes arrive late or
-are expensive. They can be useful surrogate rewards, but Fiscus must record:
+are expensive. They can be useful surrogate rewards, but Segreant must record:
 
 ```text
 judge_model
@@ -824,7 +824,7 @@ Use external standards where they improve portability:
 - provider-native cost APIs for reconciliation rather than treating local metering as an
   invoice.
 
-Fiscus adds the decision/evidence layer on top. It should not fork common vocabulary for
+Segreant adds the decision/evidence layer on top. It should not fork common vocabulary for
 things already standardized.
 
 ## 23. Architecture implied by the mathematics
@@ -893,7 +893,7 @@ policy and estimator versions
 ex-post outcome when available
 ```
 
-This turns the core Fiscus thesis into an interface: important claims become inspectable
+This turns the core Segreant thesis into an interface: important claims become inspectable
 objects.
 
 ## 25. Implementation sequence
@@ -904,7 +904,7 @@ a router is improving anything.
 1. Finish existing correctness/Phase-2 remediation and freeze current truth semantics.
 2. Add canonical economic types: cost basis, evidence grade, execution plan, constraint,
    outcome evidence, decision record, readiness.
-3. Make financial vocabulary FOCUS-compatible where semantics match; preserve Fiscus's
+3. Make financial vocabulary FOCUS-compatible where semantics match; preserve Segreant's
    stricter unknown/provenance rules.
 4. Add Decision Ledger in observe-only mode.
 5. Extend proxy/import adapters to record plan identity and policy/propensity where
@@ -956,7 +956,7 @@ policy regret vs trusted baseline
 ```
 
 The 2026 LLMRouterBench result is a warning worth institutionalizing: many sophisticated
-routers do not reliably beat simple baselines under unified evaluation. Fiscus should
+routers do not reliably beat simple baselines under unified evaluation. Segreant should
 make `beats_simple_baseline` a release criterion for any claimed smart-routing
 algorithm.
 
@@ -966,7 +966,7 @@ interesting.
 ## 27. What may actually be novel
 
 None of contextual bandits, OPE, confidence sequences, CVaR, FOCUS, Pareto frontiers,
-causal inference, or VOI is new by itself. Fiscus must not claim mathematical novelty
+causal inference, or VOI is new by itself. Segreant must not claim mathematical novelty
 merely for combining known results.
 
 Potential research novelty may emerge from the integration and from specific algorithms,
@@ -976,7 +976,7 @@ for example:
   statistical bounds and enforcement readiness;
 - a safe policy-improvement gate that jointly budgets cost, quality regret, tail spend,
   and evidence overlap;
-- minimax-regret instrumentation choice under Fiscus's explicit `unknown` semantics;
+- minimax-regret instrumentation choice under Segreant's explicit `unknown` semantics;
 - multi-level delayed-outcome learning where cheap structural signals are surrogates for
   later verified realization/business outcomes;
 - auditable ex-ante Decision Receipts linking a route to its candidate set, evidence,
@@ -989,7 +989,7 @@ even if every mathematical ingredient turns out to have prior art.
 
 ## 28. Nonclaims
 
-Until the relevant evidence exists, Fiscus must not say:
+Until the relevant evidence exists, Segreant must not say:
 
 - "this is the best model for the task" when it only saw historical operator selection;
 - "this route saves X dollars" when X is only list-price arithmetic or a point scenario;
@@ -1034,10 +1034,10 @@ Primary/authoritative sources used to shape this research direction:
 
 ## 30. Decision
 
-The recommended foundation is not "make Fiscus a more complicated FinOps dashboard."
+The recommended foundation is not "make Segreant a more complicated FinOps dashboard."
 It is:
 
-> **Fiscus becomes the evidence-constrained allocator and governor of AI economic
+> **Segreant becomes the evidence-constrained allocator and governor of AI economic
 > decisions. It measures the money, learns the organization's actual outcome frontier,
 > prices uncertainty and budget scarcity, refuses unsupported counterfactuals, and only
 > graduates a recommendation into enforcement when the evidence can carry it.**

@@ -6,7 +6,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { Store } from '../store/db.ts';
-import { loadConfig, mutateConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, configPath, segreantHome, isDemo, type SegreantConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { economicRequestsToCsv, economicRequestsToJson } from '../export/economic.ts';
@@ -36,7 +36,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   // that the surface now reads COVERAGE beside them: on a default install every
   // channel is dark -- caps opt-in, no baseline, value uninstrumented, nothing
   // to price -- so an empty alert list records that nothing was looked at, not
-  // that nothing fired. `fiscus ops` and the dashboard already read this
+  // that nothing fired. `segreant ops` and the dashboard already read this
   // producer (D-141); `show` was the one surface still printing silence over
   // it. Same producer, same sentences, so the three cannot disagree.
   let alerts: Alert[] | null = null;
@@ -58,7 +58,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const tty = process.stdout.isTTY ?? false;
   const todaySpend = store.spendBetween(startOfLocalDay(), Date.now() + 1000);
   console.log('');
-  console.log(color(tty, C.bold, `  Fiscus — ${label}`));
+  console.log(color(tty, C.bold, `  Segreant — ${label}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   const truncation = retentionNotice(retention);
@@ -74,7 +74,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
       const top = alerts[0]!;
       const sevColor = top.severity === 'critical' ? C.red : top.severity === 'warn' ? C.yellow : C.gray;
       console.log(
-        `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: fiscus alerts`)}`,
+        `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: segreant alerts`)}`,
       );
     } else {
       // NOT silence. An empty list from six dark channels and an empty list
@@ -101,7 +101,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
     console.log('');
     console.log(`  Daily cap   ${usd(cfg.budget.dailyUsd)}   ${color(tty, pct > 90 ? C.red : pct > 70 ? C.yellow : C.green, `${pct.toFixed(0)}% used`)}   ${color(tty, C.gray, `${usd(remaining)} left`)}`);
     if (liveOnly && importedToday > 0.005) {
-      console.log(color(tty, C.gray, `              + ${usd(importedToday)} imported today — outside the cap (include it: fiscus budget --include-imported on)`));
+      console.log(color(tty, C.gray, `              + ${usd(importedToday)} imported today — outside the cap (include it: segreant budget --include-imported on)`));
     }
   }
 
@@ -136,16 +136,16 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
     for (const s of bySource.slice(0, 8)) {
       console.log(`  ${s.label.padEnd(34)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req`)}`);
     }
-    console.log(color(tty, C.gray, '  → per-source depth + model mix:  fiscus sources'));
+    console.log(color(tty, C.gray, '  → per-source depth + model mix:  segreant sources'));
   }
   console.log('');
-  console.log(color(tty, C.gray, `  Dashboard: run "fiscus start" then open http://localhost:${cfg.dashboardPort}`));
+  console.log(color(tty, C.gray, `  Dashboard: run "segreant start" then open http://localhost:${cfg.dashboardPort}`));
   console.log('');
   store.close();
 }
 
 /**
- * Spend by connected source — each AI tool deliberately routed through Fiscus.
+ * Spend by connected source — each AI tool deliberately routed through Segreant.
  * This is the "connect, don't intercept" view: a source is a feed, and its depth
  * is honest about how much of the loop it exposes (a proxy-connected tool gives
  * spend + attribution; untagged traffic is 'direct' and spend-only).
@@ -177,7 +177,7 @@ export function cmdSources(flags: Flags): void {
 
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — sources (connected AI feeds)'));
+  console.log(color(tty, C.bold, '  Segreant — sources (connected AI feeds)'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   console.log(color(tty, C.gray, `  ${all ? 'all time' : 'last 30 days'} · spend grouped by the tool each request was routed from`));
@@ -190,7 +190,7 @@ export function cmdSources(flags: Flags): void {
 
   if (!bySource.length) {
     console.log(color(tty, C.gray, '  No metered traffic yet. Connect a tool as a source, then run it:'));
-    console.log(color(tty, C.green, '    fiscus connect opencode'));
+    console.log(color(tty, C.green, '    segreant connect opencode'));
     console.log('');
     store.close();
     return;
@@ -207,8 +207,8 @@ export function cmdSources(flags: Flags): void {
   console.log('');
   console.log(color(tty, C.gray, '  Depth is read from real signals: spend always · + acceptance once a source sends'));
   console.log(color(tty, C.gray, '  proposed edits · + RoI once its work reaches projects with realized value.'));
-  console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through Fiscus (connect, don't intercept)."));
-  console.log(color(tty, C.gray, '  Tag one with:  fiscus connect <tool>   — the tag is stripped before traffic leaves your machine.'));
+  console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through Segreant (connect, don't intercept)."));
+  console.log(color(tty, C.gray, '  Tag one with:  segreant connect <tool>   — the tag is stripped before traffic leaves your machine.'));
   console.log('');
   store.close();
 }
@@ -279,11 +279,11 @@ export function cmdExport(flags: Flags): void {
 export function cmdConfig(flags: Flags): void {
   const cfg = loadConfig();
   if (flags.json) {
-    printJson({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg });
+    printJson({ home: segreantHome(), configPath: configPath(), dbPath: dbPath(), config: cfg });
     return;
   }
   console.log('');
-  console.log(`  Home:   ${fiscusHome()}`);
+  console.log(`  Home:   ${segreantHome()}`);
   console.log(`  Config: ${configPath()}`);
   console.log(`  DB:     ${dbPath()}`);
   console.log('');
@@ -293,7 +293,7 @@ export function cmdConfig(flags: Flags): void {
 
 export function cmdBudget(flags: Flags): void {
   const next = mutateConfig((cfg) => {
-    const updated: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
+    const updated: SegreantConfig = { ...cfg, budget: { ...cfg.budget } };
     const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
       if (flags[flag] !== undefined) {
         const v = String(flags[flag]);
@@ -343,10 +343,10 @@ export function cmdPrune(): void {
  * labels; aliases merge them AT QUERY TIME — raw ledger rows are never rewritten,
  * so a merge is reversible (`unalias`) and the record stays honest.
  *
- *   fiscus project                      list projects (canonical) + alias table
- *   fiscus project merge <from...> --into <name>
- *   fiscus project alias <alias> <canonical>
- *   fiscus project unalias <alias>
+ *   segreant project                      list projects (canonical) + alias table
+ *   segreant project merge <from...> --into <name>
+ *   segreant project alias <alias> <canonical>
+ *   segreant project unalias <alias>
  */
 export function cmdProject(flags: Flags): void {
   const store = new Store(dbPath());
@@ -360,8 +360,8 @@ export function cmdProject(flags: Flags): void {
       if (typeof into !== 'string' || !into || froms.length === 0 || froms.some((f) => !f)) {
         console.error(
           sub === 'merge'
-            ? '  Usage: fiscus project merge <label...> --into <canonical>'
-            : '  Usage: fiscus project alias <alias> <canonical>',
+            ? '  Usage: segreant project merge <label...> --into <canonical>'
+            : '  Usage: segreant project alias <alias> <canonical>',
         );
         process.exitCode = 1;
         return;
@@ -375,13 +375,13 @@ export function cmdProject(flags: Flags): void {
           process.exitCode = 1;
         }
       }
-      console.log(color(tty, C.gray, '  Merged at query time only — raw rows unchanged. Undo: fiscus project unalias <label>'));
+      console.log(color(tty, C.gray, '  Merged at query time only — raw rows unchanged. Undo: segreant project unalias <label>'));
       return;
     }
     if (sub === 'unalias') {
       const alias = flags._[1];
       if (!alias) {
-        console.error('  Usage: fiscus project unalias <alias>');
+        console.error('  Usage: segreant project unalias <alias>');
         process.exitCode = 1;
         return;
       }
@@ -453,7 +453,7 @@ export function cmdProject(flags: Flags): void {
       for (const a of aliases) console.log(`  ${a.alias.padEnd(34)} → ${a.canonical}`);
     } else {
       console.log('');
-      console.log(color(tty, C.gray, '  No aliases. Merge fragmented labels: fiscus project merge <label...> --into <name>'));
+      console.log(color(tty, C.gray, '  No aliases. Merge fragmented labels: segreant project merge <label...> --into <name>'));
     }
     console.log('');
   } finally {

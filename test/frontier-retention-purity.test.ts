@@ -2,7 +2,7 @@
  * A model-switch recommendation must not be priced from spend retention deleted.
  *
  * D-176 established the mechanism: a commit whose eight-hour attribution window
- * lost its request rows to `fiscus prune` reports `attributedCostUsd: 0` while
+ * lost its request rows to `segreant prune` reports `attributedCostUsd: 0` while
  * the unit itself survives, because work units come from git history. Following
  * that record's own ranking rule — hunt this class wherever the absent number is
  * a DIVISOR — the frontier is the next surface, and it is the one that gives
@@ -13,7 +13,7 @@
  * `buildModelSwitchRecommendations` picks the incumbent as the highest
  * `costPerUnit` and the candidate as a cheaper one. A model whose units had
  * spend deleted is cheaper by exactly the deleted amount, so **retention can
- * make Fiscus recommend switching to a model on the strength of dollars it
+ * make Segreant recommend switching to a model on the strength of dollars it
  * deleted** — a recommendation, not merely a report, produced by a privacy
  * setting.
  *
@@ -49,7 +49,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-frontier-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-frontier-retention-'));
 
 import { computeFrontier } from '../src/value/frontier.ts';
 import type { WorkUnit } from '../src/value/realization.ts';
@@ -102,7 +102,7 @@ test('a partly truncated model is priced from its surviving units, not from the 
   // Here both models are priced identically per surviving unit ($3.50 against
   // $4.00, a real but modest gap). Four of the candidate's twelve units had
   // their spend deleted, which drags its apparent cost to $2.33 and roughly
-  // doubles the headroom Fiscus would report for switching.
+  // doubles the headroom Segreant would report for switching.
   const units = [
     ...Array.from({ length: 8 }, () => unit('incumbent-model', true, 4)),
     ...Array.from({ length: 8 }, () => unit('candidate-model', true, 3.5)),

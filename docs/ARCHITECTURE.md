@@ -1,6 +1,6 @@
-# Fiscus — Architecture
+# Segreant — Architecture
 
-This document records what Fiscus is, how it's built, and — just as important — what it deliberately is **not**. It reflects the system as actually implemented, not an aspirational spec.
+This document records what Segreant is, how it's built, and — just as important — what it deliberately is **not**. It reflects the system as actually implemented, not an aspirational spec.
 
 ---
 
@@ -17,14 +17,14 @@ This document records what Fiscus is, how it's built, and — just as important 
 
 ### Non-functional
 - **Latency**: negligible relative to the upstream call it wraps. The proxy adds one in-process hop; the dominant cost is the provider round-trip (hundreds of ms to tens of seconds). Sub-millisecond bookkeeping is a non-goal dressed up as a requirement — see §5.
-- **Privacy**: Fiscus is local-first for its ledger and UI, stores no provider API keys, and has no Fiscus-hosted
+- **Privacy**: Segreant is local-first for its ledger and UI, stores no provider API keys, and has no Segreant-hosted
   telemetry by default. A request intentionally routed through the proxy is
   forwarded to the configured provider, which may receive prompt text, source
   snippets, tool payloads, and the provider credential it requires.
 - **Footprint**: a single local command to run after the distributable is built.
   The runtime uses Node's bundled SQLite and has no native module or external
   database service dependency. Provider forwarding and optional refresh,
-  webhook, judge, cost-observation, and team paths use the declared Fiscus-process
+  webhook, judge, cost-observation, and team paths use the declared Segreant-process
   egress boundary; they are not hidden services.
 - **Reliability**: ordinary metering/DB failures degrade to transparent
   passthrough, but the declared egress policy and pre-dial receipt-integrity
@@ -45,7 +45,7 @@ This document records what Fiscus is, how it's built, and — just as important 
  │  IDE / Agent CLI  (Claude Code, Cursor, OpenAI SDK, aider) │
  │        │  ANTHROPIC_BASE_URL / OPENAI_BASE_URL → :8090     │
  │        ▼                                                   │
- │  ┌──────────────────── Fiscus daemon ────────────────┐ │
+ │  ┌──────────────────── Segreant daemon ────────────────┐ │
  │  │                                                       │ │
  │  │  Proxy core (src/proxy/server.ts)                     │ │
  │  │   • detect provider   • budget pre-flight             │ │
@@ -70,7 +70,7 @@ This document records what Fiscus is, how it's built, and — just as important 
    api.anthropic.com / api.openai.com
 ```
 
-The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8091`) share a single `Store` instance — the proxy writes, the dashboard mostly reads. `fiscus start` creates both and shuts both down together, so the GUI's lifetime is the CLI's; there is no separate service to supervise.
+The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8091`) share a single `Store` instance — the proxy writes, the dashboard mostly reads. `segreant start` creates both and shuts both down together, so the GUI's lifetime is the CLI's; there is no separate service to supervise.
 
 "Mostly reads" is deliberate wording. The dashboard began read-only and is not any more: the GUI reaches parity with the CLI on a small, explicit set of writes, each behind a preview and a same-origin header guard (§2.1).
 
@@ -111,7 +111,7 @@ single-page console. They link to each other in both directions, pinned by a tes
   responses — so it must never be able to become markup.
 - Zero external requests. No CDN, no fonts, no analytics. Pinned for both entry
   points.
-- Mutating routes require `x-fiscus-local: 1`, a header a cross-origin page cannot
+- Mutating routes require `x-segreant-local: 1`, a header a cross-origin page cannot
   set without a preflight this server never answers.
 - CSP served with the HTML.
 
@@ -154,7 +154,7 @@ egress, credentials, reversibility, assurance, and surface bindings.
 | Lift baseline | `src/value/liftBaseline.ts` | Resolve manual-minutes-per-task-type: cited/refreshable population prior + personal pre-tracking git history, combined by continuous-data empirical-Bayes shrinkage |
 | Receipts | `src/value/receipt.ts` | ed25519-signed, verifiable Value Receipts |
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
-| Config | `src/config.ts` | Load/save `~/.fiscus/config.json`, resolve paths |
+| Config | `src/config.ts` | Load/save `~/.segreant/config.json`, resolve paths |
 | Dashboard API | `src/dashboard/server.ts` | JSON API over the store, plus six CSRF-guarded mutating routes (`/api/import`, `/api/discover`, `POST /api/scan`, `/api/judge`, `/api/settings/update`, `/api/settings/clear-proposals`) |
 | Dashboard contracts/types | `src/dashboard/contracts.ts`, `src/dashboard/shared-types.ts`, `scripts/generate-dashboard-payload-contract.mjs` | One no-runtime source for named payload interfaces plus route/method/envelope metadata; locked generation emits the browser copy and nested runtime contract hash |
 | Web GUI | `src/dashboard/web/` | The browser application: four-claim spine, seven routes, preview-then-commit drawer. Built, not inlined — see §2.1 |
@@ -181,10 +181,10 @@ IDE/Agent          Proxy              Store           Upstream
    │                     │ computeCost(usage)             │
    │                     │ insertRequest()│               │
    │                     │───────────────▶│               │
-   │  (non-stream: X-Fiscus-Cost-USD header on the response)
+   │  (non-stream: X-Segreant-Cost-USD header on the response)
 ```
 
-**Streaming nuance.** Response headers flush before the body, so for streaming responses the final cost can't be a header. We send remaining-budget headers up front and record the final cost server-side (visible in the dashboard and `X-Fiscus-Cost-USD` for non-streaming). This is an honest consequence of HTTP, not a limitation we hide.
+**Streaming nuance.** Response headers flush before the body, so for streaming responses the final cost can't be a header. We send remaining-budget headers up front and record the final cost server-side (visible in the dashboard and `X-Segreant-Cost-USD` for non-streaming). This is an honest consequence of HTTP, not a limitation we hide.
 
 **OpenAI usage capture.** OpenAI only emits a usage chunk on a stream when `stream_options.include_usage` is set. The proxy injects that flag into outbound OpenAI requests so usage is always captured. Anthropic always reports usage in `message_start` + `message_delta`.
 
@@ -194,12 +194,12 @@ IDE/Agent          Proxy              Store           Upstream
 
 SQLite, seven tables (`src/store/db.ts`). Timestamps stored as both ISO string and epoch-ms; range/window queries use epoch-ms to avoid timezone ambiguity.
 
-- **requests** — one row per intercepted call: provider, model, project, `user` (developer/team, from `X-Fiscus-User`), session, the four token dimensions, `cost_usd`, `estimated`, `streamed`, `status_code`, `duration_ms`. The `user` column is added by an idempotent migration (`ALTER TABLE`) for DBs created before it existed.
-- **sessions** — interaction windows keyed by `X-Fiscus-Session-Id`.
+- **requests** — one row per intercepted call: provider, model, project, `user` (developer/team, from `X-Segreant-User`), session, the four token dimensions, `cost_usd`, `estimated`, `streamed`, `status_code`, `duration_ms`. The `user` column is added by an idempotent migration (`ALTER TABLE`) for DBs created before it existed.
+- **sessions** — interaction windows keyed by `X-Segreant-Session-Id`.
 - **git_commits** — commits discovered during `audit`.
 - **commit_attribution** — spend attributed to each commit's preceding window.
 - **proposals** — proposed edits captured in the proxy path (the Accepted-gate signal): provider, model, project, and the proposed files/lines as JSON.
-- **gate_signals** — ingested outcome verdicts (`tested`/`merged`/`shipped`/`incident`) from `fiscus report`, optionally linked to a commit hash.
+- **gate_signals** — ingested outcome verdicts (`tested`/`merged`/`shipped`/`incident`) from `segreant report`, optionally linked to a commit hash.
 - **receipts** — emitted Value Receipts, one per certified unit.
 
 The schema diverges from the source research in three deliberate ways, all in `docs/RESEARCH-REVIEW.md`: cache-write/cache-read columns added (they drive real cost), the fictional `reasoning_tokens` *multiplier* removed (reasoning tokens are billed as output), and the `efficiency_metrics` table (TER/AES) deferred rather than shipped.
@@ -216,7 +216,7 @@ The research describes a "transparent MITM proxy" with a root CA *and* base-URL 
 
 ### D2 — TypeScript on Node 24, not Rust
 - **Why**: The proxy's overhead is irrelevant next to the provider round-trip. Node 24 runs TypeScript directly (type-stripping) and ships SQLite built-in, giving the same "single zero-config artifact" story Rust was invoked for — runnable today, matching the rest of the stack, zero native compilation.
-- **Trade-off**: A hot loop processing tens of thousands of req/s would favor Rust/Go. That is not this workload (one developer's agents). If Fiscus ever became a shared team gateway, the core would be a rewrite candidate. The cost model and schema are language-independent, so that port is bounded.
+- **Trade-off**: A hot loop processing tens of thousands of req/s would favor Rust/Go. That is not this workload (one developer's agents). If Segreant ever became a shared team gateway, the core would be a rewrite candidate. The cost model and schema are language-independent, so that port is bounded.
 
 ### D3 — Real cost model, not the research's formula
 Cost = `input·R_in + output·R_out + cacheWrite·R_cw + cacheRead·R_cr`. The research's separate "reasoning multiplier" models a price that neither provider charges. Verified against live pricing; Anthropic values are authoritative, OpenAI values flagged community-maintained in the table.
@@ -234,7 +234,7 @@ The Standard instead scores each commit through a **funnel of eight objective ga
 - **First-Pass Acceptance** — the signal only an in-path proxy can produce: edit-distance between the AI's *proposed* diff (parsed from the response body, `src/value/proposals.ts`) and what was actually committed. Measures the human-AI collaboration loop directly, in-session.
 
 Design properties that make it a standard rather than a dashboard:
-- **`unknown` is first-class, never `fail`** (`src/value/gates.ts`). A gate you haven't wired stays `unknown` and the report shows instrumentation coverage. The model spans the whole lifecycle; the engine fills in what it observes; gaps are explicit and pluggable via `fiscus report` (ingests test/merge/ship/incident signals into `gate_signals`).
+- **`unknown` is first-class, never `fail`** (`src/value/gates.ts`). A gate you haven't wired stays `unknown` and the report shows instrumentation coverage. The model spans the whole lifecycle; the engine fills in what it observes; gaps are explicit and pluggable via `segreant report` (ingests test/merge/ship/incident signals into `gate_signals`).
 - **Maturity holds the line on honesty**: Survived and Clean are `unknown` until the window elapses, so no unit is called realized prematurely.
 - **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. A third question is asked separately from both (D-231): whether the ledger the receipt was signed over still says the same — `receipt --reconcile <file> [--as-of <instant>]` reads the v2 lineage against the local economic ledger and answers `agrees`, `ledger_moved` (a correction retained after signing), `disagrees`, or `not_reconcilable` (a v1 body, or another ledger's events). This is what turns a private number into a portable, auditable unit of account.
 - **Realization kernel bridge** (`src/value/epistemic.ts`): the canonical persisted realization path automatically and atomically issues one idempotent `value.realization_recorded` Evidence/Claim per mature unit whose eight declared gates are all observed `pass` and whose effective request-lineage attribution is complete and re-derived from the Store ledger. The payload retains commit/window/gate/economic provenance and a digest-bound identity. Its profile is provisional, self-authenticated and non-causal; it does not assert business value, provider billing, settlement or project-specific cost when the source scope is the project-blind window basis. Partial, maturing, stale, synthetic-demo and legacy snapshots remain outside this bridge.
@@ -268,7 +268,7 @@ mode/enabled values return to local-locked behavior rather than authorizing a
 cloud rule. Loaded rules use the same exact semantic validator as CLI-authored
 rules: canonical HTTPS origin, non-empty safe path prefix, valid identifiers,
 and no unexpected fields. A bounded stale-lock refusal is
-operator-repairable only after confirming no Fiscus writer is active; the lock
+operator-repairable only after confirming no Segreant writer is active; the lock
 is never auto-deleted. A budget *block* is another
 intentional request stop. Receipt persistence is synchronous, but it is not an
 `fsync` or power-loss durability guarantee; the boundary is process-scoped and
@@ -298,7 +298,7 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 Six items that used to live here are done and moved to the README's Status
 section: native provider pricing beyond the OpenAI wire format (Gemini is now a
 first-class, verified rate-card entry), auto-updating pricing (`pricing --refresh` /
-`--auto` against a community feed), passive log import (`fiscus import` —
+`--auto` against a community feed), passive log import (`segreant import` —
 Claude Code, opencode, Codex CLI — which grew into `scan`/`discover`, the zero-wiring
 onboarding path), a machine-wide tool inventory scan (`scan` now also surfaces a
 read-only, best-effort inventory of other AI coding tools it recognizes but doesn't
@@ -320,13 +320,13 @@ genuinely open:
 1. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
    dashboard; SSO; support/SLA. Numeric-only, opt-in, signed. Scoped in
    [docs/TEAM-TIER-DESIGN.md](TEAM-TIER-DESIGN.md) as a bring-your-own
-   server/hosting/SSO deployment model, keeping Fiscus as software an operator
+   server/hosting/SSO deployment model, keeping Segreant as software an operator
    deploys rather than a service we run — that framing hasn't changed. **The
    client half is now built:** `src/team/rollup.ts` (`buildRollupBody`/
    `signRollup`/`verifyRollup`, reusing `value/receipt.ts`'s `canonical`/
    `keyIdForPem` directly — canonicalization must be byte-identical between
    signer and verifier, so that's a correctness requirement, not just reuse for
-   its own sake) and the `fiscus team push` CLI command (`--url`, `--dry-run`,
+   its own sake) and the `segreant team push` CLI command (`--url`, `--dry-run`,
    `--pubkey`, `--window`, `--project`) — 5 adversarial tests in
    `test/team-rollup.test.ts` (tamper detection, key-pinning against a
    self-consistent forgery, a forged keyId claim, a garbled public key). A
@@ -345,7 +345,7 @@ genuinely open:
    `PgRollupStore`, `schema.sql`) was code-reviewed but not run against a live
    Postgres this session (Docker wasn't running locally when this was built) —
    see `team-server/README.md` for how to verify it. Compensating evidence: a
-   genuine end-to-end run of the real `fiscus team push` CLI against the
+   genuine end-to-end run of the real `segreant team push` CLI against the
    real `team-server` HTTP layer (fake store in place of Postgres) proved the
    client↔server wire format matches, for both the accept and the
    unregistered-key-reject paths.
@@ -398,7 +398,7 @@ genuinely open:
    principle (Bedrock via its newer bearer-token "API key" mode, not classic SigV4
    signing which a transparent proxy can't support; Vertex via a client-supplied
    OAuth2 access token, still a forwardable bearer token even though it isn't a
-   static key) — so this doesn't require Fiscus to hold real cloud credentials.
+   static key) — so this doesn't require Segreant to hold real cloud credentials.
    Not yet scoped as a build: Bedrock's cache-token inclusive/exclusive usage
    semantics specifically still need the same independent cross-check the
    `/responses` fix used before any cost math on them would be trustworthy.
@@ -418,7 +418,7 @@ genuinely open:
    piece didn't wire in), and `src/judge/call.ts` +
    `src/judge/orchestrate.ts`'s `judgeSession` (the actual OpenAI-compatible
    call, strictly parsed, gated first, gracefully degraded on any failure) —
-   61 tests across seven files (incl. the `fiscus judge` CLI wiring and the
+   61 tests across seven files (incl. the `segreant judge` CLI wiring and the
    transcript reader), none of them mocked-away: real local HTTP
    servers stand in for the judge endpoint the same way `test/proxy.test.ts`
    already stands in for upstream providers. The full-content tiers are real
@@ -426,16 +426,16 @@ genuinely open:
    reads each tool's own on-disk session log ephemerally at judge time
    (Claude Code's `<sessionId>.jsonl`, opencode's session database, Codex's
    rollout JSONL — bounded excerpt, clipping disclosed, nothing persisted;
-   the store still never stores prompt/response text), and `fiscus judge`
+   the store still never stores prompt/response text), and `segreant judge`
    judges real sessions looked up from the store (`--session <id>` to pick).
    See [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's
    boxed note. Genuinely still open: a real controlled A/B, and automatic
-   invocation from the Lift surface. There is no fiscus lift command to
+   invocation from the Lift surface. There is no segreant lift command to
    invoke it from -- named here without code formatting on purpose, since
    formatting it as a command is what would imply it can be typed -- and
    inventing the trigger before the command would be deciding the surface
    by accident.
-4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
+4. **Rust core** — only if Segreant becomes a shared gateway under real concurrency.
    Until then it's premature.
 
 ---
@@ -445,4 +445,4 @@ genuinely open:
 - Sees only traffic routed through it (D1).
 - Cost accuracy depends on the pricing table; unknown models are flagged `estimated` and use a conservative fallback rather than failing.
 - Budget blocking is pre-flight on cumulative state; a single in-flight request can still complete above a cap (you can't un-send a request mid-stream).
-- "Cost reduction %" is a function of baseline waste, not a guarantee the tool makes. Fiscus provides visibility and controls; the savings are the user's to realize.
+- "Cost reduction %" is a function of baseline waste, not a guarantee the tool makes. Segreant provides visibility and controls; the savings are the user's to realize.

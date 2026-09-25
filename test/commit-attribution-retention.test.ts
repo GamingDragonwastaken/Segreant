@@ -4,7 +4,7 @@
  * THE COUNTEREXAMPLE, MEASURED. A repository with one commit, and $6.00 of
  * metered spend one hour before it — inside the eight-hour attribution window
  * `attributeCommits` uses. `computeRealization` reported the commit with
- * `attributedCostUsd: 6`. `fiscus prune` then deleted the requests on the
+ * `attributedCostUsd: 6`. `segreant prune` then deleted the requests on the
  * operator's own retention policy, and the same call over the same repository
  * reported the same commit with `attributedCostUsd: 0`.
  *
@@ -39,7 +39,7 @@
  * WHAT THIS DOES NOT ESTABLISH. That the RoI figure is otherwise sound — the
  * lenses carry their own conditions and none is closed here. Nor that the
  * dashboard says any of this: `/api/value` carries no coverage field, which
- * stays open. Nor anything about spend that never reached Fiscus, which is the
+ * stays open. Nor anything about spend that never reached Segreant, which is the
  * permanent limit of a local meter and a different claim entirely.
  *
  * Recorded at D-176.
@@ -52,7 +52,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-attr-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-attr-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { attributeCommits, projectName } from '../src/git/correlate.ts';
@@ -67,12 +67,12 @@ const NOW = Date.now();
 const COMMIT_MS = NOW - 60 * DAY;
 
 function makeRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-attr-repo-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-attr-repo-'));
   const git = (args: string[], env?: NodeJS.ProcessEnv) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe', env: env ?? process.env });
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.invalid']);
-  git(['config', 'user.name', 'Fiscus test']);
+  git(['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
   git(['add', '.']);
   const when = new Date(COMMIT_MS).toISOString();
@@ -146,13 +146,13 @@ test('a commit whose window starts after the boundary is not truncated', async (
   // `prune` deletes rows strictly older than the boundary, and the window is
   // [commit - 8h, commit]. A commit well after the boundary lost nothing, and
   // marking every commit on a pruned ledger truncated would be noise.
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-attr-recent-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-attr-recent-'));
   const store = new Store(':memory:');
   try {
     const git = (args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
     git(['init', '-q']);
     git(['config', 'user.email', 'test@example.invalid']);
-    git(['config', 'user.name', 'Fiscus test']);
+    git(['config', 'user.name', 'Segreant test']);
     writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
     git(['add', '.']);
     git(['commit', '-qm', 'feat: recent work']);

@@ -18,11 +18,11 @@
  *      machine-readable feed for this: refreshing requires an explicit URL, we
  *      never invent a default one.
  *   2. A PERSONAL prior. `personalBaselineFromCommits` mines this project's own
- *      git history from BEFORE Fiscus recorded its first tracked request
+ *      git history from BEFORE Segreant recorded its first tracked request
  *      ANYWHERE (a global cutoff, not per-project) — turning inter-commit gaps
  *      into a real, behavioral personal baseline. Two honest limits, disclosed
- *      rather than hidden: (a) the cutoff can only reflect AI use Fiscus has
- *      itself tracked — pre-install AI-assisted commits (from a tool Fiscus
+ *      rather than hidden: (a) the cutoff can only reflect AI use Segreant has
+ *      itself tracked — pre-install AI-assisted commits (from a tool Segreant
  *      never saw) are indistinguishable from genuinely manual ones and get
  *      absorbed into the "manual" signal; (b) the cutoff is `MIN(ts_epoch_ms)`
  *      over the `requests` table, which retention pruning (`Store.prune`) can
@@ -43,7 +43,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { fiscusHome } from '../config.ts';
+import { segreantHome } from '../config.ts';
 import type { Store } from '../store/db.ts';
 import { readCommitsBefore } from '../git/correlate.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
@@ -54,9 +54,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** The baseline table shipped inside the package — always present, works offline. */
 const BUNDLED_BASELINE_PATH = join(__dirname, '..', '..', 'baselines', 'lift-baselines.json');
 
-/** A user-writable override at ~/.fiscus/baselines/lift-baselines.json, same pattern as pricing's cache. */
+/** A user-writable override at ~/.segreant/baselines/lift-baselines.json, same pattern as pricing's cache. */
 function cachePath(): string {
-  return join(fiscusHome(), 'baselines', 'lift-baselines.json');
+  return join(segreantHome(), 'baselines', 'lift-baselines.json');
 }
 
 export interface BaselineManifest {
@@ -135,7 +135,7 @@ export function applyBaselineManifest(rawText: string): BaselineRefreshResult {
     return { ok: false, error: 'manifest failed shape check (schema_version / baselineMinutes: positive numbers)' };
   }
   try {
-    const dir = join(fiscusHome(), 'baselines');
+    const dir = join(segreantHome(), 'baselines');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(cachePath(), JSON.stringify(obj, null, 2) + '\n', 'utf8');
   } catch (e) {
@@ -151,7 +151,7 @@ export function applyBaselineManifest(rawText: string): BaselineRefreshResult {
  * is no established machine-readable feed for Lift baselines — METR publishes
  * research, not a versioned JSON endpoint. So this NEVER invents a default: pass
  * an explicit URL you trust (e.g. a manifest you or your org curates and hosts),
- * or edit ~/.fiscus/baselines/lift-baselines.json by hand. Calling this with
+ * or edit ~/.segreant/baselines/lift-baselines.json by hand. Calling this with
  * no URL is a clear, honest failure — not a silent no-op and not a fabricated
  * endpoint.
  */
@@ -182,7 +182,7 @@ export async function refreshBaselineManifest(url: string | null, timeoutMs = 20
       return {
         ok: false,
         failureCode,
-        error: `Fiscus egress boundary refused the Lift baseline refresh (${e.code}): ${e.message}${repair}`,
+        error: `Segreant egress boundary refused the Lift baseline refresh (${e.code}): ${e.message}${repair}`,
       };
     }
     return { ok: false, error: `fetch failed: ${String(e)}`, failureCode: 'network_error' };

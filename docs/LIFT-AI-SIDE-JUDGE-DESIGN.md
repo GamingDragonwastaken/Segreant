@@ -36,7 +36,7 @@ Lift compares two things: manual-baseline minutes, and measured time-with-AI
 [RETURN-ON-INTELLIGENCE.md §4](RETURN-ON-INTELLIGENCE.md)). The manual-baseline side
 was the flat, unsourced input until this session's earlier work made it a cited METR
 prior blended with personal git history (§7.1 of that doc, `src/value/liftBaseline.ts`
-— see [[fiscus-real-lift-source-idea]]). **That upgrade never touched the other
+— see [[segreant-real-lift-source-idea]]). **That upgrade never touched the other
 side of the comparison.** Time-with-AI today is still just wall-clock duration
 between a session's first and last request, windowed for concurrency — it can't tell
 a focused, three-turn session that nailed the task from a forty-turn session that
@@ -132,16 +132,16 @@ that lens already does.
 > visibly, via `rationale` — on any failure.
 >
 > **The "full session content" tiers are now real (2026-07-16) — without the
-> capture decision this note originally feared.** Fiscus's store STILL never
+> capture decision this note originally feared.** Segreant's store STILL never
 > persists prompt text or the AI's response text — `RequestRow` has no content
 > field, and `ProposalRow` stores only the proposed file diffs that already
 > feed the Acceptance lens. The resolution was noticing that no capture is
-> needed: the tools Fiscus imports from already keep their own transcripts on
+> needed: the tools Segreant imports from already keep their own transcripts on
 > disk (Claude Code writes `~/.claude/projects/<dir>/<sessionId>.jsonl` with
 > full message content). `src/judge/transcript.ts` reads that file AT JUDGE
 > TIME, read-only, into a bounded excerpt (per-turn and total character caps,
 > clipping counted and disclosed) that lives only for the one judge call —
-> nothing is ever written to Fiscus's store. All three importers' tools are
+> nothing is ever written to Segreant's store. All three importers' tools are
 > covered: Claude Code (`<sessionId>.jsonl`), opencode (its session database's
 > `part`/`message` tables, read-only WAL snapshot), and Codex (rollout JSONL
 > located by the session uuid). Plain proxy traffic has no on-disk transcript
@@ -163,13 +163,13 @@ path, exactly as ARCHITECTURE.md §7 item 3 already says. Two sub-choices the us
 raised, both worth supporting rather than picking one:
 
 **Local model.** The proxy already speaks to arbitrary OpenAI-compatible endpoints
-today — `x-fiscus-openai-base` / `config.upstreams.openai` already routes metered
+today — `x-segreant-openai-base` / `config.upstreams.openai` already routes metered
 traffic to Ollama and other local servers (README Status section). The same
 mechanism is directly reusable for a judge call: point a separate config key
 (`config.lift.judge.baseUrl`) at a local inference server, and nothing new has to be
 invented to *reach* it. When that endpoint is literal loopback and the local_locked
 egress mode is active, this tier can reasonably default to reading full session
-content when enabled; the configured Fiscus-process destination remains explicit.
+content when enabled; the configured Segreant-process destination remains explicit.
 
 **User's own API key.** A separate, explicit credential
 (`config.lift.judge.apiKey` / a dedicated env var) — never the same credential or
@@ -237,7 +237,7 @@ what the ladder allows:
   addressed in the original sketch. The built gate resolves this case (local
   AND hosted both fully opted into) by preferring the configured local endpoint
   and not selecting a hosted judge, so it is the strictly more conservative
-  reading of an ambiguous config within the declared Fiscus-process egress
+  reading of an ambiguous config within the declared Segreant-process egress
   config, and it's a one-line config change to reverse (unset
   `judge.localBaseUrl`).
 
@@ -246,12 +246,12 @@ what the ladder allows:
 | Algorithmic (§1) | **On** | No outbound judge request; reads the local structural record | Same | None — same posture as the Acceptance lens it reuses |
 | Local LLM, structural input | Off | Bounded summary to the configured endpoint; a validated loopback URL is the only destination reported as on-device | Same; a non-loopback URL is reported as remote/off-device | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
 | Local LLM, full content | Off | Bounded content to the configured endpoint; a validated loopback URL is the only destination reported as on-device | Same, but see ⚠ below — no richer payload actually exists to send; a non-loopback URL is reported as remote/off-device | Same opt-in as above plus `judge.localSendFullContent` |
-| Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `FISCUS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
+| Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `SEGREANT_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 
 ⚠ **The two "full content" rows now do what their name says — for Claude Code,
 opencode, and Codex sessions.** The excerpt is read ephemerally from the
-tool's own on-disk transcript at judge time (see the boxed note in §2); Fiscus
+tool's own on-disk transcript at judge time (see the boxed note in §2); Segreant
 still never persists content. For sessions whose tool has no supported
 on-disk transcript (plain proxy traffic), `judgeSession`
 (`src/judge/orchestrate.ts`) degrades honestly: it sends the structural
@@ -284,9 +284,9 @@ can affect the other tier's behavior.
   (Claude Code) and 2026-07-18 (opencode + Codex) without a capture decision:
   ephemeral read-at-judge-time from each tool's own on-disk log.
 - **A dashboard trigger, or automatic invocation from a Lift command.** The
-  `fiscus judge` subcommand exists (it judges real sessions looked up from the
+  `segreant judge` subcommand exists (it judges real sessions looked up from the
   store; `--session <id>` to pick one), but nothing invokes judging
-  automatically. Note that there is no fiscus lift command either -- an
+  automatically. Note that there is no segreant lift command either -- an
   earlier version of this line set that name in code formatting, as though
   it were a command waiting to be hooked into.
   Still an open question, not decided here.

@@ -87,7 +87,7 @@ export function assessMetricUse(metric: string, purpose: MetricPurpose): MetricA
   const allowed = !classes.includes('incentive_unsafe') && !classes.includes('compensation_prohibited');
   let reason = 'metric is being used within its declared evidence class';
   if (classes.includes('compensation_prohibited')) {
-    reason = 'Fiscus does not endorse tying individual compensation to a single instrumented metric';
+    reason = 'Segreant does not endorse tying individual compensation to a single instrumented metric';
   } else if (classes.includes('incentive_unsafe')) {
     reason = 'resource consumption is an input/cost signal, not productivity; rewarding it creates token-maxxing incentives';
   } else if (intrinsic === 'resource_accounting') {

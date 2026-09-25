@@ -70,8 +70,8 @@ function weakEvidence(id: string, finalizedAt: string | null = null): Evidence {
   return evidence({
     id,
     evidenceType: 'usage.observation',
-    sourceIdentity: 'fiscus:local',
-    sourceClass: 'fiscus_local_records',
+    sourceIdentity: 'segreant:local',
+    sourceClass: 'segreant_local_records',
     payload: { value: '1' },
     scope: STUDY_SCOPE,
     grain: STUDY_GRAIN,

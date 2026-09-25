@@ -63,7 +63,7 @@ and evaluates a declared six-member admissible preference set through
 `preferenceRobustness` (D-249; a diagnostic rendered beside the certificate
 that never moves standing), calls `certifyDecision`, `minimaxRegret`,
 `decisionCountermodels`, `decisionInvalidatingAssumptionSets` and
-`gateDecisionForConsequence`, renders the result in `fiscus budget
+`gateDecisionForConsequence`, renders the result in `segreant budget
 --recommend`, and routes a certified cap through `issueDecisionToKernel` on
 `--apply`. A review-only or under-assured decision is rendered with its
 shortfalls and `--apply` is refused (D-213). That is the whole of the
@@ -71,7 +71,7 @@ product's recommendation → approval → action chain (D-252): the recommendati
 is advisory output, the approval is the operator's `--apply` under a DAL-3
 certificate, the action is the configuration write, and the record is the
 persisted certificate bundle whose `actionSemantics` is `no_action` /
-`permitted: false` by type — Fiscus never acts on a certificate by itself, and
+`permitted: false` by type — Segreant never acts on a certificate by itself, and
 there is no approved-policy object that could make it. `decisionCertificationStructure`
 and `decisionInvalidatingAssumptionSets` (D-195) are this module's own adapter
 onto `minimalInvalidatingAssumptionSets` in `src/epistemic/countermodel.ts`,
@@ -91,7 +91,7 @@ producer named for recommending or advising and requires each to be gated
 (`cmdBudgetAdvisor`); the budget advisor's frontier cells are never ranked
 into an action (the input is accepted and not read; the dead branch is gone),
 and the usage path issues no advice — its exposure line is labelled as none.
-The assurance ladder is a Fiscus policy choice, not a derived threshold, and it
+The assurance ladder is a Segreant policy choice, not a derived threshold, and it
 assumes the declared input set is complete — an undeclared input cannot lower
 the level it was left out of; that completeness is the evidence holder's claim
 and is not evaluated by this module.

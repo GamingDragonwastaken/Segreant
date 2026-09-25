@@ -6,8 +6,8 @@ This file exists to prevent a stale local checkout from continuing development u
 
 - Repository: `GamingDragonwastaken/Fiscus`
 - Reconstruction branch: `gpt56/magnum-opus-reconstruction`
-- Remaining-work authority: `docs/program/FISCUS-REMAINING-WORK-AUDIT.md`
-- Durable state: `docs/program/FISCUS-MAGNUM-OPUS-STATE.md`
+- Remaining-work authority: `docs/program/SEGREANT-REMAINING-WORK-AUDIT.md`
+- Durable state: `docs/program/SEGREANT-MAGNUM-OPUS-STATE.md`
 - Do not develop from the old pre-reconstruction local branch merely because it already exists on disk.
 - Do not merge PR #10. It exists only to make GitHub Actions evaluate the reconstruction branch against `main`.
 
@@ -75,8 +75,8 @@ These SHAs must match before the baseline build unless Luna intentionally create
 3. Implement the already-RED transitive revocation specification.
 4. Migrate legacy coding demo fixtures to explicit required lifecycle evidence.
 5. Restore exact-SHA green CI and package smoke without weakening strict realization semantics.
-6. Update `FISCUS-MAGNUM-OPUS-STATE.md`, `AUDIT-REGISTER.md`, `DECISION-LOG.md`, and `EVIDENCE-INDEX.md`.
-7. Continue the dependency-ordered remaining-work program in `FISCUS-REMAINING-WORK-AUDIT.md`.
+6. Update `SEGREANT-MAGNUM-OPUS-STATE.md`, `AUDIT-REGISTER.md`, `DECISION-LOG.md`, and `EVIDENCE-INDEX.md`.
+7. Continue the dependency-ordered remaining-work program in `SEGREANT-REMAINING-WORK-AUDIT.md`.
 
 ## Standing rule
 

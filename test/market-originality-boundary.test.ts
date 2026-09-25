@@ -16,8 +16,8 @@ test('J05 market matrix is current-source, capability-specific, and refuses unsu
   assert.match(matrix, /Refuse/i);
 });
 
-test('J06 review separates standards, Fiscus-specific semantics, combinations, and unproven novelty', () => {
-  for (const marker of ['Substitution test', 'Standardized, not novel', 'Fiscus-specific semantics', 'Potentially distinctive combination', 'Not currently proven', 'Complexity-theater guard', 'Independent scholarly and market critique', 'Pre-claim review gate']) {
+test('J06 review separates standards, Segreant-specific semantics, combinations, and unproven novelty', () => {
+  for (const marker of ['Substitution test', 'Standardized, not novel', 'Segreant-specific semantics', 'Potentially distinctive combination', 'Not currently proven', 'Complexity-theater guard', 'Independent scholarly and market critique', 'Pre-claim review gate']) {
     assert.match(originality, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.match(originality, /not a novel theorem/i);

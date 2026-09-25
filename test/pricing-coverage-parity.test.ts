@@ -1,5 +1,5 @@
 /**
- * `fiscus pricing --coverage` and `GET /api/pricing` must answer the same
+ * `segreant pricing --coverage` and `GET /api/pricing` must answer the same
  * question with the same numbers.
  *
  * This repository has already paid once for a parity claim maintained by hand:

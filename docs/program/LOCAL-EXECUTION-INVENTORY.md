@@ -42,7 +42,7 @@ These are safe branch-retirement candidates once branch deletion is available.
   control boundary.
 - `gpt56/sol-magnum-opus-integration` — divergent early integration/archive lane;
   later canonical kernel/tests/program records supersede its runtime changes.
-- `codex/fiscus-local-working-tree-snapshot-2026-08-29` — one-commit historical
+- `codex/segreant-local-working-tree-snapshot-2026-08-29` — one-commit historical
   snapshot from before the reconstruction; canonical main is hundreds of commits
   ahead.
 - `agent/truth-closure` — historical PR #1 lane; final reconstruction subsumes

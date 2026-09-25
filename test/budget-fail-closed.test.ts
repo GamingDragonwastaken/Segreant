@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createProxyServer } from '../src/proxy/server.ts';
-import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 import type { Store } from '../src/store/db.ts';
 
 async function listen(server: http.Server): Promise<string> {
@@ -22,9 +22,9 @@ function close(server: http.Server): Promise<void> {
 }
 
 test('proxy fails closed before upstream dial when budget evaluation cannot read the ledger', async () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const testHome = mkdtempSync(join(tmpdir(), 'fiscus-budget-fail-closed-'));
-  process.env.FISCUS_HOME = testHome;
+  const previousHome = process.env.SEGREANT_HOME;
+  const testHome = mkdtempSync(join(tmpdir(), 'segreant-budget-fail-closed-'));
+  process.env.SEGREANT_HOME = testHome;
   let upstreamRequests = 0;
   const upstream = http.createServer((_req, res) => {
     upstreamRequests += 1;
@@ -32,7 +32,7 @@ test('proxy fails closed before upstream dial when budget evaluation cannot read
     res.end(JSON.stringify({ model: 'gpt-4o', usage: { prompt_tokens: 1, completion_tokens: 1 } }));
   });
   const upstreamBase = await listen(upstream);
-  const config: FiscusConfig = structuredClone(DEFAULT_CONFIG);
+  const config: SegreantConfig = structuredClone(DEFAULT_CONFIG);
   config.upstreams.openai = upstreamBase;
   const failingStore = {
     matchingOpenAiScope: () => null,
@@ -52,22 +52,22 @@ test('proxy fails closed before upstream dial when budget evaluation cannot read
     });
     assert.equal(response.status, 503);
     const body = await response.json() as { error?: { type?: string; code?: string } };
-    assert.equal(body.error?.type, 'fiscus_budget_unavailable');
+    assert.equal(body.error?.type, 'segreant_budget_unavailable');
     assert.equal(body.error?.code, 'budget_enforcement_unavailable');
     assert.equal(upstreamRequests, 0, 'a failed budget read must not reach the provider');
   } finally {
     await close(proxy);
     await close(upstream);
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(testHome, { recursive: true, force: true });
   }
 });
 
 test('proxy opens an accounting circuit after a request cannot be persisted', async () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const testHome = mkdtempSync(join(tmpdir(), 'fiscus-budget-accounting-circuit-'));
-  process.env.FISCUS_HOME = testHome;
+  const previousHome = process.env.SEGREANT_HOME;
+  const testHome = mkdtempSync(join(tmpdir(), 'segreant-budget-accounting-circuit-'));
+  process.env.SEGREANT_HOME = testHome;
   let upstreamRequests = 0;
   const upstream = http.createServer((_req, res) => {
     upstreamRequests += 1;
@@ -75,7 +75,7 @@ test('proxy opens an accounting circuit after a request cannot be persisted', as
     res.end(JSON.stringify({ model: 'gpt-4o', usage: { prompt_tokens: 1, completion_tokens: 1 } }));
   });
   const upstreamBase = await listen(upstream);
-  const config: FiscusConfig = structuredClone(DEFAULT_CONFIG);
+  const config: SegreantConfig = structuredClone(DEFAULT_CONFIG);
   config.upstreams.openai = upstreamBase;
   const failingStore = {
     matchingOpenAiScope: () => null,
@@ -97,14 +97,14 @@ test('proxy opens an accounting circuit after a request cannot be persisted', as
     const second = await request();
     assert.equal(second.status, 503, 'future requests must stop after accounting loss');
     const body = await second.json() as { error?: { type?: string; code?: string } };
-    assert.equal(body.error?.type, 'fiscus_budget_unavailable');
+    assert.equal(body.error?.type, 'segreant_budget_unavailable');
     assert.equal(body.error?.code, 'budget_enforcement_unavailable');
     assert.equal(upstreamRequests, 1, 'only the request that lost its persistence race may reach the provider');
   } finally {
     await close(proxy);
     await close(upstream);
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(testHome, { recursive: true, force: true });
   }
 });

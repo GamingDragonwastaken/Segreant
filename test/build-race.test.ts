@@ -8,7 +8,7 @@ import { createBuildWorkspace } from './support/buildWorkspace.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUILD = join(ROOT, 'scripts', 'build.mjs');
-const CLI = join(ROOT, 'bin', 'fiscus.mjs');
+const CLI = join(ROOT, 'bin', 'segreant.mjs');
 const PUBLICATION_LOCK = join(ROOT, 'bin', 'publication-lock.mjs');
 const RUNTIME_SNAPSHOT = join(ROOT, 'bin', 'runtime-snapshot.mjs');
 
@@ -54,9 +54,9 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
   //
   // IN A COPY OF THE REPOSITORY, NOT THE REPOSITORY. A real build holds the
   // root publication lock for tens of seconds, and every other file that spawns
-  // `bin/fiscus.mjs` takes that lock as a reader and queues behind it — which is
-  // how `test/fiscus-home-cli.test.ts` came to fail a full local run with
-  // `fiscus demo should succeed` after sitting in the queue for its own 180s
+  // `bin/segreant.mjs` takes that lock as a reader and queues behind it — which is
+  // how `test/segreant-home-cli.test.ts` came to fail a full local run with
+  // `segreant demo should succeed` after sitting in the queue for its own 180s
   // timeout. The claim here is about the BUILD's publication protocol, which is
   // a property of the protocol and not of this checkout, so it holds identically
   // against a copy. Same two builders, same eight readers, same real `tsc`; only
@@ -97,9 +97,9 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
 
   // ISOLATION IS "NONE OF OURS TOUCHED IT", NOT "THE PATH IS ABSENT" (WP-C04).
   //
-  // This assertion used to read `existsSync(ROOT/.fiscus-build.lock) === false`,
+  // This assertion used to read `existsSync(ROOT/.segreant-build.lock) === false`,
   // and it was not a statement about this test at all. As the comment at the top
-  // of this file records, EVERY test file that spawns `bin/fiscus.mjs` takes the
+  // of this file records, EVERY test file that spawns `bin/segreant.mjs` takes the
   // repository lock as a reader — and `node --test` runs files in parallel. So
   // the old line asked "is any other test file holding the repository lock right
   // now", and answered a question about the harness schedule. It passed in
@@ -116,7 +116,7 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
   //      THIS LINE ONCE CLAIMED "nothing else in the suite builds at ROOT --
   //      `pretest` finishes before any test starts -- so this is stable under
   //      parallelism", AND THAT WAS FALSE. `test/egress-guidance-launcher.test.ts`
-  //      ran `npm run fiscus`, whose `prefiscus` hook is `npm run build`, so it
+  //      ran `npm run segreant`, whose `presegreant` hook is `npm run build`, so it
   //      rebuilt this checkout's `dist/` in the middle of the suite and moved
   //      the mtime this assertion reads. The two tests contradicted each other
   //      and the only reason it was not a permanent failure is that
@@ -132,7 +132,7 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
   if (publishedBefore !== null) {
     assert.equal(statSync(rootArtifact).mtimeMs, publishedBefore, 'an isolated build must not republish the repository artifact');
   }
-  const rootOwner = join(ROOT, '.fiscus-build.lock', 'owner.json');
+  const rootOwner = join(ROOT, '.segreant-build.lock', 'owner.json');
   let residueOwner: number | null = null;
   if (existsSync(rootOwner)) {
     try {
@@ -148,18 +148,18 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
 
 test('the supported CLI launcher waits for publication and leaves no lock residue', async () => {
   // Use a tiny fixture runtime so the assertion is about lock observation, not
-  // the startup cost of Fiscus's real SQLite-backed CLI. The copied launcher
+  // the startup cost of Segreant's real SQLite-backed CLI. The copied launcher
   // still resolves its normal ../dist/cli.js path and its sibling lock. The
   // delayed completion also proves the launcher keeps the private snapshot
   // alive until deferred command work has actually finished.
-  const fixture = mkdtempSync(join(ROOT, '.fiscus-build-race-'));
+  const fixture = mkdtempSync(join(ROOT, '.segreant-build-race-'));
   const fixtureBin = join(fixture, 'bin');
   const fixtureDist = join(fixture, 'dist');
-  const fixtureLock = join(fixture, '.fiscus-build.lock');
+  const fixtureLock = join(fixture, '.segreant-build.lock');
   mkdirSync(fixtureBin);
   mkdirSync(fixtureDist);
   mkdirSync(join(fixture, 'pricing'));
-  copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
+  copyFileSync(CLI, join(fixtureBin, 'segreant.mjs'));
   copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
   copyFileSync(RUNTIME_SNAPSHOT, join(fixtureBin, 'runtime-snapshot.mjs'));
   writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-ready\n', 'utf8');
@@ -177,7 +177,7 @@ export const cliCompletion = new Promise((resolve, reject) => setTimeout(() => {
   mkdirSync(fixtureLock);
   writeFileSync(join(fixtureLock, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'held-for-test' }), 'utf8');
 
-  const reader = spawnNode(join(fixtureBin, 'fiscus.mjs'), [], fixture);
+  const reader = spawnNode(join(fixtureBin, 'segreant.mjs'), [], fixture);
   try {
     await new Promise((resolve) => setTimeout(resolve, 250));
     assert.equal(reader.child.exitCode, null, 'the launcher imported the runtime before publication completed');
@@ -200,8 +200,8 @@ test('the launcher cannot turn a spawn or publication-lock failure into exit 0',
 });
 
 test('publication lock reclaims a dead creator whose owner rename was interrupted', async () => {
-  const fixture = mkdtempSync(join(ROOT, '.fiscus-build-orphan-'));
-  const lock = join(fixture, '.fiscus-build.lock');
+  const fixture = mkdtempSync(join(ROOT, '.segreant-build-orphan-'));
+  const lock = join(fixture, '.segreant-build.lock');
   mkdirSync(lock);
   // The owner record is valid but remains under the atomic temp name. A PID
   // outside the process table makes the recovery assertion deterministic on
@@ -225,7 +225,7 @@ test('publication lock reclaims a dead creator whose owner rename was interrupte
 });
 
 test('source generation fingerprints distinguish changed build inputs', async () => {
-  const fixture = mkdtempSync(join(ROOT, '.fiscus-build-generation-'));
+  const fixture = mkdtempSync(join(ROOT, '.segreant-build-generation-'));
   try {
     const source = join(fixture, 'src');
     mkdirSync(source);
@@ -243,20 +243,20 @@ test('source generation fingerprints distinguish changed build inputs', async ()
 });
 
 test('the runtime snapshot outlives a command that keeps running after its completion promise', async () => {
-  // `fiscus start` resolves its command promise the moment the proxy and
+  // `segreant start` resolves its command promise the moment the proxy and
   // dashboard sockets are listening, and then serves requests for hours. The
   // dashboard reads the bundled pricing card per request rather than at import,
   // so a snapshot deleted at completion is deleted out from under a live
   // server: `/api/overview` answers ENOENT on its own copied pricing card and
   // `/app/main.js` 404s. The whole local suite stays green while that happens,
   // because nothing else drives the packaged launcher past completion.
-  const fixture = mkdtempSync(join(ROOT, '.fiscus-runtime-life-'));
+  const fixture = mkdtempSync(join(ROOT, '.segreant-runtime-life-'));
   const fixtureBin = join(fixture, 'bin');
   const fixtureDist = join(fixture, 'dist');
   mkdirSync(fixtureBin);
   mkdirSync(fixtureDist);
   mkdirSync(join(fixture, 'pricing'));
-  copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
+  copyFileSync(CLI, join(fixtureBin, 'segreant.mjs'));
   copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
   copyFileSync(RUNTIME_SNAPSHOT, join(fixtureBin, 'runtime-snapshot.mjs'));
   writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-ready\n', 'utf8');
@@ -273,7 +273,7 @@ setTimeout(() => {
 `, 'utf8');
 
   try {
-    const result = await runNode(join(fixtureBin, 'fiscus.mjs'), []);
+    const result = await runNode(join(fixtureBin, 'segreant.mjs'), []);
     assert.equal(result.code, 0, result.stderr || 'a command outliving its completion promise lost its runtime snapshot');
     const [snapshotRoot = '', resource] = result.stdout.split('\n');
     assert.equal(`${resource}\n`, 'fixture-resource-ready\n', 'the post-completion resource read must still resolve inside the snapshot');
@@ -288,10 +288,10 @@ test('orphan runtime snapshots are reaped by owner liveness, never by pathname',
   // A process killed outright (SIGKILL, a closed terminal) never runs its exit
   // handler, so the reaper is what keeps temp from accumulating 2.8 MB copies.
   // It must still refuse to delete a snapshot whose owner is alive — a running
-  // `fiscus start` would lose its module tree to another CLI invocation.
-  const parent = mkdtempSync(join(ROOT, '.fiscus-runtime-reap-'));
-  const dead = join(parent, 'fiscus-runtime-dead');
-  const live = join(parent, 'fiscus-runtime-live');
+  // `segreant start` would lose its module tree to another CLI invocation.
+  const parent = mkdtempSync(join(ROOT, '.segreant-runtime-reap-'));
+  const dead = join(parent, 'segreant-runtime-dead');
+  const live = join(parent, 'segreant-runtime-live');
   const foreign = join(parent, 'unrelated-directory');
   for (const path of [dead, live, foreign]) mkdirSync(path);
   writeFileSync(join(dead, 'owner.json'), JSON.stringify({ pid: 2_147_483_647 }), 'utf8');

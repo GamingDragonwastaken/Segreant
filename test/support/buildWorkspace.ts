@@ -5,11 +5,11 @@
  * ONE TEST WAS COSTING THE WHOLE LOCAL SUITE ITS MEANING. `concurrent builds
  * keep the compiled CLI runnable throughout publication` starts two real builds
  * at the repository root, and a real build holds the root publication lock for
- * tens of seconds. Every other file that spawns `bin/fiscus.mjs` — the CLI
+ * tens of seconds. Every other file that spawns `bin/segreant.mjs` — the CLI
  * tests, the package-surface sweep, the issuance-map walk, the home-override
  * end-to-end — takes that same lock as a READER and queues behind it. On the
- * last full run `test/fiscus-home-cli.test.ts` sat in that queue until its own
- * 180-second `execFile` timeout fired and reported `fiscus demo should succeed`,
+ * last full run `test/segreant-home-cli.test.ts` sat in that queue until its own
+ * 180-second `execFile` timeout fired and reported `segreant demo should succeed`,
  * which names the wrong thing entirely: the demo was fine, it never got to run.
  *
  * The lock was doing its job. The test was building in the wrong place.
@@ -63,14 +63,14 @@ export interface BuildWorkspace {
 }
 
 /** Copy the build inputs into a temp root and link its `node_modules`. */
-export function createBuildWorkspace(prefix = '.fiscus-ws-'): BuildWorkspace {
+export function createBuildWorkspace(prefix = '.segreant-ws-'): BuildWorkspace {
   // BESIDE THE REPOSITORY, NOT IN THE SYSTEM TEMP DIRECTORY. `scripts/build.mjs`
   // already stages beside `dist` on purpose, so that every publication rename is
   // same-volume; the same reasoning applies to the whole workspace, and it is
   // not theoretical here. Measured on this machine: the identical test took
   // 177s with the workspace under `os.tmpdir()` and 95-131s at the repository
   // root before isolation. A sibling directory keeps the isolation and gives the
-  // volume back. `.fiscus-ws-*` is gitignored.
+  // volume back. `.segreant-ws-*` is gitignored.
   const root = mkdtempSync(join(REPO, prefix));
   try {
     for (const entry of BUILD_INPUTS) {
@@ -96,7 +96,7 @@ export function createBuildWorkspace(prefix = '.fiscus-ws-'): BuildWorkspace {
   return {
     root,
     build: join(root, 'scripts', 'build.mjs'),
-    cli: join(root, 'bin', 'fiscus.mjs'),
+    cli: join(root, 'bin', 'segreant.mjs'),
     seeded: existsSync(join(root, 'dist', 'cli.js')),
     dispose(): void {
       // The junction is removed with the tree; `rmSync` does not follow it, so

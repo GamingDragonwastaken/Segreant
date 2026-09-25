@@ -3,7 +3,7 @@
  *
  * D-176 put two counts on the realization rollup — mature units whose spend
  * window retention truncated, and units whose coverage is unknown — and wired
- * them into `noteSource`, so `fiscus roi` and `fiscus saved` say that the cost
+ * them into `noteSource`, so `segreant roi` and `segreant saved` say that the cost
  * totals they print are understated by an unknown amount. D-177 added two more
  * on each model-switch recommendation.
  *
@@ -43,7 +43,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-value-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-value-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
@@ -66,12 +66,12 @@ function boot(store: Store): Promise<{ base: string; close: () => Promise<void> 
 }
 
 function makeRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-value-repo-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-value-repo-'));
   const git = (args: string[], env?: NodeJS.ProcessEnv) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe', env: env ?? process.env });
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.invalid']);
-  git(['config', 'user.name', 'Fiscus test']);
+  git(['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
   git(['add', '.']);
   const when = new Date(COMMIT_MS).toISOString();
@@ -198,8 +198,8 @@ test('the value payload carries D-177 model-switch retention and unknown-coverag
   const repo = makeRepo();
   const store = new Store(':memory:');
   let srv: { base: string; close: () => Promise<void> } | null = null;
-  const previousDemo = process.env.FISCUS_DEMO;
-  process.env.FISCUS_DEMO = '1';
+  const previousDemo = process.env.SEGREANT_DEMO;
+  process.env.SEGREANT_DEMO = '1';
   try {
     // Demo snapshots include a review-only model trial, so this exercises the
     // actual /api/value frontier payload rather than a hand-built object.
@@ -217,7 +217,7 @@ test('the value payload carries D-177 model-switch retention and unknown-coverag
     await srv?.close();
     store.close();
     rmSync(repo, { recursive: true, force: true });
-    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
-    else process.env.FISCUS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.SEGREANT_DEMO;
+    else process.env.SEGREANT_DEMO = previousDemo;
   }
 });

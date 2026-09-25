@@ -15,7 +15,7 @@
  * rate is not counted twice. The grade is exactly what the operator reported,
  * never inferred from text.
  *
- * No prompt text is read or stored, so Fiscus never classifies the content.
+ * No prompt text is read or stored, so Segreant never classifies the content.
  */
 
 import type { Store, WindowRetentionCoverage } from '../store/db.ts';

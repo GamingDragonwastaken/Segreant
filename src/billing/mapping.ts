@@ -3,7 +3,7 @@
  * account.
  *
  * A provider export normally has a provider account/project identity, while a
- * Fiscus ledger has a local accounting/project identity. Those are different
+ * Segreant ledger has a local accounting/project identity. Those are different
  * namespaces. This module permits an operator to declare an exact mapping for
  * one immutable imported record, but it never infers a mapping from a model,
  * date, amount, or provider project name. A mapping is therefore useful for a
@@ -163,7 +163,7 @@ export function billingMappingKey(input: Pick<NewBillingRecordMappingInput, 'sou
     text(input.sourceRecordId, 'sourceRecordId'),
   ];
   const canonical = fields.map((field) => `${field.length}:${field}`).join('');
-  return createHash('sha256').update(`fiscus-billing-record-mapping-key-v${BILLING_MAPPING_SCHEMA_VERSION}\n${canonical}`, 'utf8').digest('hex');
+  return createHash('sha256').update(`segreant-billing-record-mapping-key-v${BILLING_MAPPING_SCHEMA_VERSION}\n${canonical}`, 'utf8').digest('hex');
 }
 
 /** Create and validate a mapping row without reading or writing a database. */
@@ -250,7 +250,7 @@ function asOfMapping(
 
 /**
  * Evaluate every imported record without guessing. `providerScopeAuthority` is
- * deliberately explicit: current Fiscus route declarations are operator
+ * deliberately explicit: current Segreant route declarations are operator
  * assertions, so the default result is always excluded from money-consuming
  * controls even when every row has a local target.
  */
@@ -323,7 +323,7 @@ export function evaluateBillingMapping(input: {
   const reconciliationDetail = reconciliationStatus === 'blocked_no_records'
     ? 'no imported provider records exist to map'
     : reconciliationStatus === 'blocked_incomplete_mapping'
-      ? 'unmapped, stale, or ambiguous records remain as residuals; Fiscus refuses to force-fit them'
+      ? 'unmapped, stale, or ambiguous records remain as residuals; Segreant refuses to force-fit them'
       : reconciliationStatus === 'blocked_provider_scope_not_authoritative'
         ? 'all rows have exact operator mappings, but provider/account scope remains operator-declared and unverified'
         : 'every imported record has an exact mapping and the caller supplied provider-verified scope authority';

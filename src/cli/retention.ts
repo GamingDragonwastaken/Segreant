@@ -2,7 +2,7 @@
  * One sentence, in one place, for a window that reaches behind what retention
  * deleted.
  *
- * `fiscus prune` deletes request rows on the operator's own retention policy.
+ * `segreant prune` deletes request rows on the operator's own retention policy.
  * After D-170 the boundary is recorded; after D-171 the window surfaces read
  * it. The wording lives here rather than at each call site so that three
  * commands cannot end up describing the same fact three ways -- and so that the

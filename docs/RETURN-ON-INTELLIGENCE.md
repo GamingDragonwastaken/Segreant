@@ -210,7 +210,7 @@ with-AI and without-AI worlds for the same task, so **λ is not point-identified
 Selection, substitution, and concurrency can move the estimate in different
 directions. We therefore report a disclosed interval and sensitivity range, not a
 causal money credit. A separate registered randomized study is required before
-Fiscus can state a scoped causal effect or net benefit.
+Segreant can state a scoped causal effect or net benefit.
 
 ```
 RoI ∈ [RoI_low, RoI_high]      (point = interior estimate)
@@ -286,13 +286,13 @@ Every term is defended:
   will not invent the denominator (`basis: 'none'`).
 - **Behavioural Lift is an observational lens, not a causal money credit.**
   The historical `RoI_gross` / `RoI_causal` terminology describes a formula
-  from before Fiscus had a dedicated causal-evidence lane. Behavioural Lift, a
+  from before Segreant had a dedicated causal-evidence lane. Behavioural Lift, a
   time-speed estimate, and a manual-equivalent valuation do not establish the
   outcome that would have occurred without AI. The current product therefore
   renders this money value only as an **observed/manual-equivalent value
   scenario** and keeps the legacy causal fields null.
 
-  A future Fiscus causal net-benefit result is deliberately a separate object.
+  A future Segreant causal net-benefit result is deliberately a separate object.
   It requires the registered randomized-study conditions in
   [CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md): frozen
   intervention/control definitions, pre-exposure random assignment, completed
@@ -402,7 +402,7 @@ hand-wavy.
   number (RoI return: realized manual-equivalent value over tokens + measured
   supervision time, counterfactually credited once) + the risk-adjusted
   certainty-equivalent, over the coding substrate (Realization funnel).
-  (`src/value/lenses.ts`, `fiscus roi [--labor-rate <w>] [--risk <γ>]`.)
+  (`src/value/lenses.ts`, `segreant roi [--labor-rate <w>] [--risk <γ>]`.)
 - **Next**: the per-context frontier (model × task-type) from proposal→outcome
   linkage; behavioral Lift via model A/B on like tasks.
 - **Then**: non-coding modality capture (chat/research/writing/agent outcome
@@ -461,15 +461,15 @@ which source produced it:
    is unchanged: an auditable org input, exactly like the labor rate, never
    silently replaced.
 2. **This machine's own pre-tracking git history**, when there's any. Commits
-   from before Fiscus recorded its first tracked request ANYWHERE (a global
+   from before Segreant recorded its first tracked request ANYWHERE (a global
    cutoff, not per-project) are treated as pre-tracking evidence. Consecutive
    commits whose gap looks like real, continuous working time (bounded 2–90
    minutes by default — short enough to exclude fixup/squash noise, long enough
    to exclude breaks) are classified by the same task-type classifier the
    realization engine already uses (`classifyTaskType`), and the gap becomes a
    real, behavioral personal-minutes sample. Two honest limits on the cutoff,
-   disclosed rather than hidden: it can only reflect AI use Fiscus has itself
-   tracked, so AI-assisted work from *before* Fiscus was installed reads as
+   disclosed rather than hidden: it can only reflect AI use Segreant has itself
+   tracked, so AI-assisted work from *before* Segreant was installed reads as
    "manual"; and it's the minimum timestamp in the (retention-prunable) request
    ledger, so on a long-lived install it can drift forward as old requests age
    out, rather than staying pinned to the true first-ever request. Neither is
@@ -483,13 +483,13 @@ which source produced it:
    METR does not publish a breakdown matching this project's task-type taxonomy,
    so the per-task-type minutes are this project's own calibration against that
    published scale, not a METR output — disclosed as such in the manifest file
-   itself. These values are unchanged from Fiscus's earlier illustrative
+   itself. These values are unchanged from Segreant's earlier illustrative
    defaults; the METR anchor is an order-of-magnitude sanity check against a
    real, cited human-timed scale, not a re-derivation of the numbers from METR
-   data. Refreshable via `fiscus baseline --refresh --url <manifest>` (a
-   user-writable cache under `~/.fiscus/baselines/` overrides the bundled
-   floor; `fiscus baseline` alone shows source/age/staleness) — but honestly,
-   unlike `fiscus pricing`, there is no established machine-readable feed for
+   data. Refreshable via `segreant baseline --refresh --url <manifest>` (a
+   user-writable cache under `~/.segreant/baselines/` overrides the bundled
+   floor; `segreant baseline` alone shows source/age/staleness) — but honestly,
+   unlike `segreant pricing`, there is no established machine-readable feed for
    this, so `--url` is required every time: there is no saved or invented
    default to silently reuse.
 
@@ -511,7 +511,7 @@ choice over pretending to fit one from too little data. None of this touches
 `liftFromData`, `boundedLift`, or the Manski interval mechanics above — it only
 sharpens one of their inputs.
 
-**Time Reclaimed** (`src/value/timeReclaimed.ts`, `fiscus saved`) is this same
+**Time Reclaimed** (`src/value/timeReclaimed.ts`, `segreant saved`) is this same
 baseline math read as a calendar unit instead of a ratio: manual minutes of
 REALIZED work at these resolved task-type baselines, minus measured
 time-with-AI, in work-weeks — with the baseline band above as the interval,
@@ -615,7 +615,7 @@ Tightly-clustered cell rates ⟹ their spread is noise ⟹ large κ ⟹ heavy sh
 genuinely spread rates ⟹ real differences ⟹ small κ ⟹ light shrinkage. Alongside
 each shrunken figure we can show the **evidence weight** `n/(n+κ) ∈ [0,1]` — a
 plain-language confidence. (`src/value/reliability.ts`, `test/reliability.test.ts`.)
-This supports offline research only. Fiscus does not currently expose a
+This supports offline research only. Segreant does not currently expose a
 shadow-price or generic same-budget allocation decision: model×task and project
 cells can still be unlike work, so shrinkage alone cannot make a cross-context
 optimization causal or comparable. The retained raw allocator is explicitly
@@ -656,7 +656,7 @@ otherwise answer. And because the split follows `aᵢ^{1/(1−β)}` rather than 
 of it — the honest antidote to "pour everything into the top-scoring model." β is
 disclosed like the Index's weights and θ; the concave shape is a planning
 assumption that travels with the output. (`src/value/marginal.ts`,
-`test/marginal.test.ts`; currently withheld from `fiscus budget --recommend`
+`test/marginal.test.ts`; currently withheld from `segreant budget --recommend`
 until a within-task, controlled allocation contract exists.)
 
 ### 9.1 β estimated from your own curvature (never silently assumed)
@@ -764,7 +764,7 @@ The honest framing travels with the output: the alarm detects that the rate
 gamed metric both trip it. Its job is to force the question no dashboard asks —
 *did the work change, or did the measuring get bent?*
 (`src/value/drift.ts`, `test/drift.test.ts`; the "Stability" line in
-`fiscus roi` and the dashboard.)
+`segreant roi` and the dashboard.)
 
 ## 12. Instrumentation sensitivity — which measurement moves the Index most
 
@@ -802,4 +802,4 @@ be conflated:
 | Has the rate **moved**? | the drift alarm | §11 |
 
 (`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Largest exposure" line in
-`fiscus roi` / `usage`.)
+`segreant roi` / `usage`.)

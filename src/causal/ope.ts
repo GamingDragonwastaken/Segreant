@@ -12,7 +12,7 @@
 
 import { canonicalJson, isCausalIdentifier, isSha256, sha256 } from './protocol.ts';
 
-export const OPE_TYPE = 'fiscus.causal.ope.evaluation' as const;
+export const OPE_TYPE = 'segreant.causal.ope.evaluation' as const;
 export const OPE_VERSION = 1 as const;
 
 export type OpeEstimator = 'ips' | 'self_normalized_ips' | 'doubly_robust';
@@ -437,7 +437,7 @@ export function evaluateOpe(input: OpeEvaluationInput): OpeEvaluation {
       loggingPolicies: Object.freeze([...loggingPolicies.values()].sort((a, b) => `${a.policyId}@${a.version}`.localeCompare(`${b.policyId}@${b.version}`))),
       contextSchemas: Object.freeze([...contextSchemas].sort()),
       ...(outcomeModel === undefined ? {} : { outcomeModel }),
-      digest: sha256(`fiscus.ope\n${OPE_VERSION}\n${canonicalJson(provenanceMaterial)}`),
+      digest: sha256(`segreant.ope\n${OPE_VERSION}\n${canonicalJson(provenanceMaterial)}`),
     },
     assumptions: Object.freeze(assumptions),
     limitations: Object.freeze(limitations),

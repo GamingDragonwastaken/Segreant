@@ -225,7 +225,7 @@ function bindings(input: ReadonlyArray<DecisionEvidenceBinding>): readonly Evide
 }
 
 function coordinates(decisionId: string) {
-  return { scope: scope({ ledger: 'fiscus-decision', decisionId }), grain: grain(['decision', 'action']) };
+  return { scope: scope({ ledger: 'segreant-decision', decisionId }), grain: grain(['decision', 'action']) };
 }
 
 /**
@@ -395,8 +395,8 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
   const observationEvidence = evidence({
     id: observationEvidenceId,
     evidenceType: 'decision.utility_interval',
-    sourceIdentity: 'fiscus:decision-engine',
-    sourceClass: 'fiscus_local_interval_certificate',
+    sourceIdentity: 'segreant:decision-engine',
+    sourceClass: 'segreant_local_interval_certificate',
     payload: { decisionProblem: problem, decisionId, intervals: intervalValue, certificate: checked.certificate } as never,
     scope: coordinate.scope,
     grain: coordinate.grain,
@@ -422,8 +422,8 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
   const certificateEvidence = evidence({
     id: certificateEvidenceId,
     evidenceType: 'decision.certificate_bundle',
-    sourceIdentity: 'fiscus:decision-engine',
-    sourceClass: 'fiscus_decision_certificate_bundle',
+    sourceIdentity: 'segreant:decision-engine',
+    sourceClass: 'segreant_decision_certificate_bundle',
     payload: certificateBundle as never,
     scope: coordinate.scope,
     grain: coordinate.grain,

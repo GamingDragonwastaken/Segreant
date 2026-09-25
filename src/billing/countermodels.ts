@@ -12,7 +12,7 @@
  *
  * THE ALGEBRA THEY ATTACH TO, restated so the worlds below are checkable rather
  * than atmospheric. With P the provider's reported total on the declared scope,
- * L what Fiscus metered on it, T the true billed cost of on-path traffic and O
+ * L what Segreant metered on it, T the true billed cost of on-path traffic and O
  * the true billed cost of off-path traffic:
  *
  *     P = T + O        R = P - L = O + (T - L)        so   O <= R  iff  L <= T
@@ -20,12 +20,12 @@
  * Every countermodel here is a way for one of those identities to hold with
  * different quantities than the reader assumes.
  *
- * FOUR OF THE FIVE CANNOT BE EXCLUDED BY ANYTHING FISCUS HAS, and that is the
+ * FOUR OF THE FIVE CANNOT BE EXCLUDED BY ANYTHING SEGREANT HAS, and that is the
  * finding rather than a gap in the file. They carry `excludedBy: null`, which
  * makes the residual PERMANENTLY conditional rather than pending a check an
- * operator could go and do. The fifth — whether a person handed Fiscus the
+ * operator could go and do. The fifth — whether a person handed Segreant the
  * provider's numbers — names a real discriminator, so it is the one an operator
- * can actually close, by pointing Fiscus at the provider instead.
+ * can actually close, by pointing Segreant at the provider instead.
  *
  * ONE OF THEM IS NOT MERELY LIVE. When the residual is negative, `L > P >= T`,
  * which REFUTES `L <= T` outright: the rate-card over-pricing world is not an
@@ -54,13 +54,13 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
     claimBecomes:
       'P and L are totals over DIFFERENT populations, so R is not a residual over one scope and bounds nothing. The figure is a difference between two unrelated sums.',
     // Deciding this needs the provider to attest which traffic it billed to the
-    // scope. No provider surface Fiscus reads does that, and a local
+    // scope. No provider surface Segreant reads does that, and a local
     // declaration cannot verify itself.
     excludedBy: null,
   },
   off_path_provider_usage_is_not_observable: {
     world:
-      'Some traffic on this scope never passed through Fiscus at all, so O > 0 by an amount nothing local observed.',
+      'Some traffic on this scope never passed through Segreant at all, so O > 0 by an amount nothing local observed.',
     claimBecomes:
       'The claim was never that O is zero, and remains an upper bound. What changes is that a small R stops being reassuring: it is consistent with a large O offset by an equally large local over-estimate.',
     // This is the condition the residual exists to bound rather than to answer,
@@ -72,7 +72,7 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
       'The provider report and the local ledger agree on the period total while disagreeing about every request inside it — the same sum reached from a different composition.',
     claimBecomes:
       'A residual near zero stops implying agreement about anything but the total. Per-model and per-request conclusions drawn from the two sides cannot be reconciled, because there is no key on which to reconcile them.',
-    // The join key does not exist in the provider's data. Nothing Fiscus does
+    // The join key does not exist in the provider's data. Nothing Segreant does
     // locally creates one.
     excludedBy: null,
   },
@@ -92,13 +92,13 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
     claimBecomes:
       'P is not the provider’s figure, so R is a comparison between the local ledger and a document of unknown provenance. Nothing about the provider follows from it.',
     excludedBy:
-      'Fiscus fetching the report from the provider itself, which is recorded on the run as its provider source kind.',
+      'Segreant fetching the report from the provider itself, which is recorded on the run as its provider source kind.',
   },
   local_ledger_truncated_by_retention: {
     world:
-      'Retention deleted request rows from inside this period, so L is computed over a strict subset of what Fiscus metered: the surviving ledger yields L - D for a deleted on-path amount D >= 0 that no surviving row records.',
+      'Retention deleted request rows from inside this period, so L is computed over a strict subset of what Segreant metered: the surviving ledger yields L - D for a deleted on-path amount D >= 0 that no surviving row records.',
     claimBecomes:
-      'The residual is R + D rather than R, so part of what is displayed as spend the provider charged for and Fiscus never saw is in fact traffic Fiscus metered and then deleted. `O <= R` is not established, because a non-negative computed residual is consistent with a negative real one.',
+      'The residual is R + D rather than R, so part of what is displayed as spend the provider charged for and Segreant never saw is in fact traffic Segreant metered and then deleted. `O <= R` is not established, because a non-negative computed residual is consistent with a negative real one.',
     // Nothing can undo a deletion, and no surviving row records what was
     // removed. Reconciling a period that begins at or after the boundary avoids
     // the condition; it does not exclude it for this period.
@@ -113,7 +113,7 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
  * are evidence-driven. The rate-card world is `realized` when the residual is
  * negative, because `R < 0` establishes `L > T` rather than leaving it open.
  * The retention world is `realized` WHENEVER IT APPEARS, and for a different
- * reason: the condition is only on the run because Fiscus recorded performing
+ * reason: the condition is only on the run because Segreant recorded performing
  * the deletion itself, so it is a fact rather than an unexcluded possibility.
  * Reporting it as `live` would understate what is known (D-173). The rest are
  * `live` — nothing on the run decides them.
@@ -123,7 +123,7 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
  * is no such assumption to violate, and emitting a world for it would assess an
  * assumption the claim does not make — which `assessAssumptionFragility`
  * rejects, correctly. Nothing here is ever `excluded`, and the file should not
- * pretend otherwise: a condition Fiscus can rule out does not survive as a
+ * pretend otherwise: a condition Segreant can rule out does not survive as a
  * condition in the first place.
  */
 export function reconciliationCountermodels(run: ReconciliationRun): readonly Countermodel[] {

@@ -109,8 +109,8 @@ function options(temp: string): { cwd: string; env: NodeJS.ProcessEnv; encoding:
     cwd: ROOT,
     env: {
       ...process.env,
-      FISCUS_DB: join(temp, 'causal-cli.db'),
-      FISCUS_HOME: join(temp, 'home'),
+      SEGREANT_DB: join(temp, 'causal-cli.db'),
+      SEGREANT_HOME: join(temp, 'home'),
     },
     encoding: 'utf8',
   };
@@ -130,7 +130,7 @@ function run(temp: string, args: string[]): Record<string, unknown> {
 }
 
 test('causal CLI defers valid v2 registration preview and apply without mutation or disclosure', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-'));
   try {
     const protocolFile = join(temp, 'protocol.json');
     writeFileSync(protocolFile, JSON.stringify(v2Draft()), 'utf8');
@@ -161,7 +161,7 @@ test('causal CLI defers valid v2 registration preview and apply without mutation
 });
 
 test('causal CLI refuses retained v1 registration preview and apply as inspect-only', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-v1-register-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-v1-register-'));
   try {
     const protocolFile = join(temp, 'protocol.json');
     writeFileSync(protocolFile, JSON.stringify(draft()), 'utf8');
@@ -182,7 +182,7 @@ test('causal CLI refuses retained v1 registration preview and apply as inspect-o
 });
 
 test('causal CLI hides Store-only v2 state from legacy status and refuses reads before units access', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-v2-hidden-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-v2-hidden-'));
   try {
     const protocol = commitCausalProtocol(v2Draft(), 1_700_000_000_500);
     const store = new Store(databaseFile(temp));
@@ -246,7 +246,7 @@ test('causal CLI surfaces stored protocol integrity failures as typed redacted e
   ];
 
   for (const fixture of cases) {
-    const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-integrity-'));
+    const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-integrity-'));
     try {
       const store = new Store(databaseFile(temp));
       try {
@@ -272,7 +272,7 @@ test('causal CLI surfaces stored protocol integrity failures as typed redacted e
 });
 
 test('causal CLI redacts latest-analysis timestamp materialization failures', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-analysis-integrity-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-analysis-integrity-'));
   try {
     const protocol = commitCausalProtocol(draft(), 1_700_000_000_100);
     const store = new Store(databaseFile(temp));
@@ -298,7 +298,7 @@ test('causal CLI redacts latest-analysis timestamp materialization failures', ()
 });
 
 test('causal CLI refuses an undeclared raw protocol field instead of silently dropping it', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-invalid-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-invalid-'));
   try {
     const protocolFile = join(temp, 'protocol.json');
     writeFileSync(protocolFile, JSON.stringify({ ...draft(), prompt: 'do not store this raw prompt' }), 'utf8');
@@ -311,7 +311,7 @@ test('causal CLI refuses an undeclared raw protocol field instead of silently dr
 });
 
 test('causal CLI refuses v1 assignment preview and apply before allocating or disclosing an arm', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-cli-v1-assign-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-cli-v1-assign-'));
   try {
     const protocol = commitCausalProtocol(draft(), 1_700_000_000_100);
     const store = new Store(databaseFile(temp));

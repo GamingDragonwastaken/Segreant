@@ -184,7 +184,7 @@ function v2AssignmentFixture(
 function v2DecisionEventHashForTamper(decision: CausalDecisionRecordV2): string {
   const { eventHash: _eventHash, ...material } = decision;
   return 'sha256:' + createHash('sha256')
-    .update('fiscus.causal.decision\n2\n' + canonicalJson(material))
+    .update('segreant.causal.decision\n2\n' + canonicalJson(material))
     .digest('hex');
 }
 
@@ -208,7 +208,7 @@ test('v2 protocol validates, commits its frozen domain-separated hash, and rejec
   assert.deepEqual(validateCausalProtocol(draft), []);
   assert.equal(
     protocolHash(draft),
-    'sha256:534831a0f8a642aa153c901a7315f86430af8a253aa1cd68136d688a4ea3f4ff',
+    'sha256:5617c3ffd8290d2edbd3b7dd96d0c2cc89ddd7f734bea698adaf57ffdc5077db',
   );
 
   const committed = commitCausalProtocol(draft, 1_700_000_000_500);
@@ -420,7 +420,7 @@ test('v2 protocol hash exact-decodes the public document before projecting mater
 
   assert.equal(
     protocolHash(v2Draft()),
-    'sha256:534831a0f8a642aa153c901a7315f86430af8a253aa1cd68136d688a4ea3f4ff',
+    'sha256:5617c3ffd8290d2edbd3b7dd96d0c2cc89ddd7f734bea698adaf57ffdc5077db',
   );
 });
 
@@ -487,14 +487,14 @@ for (const { name, mutate } of malformedV2StudyWindowCases) {
 
 test('v1 hash isolation preserves the frozen vector and makes retained v1 inspect-only', () => {
   const draft = modelDraft();
-  assert.equal(protocolHash(draft), 'd96fa6e475eca79a4bfa618c503d68834febd69ea6a3b4a42d19a7e290b69b16');
+  assert.equal(protocolHash(draft), '7c55688dee63072d32e4b433462c4b063072f06204f821314d928d192f3f0ca3');
   const committedV1 = commitCausalProtocol(draft, 1_700_000_000_100);
   assert.deepEqual(verifyCommittedCausalProtocol(committedV1), []);
   assert.equal(isCausalProtocolMutationEligible(committedV1), false);
 
   const committedV2 = commitCausalProtocol(v2Draft(), 1_700_000_000_500);
   assert.equal(isCausalProtocolMutationEligible(committedV2), true);
-  assert.equal(protocolHash(draft), 'd96fa6e475eca79a4bfa618c503d68834febd69ea6a3b4a42d19a7e290b69b16');
+  assert.equal(protocolHash(draft), '7c55688dee63072d32e4b433462c4b063072f06204f821314d928d192f3f0ca3');
 });
 
 test('local_ai_judge is rejected for v2 quality and economic evidence at draft and commitment boundaries', () => {
@@ -566,15 +566,15 @@ test('v2 assignment block root is independent, protocol-derived, and acyclic', (
   const first = v2AssignmentFixture();
   const second = v2AssignmentFixture('block:beta', 2, [D('5'), D('6'), D('7'), D('8')]);
 
-  assert.equal(first.block.plan.blockRoot, 'sha256:3910ebf11cb3a210cf0e8cc54796d4f80e48645fba61641c2c35613829d14cd3');
-  assert.equal(first.block.plan.randomizationMaterialDigest, 'sha256:26e709bf388301641591771e7faf8b781a27e8617a52fc5bf68165bb016b74a9');
-  assert.equal(first.block.plan.allocationHash, 'sha256:2c49dcd28a9ece58810933201eee73a4796c293f624539440278403c2562fa03');
-  assert.equal(first.block.plan.planHash, 'sha256:77b9957c2d971f1c1038de34ade78a820e7af5acd66be22ad1a2f80abd4156a2');
-  assert.equal(first.block.plan.firstDecisionHash, 'sha256:645f36837e8ac3f52b80faab82e82dd67711beebf57c35e6df997d2eb9ca8793');
-  assert.equal(first.block.plan.lastDecisionHash, 'sha256:4e8fa3e5cbfdaa8819bf5a44a8416acd81c7381b42c926377bc444441e93c6f6');
+  assert.equal(first.block.plan.blockRoot, 'sha256:baf4176869913a6535cf6ae0378446d963bc5bf214e3f21c00f71c323e6df6fa');
+  assert.equal(first.block.plan.randomizationMaterialDigest, 'sha256:51da08477ef2e3484a7f1f4b1a9c43b353e4f5d4ef06dfc056fc729be22e9b83');
+  assert.equal(first.block.plan.allocationHash, 'sha256:55305a2f9eb522223fc8e455513e9cc0702b43434a24b05cb569b2e3a40c2503');
+  assert.equal(first.block.plan.planHash, 'sha256:2b4fc85263824511307b061f00aa521e6b2972d2493aa5330849ef853908131b');
+  assert.equal(first.block.plan.firstDecisionHash, 'sha256:55782998d9905855ef294f6c17a7d9ca91512f325136396f62612a7177648bed');
+  assert.equal(first.block.plan.lastDecisionHash, 'sha256:37bc42c5a0bd97075b1d5e07af03acf193febb367faf37a693286e387c0bb7ba');
   assert.deepEqual(
     first.block.decisions.map((decision) => decision.assignedArmId),
-    ['arm:candidate', 'arm:candidate', 'arm:control', 'arm:control'],
+    ['arm:candidate', 'arm:control', 'arm:candidate', 'arm:control'],
   );
 
   assert.notEqual(second.block.plan.blockRoot, first.block.plan.blockRoot);

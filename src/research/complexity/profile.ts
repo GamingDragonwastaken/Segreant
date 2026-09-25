@@ -91,7 +91,7 @@ function inputDigest(input: ComplexityProfileInput): `sha256:${string}` {
     structural: input.structural,
     execution: input.execution,
   });
-  return `sha256:${createHash('sha256').update(`fiscus.complexity\n1\n${canonical}`, 'utf8').digest('hex')}`;
+  return `sha256:${createHash('sha256').update(`segreant.complexity\n1\n${canonical}`, 'utf8').digest('hex')}`;
 }
 
 export function buildComplexityProfile(input: ComplexityProfileInput): ComplexityProfile {

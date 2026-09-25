@@ -164,7 +164,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
 
   // Gate coverage
   console.log('');
-  console.log(color(tty, C.bold, '  Gate coverage') + color(tty, C.gray, '   (wire more with: fiscus report)'));
+  console.log(color(tty, C.bold, '  Gate coverage') + color(tty, C.gray, '   (wire more with: segreant report)'));
   for (const g of GATE_LADDER) {
     const n = m.instrumentation[g];
     const meta = GATE_META[g];
@@ -215,7 +215,7 @@ export async function cmdReport(flags: Flags): Promise<void> {
   const usageKinds = ['used', 'resolved', 'published', 'accepted', 'redone', 'discarded'];
   const allowed = [...codeKinds, ...usageKinds];
   if (!allowed.includes(kind)) {
-    console.error(`  Usage: fiscus report --kind <${allowed.join('|')}>`);
+    console.error(`  Usage: segreant report --kind <${allowed.join('|')}>`);
     console.error('         code:  --commit <hash>      non-code:  --session <id>      [--verdict pass|fail] [--detail "..."]');
     process.exitCode = 1;
     return;
@@ -224,7 +224,7 @@ export async function cmdReport(flags: Flags): Promise<void> {
   const verdict = negative ? 'fail' : String(flags.verdict ?? 'pass') === 'fail' ? 'fail' : 'pass';
   const tty = process.stdout.isTTY ?? false;
   if (codeKinds.includes(kind) && !flags.commit) {
-    console.error(`  Code outcome "${kind}" needs --commit <hash>. Fiscus will not apply a project-wide assertion to an arbitrary commit.`);
+    console.error(`  Code outcome "${kind}" needs --commit <hash>. Segreant will not apply a project-wide assertion to an arbitrary commit.`);
     process.exitCode = 1;
     return;
   }
@@ -267,7 +267,7 @@ export async function cmdReport(flags: Flags): Promise<void> {
   });
   console.log('');
   console.log(`  Recorded ${color(tty, C.bold, kind)} = ${verdict}` + (ref ? ` for ${ref.slice(0, 12)}` : ' (project-wide)'));
-  console.log(color(tty, C.gray, '  It resolves the matching gate on the next "fiscus realize" / "usage".'));
+  console.log(color(tty, C.gray, '  It resolves the matching gate on the next "segreant realize" / "usage".'));
   console.log('');
   store.close();
 }
@@ -291,7 +291,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   console.log('');
   console.log(color(tty, C.bold, '  Return on Intelligence — usage without code signals (chat, research, drafting)'));
-  console.log(color(tty, C.gray, `  ${rep.units.length} sessions · outcomes via "fiscus report --session <id> --kind used|resolved|…"`));
+  console.log(color(tty, C.gray, `  ${rep.units.length} sessions · outcomes via "segreant report --session <id> --kind used|resolved|…"`));
   console.log(color(tty, C.gray, '  Scores sessions with no captured code proposals. A CODING session lands here too'));
   console.log(color(tty, C.gray, '  when its tool never reports diffs — route it through the proxy to move it to git RoI.'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
@@ -306,7 +306,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
     // contradicting it.
     console.log(color(tty, C.gray, rep.retention.truncated
       ? '  No sessions without code signals SURVIVE in range — whether any were tagged before the deletion cannot be read from here.'
-      : '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
+      : '  No sessions without code signals in range. Tag sessions with X-Segreant-Session-Id to measure them.'));
     console.log('');
     store.close();
     return;
@@ -528,7 +528,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
 
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, `  Fiscus — time reclaimed · ${project}`));
+  console.log(color(tty, C.bold, `  Segreant — time reclaimed · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits,
     loaded.report.matured.spendWindowTruncatedUnits, loaded.report.matured.spendWindowUnknownUnits);
@@ -538,7 +538,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
     console.log('');
     for (const n of rec.notes) console.log(color(tty, C.gray, `  · ${n}`));
     console.log('');
-    console.log(color(tty, C.gray, '  Route real traffic through the proxy, then: fiscus exec -- npm test   fiscus roi --repo .'));
+    console.log(color(tty, C.gray, '  Route real traffic through the proxy, then: segreant exec -- npm test   segreant roi --repo .'));
     console.log('');
     store.close();
     return;
@@ -766,14 +766,14 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Cheaper-model trials to review'));
   for (const r of fr.recommendations) console.log(color(tty, C.gray, `  → ${r}`));
   console.log(
-    color(tty, C.dim, '    Local historical comparison only — Fiscus does not change provider routing.'),
+    color(tty, C.dim, '    Local historical comparison only — Segreant does not change provider routing.'),
   );
   console.log('');
   store.close();
 }
 
 /**
- * Ambient outcome capture — `fiscus exec [--kind K] [--commit R|--session S] -- <cmd…>`.
+ * Ambient outcome capture — `segreant exec [--kind K] [--commit R|--session S] -- <cmd…>`.
  *
  * The adoption cliff of outcome reporting is the human in the loop: every manual
  * `report` decays to zero compliance. But machines already KNOW outcomes — as
@@ -789,12 +789,12 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
   const usageKinds = ['used', 'resolved', 'published'];
   const kind = String(flags.kind ?? 'tested');
   if (![...codeKinds, ...usageKinds].includes(kind)) {
-    console.error(`  Usage: fiscus exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
+    console.error(`  Usage: segreant exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
     process.exitCode = 1;
     return;
   }
   if (command.length === 0) {
-    console.error('  Nothing to run. Put the wrapped command after a bare "--":  fiscus exec -- npm test');
+    console.error('  Nothing to run. Put the wrapped command after a bare "--":  segreant exec -- npm test');
     process.exitCode = 1;
     return;
   }
@@ -844,7 +844,7 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
         ? spawn(command.join(' '), { stdio: 'inherit', shell: true })
         : spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
     child.on('error', (e) => {
-      console.error(`  fiscus exec: could not start "${command[0]}": ${String(e)}`);
+      console.error(`  segreant exec: could not start "${command[0]}": ${String(e)}`);
       resolve(127);
     });
     child.on('close', (code) => resolve(code ?? 1));
@@ -866,6 +866,6 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
   store.close();
 
   const tty = process.stderr.isTTY ?? false;
-  console.error(color(tty, C.gray, `  [fiscus] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
+  console.error(color(tty, C.gray, `  [segreant] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
   process.exitCode = exitCode; // transparent: the wrapper never changes what the pipeline sees
 }

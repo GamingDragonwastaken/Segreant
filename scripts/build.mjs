@@ -236,7 +236,7 @@ function buildOnce() {
   const sourceGeneration = sourceFingerprint(root, sourceInputs);
   // Stage beside dist so every publication rename is same-volume even on a
   // machine whose system temp directory is mounted elsewhere.
-  const stage = mkdtempSync(join(root, '.fiscus-build-'));
+  const stage = mkdtempSync(join(root, '.segreant-build-'));
   try {
 
     // Pass 1 — the Node runtime (CLI, proxy, store, dashboard server).

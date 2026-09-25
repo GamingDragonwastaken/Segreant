@@ -1,5 +1,5 @@
 /**
- * The only Fiscus-process HTTP(S) dialler. It pins the selected DNS address,
+ * The only Segreant-process HTTP(S) dialler. It pins the selected DNS address,
  * never follows redirects, and writes redacted receipts before each dial. A
  * present receipt history that cannot be validated/extended refuses before DNS
  * resolution or socket creation; only an absent history may establish genesis.
@@ -206,10 +206,10 @@ async function resolveTarget(target: URL, targetClass: EgressTargetClass): Promi
     : await (egressDnsLookupForTests ?? ((hostname, options) => dnsLookup(hostname, options)))(target.hostname, { all: true, verbatim: true });
   if (addresses.length === 0) throw new EgressError('dns_denied', 'egress DNS resolution produced no address');
   if (targetClass === 'loopback' && !addresses.every((entry) => isLoopback(entry.address))) {
-    throw new EgressError('dns_denied', 'loopback target resolved outside loopback; Fiscus refused the request');
+    throw new EgressError('dns_denied', 'loopback target resolved outside loopback; Segreant refused the request');
   }
   if (targetClass === 'controlled_cloud' && !addresses.every((entry) => isPublic(entry.address))) {
-    throw new EgressError('dns_denied', 'controlled-cloud target resolved to a non-public address; Fiscus refused the request');
+    throw new EgressError('dns_denied', 'controlled-cloud target resolved to a non-public address; Segreant refused the request');
   }
   const first = addresses[0]!;
   return { address: normalAddress(first.address), family: first.family as 4 | 6, targetClass };
@@ -222,7 +222,7 @@ function receipt(input: Parameters<typeof appendEgressReceipt>[0]): void {
     if (error instanceof EgressReceiptError && error.code === 'integrity') {
       throw new EgressError('receipt_integrity_failed', error.message);
     }
-    throw new EgressError('receipt_persistence_failed', 'egress receipt persistence failed; Fiscus refused the outbound request');
+    throw new EgressError('receipt_persistence_failed', 'egress receipt persistence failed; Segreant refused the outbound request');
   }
 }
 
@@ -260,7 +260,7 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
   } catch (error) {
     receipt({ ...common, event: 'transport_failed' });
     if (error instanceof EgressError) throw error;
-    throw new EgressError('dns_denied', 'Fiscus could not resolve an allowed egress target');
+    throw new EgressError('dns_denied', 'Segreant could not resolve an allowed egress target');
   }
   receipt({ ...common, event: 'dial_started' });
 
@@ -278,7 +278,7 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
           : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed');
       }
       if (error instanceof EgressError) throw error;
-      throw new EgressError('transport_failed', 'Fiscus could not complete the permitted outbound request');
+      throw new EgressError('transport_failed', 'Segreant could not complete the permitted outbound request');
     }
   }
 
@@ -328,7 +328,7 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
         fail(error instanceof EgressError ? error : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed'));
         return;
       }
-      fail(new EgressError('transport_failed', 'Fiscus could not complete the permitted outbound request'));
+      fail(new EgressError('transport_failed', 'Segreant could not complete the permitted outbound request'));
     });
     const abort = (): void => {
       req.destroy(new Error('aborted'));
@@ -350,7 +350,7 @@ export function egressFetch(url: string | URL, init: EgressFetchInit): Promise<R
 
 /**
  * Release a response body for callers that only need status/headers. A
- * Fiscus-owned transport returns a live stream; leaving it unread can retain a
+ * Segreant-owned transport returns a live stream; leaving it unread can retain a
  * socket and make repeated health/watch operations accumulate resources.
  */
 export async function discardResponseBody(response: Response): Promise<void> {

@@ -15,7 +15,7 @@ import { Store } from '../src/store/db.ts';
 import type { RealizationReport } from '../src/value/realization.ts';
 
 function makeRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'fiscus-time-reclaimed-'));
+  return mkdtempSync(join(tmpdir(), 'segreant-time-reclaimed-'));
 }
 
 const BASE = { feature: 240, bugfix: 90 };
@@ -65,7 +65,7 @@ test('time reclaimed: uninstrumented is null, never zero — and never negative-
 test('timeReclaimedFromStore: measures AI minutes over the full matured-unit window and feeds computeTimeReclaimed', () => {
   const dir = makeRoot();
   try {
-    const store = new Store(join(dir, 'fiscus.db'));
+    const store = new Store(join(dir, 'segreant.db'));
     store.insertRequest({
       requestId: 'r1', sessionId: 's1', tsEpochMs: 0, provider: 'anthropic', model: 'm', project: 'p',
       taskWeight: 1, inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,

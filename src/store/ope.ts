@@ -21,7 +21,7 @@ interface OpeObservationRow {
   observation_json: string;
 }
 
-const OBSERVATION_DIGEST_DOMAIN = 'fiscus.ope.observation';
+const OBSERVATION_DIGEST_DOMAIN = 'segreant.ope.observation';
 const STRUCTURAL_BOUNDS = { low: -Number.MAX_SAFE_INTEGER, high: Number.MAX_SAFE_INTEGER } as const;
 const STRUCTURAL_OVERLAP = { minLoggingPropensity: Number.MIN_VALUE, maxImportanceWeight: Number.MAX_SAFE_INTEGER } as const;
 

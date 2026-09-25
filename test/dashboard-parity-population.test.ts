@@ -28,7 +28,7 @@
  * with no basis, which is the one thing this repository refuses.
  *
  * `not_applicable` IS A FOURTH STATE, NOT A FOURTH WAY OF SAYING `planned`.
- * `fiscus start` is the command that serves the GUI. By the time there is a
+ * `segreant start` is the command that serves the GUI. By the time there is a
  * page to click, it has already run. Calling that `planned` would assert that
  * a GUI surface for it is coming, which is not true and not intended; calling
  * it `full` or `partial` would be worse. The honest answer is that the GUI
@@ -59,12 +59,12 @@
  *
  * THE CHECK ABOVE READ ONE WORD (WP-I03, second pass). Both directions of the
  * population test compared `command.split(' ')[0]` with the dispatch: the verb,
- * and nothing after it. `fiscus billing openai-costs adopt --apply` was
- * checked as `billing`; `fiscus config --clear-proposals` was checked as
+ * and nothing after it. `segreant billing openai-costs adopt --apply` was
+ * checked as `billing`; `segreant config --clear-proposals` was checked as
  * `config`. A row could document any subcommand path and any flag, and as long
  * as the first word reached a `case`, it counted as a command the CLI runs.
  *
- * IT WAS VACUOUS FOR EXACTLY ONE ROW, AND THAT ROW IS DESTRUCTIVE. `fiscus
+ * IT WAS VACUOUS FOR EXACTLY ONE ROW, AND THAT ROW IS DESTRUCTIVE. `segreant
  * config --clear-proposals` does not exist. `cmdConfig` reads no such flag and
  * never has -- a pickaxe search over the CLI's history finds the string in no
  * CLI source at any commit -- so the command prints the config and exits 0
@@ -96,7 +96,7 @@
  * THE ROW IS CORRECTED, NOT THE CHECK. A capability the GUI offers and the CLI
  * does not is a state the parity map had no way to say, because the map's
  * premise runs the other way. It now says it: a `command` that does not start
- * with `fiscus ` is not a CLI claim, must name a declared API route, and
+ * with `segreant ` is not a CLI claim, must name a declared API route, and
  * carries an empty CLI binding. Adding the flag to `cmdConfig` instead would
  * have made the row true by building a destructive CLI path nobody had decided
  * to build, which is not this packet's call.
@@ -158,7 +158,7 @@ interface DocumentedCommand {
  * argument, not a subcommand.
  */
 function parseDocumented(id: string, raw: string): DocumentedCommand {
-  const tokens = raw.replace(/^fiscus /, '').split(/\s+/).filter((t) => t.length > 0);
+  const tokens = raw.replace(/^segreant /, '').split(/\s+/).filter((t) => t.length > 0);
   const [verb, ...rest] = tokens;
   assert.ok(verb, `${id} documents an empty command`);
   const path: string[] = [];
@@ -172,10 +172,10 @@ function parseDocumented(id: string, raw: string): DocumentedCommand {
   return { id, raw, verb, path, flags };
 }
 
-/** Rows that claim a CLI command. A `command` not starting with `fiscus ` is a GUI-only capability, checked separately. */
+/** Rows that claim a CLI command. A `command` not starting with `segreant ` is a GUI-only capability, checked separately. */
 function cliRows(): DocumentedCommand[] {
   return CAPABILITIES
-    .filter((capability) => capability.command.startsWith('fiscus '))
+    .filter((capability) => capability.command.startsWith('segreant '))
     .map((capability) => parseDocumented(capability.id, capability.command));
 }
 
@@ -342,8 +342,8 @@ test('the six commands this packet added are present and honestly stated', () =>
   const byVerb = new Map(cliRows().map((row) => [row.verb, byId.get(row.id)!]));
   for (const verb of ['start', 'init', 'economic', 'backup', 'restore', 'diagnostics']) {
     const capability = byVerb.get(verb);
-    assert.ok(capability, `fiscus ${verb} must have a capability row`);
-    assert.ok(capability.plain.length > 0, `fiscus ${verb} must be described in the operator's words`);
+    assert.ok(capability, `segreant ${verb} must have a capability row`);
+    assert.ok(capability.plain.length > 0, `segreant ${verb} must be described in the operator's words`);
   }
   assert.equal(byVerb.get('start')!.coverage, 'not_applicable', 'the GUI is served by start and cannot offer it');
   assert.equal(byVerb.get('economic')!.coverage, 'partial', '/api/economic is a real modern-app binding');
@@ -367,7 +367,7 @@ test('the dispatch reader is not vacuous: it finds the real groups and resolves 
 });
 
 test('every documented command is read in full: its subcommand path and flags reach the code that handles its verb', () => {
-  // THE COUNTEREXAMPLE. `fiscus config --clear-proposals` passed the verb
+  // THE COUNTEREXAMPLE. `segreant config --clear-proposals` passed the verb
   // check as `config` while `cmdConfig` reads no such flag; the command exits 0
   // having cleared nothing, and the drawer offered it with a copy button as the
   // shortcut for a destructive action.
@@ -394,30 +394,30 @@ test('the full-path reader is not vacuous: it resolves handlers, sees real subco
   const billing = table.get('billing');
   assert.ok(billing?.handlerModule, 'billing must resolve to its module');
   assert.deepEqual(
-    unreadParts(parseDocumented('probe', 'fiscus billing openai-costs adopt --apply'), billing),
+    unreadParts(parseDocumented('probe', 'segreant billing openai-costs adopt --apply'), billing),
     [],
     'a real three-word path with a real flag must be read',
   );
   assert.equal(
-    unreadParts(parseDocumented('probe', 'fiscus billing openai-costs vanish --nonexistent'), billing).length,
+    unreadParts(parseDocumented('probe', 'segreant billing openai-costs vanish --nonexistent'), billing).length,
     2,
     'an invented subcommand and an invented flag must both be reported',
   );
   // `team push` is dispatched in the case body itself, not in the module.
   const team = table.get('team');
   assert.ok(team);
-  assert.deepEqual(unreadParts(parseDocumented('probe', 'fiscus team push'), team), []);
+  assert.deepEqual(unreadParts(parseDocumented('probe', 'segreant team push'), team), []);
   // The parser's two exclusions, so a change to either fails here.
-  assert.deepEqual(parseDocumented('probe', 'fiscus exec -- <command>').path, []);
-  assert.deepEqual(parseDocumented('probe', 'fiscus restore --from <backup> --out <file>').flags, ['from', 'out']);
+  assert.deepEqual(parseDocumented('probe', 'segreant exec -- <command>').path, []);
+  assert.deepEqual(parseDocumented('probe', 'segreant restore --from <backup> --out <file>').flags, ['from', 'out']);
 });
 
 test('a capability the GUI offers and the CLI does not says so, and binds a declared route instead of a fiction', () => {
   // The parity map's premise runs CLI -> GUI, so a GUI-only capability had no
   // way to be stated and one was stated as a CLI command that does not exist.
-  // The honest shape: no `fiscus ` prefix, no CLI binding, and an API route the
+  // The honest shape: no `segreant ` prefix, no CLI binding, and an API route the
   // contract declares -- so the escape from the CLI check cannot become free text.
-  const guiOnly = CAPABILITY_SPECS.filter((spec) => !spec.command.startsWith('fiscus '));
+  const guiOnly = CAPABILITY_SPECS.filter((spec) => !spec.command.startsWith('segreant '));
   assert.ok(guiOnly.some((spec) => spec.id === 'clear-proposals'), 'clear-proposals has no CLI path and must not claim one');
   for (const spec of guiOnly) {
     assert.equal(spec.bindings.cli, '', `${spec.id} claims no CLI command and must carry no CLI binding`);

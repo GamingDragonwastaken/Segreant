@@ -2,7 +2,7 @@
  * A sum across unequal windows must say so (WP-C06).
  *
  * THE DEFECT. Every rollup declares its own observation window, chosen by
- * whoever pushed it — `fiscus team push --window D` defaults to 30 and accepts
+ * whoever pushed it — `segreant team push --window D` defaults to 30 and accepts
  * anything. `aggregateProjects` sums one rollup per developer regardless of how
  * long each of their windows is, and `/dashboard/projects` returned
  * `{ ok: true, projects: [...] }`: a total with no period attached at all. A
@@ -110,7 +110,7 @@ async function dashboardProjects(
   windows: { from: string; to: string }[],
   coverages: (RollupCoverage | 'legacy')[] = [],
 ): Promise<CoverageResponse> {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-window-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-window-'));
   const idp = await startFakeIdp();
   try {
     const store = new FakeRollupStore();

@@ -31,13 +31,13 @@ import {
 
 const MANIFEST_VERSION = 1;
 // These tables are created by the original on-disk schema and remain the
-// minimum contract for a usable Fiscus ledger. Do not invent a metadata table
-// here: compatibility is checked against the schema Fiscus actually owns.
+// minimum contract for a usable Segreant ledger. Do not invent a metadata table
+// here: compatibility is checked against the schema Segreant actually owns.
 const REQUIRED_TABLES = ['requests', 'sessions'] as const;
 
 export interface BackupManifest {
   version: 1;
-  kind: 'fiscus-ledger-backup';
+  kind: 'segreant-ledger-backup';
   createdAt: string;
   bytes: number;
   sha256: string;
@@ -256,7 +256,7 @@ function writeManifest(path: string, inspected: { bytes: number; sha256: string;
   const target = manifestPath(path);
   const manifest: BackupManifest = {
     version: MANIFEST_VERSION,
-    kind: 'fiscus-ledger-backup',
+    kind: 'segreant-ledger-backup',
     createdAt: new Date().toISOString(),
     bytes: inspected.bytes,
     sha256: inspected.sha256,
@@ -300,7 +300,7 @@ function verifyManifest(path: string, inspected: { bytes: number; sha256: string
   try {
     if (!regularFile(target)) return 'backup manifest is not a regular file';
     const raw = JSON.parse(readFileSync(target, 'utf8')) as Partial<BackupManifest>;
-    if (raw.version !== 1 || raw.kind !== 'fiscus-ledger-backup') return 'backup manifest has an unsupported version or kind';
+    if (raw.version !== 1 || raw.kind !== 'segreant-ledger-backup') return 'backup manifest has an unsupported version or kind';
     if (raw.bytes !== inspected.bytes || raw.sha256 !== inspected.sha256
         || (raw.schemaVersion !== undefined && raw.schemaVersion !== inspected.schemaVersion)
         || raw.schemaFingerprint !== inspected.schemaFingerprint) {
@@ -371,7 +371,7 @@ export function restoreDatabase(sourcePath: string, destinationPath: string): Ba
   const destination = resolve(destinationPath);
   const inspectedSource = inspectBackup(source);
   if (!inspectedSource.ok) return failure(destination, `source backup is invalid: ${inspectedSource.reason}`);
-  if (!inspectedSource.manifestPresent) return failure(destination, 'source backup is missing its integrity manifest; use a Fiscus-created backup artifact');
+  if (!inspectedSource.manifestPresent) return failure(destination, 'source backup is missing its integrity manifest; use a Segreant-created backup artifact');
   if (pathEntryExists(destination)) return failure(destination, 'restore destination already exists; refusing to overwrite it');
   if (pathEntryExists(manifestPath(destination))) return failure(destination, 'restore manifest destination already exists; refusing to overwrite it');
   let db: DatabaseSync | null = null;

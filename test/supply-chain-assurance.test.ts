@@ -88,7 +88,7 @@ test('supply chain: the lockfile cannot drift from the manifest it locks', () =>
   );
 
   const driftedName = violationsFor((inputs) => {
-    inputs.packageLock.name = 'not-fiscus';
+    inputs.packageLock.name = 'not-segreant';
   });
   assert.ok(
     driftedName.some((line) => /package-lock\.json name/.test(line)),
@@ -215,7 +215,7 @@ test('supply chain: workflows install the repository from its lockfile, never re
     `expected an npm-install violation, got ${JSON.stringify(loose)}`,
   );
 
-  // The package-smoke job deliberately runs `npm install ../fiscus-pack/*.tgz`
+  // The package-smoke job deliberately runs `npm install ../segreant-pack/*.tgz`
   // to install the packed tarball into a clean directory. That is an install of
   // a named local artifact, not a fresh resolve of this repo's tree, and the
   // rule must not collapse the two or the only real packaging proof in CI dies.
@@ -303,7 +303,7 @@ test('supply chain: the publish allowlist cannot name an internal or local path'
   );
 
   const local = violationsFor((inputs) => {
-    inputs.packageJson.files.push('C:/Users/someone/Documents/Fiscus/extra');
+    inputs.packageJson.files.push('C:/Users/someone/Documents/Segreant/extra');
   });
   assert.ok(
     local.some((line) => /absolute or machine-local path/.test(line)),

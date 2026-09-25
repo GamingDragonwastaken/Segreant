@@ -43,7 +43,7 @@ const COMPUTED_AT_MS = ASSIGNED_AT_MS + 8;
 
 function protocol(): CommittedCausalStudyProtocolV2 {
   const draft: CausalStudyProtocolDraftV2 = {
-    type: 'fiscus.causal-study',
+    type: 'segreant.causal-study',
     version: 2,
     studyId: STUDY_ID,
     seriesId: 'series:producer-store',
@@ -158,7 +158,7 @@ function requestRow(
 }
 
 function subjectDigest(subject: string): string {
-  return 'sha256:' + sha256('fiscus.causal.commit-subject\n1\n' + subject);
+  return 'sha256:' + sha256('segreant.causal.commit-subject\n1\n' + subject);
 }
 
 test('Store-owned producer derives and atomically persists an independent scalar unit', () => {
@@ -257,7 +257,7 @@ test('Store-owned producer derives and atomically persists an independent scalar
     });
 
     const executionMaterial: Omit<CausalExecutionRecordV2, 'eventHash'> = {
-      type: 'fiscus.causal-execution',
+      type: 'segreant.causal-execution',
       version: 2,
       executionId: 'execution:producer-store',
       decisionId: decision.decisionId,
@@ -284,7 +284,7 @@ test('Store-owned producer derives and atomically persists an independent scalar
     assert.equal(store.appendCausalExecutionV2(execution), 'created');
 
     const outcomeMaterial = {
-      type: 'fiscus.causal-terminal-outcome' as const,
+      type: 'segreant.causal-terminal-outcome' as const,
       version: 2 as const,
       outcomeId: 'outcome:producer-store',
       decisionId: decision.decisionId,

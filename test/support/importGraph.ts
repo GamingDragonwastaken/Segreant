@@ -21,7 +21,7 @@ import { dirname, join, relative as relativePath, resolve, sep } from 'node:path
 export const ROOT = join(import.meta.dirname, '..', '..');
 
 /**
- * `bin/fiscus.mjs` runs `dist/cli.js`, compiled from `src/cli.ts`, so that is
+ * `bin/segreant.mjs` runs `dist/cli.js`, compiled from `src/cli.ts`, so that is
  * the entry. `team-server/` is a separate npm project that imports root source
  * directly, so its server is a second one — leaving it out would make the answer
  * depend on the accident that everything it pulls in is reachable from the CLI

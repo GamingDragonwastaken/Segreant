@@ -60,7 +60,7 @@ import type { WindowRetentionCoverage } from '../store/db.ts';
  * The seven axes that do not vary, and why stating them is the point.
  *
  * Every canonical boundary under `src/` declares the same values on these axes
- * for every claim it issues: locally verified arithmetic and lineage, a Fiscus
+ * for every claim it issues: locally verified arithmetic and lineage, a Segreant
  * assertion rather than a provider-authenticated one, a scope conditional on
  * this ledger, a measurement model never validated against a provider
  * statement, no causal identification, nothing final, and no decision-fitness
@@ -141,7 +141,7 @@ export interface MeteredSupportInput {
  *   (D-175). This used to be excluded by a sentence here saying coverage "says
  *   nothing about whether the ledger sees every request the organisation made,
  *   which no local evidence can establish". That is TRUE of traffic which never
- *   reached Fiscus and FALSE of rows Fiscus deleted itself: since D-170 the
+ *   reached Segreant and FALSE of rows Segreant deleted itself: since D-170 the
  *   ledger records its own retention boundary, so this is the one case where
  *   local evidence does establish it, and answering `complete` over a pruned
  *   window states something the evidence contradicts.

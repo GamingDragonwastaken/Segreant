@@ -1,5 +1,5 @@
 /**
- * Export the local epistemic ledger as a `.fiscuspack` envelope.
+ * Export the local epistemic ledger as a `.segreantpack` envelope.
  *
  * The first production producer of a pack (D-229). What travels: every node
  * the ledger graph holds — evidence, claims, assumptions, witnesses,
@@ -23,9 +23,9 @@ import { createHash } from 'node:crypto';
 import type { EpistemicLedger } from '../epistemic/ledger.ts';
 import { canonicalJson } from '../epistemic/serialization.ts';
 import type { Instant } from '../epistemic/time.ts';
-import { createFiscusPackEnvelope, createFiscusPackManifest } from './manifest.ts';
-import { signFiscusPack, type FiscusPackKeyInput } from './signature.ts';
-import { DEFAULT_FISCUS_PACK_LIMITS, type FiscusPackEnvelope, type FiscusPackOmission, type FiscusPackRecordReference, type FiscusPackRedaction } from './types.ts';
+import { createSegreantPackEnvelope, createSegreantPackManifest } from './manifest.ts';
+import { signSegreantPack, type SegreantPackKeyInput } from './signature.ts';
+import { DEFAULT_SEGREANT_PACK_LIMITS, type SegreantPackEnvelope, type SegreantPackOmission, type SegreantPackRecordReference, type SegreantPackRedaction } from './types.ts';
 
 export const LEDGER_PACK_RECORDS_PATH = 'records.json';
 export const LEDGER_PACK_RECORDS_MEDIA_TYPE = 'application/json';
@@ -38,7 +38,7 @@ export interface LedgerPackExportInput {
   readonly packId: string;
   readonly createdAt: Instant;
   /** Sign the manifest; the public key is embedded so a verifier can check integrity. */
-  readonly signingKey?: FiscusPackKeyInput;
+  readonly signingKey?: SegreantPackKeyInput;
   /**
    * Byte budget for the records attachment. Defaults to a share of the
    * envelope limit that leaves room for the manifest; nodes past it are
@@ -56,7 +56,7 @@ export interface LedgerPackExportSummary {
 }
 
 export interface LedgerPackExport {
-  readonly pack: FiscusPackEnvelope;
+  readonly pack: SegreantPackEnvelope;
   readonly summary: LedgerPackExportSummary;
 }
 
@@ -76,11 +76,11 @@ function readNode(ledger: EpistemicLedger, kind: string, id: string): Record<str
 }
 
 export function exportLedgerPack(input: LedgerPackExportInput): LedgerPackExport {
-  const budget = input.attachmentByteBudget ?? Math.floor(DEFAULT_FISCUS_PACK_LIMITS.maxEnvelopeBytes * 0.6);
+  const budget = input.attachmentByteBudget ?? Math.floor(DEFAULT_SEGREANT_PACK_LIMITS.maxEnvelopeBytes * 0.6);
   if (!Number.isSafeInteger(budget) || budget <= 0) throw new Error('attachment byte budget must be a positive integer');
 
   const graph = input.ledger.graph();
-  const includedRecords: FiscusPackRecordReference[] = [];
+  const includedRecords: SegreantPackRecordReference[] = [];
   const records: Array<{ kind: string; payload: Record<string, unknown> }> = [];
   const omittedByKind = new Map<string, string[]>();
   const redactedIds: string[] = [];
@@ -112,13 +112,13 @@ export function exportLedgerPack(input: LedgerPackExportInput): LedgerPackExport
     records.push(entry);
   }
 
-  const omissions: FiscusPackOmission[] = [...omittedByKind.entries()].map(([kind, ids]) => ({
+  const omissions: SegreantPackOmission[] = [...omittedByKind.entries()].map(([kind, ids]) => ({
     kind,
     count: ids.length,
     ids,
     reason: `records attachment byte budget of ${budget} reached; nodes past it were omitted whole, not truncated`,
   }));
-  const redactions: FiscusPackRedaction[] = redactedIds.length === 0 ? [] : [{
+  const redactions: SegreantPackRedaction[] = redactedIds.length === 0 ? [] : [{
     kind: 'evidence',
     ids: redactedIds,
     fields: ['payload'],
@@ -127,7 +127,7 @@ export function exportLedgerPack(input: LedgerPackExportInput): LedgerPackExport
 
   const attachmentText = canonicalJson(records);
   const attachmentData = Buffer.from(attachmentText, 'utf8');
-  const manifest = createFiscusPackManifest({
+  const manifest = createSegreantPackManifest({
     packId: input.packId,
     createdAt: input.createdAt,
     includedRecords,
@@ -141,8 +141,8 @@ export function exportLedgerPack(input: LedgerPackExportInput): LedgerPackExport
       digest: `sha256:${createHash('sha256').update(attachmentData).digest('hex')}`,
     }],
   });
-  let pack = createFiscusPackEnvelope(manifest, [{ path: LEDGER_PACK_RECORDS_PATH, data: attachmentData.toString('base64') }]);
-  if (input.signingKey !== undefined) pack = signFiscusPack(pack, input.signingKey);
+  let pack = createSegreantPackEnvelope(manifest, [{ path: LEDGER_PACK_RECORDS_PATH, data: attachmentData.toString('base64') }]);
+  if (input.signingKey !== undefined) pack = signSegreantPack(pack, input.signingKey);
 
   return Object.freeze({
     pack,

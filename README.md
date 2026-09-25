@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="web/assets/seal-256.png" alt="The Fiscus Minted Seal — a heraldic griffin engraved on a gold coin" width="112" />
+<img src="web/assets/seal-256.png" alt="The Segreant Minted Seal — a heraldic griffin engraved on a gold coin" width="112" />
 
-# Fiscus
+# Segreant
 
 **Govern the spend. Not the developer.**
 
@@ -33,22 +33,22 @@ figure nobody can defend.
 
 ## Four numbers, never one
 
-Fiscus is built on a single refusal: **it will not collapse four different
+Segreant is built on a single refusal: **it will not collapse four different
 questions into one number.**
 
 | | The question | Where the answer comes from |
 |---|---|---|
-| **Metered usage** | What did the traffic use, at list price? | Fiscus's proxy or your tools' own logs, priced from a versioned local rate card |
+| **Metered usage** | What did the traffic use, at list price? | Segreant's proxy or your tools' own logs, priced from a versioned local rate card |
 | **Provider-billed cost** | What did the provider actually charge? | The provider's cost export or Costs API (OpenAI today), imported and kept separate |
 | **Allocated cost** | Whose budget does it belong to? | Allocation rules you write, reported together with what they left unallocated |
 | **Value** | Did the spend become shipped, kept work? | Outcome evidence from git, tests and your reports |
 
 Every figure on every screen says which of the four it is. When the evidence
-for a number is missing, Fiscus shows **unknown**. It never fills in a guess.
+for a number is missing, Segreant shows **unknown**. It never fills in a guess.
 
 ## What makes it different
 
-Most cost tools are dashboards. Fiscus is an accounting system with an
+Most cost tools are dashboards. Segreant is an accounting system with an
 evidence model underneath, and it behaves like one.
 
 - **Every row carries its provenance.** Each priced request records the exact
@@ -56,7 +56,7 @@ evidence model underneath, and it behaves like one.
   match. Repricing appends a before/after event; nothing is silently
   overwritten.
 - **Budgets fail closed.** If the budget config is malformed or the ledger
-  can't be read, Fiscus stops forwarding. A broken meter never becomes an
+  can't be read, Segreant stops forwarding. A broken meter never becomes an
   unlimited one.
 - **Reconciliation shows its residual.** When metered spend and the
   provider's bill disagree, the gap is reported with the conditions that
@@ -70,8 +70,8 @@ evidence model underneath, and it behaves like one.
   the commits came from too few sessions.
 - **Evidence you can hand to someone else.** Realized work produces
   ed25519-signed value receipts. The whole evidence ledger exports as a
-  `.fiscuspack` that a standalone verifier checks offline, without trusting
-  Fiscus.
+  `.segreantpack` that a standalone verifier checks offline, without trusting
+  Segreant.
 - **A kernel that can't be talked into certainty.** Claims live in a small
   trusted core that tracks four evidence states: unknown, supported, refuted
   and conflicted. It refuses derivations that would strengthen a claim beyond
@@ -91,11 +91,11 @@ npm run demo    # seeds labelled synthetic data and opens the dashboard
 Open **http://localhost:8091**. You'll see spend by project and model, budget
 controls and governance alerts, the Return on Intelligence view, and a
 review-only cheaper-model trial. It all runs on an isolated `demo.db` and is
-labelled as synthetic. Clear it with `fiscus demo --clear`.
+labelled as synthetic. Clear it with `segreant demo --clear`.
 
 ## Use it on your real work
 
-Put the `fiscus` command on your `PATH` from the clone (Fiscus is not on npm
+Put the `segreant` command on your `PATH` from the clone (Segreant is not on npm
 yet):
 
 ```bash
@@ -103,16 +103,16 @@ npm link
 ```
 
 **Option A: no wiring at all.** If you use Claude Code, Codex or opencode,
-Fiscus reads the usage those tools already log on your machine, including
+Segreant reads the usage those tools already log on your machine, including
 subscription usage a proxy never sees:
 
 ```bash
-fiscus scan            # finds your AI tools and git repos; changes nothing
-fiscus scan --setup    # imports that usage and groups it by project
-fiscus today           # what today cost, by model, project and tool
+segreant scan            # finds your AI tools and git repos; changes nothing
+segreant scan --setup    # imports that usage and groups it by project
+segreant today           # what today cost, by model, project and tool
 ```
 
-**Option B: route traffic through Fiscus** to meter it live and enforce budgets:
+**Option B: route traffic through Segreant** to meter it live and enforce budgets:
 
 ```bash
 npm run start          # proxy on :8090, dashboard on :8091
@@ -123,17 +123,17 @@ export ANTHROPIC_BASE_URL="http://localhost:8090"
 export OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
 
-Fiscus starts **locked**: it forwards nothing to a cloud provider until you
-grant that exact route with `fiscus egress apply`; the two commands for OpenAI
+Segreant starts **locked**: it forwards nothing to a cloud provider until you
+grant that exact route with `segreant egress apply`; the two commands for OpenAI
 and Anthropic are in [GETTING-STARTED.md](docs/GETTING-STARTED.md). Then set a
 cap:
 
 ```bash
-fiscus budget --daily 25 --soft 18 --runaway 2   # hard cap, warning, loop guard
+segreant budget --daily 25 --soft 18 --runaway 2   # hard cap, warning, loop guard
 ```
 
 Caps are opt-in. A fresh install meters but never blocks. Unset the two
-variables and Fiscus is out of the path.
+variables and Segreant is out of the path.
 
 Per-tool recipes (Cursor, aider, opencode, Antigravity, your own SDK scripts):
 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
@@ -141,24 +141,24 @@ Per-tool recipes (Cursor, aider, opencode, Antigravity, your own SDK scripts):
 ## What you can do with it
 
 - **See the spend.** By day, project, model, tool and developer, in the
-  terminal (`fiscus today`, `week`, `month`) or the dashboard. Export CSV for
+  terminal (`segreant today`, `week`, `month`) or the dashboard. Export CSV for
   your own BI.
 - **Stop runaway agents.** Daily, per-session and velocity caps on proxied
   traffic.
 - **Check against the real bill.** Import an OpenAI cost export, or pull
-  OpenAI's Costs API read-only, and reconcile it against what Fiscus metered
+  OpenAI's Costs API read-only, and reconcile it against what Segreant metered
   at project-day level. See [PROVIDER-RECONCILIATION.md](docs/PROVIDER-RECONCILIATION.md).
 - **Allocate to cost centres.** Versioned, effective-dated rules, reported as
   showback. See [ALLOCATION.md](docs/ALLOCATION.md).
 - **Measure what the spend produced.** Return on Intelligence follows each
   commit through tested, merged, shipped and survived. See
   [RETURN-ON-INTELLIGENCE.md](docs/RETURN-ON-INTELLIGENCE.md).
-- **Try a cheaper model, carefully.** `fiscus frontier` compares models on the
+- **Try a cheaper model, carefully.** `segreant frontier` compares models on the
   same kind of task. It never changes your routing for you.
 - **Keep your data yours.** SQLite on your disk, verified backup and restore,
   and evidence packs you can sign and verify.
 
-Every command, flag and design detail is in the **[Fiscus guide](docs/GUIDE.md)**.
+Every command, flag and design detail is in the **[Segreant guide](docs/GUIDE.md)**.
 
 ## For teams and enterprises
 
@@ -177,7 +177,7 @@ The team server is implemented and tested, but it has not yet been validated in
 a production deployment; see [team-server/README.md](team-server/README.md)
 before exposing it to a network.
 
-## What Fiscus will not claim
+## What Segreant will not claim
 
 Built to be believed, so it is strict about what it says.
 
@@ -199,8 +199,8 @@ offered is [CAPABILITY-EVIDENCE-CONTRACT.md](docs/CAPABILITY-EVIDENCE-CONTRACT.m
 
 ## Privacy
 
-Fiscus has no hosted service and sends no telemetry by default. The ledger
-lives under `~/.fiscus`, and the dashboard loads nothing from third parties:
+Segreant has no hosted service and sends no telemetry by default. The ledger
+lives under `~/.segreant`, and the dashboard loads nothing from third parties:
 no CDNs, fonts or analytics. Requests you route through the proxy still go to
 the AI provider you configured, and your API keys pass through without being
 stored. Every other outbound path (price-card refresh, alert webhooks, team
@@ -208,7 +208,7 @@ rollups) is opt-in and listed in [DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md).
 
 ## Status
 
-Fiscus is **pre-release (0.1.0)** and not on npm yet; run it from a clone as
+Segreant is **pre-release (0.1.0)** and not on npm yet; run it from a clone as
 shown above. CI covers Linux, macOS and Windows, including a packaged-install
 smoke test, a browser accessibility pass and supply-chain checks.
 Reconciliation and outcome measurement are implemented and tested but have not
@@ -223,7 +223,7 @@ or [start a discussion](https://github.com/GamingDragonwastaken/Fiscus/discussio
 
 | Start here | Go deeper | Trust and boundaries |
 |---|---|---|
-| [Getting started](docs/GETTING-STARTED.md) | [Fiscus guide](docs/GUIDE.md) | [Data boundaries](docs/DATA-BOUNDARIES.md) |
+| [Getting started](docs/GETTING-STARTED.md) | [Segreant guide](docs/GUIDE.md) | [Data boundaries](docs/DATA-BOUNDARIES.md) |
 | [Integrations](docs/INTEGRATIONS.md) | [Architecture](docs/ARCHITECTURE.md) | [Capability contract](docs/CAPABILITY-EVIDENCE-CONTRACT.md) |
 | [FAQ](docs/FAQ.md) | [Methodology (plain language)](docs/METHODOLOGY.md) | [Threat model](docs/THREAT-MODEL.md) |
 
@@ -253,9 +253,9 @@ for reporting a vulnerability, [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)
 for what stays stable, and [docs/RELEASE-PROCESS.md](docs/RELEASE-PROCESS.md)
 for how a release is gated.
 
-## Supporting Fiscus
+## Supporting Segreant
 
-Fiscus is built independently and is free for personal and noncommercial use.
+Segreant is built independently and is free for personal and noncommercial use.
 Companies pay for a cheap commercial license
 ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)), and that is what funds the
 work. Paying never unlocks features
@@ -264,6 +264,6 @@ work. Paying never unlocks features
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE): free for personal use, research,
-education and nonprofits. Using Fiscus in a business needs a commercial
+education and nonprofits. Using Segreant in a business needs a commercial
 license, which is cheap and quick to get; see
 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).

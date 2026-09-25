@@ -1,10 +1,10 @@
 # Provider Reconciliation
 
-Comparing what Fiscus metered against what the provider reports, at the only
+Comparing what Segreant metered against what the provider reports, at the only
 grain where the two join, with the residual stated rather than removed.
 
 This is Stage 1 of [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md):
-*one organization can compare Fiscus observations with one authoritative
+*one organization can compare Segreant observations with one authoritative
 provider cost source.*
 
 ---
@@ -12,7 +12,7 @@ provider cost source.*
 ## 1. What a reconciliation here is, and is not
 
 **It is** a per-day comparison of two totals for one OpenAI project: the amount
-the provider's Organization Costs API reported, and the amount Fiscus metered on
+the provider's Organization Costs API reported, and the amount Segreant metered on
 the route you declared belongs to that project. The difference is reported per
 day with a structural reason.
 
@@ -39,7 +39,7 @@ day's metered total is a *compatible* join. It is coarse, and it is honest.
 ## 2. What it takes to run one
 
 Declare the route scope, get a provider observation for a closed period, then
-reconcile. `fiscus billing reconcile` prints exactly which step is outstanding,
+reconcile. `segreant billing reconcile` prints exactly which step is outstanding,
 so you never have to guess where you are.
 
 **There are two routes to the observation, and they are not equal.**
@@ -47,7 +47,7 @@ so you never have to guess where you are.
 | | Route A — direct pull | Route B — adopt an export |
 | --- | --- | --- |
 | Needs | an Admin key with the Costs read scope | nothing but a file you already have |
-| Provider side obtained by | Fiscus, from the provider | you, then handed to Fiscus |
+| Provider side obtained by | Segreant, from the provider | you, then handed to Segreant |
 | Stamped | `provider_api_pull` | `operator_supplied_export` |
 | Conditions on the result | 4 | 5 |
 | Arithmetic | identical | identical |
@@ -58,17 +58,17 @@ to be stuck: minting an Admin key needs a different permission than reading a
 bill, and an owner who can do the second should not be unable to reconcile.
 
 What route B does *not* do is pretend. Nothing in an adopted export was obtained
-from the provider by Fiscus, so nothing here can detect a report that was edited
+from the provider by Segreant, so nothing here can detect a report that was edited
 before it was handed over. That fact is stamped on the observation, survives into
 every reconciliation built on it, and appears as a fifth permanent condition.
 
 ### Step 1 — declare the route scope *(local)*
 
 ```bash
-fiscus billing scope set --provider openai --base-url https://api.openai.com --account-ref org_yourorg --project-ref proj_yourproject --apply
+segreant billing scope set --provider openai --base-url https://api.openai.com --account-ref org_yourorg --project-ref proj_yourproject --apply
 ```
 
-This records your statement that traffic Fiscus proxies to that exact endpoint
+This records your statement that traffic Segreant proxies to that exact endpoint
 belongs to that project. It is stored as `operator_declared_unverified`, because
 that is what it is. Requests metered *after* this point carry the declaration;
 earlier rows do not and are excluded from every comparison below.
@@ -79,7 +79,7 @@ The stored endpoint contains no credentials, query string, or fragment.
 
 In the OpenAI platform, create an **Admin key** restricted to reading
 organization costs. Do not reuse an inference key, and do not grant write
-scopes. Fiscus makes exactly one kind of request with it:
+scopes. Segreant makes exactly one kind of request with it:
 
 ```text
 GET https://api.openai.com/v1/organization/costs
@@ -92,7 +92,7 @@ no write path anywhere in the connector.
 ### Step 3 — supply it for one command *(yours)*
 
 ```bash
-OPENAI_ADMIN_API_KEY=sk-admin-… fiscus billing openai-costs pull --from 2026-07-01 --to 2026-08-01 --apply
+OPENAI_ADMIN_API_KEY=sk-admin-… segreant billing openai-costs pull --from 2026-07-01 --to 2026-08-01 --apply
 ```
 
 The key is read from the environment at the moment of the pull and nowhere else.
@@ -101,7 +101,7 @@ It is never written to the database, the config, the logs, or any export. A
 can confirm that with `--json` before ever supplying a key:
 
 ```bash
-fiscus billing openai-costs preview --from 2026-07-01 --to 2026-08-01 --json
+segreant billing openai-costs preview --from 2026-07-01 --to 2026-08-01 --json
 # → "networkAttempted": false, "credentialRead": false
 ```
 
@@ -115,10 +115,10 @@ If you can download a costs report but cannot mint an Admin key, import it and
 adopt it as the observation. Both commands are read-only until `--apply`:
 
 ```bash
-fiscus billing import --file ./your-costs-export.fiscus.json --apply
-fiscus billing openai-costs adopt                      # lists adoptable imports
-fiscus billing openai-costs adopt --import-id <id>     # preview: what it would observe
-fiscus billing openai-costs adopt --import-id <id> --apply
+segreant billing import --file ./your-costs-export.segreant.json --apply
+segreant billing openai-costs adopt                      # lists adoptable imports
+segreant billing openai-costs adopt --import-id <id>     # preview: what it would observe
+segreant billing openai-costs adopt --import-id <id> --apply
 ```
 
 Adoption is strict about what it will observe, because the arithmetic downstream
@@ -139,9 +139,9 @@ SHA-256 as the digest of the single "page" that produced them. Not the raw file.
 ### Step 4 — reconcile *(local)*
 
 ```bash
-fiscus billing reconcile
-fiscus billing reconcile --apply     # persist it as an immutable derived run
-fiscus billing reconcile --json --materiality 1.00
+segreant billing reconcile
+segreant billing reconcile --apply     # persist it as an immutable derived run
+segreant billing reconcile --json --materiality 1.00
 ```
 
 Read-only by default. `--apply` records the run so the history of what was
@@ -154,7 +154,7 @@ and never edits an old one.
 
 ```text
 Provider reported   $412.880000
-Fiscus metered      $377.150000   (local rate-card estimate)
+Segreant metered      $377.150000   (local rate-card estimate)
 Unexplained         +$35.730000
 ```
 
@@ -163,8 +163,8 @@ ask:
 
 | Sign | Reading |
 | --- | --- |
-| Provider > Fiscus | Usage reached that project without passing through Fiscus, or the local rate card under-prices it. The residual is an **upper bound** on off-path spend, not a measurement of it. |
-| Fiscus > provider | The local rate card over-prices, the provider applied credits or discounts, the day is still lagging, or — the one worth checking first — the route declaration is wrong and this traffic belongs to a different project. |
+| Provider > Segreant | Usage reached that project without passing through Segreant, or the local rate card under-prices it. The residual is an **upper bound** on off-path spend, not a measurement of it. |
+| Segreant > provider | The local rate card over-prices, the provider applied credits or discounts, the day is still lagging, or — the one worth checking first — the route declaration is wrong and this traffic belongs to a different project. |
 
 Per-day reasons are structural and say nothing about cause:
 
@@ -172,9 +172,9 @@ Per-day reasons are structural and say nothing about cause:
 | --- | --- |
 | `exact_match` | The two totals are identical to the microdollar |
 | `provider_exceeds_local` | Both sides present, provider higher |
-| `local_exceeds_provider` | Both sides present, Fiscus higher |
-| `no_local_capture` | The provider reported spend on a day Fiscus metered none |
-| `no_provider_report` | Fiscus metered spend on a day the provider reported none |
+| `local_exceeds_provider` | Both sides present, Segreant higher |
+| `no_local_capture` | The provider reported spend on a day Segreant metered none |
+| `no_provider_report` | Segreant metered spend on a day the provider reported none |
 
 `materiality` only decides which days are *flagged*. An immaterial day still
 reports its real difference and its real reason — a small difference is never
@@ -213,22 +213,22 @@ method, not defects of your data, and an exactly-matching day does not earn a
 cleaner label:
 
 - **`local_route_scope_is_not_provider_verified`** — you declared that an
-  endpoint maps to a project. Nothing in Fiscus checks that with the provider.
+  endpoint maps to a project. Nothing in Segreant checks that with the provider.
   Every number is conditional on that declaration being true. This is the one
   condition that could in principle be discharged, and doing so would require
   binding the proxy's API key identity to the project through the Admin API —
   a broader credential scope than this connector has, and a deliberate
   non-decision until there is a reason to make it.
 - **`off_path_provider_usage_is_not_observable`** — anything that did not pass
-  through Fiscus is invisible. It can only be inferred from the residual.
+  through Segreant is invisible. It can only be inferred from the residual.
 - **`provider_line_items_do_not_join_to_requests_or_models`** — the reason this
   compares day totals rather than requests.
-- **`local_request_amounts_are_rate_card_estimates`** — Fiscus prices from a
+- **`local_request_amounts_are_rate_card_estimates`** — Segreant prices from a
   local rate card. The gap between that and the provider report is the subject
   of the comparison, not a flaw in it.
 - **`provider_report_is_operator_supplied_and_unverified`** — *route B only.*
   The provider figures were supplied by a person, not read from the provider.
-  Fiscus validated their shape and digested the file; it obtained nothing from
+  Segreant validated their shape and digested the file; it obtained nothing from
   the provider. This condition is absent on a pulled observation, so its
   presence is the signal, not boilerplate.
 

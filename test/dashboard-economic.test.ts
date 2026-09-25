@@ -11,7 +11,7 @@ import { interval } from '../src/epistemic/time.ts';
 function request(): RequestRow {
   return {
     requestId: 'request:dashboard-economic', sessionId: null, tsEpochMs: 0,
-    provider: 'anthropic', model: 'claude-opus-4-8', project: 'fiscus', taskWeight: 1,
+    provider: 'anthropic', model: 'claude-opus-4-8', project: 'segreant', taskWeight: 1,
     inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
     costUsd: 1, economicAmount: money('1', 'USD', 'list'), estimated: false,
     streamed: false, statusCode: 200, durationMs: 1, via: 'proxy',

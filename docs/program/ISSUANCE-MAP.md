@@ -42,7 +42,7 @@ whether anything runs it, and the difference decides which defect to fix first.
 `reach` is the second axis, and it has THREE states rather than two.
 
 `product` means the module is in the transitive import closure of `src/cli.ts`
-— the entry `bin/fiscus.mjs` runs through `dist/cli.js` — or of the team-server
+— the entry `bin/segreant.mjs` runs through `dist/cli.js` — or of the team-server
 entry, which imports root source directly, AND something in that closure names
 the entry point the boundary declares. `imported_uninvoked` means the first half
 holds and the second does not: the module ships, and no product path calls into
@@ -72,7 +72,7 @@ Of the seventeen boundaries, sixteen are `product`, one is
 `imported_uninvoked`, and none is `unreached`. The two decision boundaries
 were the unreached pair until D-220: `src/budget/capDecision.ts` now calls
 `certifyDecision` and `minimaxRegret` for the budget-cap decision that
-`fiscus budget --recommend` renders, and routes a certified cap through
+`segreant budget --recommend` renders, and routes a certified cap through
 `issueDecisionToKernel` on `--apply`. `alloc.exactRun` is the
 middle case: `src/store/db.ts` imports it, and no product path calls the store
 method that would run it. None of this is dead code to delete on sight. The imported-but-uninvoked exact
@@ -114,7 +114,7 @@ from the table directly below it.
 | `causal.qualification` | `src/causal/qualification.ts` | kernel_primitive | product | A local randomized study qualifies as causal evidence |
 | `causal.estimate` | `src/causal/estimate.ts` | kernel_primitive | product | An assigned-arm difference with a finite-range interval |
 | `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
-| `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell |
+| `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Segreant has could tell |
 | `decision.certificate` | `src/decision/engine.ts` | **kernel_primitive** | product | Pure interval-dominance primitive; product presentation/action routes through the canonical adapter before strengthening |
 | `decision.certificate.issuance` | `src/decision/epistemic.ts` | **canonical** | product | One action robustly dominates the alternatives under the declared utility intervals, bound to interval Evidence and a decision-fitness Derivation |
 

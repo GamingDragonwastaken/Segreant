@@ -1,20 +1,20 @@
 import { discardResponseBody, egressFetchWithConfig, EgressError } from './transport.ts';
-import type { FiscusConfig } from '../config.ts';
+import type { SegreantConfig } from '../config.ts';
 import type { ProxyStatus } from '../guide.ts';
 
-export const RECEIPT_REPAIR_ACTION = 'run fiscus egress verify; preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock; Fiscus will not restart history as genesis';
-export const EGRESS_RULE_ACTION = 'run fiscus egress verify and review the exact configured rule before retrying';
+export const RECEIPT_REPAIR_ACTION = 'run segreant egress verify; preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Segreant writer is active, then remove only that lock; Segreant will not restart history as genesis';
+export const EGRESS_RULE_ACTION = 'run segreant egress verify and review the exact configured rule before retrying';
 
 function isBoundaryRefusal(error: EgressError): boolean {
   return error.code !== 'transport_failed';
 }
 
 /** Probe the local proxy while preserving whether failure was local policy or transport. */
-export async function probeProxyState(config: FiscusConfig): Promise<ProxyStatus> {
+export async function probeProxyState(config: SegreantConfig): Promise<ProxyStatus> {
   try {
     // The proxy binds to IPv4 loopback. Use the literal address so health
     // itself never depends on ambient localhost DNS ordering or aliases.
-    const response = await egressFetchWithConfig(config.egress, 'http://127.0.0.1:' + config.port + '/__fiscus/health', {
+    const response = await egressFetchWithConfig(config.egress, 'http://127.0.0.1:' + config.port + '/__segreant/health', {
       purpose: 'local_healthcheck',
       dataClass: 'healthcheck',
       signal: AbortSignal.timeout(800),

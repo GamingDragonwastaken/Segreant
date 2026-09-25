@@ -27,7 +27,7 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from './claim-support.ts';
-import { isDemo, type FiscusConfig } from '../config.ts';
+import { isDemo, type SegreantConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
@@ -66,10 +66,10 @@ import type { DashboardResponseFor } from './shared-types.ts';
  * touching a developer's real local configuration.
  */
 export interface ConfigPersistence {
-  load: () => FiscusConfig;
-  save: (config: FiscusConfig) => void;
+  load: () => SegreantConfig;
+  save: (config: SegreantConfig) => void;
   /** Production supplies the shared read-modify-write transaction boundary. */
-  mutate?: (mutator: (current: FiscusConfig) => FiscusConfig | void) => FiscusConfig;
+  mutate?: (mutator: (current: SegreantConfig) => SegreantConfig | void) => SegreantConfig;
 }
 
 /** Everything a handler is allowed to reach for. Nothing else is in scope. */
@@ -79,7 +79,7 @@ export interface RouteContext {
   /** The parsed request URL — handlers read `searchParams` off this. */
   url: URL;
   store: Store;
-  config: FiscusConfig;
+  config: SegreantConfig;
   /** This package's version — surfaced read-only in the Settings view. */
   version: string;
   configPersistence: ConfigPersistence;
@@ -113,9 +113,9 @@ export interface Route {
    */
   allow?: string;
   /**
-   * Methods that additionally require `x-fiscus-local: 1`. A cross-origin page
+   * Methods that additionally require `x-segreant-local: 1`. A cross-origin page
    * cannot set a custom header without a preflight this server never answers,
-   * so a malicious site cannot drive the operator's local Fiscus. This is the
+   * so a malicious site cannot drive the operator's local Segreant. This is the
    * CSRF gate on every mutating route — never relax it.
    */
   localOnly?: readonly string[];
@@ -170,7 +170,7 @@ function resolveRange(range: RangeKey, now: number): { startMs: number; endMs: n
   }
 }
 
-export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey): DashboardResponseFor<'overview'> {
+export function buildOverview(store: Store, config: SegreantConfig, range: RangeKey): DashboardResponseFor<'overview'> {
   const now = Date.now();
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 
@@ -268,7 +268,7 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
 /**
  * Server-side view of the importers: where each tool's local data lives, whether
  * it's present on this machine, and how to read it. Lets non-CLI users click to
- * meter their tools from the dashboard — same engines as `fiscus import`.
+ * meter their tools from the dashboard — same engines as `segreant import`.
  */
 interface DashImporter {
   id: string;
@@ -301,7 +301,7 @@ const DASH_IMPORTERS: DashImporter[] = [
 // ---------------------------------------------------------------------------
 
 export function handleHealth({ res }: RouteContext): void {
-  return json(res, 200, { ok: true, service: 'fiscus-dashboard' });
+  return json(res, 200, { ok: true, service: 'segreant-dashboard' });
 }
 
 /**
@@ -377,7 +377,7 @@ export function handleDiscover({ req, res, url, store }: RouteContext): void {
  * last scan you COMMITTED to", so the preview that reports it must not also
  * move the mark it is measured against — a GET that advanced the baseline made
  * the drift it just reported unobservable to the next reader, and made itself
- * the one write on this server reachable without `x-fiscus-local: 1`.
+ * the one write on this server reachable without `x-segreant-local: 1`.
  */
 export function handleScan({ req, res, url, store }: RouteContext): void {
   const path = url.searchParams.get('path') || undefined;
@@ -442,7 +442,7 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
 
 /**
  * Provider billing evidence has a different truth contract from the local
- * request ledger: an operator supplied it, Fiscus has not verified it with
+ * request ledger: an operator supplied it, Segreant has not verified it with
  * the provider, and there is no account-bound reconciliation yet. Keep this
  * deliberately separate from /api/overview and /api/value so an imported
  * charge line cannot silently affect metering, budgets, ROI, or advice.
@@ -558,7 +558,7 @@ export function handleBilling({ res, url, store }: RouteContext): void {
  * Cost-centre allocation — the showback surface, written for a BUDGET OWNER.
  *
  * Recorded runs only. Like reconciliation, this route reads what
- * `fiscus alloc run --apply` recorded and never computes a run of its own: a
+ * `segreant alloc run --apply` recorded and never computes a run of its own: a
  * freshly computed allocation would disagree with the recorded one the
  * moment a rule changed or new spend landed in the period, and the recorded
  * run is the statement someone has to stand behind.
@@ -606,7 +606,7 @@ export function handleAllocation({ res, store }: RouteContext): void {
 
 /**
  * Exact economic-ledger projection — the dashboard/API counterpart of
- * `fiscus economic --json`. This is deliberately a read-only projection: it
+ * `segreant economic --json`. This is deliberately a read-only projection: it
  * exposes the same source/effective coverage and role-aware balances as the
  * CLI, without recomputing or mutating historical events.
  *
@@ -664,7 +664,7 @@ export function handleEconomic({ res, url, store }: RouteContext): void {
 }
 
 /**
- * Pricing provenance — the read-only GUI counterpart of `fiscus pricing
+ * Pricing provenance — the read-only GUI counterpart of `segreant pricing
  * --coverage`, answering how each recorded amount was actually priced.
  *
  * Parity here is literal, not asserted: both surfaces call `pricingCoverage`
@@ -726,7 +726,7 @@ export function handleExportCsv({ res, url, store }: RouteContext): void {
       : requestsToCsv(store.requestsInRange(startMs, endMs));
     res.writeHead(200, {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="fiscus-${safe}.csv"`,
+      'content-disposition': `attachment; filename="segreant-${safe}.csv"`,
       'cache-control': 'no-store',
     });
     res.end(csv);
@@ -781,7 +781,7 @@ export function handleKernel({ res, url, store }: RouteContext): void {
 }
 
 export function handleGuide({ res, store, config }: RouteContext): void {
-  // Same journey engine as `fiscus guide` — one truth, two renderers.
+  // Same journey engine as `segreant guide` — one truth, two renderers.
   void (async () => {
     try {
       const now = Date.now();
@@ -873,7 +873,7 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
       // launch directory when no `?repo=` is given, the same
       // `flags.repo ?? process.cwd()` convention every CLI command uses — so
       // the baseline mines that directory's git history exactly as
-      // `fiscus roi` (no `--repo`) would.
+      // `segreant roi` (no `--repo`) would.
       //
       // `discloseLiftSource: false` keeps this payload's strings exactly as
       // they have always been: the CLI names its Lift source in
@@ -1068,10 +1068,10 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
         chunks.push(chunk);
       }
       const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
-      let current: FiscusConfig;
-      let next: FiscusConfig;
+      let current: SegreantConfig;
+      let next: SegreantConfig;
       if (configPersistence.mutate) {
-        let before: FiscusConfig | null = null;
+        let before: SegreantConfig | null = null;
         next = configPersistence.mutate((latest) => {
           before = structuredClone(latest);
           return applySettingsPatch(latest, patch);
@@ -1091,7 +1091,7 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
         store.recordRetentionPolicyChange('proposals', current.proposalRetentionDays, next.proposalRetentionDays, Date.now(), 'dashboard-settings');
       }
       // Mutate the shared config object IN PLACE rather than rebinding it.
-      // `fiscus start` hands this same object to the proxy, and the guard holds
+      // `segreant start` hands this same object to the proxy, and the guard holds
       // it as a getter (`new BudgetGuard(store, () => config.budget)`) that is
       // re-read per request — so this assignment makes a saved cap live, with no
       // restart. Verified end to end: with no cap a proxied request returned

@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
 import { dirname, join } from 'node:path';
-import { fiscusHome } from '../config.ts';
+import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,28 +25,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const BUNDLED_PRICING_PATH = join(__dirname, '..', '..', 'pricing', 'models.json');
 
 /**
- * A user-writable copy under ~/.fiscus/pricing/models.json that, when present
+ * A user-writable copy under ~/.segreant/pricing/models.json that, when present
  * and structurally valid, OVERRIDES the bundled table. This is where
- * `fiscus pricing --refresh` writes a freshly-pulled manifest, so prices can
+ * `segreant pricing --refresh` writes a freshly-pulled manifest, so prices can
  * be updated without reinstalling — pricing is a core dependability, and
  * provider rates drift.
  */
 function cachePath(): string {
-  return join(fiscusHome(), 'pricing', 'models.json');
+  return join(segreantHome(), 'pricing', 'models.json');
 }
 
 /** Sidecar for verifiable local cache provenance. It intentionally stores only
  * a redacted source identity, never a URL query string or credentials. */
 function provenancePath(): string {
-  return join(fiscusHome(), 'pricing', 'provenance.json');
+  return join(segreantHome(), 'pricing', 'provenance.json');
 }
 
 function archivePath(cardSha256: string): string {
-  return join(fiscusHome(), 'pricing', 'cards', `${cardSha256}.json`);
+  return join(segreantHome(), 'pricing', 'cards', `${cardSha256}.json`);
 }
 
 function archiveProvenancePath(cardSha256: string): string {
-  return join(fiscusHome(), 'pricing', 'cards', `${cardSha256}.provenance.json`);
+  return join(segreantHome(), 'pricing', 'cards', `${cardSha256}.provenance.json`);
 }
 
 export type Provider = 'anthropic' | 'openai';
@@ -79,7 +79,7 @@ export type PricingSourceKind = 'manual' | 'native_manifest' | 'litellm_transfor
 
 /**
  * What kind of number a ledger row contains. These are evidence labels, not
- * billing states: Fiscus does not receive provider invoices, discounts, taxes,
+ * billing states: Segreant does not receive provider invoices, discounts, taxes,
  * credits, or reconciliation data.
  */
 export const COST_BASES = [
@@ -131,7 +131,7 @@ export interface PricingCardProvenance {
   /** Hash of the full fetch target, used only locally for conditional requests. */
   sourceUrlSha256: string | null;
   sourceKind: PricingSourceKind;
-  /** When Fiscus accepted this immutable card content. */
+  /** When Segreant accepted this immutable card content. */
   fetchedAt: string;
   /** A declared native-manifest date, never inferred for a transformed feed. */
   upstreamDeclaredUpdated: string | null;
@@ -409,7 +409,7 @@ export interface RefreshResult {
   cardSha256?: string;
   unchanged?: boolean;
   error?: string;
-  /** Stable distinction between a Fiscus boundary refusal and an ordinary fetch failure. */
+  /** Stable distinction between a Segreant boundary refusal and an ordinary fetch failure. */
   failureCode?: PricingRefreshFailureCode;
 }
 
@@ -578,7 +578,7 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
   };
 
   try {
-    const dir = join(fiscusHome(), 'pricing');
+    const dir = join(segreantHome(), 'pricing');
     const archiveDir = join(dir, 'cards');
     if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true });
     const cardText = JSON.stringify(file, null, 2) + '\n';
@@ -685,7 +685,7 @@ function pricingFailureMessage(error: unknown, failureCode: PricingRefreshFailur
     ? '; repair/restore the local receipt history before retrying'
     : '';
   return boundary
-    ? `Fiscus egress boundary refused the pricing refresh (${failureCode.slice('egress_'.length)}): ${String(error)}${repair}`
+    ? `Segreant egress boundary refused the pricing refresh (${failureCode.slice('egress_'.length)}): ${String(error)}${repair}`
     : `fetch failed: ${String(error)}`;
 }
 
@@ -781,7 +781,7 @@ export async function refreshPricingFromResponses(input: {
 
 export interface PricingStatus {
   source: 'cache' | 'bundled';
-  /** Declared rate-card date (not necessarily the time Fiscus retrieved it). */
+  /** Declared rate-card date (not necessarily the time Segreant retrieved it). */
   updated: string;
   ageDays: number | null;
   stale: boolean;
@@ -876,7 +876,7 @@ function resolved(
   };
 }
 
-/** Use when a connected tool supplies a nonzero amount that Fiscus did not calculate. */
+/** Use when a connected tool supplies a nonzero amount that Segreant did not calculate. */
 export function toolReportedPricingEvidence(): RequestPricingEvidence {
   return {
     costBasis: 'tool_reported_unverified',

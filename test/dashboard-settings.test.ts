@@ -16,13 +16,13 @@ import { DEFAULT_CONFIG } from '../src/config.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 
-const originalFiscusHome = process.env.FISCUS_HOME;
-const dashboardTestHome = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-settings-home-'));
-process.env.FISCUS_HOME = dashboardTestHome;
+const originalSegreantHome = process.env.SEGREANT_HOME;
+const dashboardTestHome = mkdtempSync(join(tmpdir(), 'segreant-dashboard-settings-home-'));
+process.env.SEGREANT_HOME = dashboardTestHome;
 
 test.after(() => {
-  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = originalFiscusHome;
+  if (originalSegreantHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = originalSegreantHome;
   rmSync(dashboardTestHome, { recursive: true, force: true });
 });
 
@@ -48,7 +48,7 @@ test('buildSettingsSnapshot reports config, paths, and recent connections', () =
   assert.equal(snap.egress.mode, 'local_locked');
   assert.deepEqual(snap.egress.rules, []);
   assert.equal(snap.egress.receipts.ok, true);
-  assert.match(snap.egress.scope, /Fiscus-process/i);
+  assert.match(snap.egress.scope, /Segreant-process/i);
   assert.equal(snap.connections.length, 1);
   assert.equal(snap.connections[0]!.provider, 'anthropic');
   store.close();
@@ -62,9 +62,9 @@ test('buildSettingsSnapshot reports no connections when no traffic is in the win
 });
 
 test('dashboard settings action exposes corrupt receipt history and bounded repair guidance', () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-receipt-refusal-'));
-  const previousHome = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-dashboard-receipt-refusal-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
   const store = new Store(':memory:');
   try {
@@ -73,8 +73,8 @@ test('dashboard settings action exposes corrupt receipt history and bounded repa
     assert.match(snapshot.egress.receipts.errors.join(' '), /id|hash/i);
   } finally {
     store.close();
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
@@ -160,7 +160,7 @@ test('POST /api/settings/update applies a patch, persists it, and requires the l
 
     const res = await fetch(`${srv.base}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-segreant-local': '1' },
       body: JSON.stringify({ metadataOnly: true, budget: { dailyUsd: 42 } }),
     });
     assert.equal(res.status, 200);
@@ -187,7 +187,7 @@ test('POST /api/settings/update rejects malformed budget values before persisten
   try {
     const res = await fetch(`${srv.base}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-segreant-local': '1' },
       body: JSON.stringify({ budget: { dailyUsd: 'unlimited' } }),
     });
     assert.equal(res.status, 400);
@@ -206,7 +206,7 @@ test('POST /api/settings/update rejects an oversized body before parsing or pers
   try {
     const res = await fetch(`${srv.base}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-segreant-local': '1' },
       body: 'x'.repeat(16 * 1024 + 1),
     });
     assert.equal(res.status, 400);
@@ -230,7 +230,7 @@ test('POST /api/settings/clear-proposals removes stored proposals and requires t
     const noHeader = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST' });
     assert.equal(noHeader.status, 403);
 
-    const res = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST', headers: { 'x-fiscus-local': '1' } });
+    const res = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST', headers: { 'x-segreant-local': '1' } });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { ok: boolean; removed: number };
     assert.equal(body.ok, true);

@@ -8,14 +8,14 @@ identity and ordinary-ledger adapter, but the asserted identity path remains
 inconclusive rather than qualified until a governed real study passes every
 causal gate.
 
-This is the contract Fiscus must satisfy before it uses causal financial
+This is the contract Segreant must satisfy before it uses causal financial
 language. It is intentionally stricter than the ordinary local ledger,
 price model, realized-value pipeline, or RoI Index. Those tools remain
 valuable; none can reconstruct the counterfactual by itself.
 
 ## Purpose and non-goal
 
-Fiscus is building a local-first causal-evidence lane for two questions:
+Segreant is building a local-first causal-evidence lane for two questions:
 
 1. **Model or policy comparison** — did assignment to a candidate model/policy
    reduce direct operating cost while meeting a predeclared quality guardrail?
@@ -30,7 +30,7 @@ local data was never altered.
 
 ## Evidence hierarchy
 
-| Grade | Fiscus may say | Fiscus must not say |
+| Grade | Segreant may say | Segreant must not say |
 | --- | --- | --- |
 | accounted | Recorded cost and usage with the stated source | Saved, caused, same value, or ROI |
 | modeled | Counterfactual price/model calculation under named assumptions | Realized savings or a guarantee |
@@ -68,7 +68,7 @@ Before the first eligible exposure, a randomized protocol must pin:
   receipt references; and
 - claim templates for qualified, inconclusive, and invalid results.
 
-Fiscus rejects raw prompt text, source text, credentials, URLs with secrets,
+Segreant rejects raw prompt text, source text, credentials, URLs with secrets,
 and open-ended free-text payloads in the protocol's structural context. The
 protocol stores declared identifiers and hashes, not a hidden copy of sensitive
 input material.
@@ -94,7 +94,7 @@ upgrade version 1. V1 hashes remain the original raw lowercase 64-hex SHA-256
 values and retained v1 commitments remain inspectable, but they are ineligible
 for new causal mutations. A v2 commitment uses the namespaced digest
 `sha256:<64 lowercase hex>` over the exact draft material with the byte prefix
-`fiscus.causal.protocol\n2\n`. Commitment-only fields are not hash material.
+`segreant.causal.protocol\n2\n`. Commitment-only fields are not hash material.
 
 V2 requires namespaced IDs for study/series/version ownership and scope,
 eligibility and explicit inclusion/exclusion rules, a study window and stopping
@@ -168,7 +168,7 @@ The first supported design is a pre-specified, blocked randomized comparison
 with an intention-to-treat headline. Every result must include the point
 estimate, confidence interval, arm counts, completion/missingness/adherence
 table, quality result, cost source classification, protocol hash, and exact
-result state. Fiscus does not turn a p-value alone into a winner badge.
+result state. Segreant does not turn a p-value alone into a winner badge.
 
 For the `model_cost_quality` conjunction, the registered analysis plan uses a
 family-wise confidence level: the overall alpha is split equally across the cost
@@ -190,7 +190,7 @@ endpoint alone never authorizes the conjunction.
 Quasi-experimental designs may later be supported, but are not a default
 shortcut. A difference-in-differences result must surface its parallel-trends,
 no-anticipation, comparison-cohort, pre-period, sensitivity, staggered-adoption,
-and cluster-inference assumptions. If those gates are absent, Fiscus reports an
+and cluster-inference assumptions. If those gates are absent, Segreant reports an
 observational comparison instead.
 
 ## Recommendation rule
@@ -200,7 +200,7 @@ Recommendations are evidence-aware and review-only:
 - **Qualified recommendation** — matching qualified causal study, cost result,
   and quality guardrail; requires human review before routing changes.
 - **Conditional candidate** — modeled or observed cost signal, but no qualified
-  causal/value-parity evidence; Fiscus offers a study plan.
+  causal/value-parity evidence; Segreant offers a study plan.
 - **No recommendation** — insufficient coverage, no overlap, invalid design,
   or unresolved evidence conflict.
 
@@ -216,7 +216,7 @@ credentials, and output content are not required inputs and must not be stored
 by default.
 
 An export defaults to an aggregate, redacted evidence pack. Any sensitive field
-requires explicit operator selection. Fiscus must never silently upload a study,
+requires explicit operator selection. Segreant must never silently upload a study,
 its raw evidence, or a local evaluation to an LLM, analytics service, or hosted
 evaluator. If an explicit controlled-cloud source is used, the egress receipt
 chain is part of the evidence pack but does not prove recipient retention or
@@ -224,7 +224,7 @@ provider-side confidentiality.
 
 ## Revocation rule
 
-Fiscus reverts a study to inconclusive or invalid when protocol validation,
+Segreant reverts a study to inconclusive or invalid when protocol validation,
 assignment reconstruction, plan adherence, cost lineage, outcome maturation,
 quality criteria, interval computation, or the local evidence manifest no
 longer passes. The previous result must remain visible as superseded with the
@@ -291,5 +291,5 @@ reviewed slices. The internal sidecar implementation is not itself release
 evidence and makes no provider-invoice or causal customer claim.
 No supported current causal command mutates study evidence, changes a provider
 route, changes provider configuration, or changes a budget automatically.
-Fiscus still has **no qualified causal customer
+Segreant still has **no qualified causal customer
 result** unless and until a real executed study passes every applicable gate.

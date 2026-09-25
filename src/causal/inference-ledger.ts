@@ -41,7 +41,7 @@ import type {
   CommittedCausalStudyProtocol,
 } from './types.ts';
 
-export const CAUSAL_INFERENCE_LEDGER_TYPE = 'fiscus.causal-inference-ledger' as const;
+export const CAUSAL_INFERENCE_LEDGER_TYPE = 'segreant.causal-inference-ledger' as const;
 export const CAUSAL_INFERENCE_LEDGER_VERSION = 1 as const;
 
 export const DEFAULT_INFERENCE_SLICE_ID = 'slice:registered_population';
@@ -209,7 +209,7 @@ export function openCausalInferenceLedger(input: {
 }): CausalInferenceLedger {
   const plan = input.plan ?? null;
   if (plan !== null) validateCausalInferencePlan(plan);
-  const genesisDigest = digestOf('fiscus.causal.inference-ledger', {
+  const genesisDigest = digestOf('segreant.causal.inference-ledger', {
     studyId: input.studyId,
     protocolHash: input.protocolHash,
     plan: plan === null ? null : { ...plan, sliceIds: [...plan.sliceIds] },
@@ -235,7 +235,7 @@ export function causalStudyEvidenceDigest(
   protocol: CommittedCausalStudyProtocol,
   qualification: CausalQualification,
 ): string {
-  return digestOf('fiscus.causal.inference-evidence', {
+  return digestOf('segreant.causal.inference-evidence', {
     protocolHash: protocol.protocolHash,
     state: qualification.state,
     evidenceGrade: qualification.evidenceGrade,
@@ -322,7 +322,7 @@ export function recordInferentialActs(
       reportedAtMs: act.reportedAtMs,
       previousActDigest,
     };
-    const actDigest = digestOf('fiscus.causal.inference-act', actMaterial(core));
+    const actDigest = digestOf('segreant.causal.inference-act', actMaterial(core));
     previousActDigest = actDigest;
     recorded.push(Object.freeze({ ...core, actDigest }));
   }
@@ -342,7 +342,7 @@ function verifyActChain(ledger: CausalInferenceLedger): boolean {
   for (const [index, act] of ledger.acts.entries()) {
     if (act.sequence !== index + 1) return false;
     if (act.previousActDigest !== previousActDigest) return false;
-    if (act.actDigest !== digestOf('fiscus.causal.inference-act', actMaterial(act))) return false;
+    if (act.actDigest !== digestOf('segreant.causal.inference-act', actMaterial(act))) return false;
     previousActDigest = act.actDigest;
   }
   return ledger.ledgerDigest === previousActDigest;
@@ -435,7 +435,7 @@ export function summarizeInferenceMultiplicity(
     const planPrefix = plan.actsExceedPlan
       ? 'The registered plan, which no longer bounds this family, was'
       : 'Basis:';
-    limitations.push(`${planPrefix} a pre-registered plan of ${plan.maxLooks} look(s) x ${plan.endpointsPerLook} endpoint(s) x ${plan.sliceIds.length} slice(s) = ${plan.plannedActs} act(s) at family-wise ${percent(plan.targetFamilywiseErrorRate)}, which requires ${percent(plan.requiredActConfidenceLevel)} per act.${plan.actAlphaMeetsPlan ? '' : actAlpha === null ? '' : ` The reported act used ${percent(1 - actAlpha)} and does not meet it; Fiscus reports the shortfall rather than restating the interval at the level the plan wanted.`}`);
+    limitations.push(`${planPrefix} a pre-registered plan of ${plan.maxLooks} look(s) x ${plan.endpointsPerLook} endpoint(s) x ${plan.sliceIds.length} slice(s) = ${plan.plannedActs} act(s) at family-wise ${percent(plan.targetFamilywiseErrorRate)}, which requires ${percent(plan.requiredActConfidenceLevel)} per act.${plan.actAlphaMeetsPlan ? '' : actAlpha === null ? '' : ` The reported act used ${percent(1 - actAlpha)} and does not meet it; Segreant reports the shortfall rather than restating the interval at the level the plan wanted.`}`);
     if (overranActs) {
       limitations.push(`The recorded acts exceeded the pre-registered plan: ${budgeted.length} act(s) spend error budget against a planned ${plan.plannedActs}. The plan no longer bounds this family and is retained as history rather than as error control.`);
     }
@@ -483,7 +483,7 @@ function familyEndpoints(family: 'cost_quality' | 'net_benefit'): InferentialEnd
  * covered is a second look, a second slice, or a tenth of either. So a claim
  * stands when the recorded budget is no larger than the family the protocol
  * registered, or when a pre-registered plan covered the excess at an alpha the
- * reported act actually met. Otherwise Fiscus withholds it — which is the
+ * reported act actually met. Otherwise Segreant withholds it — which is the
  * conservative direction, and the only one available without inventing a
  * denominator after the fact.
  */

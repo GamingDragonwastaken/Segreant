@@ -48,14 +48,14 @@ const INPUT: ReceiptInput = {
 };
 
 function withHome(label: string): { home: string; restore: () => void } {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-receipt-integrity-' + label + '-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-receipt-integrity-' + label + '-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   return {
     home,
     restore: () => {
-      if (previous === undefined) delete process.env.FISCUS_HOME;
-      else process.env.FISCUS_HOME = previous;
+      if (previous === undefined) delete process.env.SEGREANT_HOME;
+      else process.env.SEGREANT_HOME = previous;
       rmSync(home, { recursive: true, force: true });
     },
   };
@@ -131,7 +131,7 @@ async function assertRefusesBeforeDial(
 function runEgressCli(args: string[], home: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, 'egress', ...args], {
-      env: { ...process.env, FISCUS_HOME: home, FISCUS_DB: join(home, 'fiscus.db'), NODE_OPTIONS: '' },
+      env: { ...process.env, SEGREANT_HOME: home, SEGREANT_DB: join(home, 'segreant.db'), NODE_OPTIONS: '' },
     }, (error, stdout, stderr) => {
       const code = error && typeof (error as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? Number((error as unknown as { code: number }).code)
@@ -303,7 +303,7 @@ test('receipt lock/open failure refuses before any dial', async () => {
   const state = withHome('lock-open-failure');
   try {
     rmSync(state.home, { recursive: true, force: true });
-    writeFileSync(state.home, 'the configured Fiscus home is not a directory', 'utf8');
+    writeFileSync(state.home, 'the configured Segreant home is not a directory', 'utf8');
     await assertRefusesBeforeDial(state.home, /receipt (?:lock|persistence)/i, 'receipt_persistence_failed');
   } finally {
     state.restore();
@@ -570,7 +570,7 @@ test('egress verify CLI reports the corruption reason and repair action', async 
     const payload = JSON.parse(result.stdout) as { ok: boolean; errors: string[]; action?: string };
     assert.equal(payload.ok, false);
     assert.match(payload.errors.join('\n'), /version must be 1|id must be/i);
-    assert.equal(payload.action, 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify; Fiscus will not restart history as genesis.');
+    assert.equal(payload.action, 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify; Segreant will not restart history as genesis.');
   } finally {
     state.restore();
   }
@@ -589,7 +589,7 @@ test('multiple valid writer processes serialize without forking or resetting the
       script,
     ], {
       cwd: join(import.meta.dirname, '..'),
-      env: { ...process.env, FISCUS_HOME: state.home },
+      env: { ...process.env, SEGREANT_HOME: state.home },
     }));
     await Promise.all(workers);
     const verification = verifyEgressReceipts();

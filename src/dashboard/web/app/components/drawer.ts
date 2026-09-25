@@ -1,5 +1,5 @@
 /**
- * The action drawer — the one place anything in Fiscus happens.
+ * The action drawer — the one place anything in Segreant happens.
  *
  * The CLI's signature is preview-by-default, `--apply` to persist. That is not a
  * safety feature bolted onto the product; it IS the product's argument, that a

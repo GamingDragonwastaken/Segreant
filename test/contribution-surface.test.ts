@@ -2,7 +2,7 @@
  * CONTRIBUTION EVIDENCE REACHES THE OPERATOR (WP-D03, D-246).
  *
  * `contributionEvidence` has ridden on every matured work unit since D-193,
- * and the JSON form of `fiscus value realize` carried it per unit — but the
+ * and the JSON form of `segreant value realize` carried it per unit — but the
  * human output printed nothing about it, so an operator reading the terminal
  * could not learn that the association was structural, temporal or unresolved,
  * nor that a confounder was declared. This gate holds the summary the CLI
@@ -73,7 +73,7 @@ test('the printed lines carry the counts and the non-claim sentence, and say not
   assert.deepEqual(contributionEvidenceLines(summarizeContributionEvidence([{}, {}])), [], 'no evidence, no line — not a zero dressed as a finding');
 });
 
-test('fiscus value realize prints the summary on its human path', () => {
+test('segreant value realize prints the summary on its human path', () => {
   const src = readFileSync(join(ROOT, 'src/cli/valueCmd.ts'), 'utf8');
   assert.ok(src.includes('contributionEvidenceLines(summarizeContributionEvidence(report.units))'), 'the CLI must print the contribution evidence summary');
 });

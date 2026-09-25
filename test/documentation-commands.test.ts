@@ -11,10 +11,10 @@
  * dispatch, so the two could drift silently and had no reason not to.
  *
  * WHAT THE MEASUREMENT FOUND IN THE DOCS, WHICH IS ALMOST NOTHING. Across
- * `README.md` and the 25 operator-facing files in `docs/`, 244 `fiscus
+ * `README.md` and the 25 operator-facing files in `docs/`, 244 `segreant
  * <action>` invocations appear inside code fences or inline code spans,
  * covering 40 distinct commands and 49 distinct flags. Two command names did
- * not resolve against the CLI's dispatch: `fiscus lab` and `fiscus lift`.
+ * not resolve against the CLI's dispatch: `segreant lab` and `segreant lift`.
  * Every flag occurs in `src/`, every `npm run <script>` resolves against
  * `package.json`, and every port named in a doc matches `DEFAULT_CONFIG`. So
  * the documented command surface was already sound, and this file is a gate
@@ -33,16 +33,16 @@
  * matches nothing.
  *
  * THE TWO THAT DID NOT RESOLVE, HANDLED DIFFERENTLY ON PURPOSE.
- * `fiscus lab complexity` is introduced by its own document under "Proposed
+ * `segreant lab complexity` is introduced by its own document under "Proposed
  * product boundary" and again as "Build the Complexity Lab", so the text
  * already tells the reader it does not exist; it is allowlisted here with that
- * reason recorded rather than silently skipped. `fiscus lift` was not marked at
+ * reason recorded rather than silently skipped. `segreant lift` was not marked at
  * all -- it sat in two prose sentences describing an open item, phrased as
  * though the command were there to be invoked -- so those two lines are
  * corrected instead of allowlisted. An exception with a stated reason is a
  * record; an exception without one is a hole.
  *
- * SCOPED TO CODE SPANS AND FENCES, DELIBERATELY. "The fiscus for your AI spend"
+ * SCOPED TO CODE SPANS AND FENCES, DELIBERATELY. "The segreant for your AI spend"
  * in `docs/DESIGN-DIRECTION.md` is prose about the project's name, and the URL
  * bar of a device mockup on the landing page is a picture. Neither is an
  * instruction, and a sweep that flagged them would have to be taught to ignore
@@ -77,7 +77,7 @@ const read = (relative: string): string => readFileSync(join(ROOT, relative), 'u
  * in review; leaving one out is what makes the sweep worth running.
  */
 const PLANNED: Record<string, string> = {
-  lab: 'docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md introduces `fiscus lab complexity` under "Proposed product '
+  lab: 'docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md introduces `segreant lab complexity` under "Proposed product '
     + 'boundary" and lists "Build the Complexity Lab" as future work, so its own text tells the reader it does not exist',
 };
 
@@ -133,7 +133,7 @@ function invocations(files: readonly string[]): Invocation[] {
   const found: Invocation[] = [];
   for (const file of files) {
     for (const chunk of codeChunks(read(file))) {
-      for (const match of chunk.matchAll(/(?:npx )?fiscus ([a-z][a-z0-9-]*)([^\n`|]*)/g)) {
+      for (const match of chunk.matchAll(/(?:npx )?segreant ([a-z][a-z0-9-]*)([^\n`|]*)/g)) {
         found.push({
           file,
           command: match[1]!,
@@ -165,11 +165,11 @@ function sourceText(): string {
   return parts.join('\n');
 }
 
-test('every documented fiscus command reaches a real dispatch case', () => {
+test('every documented segreant command reaches a real dispatch case', () => {
   const actions = dispatchActions();
   const unresolved = invocations(operatorDocs())
     .filter((entry) => !actions.has(entry.command) && !(entry.command in PLANNED))
-    .map((entry) => `${entry.file}: fiscus ${entry.command}`);
+    .map((entry) => `${entry.file}: segreant ${entry.command}`);
 
   assert.deepEqual(
     [...new Set(unresolved)].sort(),
@@ -197,8 +197,8 @@ test('every documented flag exists somewhere in the source that would have to ac
 test('every documented npm script is a script this package defines', () => {
   const scripts = new Set(Object.keys(JSON.parse(read('package.json')).scripts as Record<string, string>));
   // `npm run deploy` appears once, as the READER's own project script inside a
-  // `fiscus exec --kind shipped -- npm run deploy` example. It is an argument
-  // to a Fiscus command, not a Fiscus script, and requiring it to exist here
+  // `segreant exec --kind shipped -- npm run deploy` example. It is an argument
+  // to a Segreant command, not a Segreant script, and requiring it to exist here
   // would be requiring this repository to define the reader's deploy step.
   const READER_OWNED = new Set(['deploy']);
   const missing = new Set<string>();
@@ -253,18 +253,18 @@ test('the sweep is not vacuous: it reads real invocations and would catch a dead
   assert.ok(actions.has('demo') && actions.has('start'), 'the dispatch reader must find real cases');
   assert.equal(actions.has('definitely-not-a-command'), false);
 
-  const synthetic = codeChunks('Run `fiscus definitely-not-a-command --json` to break this test.');
-  const names = synthetic.flatMap((chunk) => [...chunk.matchAll(/(?:npx )?fiscus ([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+  const synthetic = codeChunks('Run `segreant definitely-not-a-command --json` to break this test.');
+  const names = synthetic.flatMap((chunk) => [...chunk.matchAll(/(?:npx )?segreant ([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
   assert.deepEqual(names, ['definitely-not-a-command']);
 });
 
 test('prose is out of scope, and that is a boundary rather than an exception list', () => {
-  // "The fiscus for your AI spend" is a sentence about the project's name.
+  // "The segreant for your AI spend" is a sentence about the project's name.
   // Reading only marked code is what keeps it out, without teaching the sweep
   // to ignore particular phrases -- which is how an allowlist grows until it
   // means nothing.
-  const chunks = codeChunks('The **fiscus** for your AI spend, and `fiscus demo` to try it.');
-  assert.deepEqual(chunks, ['fiscus demo']);
+  const chunks = codeChunks('The **segreant** for your AI spend, and `segreant demo` to try it.');
+  assert.deepEqual(chunks, ['segreant demo']);
 });
 
 test('every planned-command exception names the document that marks it as unbuilt', () => {
@@ -276,8 +276,8 @@ test('every planned-command exception names the document that marks it as unbuil
     assert.match(reason, /docs\/[A-Z-]+\.md/, `the exception for ${command} must name the document it applies to`);
     const cited = /docs\/[A-Z-]+\.md/.exec(reason)![0];
     assert.ok(
-      codeChunks(read(cited)).some((chunk) => chunk.includes(`fiscus ${command}`)),
-      `${cited} must actually be where \`fiscus ${command}\` appears`,
+      codeChunks(read(cited)).some((chunk) => chunk.includes(`segreant ${command}`)),
+      `${cited} must actually be where \`segreant ${command}\` appears`,
     );
   }
 });

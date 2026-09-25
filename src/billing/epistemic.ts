@@ -238,7 +238,7 @@ function buildRecordEvidence(run: BillingImportRun, record: BillingEvidenceRecor
     },
     measurementModelRef: null,
     monetaryBasis: 'billed',
-    assumptions: ['Provider export was supplied by the operator and was not independently authenticated by Fiscus.'],
+    assumptions: ['Provider export was supplied by the operator and was not independently authenticated by Segreant.'],
     supersedes: [],
     supersededBy: null,
     revocation: null,
@@ -442,7 +442,7 @@ function buildOpenAiObservationEvidence(run: OpenAiCostsObservationRun, line: Op
     'Provider finality is undocumented for an individual Costs snapshot.',
     'The local route scope is operator-declared and not provider-verified.',
   ];
-  if (run.sourceKind === 'operator_supplied_export') commonAssumptions.push('The provider report was supplied by an operator rather than fetched by Fiscus.');
+  if (run.sourceKind === 'operator_supplied_export') commonAssumptions.push('The provider report was supplied by an operator rather than fetched by Segreant.');
   return evidence({
     id: `evidence:openai-costs:${run.observationRunId}:${line.observationId}`,
     evidenceType: 'billing.provider_observation',
@@ -564,8 +564,8 @@ function buildLocalCaptureEvidence(reconciliation: ReconciliationRun, reconcilia
   return evidence({
     id: `evidence:billing:local-capture:${reconciliationRunId}`,
     evidenceType: 'billing.local_capture',
-    sourceIdentity: 'fiscus:request-ledger',
-    sourceClass: 'fiscus_local_request_ledger',
+    sourceIdentity: 'segreant:request-ledger',
+    sourceClass: 'segreant_local_request_ledger',
     payload: {
       amount: { ...moneyToJson(amount) },
       requestCount,
@@ -677,7 +677,7 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
     grain: grain(['provider_project_period']),
     time: { validTime, asOf: issuedAt },
     epistemic: 'supported',
-    // The derived comparison itself is a Fiscus assertion even when its
+    // The derived comparison itself is a Segreant assertion even when its
     // provider-side input was fetched from an authenticated endpoint. The same
     // profile the run's `excludedFrom` was derived from (D-228).
     profile: reconciliationClaimProfile(),

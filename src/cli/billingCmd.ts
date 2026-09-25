@@ -28,32 +28,32 @@ import { moneyToJson } from '../economics/money.ts';
 
 function billingEgressRepairAction(failureCode: string): string | undefined {
   return failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
-    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify.'
+    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify.'
     : undefined;
 }
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export|scope|mapping|openai-costs|reconcile> [options]');
-  console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
-  console.error('         fiscus billing status [--json]');
-  console.error('         fiscus billing export [--csv|--json] [--out <file>]');
-  console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
-  console.error('         fiscus billing mapping <set|status> [--record-id <id>] [--project <local-project>] [--account-ref <local-account>] [--apply] [--json]');
-  console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
-  console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]   no credential needed');
-  console.error('         fiscus billing openai-costs <status|coverage> [--json]');
-  console.error('         fiscus billing reconcile [--apply] [--materiality <usd>] [--json]');
+  console.error('  Usage: segreant billing <import|status|export|scope|mapping|openai-costs|reconcile> [options]');
+  console.error('         segreant billing import --file <evidence.json> [--apply] [--json]');
+  console.error('         segreant billing status [--json]');
+  console.error('         segreant billing export [--csv|--json] [--out <file>]');
+  console.error('         segreant billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
+  console.error('         segreant billing mapping <set|status> [--record-id <id>] [--project <local-project>] [--account-ref <local-account>] [--apply] [--json]');
+  console.error('         segreant billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         segreant billing openai-costs adopt --import-id <id> [--apply] [--json]   no credential needed');
+  console.error('         segreant billing openai-costs <status|coverage> [--json]');
+  console.error('         segreant billing reconcile [--apply] [--materiality <usd>] [--json]');
   console.error('  Local operator-supplied OpenAI billing evidence only. Reconciliation compares project-day totals');
   console.error('  under stated conditions; it never overwrites request estimates and never feeds budgets or RoI.');
 }
 
 function costsUsage(): void {
-  console.error('  Usage: fiscus billing openai-costs preview --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--json]');
-  console.error('         fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
-  console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]');
+  console.error('  Usage: segreant billing openai-costs preview --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--json]');
+  console.error('         segreant billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         segreant billing openai-costs adopt --import-id <id> [--apply] [--json]');
   console.error('             adopt an imported operator export as an observation; no Admin key, weaker evidence');
-  console.error('         fiscus billing openai-costs status [--json]');
-  console.error('         fiscus billing openai-costs coverage [--json]');
+  console.error('         segreant billing openai-costs status [--json]');
+  console.error('         segreant billing openai-costs coverage [--json]');
   console.error('  Pull is an explicit, read-only GET to OpenAI Organization Costs. It requires OPENAI_ADMIN_API_KEY only with pull --apply.');
   console.error('  Provider observations stay separate from request spend, budgets, RoI, and model recommendations; they are not reconciliation.');
 }
@@ -139,7 +139,7 @@ function printReadiness(readiness: ReconciliationReadiness): void {
       console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) were metered, but NO SCOPE IS ACTIVE.`);
       console.log('           Nothing can be on a declared route while there is no declared route, so');
       console.log('           this is not a fact about those rows. Re-activate the scope first:');
-      console.log('           fiscus billing scope set --provider openai --base-url https://api.openai.com \\');
+      console.log('           segreant billing scope set --provider openai --base-url https://api.openai.com \\');
       console.log('             --account-ref <org_…> --project-ref <proj_…> --apply');
     } else if (c.proxyOffScopeUsd > 0) {
       console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) predate your scope declaration`);
@@ -147,11 +147,11 @@ function printReadiness(readiness: ReconciliationReadiness): void {
     }
     console.log('  A pull would report your entire provider bill as unexplained residual. That is');
     console.log('  arithmetically true and operationally useless. Route traffic through the proxy');
-    console.log('  first (fiscus start, then point your tools at it), let a period close, and the');
+    console.log('  first (segreant start, then point your tools at it), let a period close, and the');
     console.log('  local side will have something in it.');
   }
   console.log('');
-  console.log('  Steps marked [you] need an account owner. Fiscus will not create, store, or');
+  console.log('  Steps marked [you] need an account owner. Segreant will not create, store, or');
   console.log('  request a provider credential on your behalf. See docs/PROVIDER-RECONCILIATION.md.');
 }
 
@@ -161,7 +161,7 @@ function printReadiness(readiness: ReconciliationReadiness): void {
  * The conditions line above names five limits and stops there, which leaves the
  * reader to work out for themselves what the world looks like when one fails and
  * whether anything they have could tell them apart. Both answers exist and
- * neither is obvious: four of them cannot be ruled out by any observation Fiscus
+ * neither is obvious: four of them cannot be ruled out by any observation Segreant
  * can make, so the residual is PERMANENTLY conditional rather than pending a
  * check someone could go and do — and one of them stops being hypothetical
  * entirely when the residual goes negative.
@@ -186,7 +186,7 @@ function printFragility(result: ReconciliationRun): void {
     // Counts the established ones too, and should: a world the evidence has
     // settled against the claim is by definition one nothing excluded.
     const text = `${assessment.unexcludable.length} of ${assessment.assumptions.length} cannot be ruled out by anything `
-      + 'Fiscus can observe, so this residual is permanently conditional rather than pending a check.';
+      + 'Segreant can observe, so this residual is permanently conditional rather than pending a check.';
     for (const line of wrapText(text, 72)) console.log(`    ${line}`);
   }
   for (const model of assessment.live) {
@@ -212,7 +212,7 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   console.log(`  Period        ${day(result.periodStartMs)} → ${day(result.periodEndMs)} (UTC, exclusive end)`);
   console.log('');
   console.log(`  Provider reported   $${displayUsd(result.providerReportedMicros)}`);
-  console.log(`  Fiscus metered      $${displayUsd(result.localCapturedMicros)}  (local rate-card estimate)`);
+  console.log(`  Segreant metered      $${displayUsd(result.localCapturedMicros)}  (local rate-card estimate)`);
   console.log(`  Unexplained         ${signedUsd(result.unexplainedVarianceMicros)}`);
   // The residual invites exactly one wrong reading — "near zero, so nothing
   // went off-path" — and that reading is an absence inference the arithmetic
@@ -237,18 +237,18 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   console.log('');
   console.log('  This is NOT a clean reconciliation and never will be. It holds only if your');
   console.log('  route declaration is true — nothing here verifies it with the provider — and');
-  console.log('  usage that never passed through Fiscus is invisible, so the residual is an');
+  console.log('  usage that never passed through Segreant is invisible, so the residual is an');
   console.log('  upper bound on off-path spend rather than a measurement of it.');
   if (result.providerSourceKind === 'operator_supplied_export') {
     console.log('  The provider side of this comparison was SUPPLIED BY AN OPERATOR, not read from');
-    console.log('  the provider by Fiscus. The arithmetic is identical; the evidence is weaker,');
+    console.log('  the provider by Segreant. The arithmetic is identical; the evidence is weaker,');
     console.log('  and nothing here can detect a report that was edited before it was handed over.');
   }
   console.log(`  Provider side ${result.providerSourceKind.replaceAll('_', ' ')}`);
   console.log(`  Conditions    ${result.conditions.join(', ')}`);
   printFragility(result);
   console.log(`  Excluded from ${result.excludedFrom.join(', ')}`);
-  console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: fiscus billing reconcile --apply');
+  console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: segreant billing reconcile --apply');
 }
 
 /** Compare the newest complete provider snapshot with the local ledger. */
@@ -322,14 +322,14 @@ function cmdAdoptCosts(flags: Flags): void {
     const scope = store.activeOpenAiScope();
     if (!scope || !scope.providerProjectRef) {
       console.error('  Declare the route scope first, so the adopted lines are bound to a project:');
-      console.error('    fiscus billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply');
+      console.error('    segreant billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply');
       process.exitCode = 1;
       return;
     }
     const imports = store.billingImportRuns(50).filter((r) => r.provider === 'openai');
     if (imports.length === 0) {
       console.error('  No OpenAI billing export has been imported. Import one first:');
-      console.error('    fiscus billing import --file <your-costs-export.fiscus.json> --apply');
+      console.error('    segreant billing import --file <your-costs-export.segreant.json> --apply');
       process.exitCode = 1;
       return;
     }
@@ -381,11 +381,11 @@ function cmdAdoptCosts(flags: Flags): void {
     console.log(`  Coverage      ${plan.declaredCoverage} — an operator declaration, never verified here`);
     console.log('');
     console.log('  This route reads no credential and makes no network request. The figures are');
-    console.log('  yours, not the provider’s: Fiscus validated their shape and digested the file,');
+    console.log('  yours, not the provider’s: Segreant validated their shape and digested the file,');
     console.log('  but obtained nothing from OpenAI. The observation is permanently stamped');
     console.log('  operator_supplied_export and every reconciliation built on it carries a fifth');
     console.log('  condition saying so. A read-only Costs pull remains the stronger evidence.');
-    console.log(applied ? '  Recorded as an immutable observation.' : '  Not recorded. Persist it with: fiscus billing openai-costs adopt --import-id <id> --apply');
+    console.log(applied ? '  Recorded as an immutable observation.' : '  Not recorded. Persist it with: segreant billing openai-costs adopt --import-id <id> --apply');
   } finally {
     store.close();
   }
@@ -399,7 +399,7 @@ function printCostsPreview(preview: OpenAiCostsPreview): void {
   console.log(`  Endpoint      ${preview.endpoint} (GET only)`);
   console.log('  Trust         provider_observation_unreconciled; provider finality is undocumented');
   console.log('  Excluded      request spend, budget enforcement, RoI, and model recommendations');
-  console.log('  No credential was read and no network request was made. Apply with: fiscus billing openai-costs pull ... --apply');
+  console.log('  No credential was read and no network request was made. Apply with: segreant billing openai-costs pull ... --apply');
 }
 
 /** Read-only provider observation commands. Preview deliberately never reads process.env. */
@@ -574,9 +574,9 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
 }
 
 function scopeUsage(): void {
-  console.error('  Usage: fiscus billing scope set --account-ref <non-secret-local-ref> [--project-ref <non-secret-local-ref>] [--apply] [--json]');
-  console.error('         fiscus billing scope status [--json]');
-  console.error('         fiscus billing scope clear [--apply] [--json]');
+  console.error('  Usage: segreant billing scope set --account-ref <non-secret-local-ref> [--project-ref <non-secret-local-ref>] [--apply] [--json]');
+  console.error('         segreant billing scope status [--json]');
+  console.error('         segreant billing scope clear [--apply] [--json]');
   console.error('  Scope covers only future OpenAI-proxy rows routed to the exact configured upstream. It is operator-declared and unverified.');
 }
 
@@ -608,7 +608,7 @@ function cmdScope(flags: Flags): void {
           console.log(`  Scope preview  OpenAI → ${preview.upstreamDisplay}`);
           console.log(`  Account ref    ${preview.billingAccountRef}${preview.providerProjectRef ? ` / ${preview.providerProjectRef}` : ''}`);
           console.log('  Trust          operator_declared_unverified — no provider login, credential, or invoice was checked');
-          console.log('  No data written. Apply with: fiscus billing scope set ... --apply');
+          console.log('  No data written. Apply with: segreant billing scope set ... --apply');
         }
         return;
       }
@@ -664,8 +664,8 @@ function cmdScope(flags: Flags): void {
 }
 
 function mappingUsage(): void {
-  console.error('  Usage: fiscus billing mapping set --record-id <imported-record-id> --project <local-project> --account-ref <local-account> [--apply] [--json]');
-  console.error('         fiscus billing mapping status [--json]');
+  console.error('  Usage: segreant billing mapping set --record-id <imported-record-id> --project <local-project> --account-ref <local-account> [--apply] [--json]');
+  console.error('         segreant billing mapping status [--json]');
   console.error('  Mapping is exact-record, append-only operator evidence. It never rewrites provider lines or request rows.');
   console.error('  Mapped imported dollars stay excluded from budgets, RoI, and model recommendations until provider scope is authoritative.');
 }
@@ -715,7 +715,7 @@ function cmdMapping(flags: Flags): void {
     const source = store.billingEvidenceRecords().find((record) => record.recordId === recordId);
     if (!source) {
       console.error(`  No imported billing evidence record exists for recordId ${recordId}.`);
-      console.error('  Use fiscus billing export --json to inspect exact record ids; Fiscus will not guess a selector.');
+      console.error('  Use segreant billing export --json to inspect exact record ids; Segreant will not guess a selector.');
       process.exitCode = 1;
       return;
     }
@@ -747,7 +747,7 @@ function cmdMapping(flags: Flags): void {
         console.log(`  Target        ${plan.targetAccountRef} / ${plan.targetProject}`);
         console.log(`  Version       ${plan.nextMappingVersion}`);
         console.log('  Trust         operator_declared_unverified');
-        console.log('  No data written. Apply with: fiscus billing mapping set ... --apply');
+        console.log('  No data written. Apply with: segreant billing mapping set ... --apply');
       }
       return;
     }
@@ -791,7 +791,7 @@ function renderPreview(preview: ReturnType<typeof readBillingImportFile>['previe
   console.log(`  Declared USD  $${formatUsdMicros(preview.providerReportedUsdMicros)}`);
   console.log('  Reconcile     not_reconciled (no verified provider-account binding on local request rows)');
   console.log('');
-  console.log('  No data written. Apply with: fiscus billing import --file <evidence.json> --apply');
+  console.log('  No data written. Apply with: segreant billing import --file <evidence.json> --apply');
 }
 
 /** Wrap a sentence to a column, so a condition is readable next to the number it qualifies. */
@@ -807,7 +807,7 @@ function wrapText(text: string, width: number): string[] {
   return lines;
 }
 
-/** `fiscus billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
+/** `segreant billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
 export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
   if (action === 'scope') {

@@ -1,5 +1,5 @@
 /**
- * Operator control surface for Fiscus-process egress.
+ * Operator control surface for Segreant-process egress.
  *
  * The command changes only the local config or inspects local receipts. It
  * never probes a remote endpoint; a rule is reviewed as data before the
@@ -33,14 +33,14 @@ function ruleFromFlags(flags: Flags): EgressRule | null {
 
 function printUsage(tty: boolean): void {
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus egress — process-scoped high-assurance transport'));
+  console.log(color(tty, C.bold, '  Segreant egress — process-scoped high-assurance transport'));
   console.log(color(tty, C.gray, '  Default is local_locked: literal loopback only. No remote probe is made by this command.'));
   console.log('');
-  console.log(color(tty, C.gray, '  fiscus egress status'));
-  console.log(color(tty, C.gray, '  fiscus egress plan --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
-  console.log(color(tty, C.gray, '  fiscus egress apply --apply --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
-  console.log(color(tty, C.gray, '  fiscus egress apply --apply --mode local_locked'));
-  console.log(color(tty, C.gray, '  fiscus egress receipts | fiscus egress verify'));
+  console.log(color(tty, C.gray, '  segreant egress status'));
+  console.log(color(tty, C.gray, '  segreant egress plan --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
+  console.log(color(tty, C.gray, '  segreant egress apply --apply --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
+  console.log(color(tty, C.gray, '  segreant egress apply --apply --mode local_locked'));
+  console.log(color(tty, C.gray, '  segreant egress receipts | segreant egress verify'));
   console.log('');
 }
 
@@ -48,7 +48,7 @@ function statusPayload(): Record<string, unknown> {
   const cfg = loadConfig();
   const verified = verifyEgressReceipts();
   return {
-    scope: 'Fiscus-process HTTP(S) transport only; it does not control other apps, direct clients, OS DNS/VPN/firewall, or provider retention.',
+    scope: 'Segreant-process HTTP(S) transport only; it does not control other apps, direct clients, OS DNS/VPN/firewall, or provider retention.',
     mode: cfg.egress.mode,
     rules: cfg.egress.rules,
     receipts: { path: egressReceiptPath(), ...verified },
@@ -59,11 +59,11 @@ function statusPayload(): Record<string, unknown> {
  * A chain verification is not a verdict on outbound traffic, and it was being
  * printed as one.
  *
- * `fiscus egress verify` said "Receipt chain valid" in GREEN, over "Receipts:
+ * `segreant egress verify` said "Receipt chain valid" in GREEN, over "Receipts:
  * 0", and exited 0 on a home that had never recorded anything. That is the
  * single question this command exists to answer, answered with the wrong claim:
  * a hash chain over an empty set verifies vacuously, so the reassuring line was
- * printed exactly when Fiscus knew least. Green is now reserved for the one
+ * printed exactly when Segreant knew least. Green is now reserved for the one
  * basis that earns it, and every basis states its own window and its own limit
  * on the same screen as the result. Recorded at D-148.
  */
@@ -98,7 +98,7 @@ function chainLine(verification: ReceiptVerification): string {
   }
 }
 
-const RECEIPT_REPAIR_ACTION = 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify; Fiscus will not restart history as genesis.';
+const RECEIPT_REPAIR_ACTION = 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify; Segreant will not restart history as genesis.';
 
 function printReceiptAction(ok: boolean): void {
   if (ok) return;
@@ -113,7 +113,7 @@ export function cmdEgress(flags: Flags): void {
     if (flags.json) printJson(payload);
     else {
       console.log('');
-      console.log(color(tty, C.bold, '  Fiscus egress status'));
+      console.log(color(tty, C.bold, '  Segreant egress status'));
       console.log('  Mode: ' + payload.mode);
       const rules = payload.rules as EgressRule[];
       console.log('  Rules: ' + (rules.length ? rules.map((rule) => rule.id + ' (' + (rule.enabled ? 'enabled' : 'disabled') + ')').join(', ') : 'none'));
@@ -208,7 +208,7 @@ export function cmdEgress(flags: Flags): void {
       console.log(color(tty, C.yellow, '  Egress plan only — configuration unchanged.'));
       console.log('  Mode: ' + preview.mode + '; rules: ' + preview.rules.map((rule) => rule.id).join(', '));
       console.log(color(tty, C.gray, '  Apply recomputes this requested change against the latest config generation under the shared mutation lock.'));
-      console.log(color(tty, C.gray, '  To persist it, rerun with: fiscus egress apply --apply ...'));
+      console.log(color(tty, C.gray, '  To persist it, rerun with: segreant egress apply --apply ...'));
       console.log('');
     }
     return;
@@ -233,7 +233,7 @@ export function cmdEgress(flags: Flags): void {
     console.log('');
     console.log(color(tty, C.green, '  Egress configuration saved.'));
     console.log('  Mode: ' + persisted.mode + '; rules: ' + persisted.rules.map((rule) => rule.id).join(', '));
-    console.log(color(tty, C.gray, '  This changes only Fiscus-process transport; it does not impose a machine-wide network policy.'));
+    console.log(color(tty, C.gray, '  This changes only Segreant-process transport; it does not impose a machine-wide network policy.'));
     console.log('');
   }
 }

@@ -4,7 +4,7 @@
  *
  * This is deliberately a measurement harness, not a pass/fail benchmark. It
  * uses synthetic in-memory ledgers, binds the dashboard only to loopback, and
- * never reads provider credentials or the user's Fiscus home.
+ * never reads provider credentials or the user's Segreant home.
  */
 
 import { performance } from 'node:perf_hooks';
@@ -26,7 +26,7 @@ import { grain } from '../src/epistemic/grain.ts';
 import { scope } from '../src/epistemic/scope.ts';
 import { interval } from '../src/epistemic/time.ts';
 import { exportLedgerPack } from '../src/pack/export.ts';
-import { serializeFiscusPack, verifyFiscusPack } from '../src/pack/index.ts';
+import { serializeSegreantPack, verifySegreantPack } from '../src/pack/index.ts';
 import { economicAttributionFromRows } from '../src/economics/attribution.ts';
 import { money } from '../src/economics/money.ts';
 import { applyAllocation } from '../src/alloc/apply.ts';
@@ -510,16 +510,16 @@ function revocationQuality(ledger, pairCount) {
 }
 
 /**
- * `.fiscuspack` export and standalone-equivalent verification over the same
+ * `.segreantpack` export and standalone-equivalent verification over the same
  * ledger (D-238): the whole graph is packed, serialized and verified, and the
  * verifier's own verdict is the quality check.
  */
 function packRoundTrip(ledger) {
   const { pack, summary } = exportLedgerPack({ ledger, packId: 'pack:benchmark', createdAt: EPISTEMIC_POST_ISSUED_AS_OF });
-  const encoded = serializeFiscusPack(pack);
-  const verdict = verifyFiscusPack(encoded);
+  const encoded = serializeSegreantPack(pack);
+  const verdict = verifySegreantPack(encoded);
   if (!verdict.ok || verdict.integrity !== 'verified' || summary.omitted !== 0) {
-    throw new Error('fiscuspack round-trip benchmark quality checks failed');
+    throw new Error('segreantpack round-trip benchmark quality checks failed');
   }
   return { included: summary.included, omitted: summary.omitted, redacted: summary.redacted, envelopeBytes: Buffer.byteLength(encoded, 'utf8') };
 }
@@ -634,7 +634,7 @@ async function runCase(name, rows, iterations) {
     epistemicIssuance: observe(() => benchmarkEpistemicIssuance(rows), iterations),
     epistemicPersistence: observe(() => benchmarkEpistemicPersistence(persistentPairs), iterations),
     revocationClosure: observe(() => revocation.ledger.revocationProjection(), iterations),
-    fiscuspackRoundTrip: observe(() => packRoundTrip(revocation.ledger), iterations),
+    segreantpackRoundTrip: observe(() => packRoundTrip(revocation.ledger), iterations),
     apiOverviewHttp: await dashboardApiObservation(ingestStore),
     exactProjection: observe(() => exactProjection(ingestStore, startMs, endMs), iterations),
     allocationRun: observe(() => allocationRun(ingestStore, startMs, endMs, endMs + 1), iterations),
@@ -652,7 +652,7 @@ async function runCase(name, rows, iterations) {
       epistemicIssuance: epistemicQuality,
       epistemicPersistence: persistenceQuality,
       revocationClosure: revocationQualityReport,
-      fiscuspackRoundTrip: packQuality,
+      segreantpackRoundTrip: packQuality,
       exactProjection: projectionQuality,
       allocationRun: allocationQuality,
       dashboardContractWalk: contractQuality,
@@ -663,13 +663,13 @@ async function runCase(name, rows, iterations) {
 async function main() {
   const { scales, iterations } = parseArgs(process.argv.slice(2));
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-  const isolatedHome = mkdtempSync(join(tmpdir(), 'fiscus-benchmark-home-'));
-  const previousHome = process.env.FISCUS_HOME;
-  const previousDb = process.env.FISCUS_DB;
-  const previousDemo = process.env.FISCUS_DEMO;
-  process.env.FISCUS_HOME = isolatedHome;
-  delete process.env.FISCUS_DB;
-  delete process.env.FISCUS_DEMO;
+  const isolatedHome = mkdtempSync(join(tmpdir(), 'segreant-benchmark-home-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  const previousDb = process.env.SEGREANT_DB;
+  const previousDemo = process.env.SEGREANT_DEMO;
+  process.env.SEGREANT_HOME = isolatedHome;
+  delete process.env.SEGREANT_DB;
+  delete process.env.SEGREANT_DEMO;
   let sourceRevision = 'unknown';
   try {
     try {
@@ -698,12 +698,12 @@ async function main() {
       interpretation: 'Measurements are local synthetic observations. No threshold or release budget is asserted; choose budgets only after comparing repeated runs on the intended release machine.',
     }, null, 2) + '\n');
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
-    if (previousDb === undefined) delete process.env.FISCUS_DB;
-    else process.env.FISCUS_DB = previousDb;
-    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
-    else process.env.FISCUS_DEMO = previousDemo;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
+    if (previousDb === undefined) delete process.env.SEGREANT_DB;
+    else process.env.SEGREANT_DB = previousDb;
+    if (previousDemo === undefined) delete process.env.SEGREANT_DEMO;
+    else process.env.SEGREANT_DEMO = previousDemo;
     rmSync(isolatedHome, { recursive: true, force: true });
   }
 }

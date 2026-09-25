@@ -12,7 +12,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
 import {
   reconcileOpenAiCosts,
@@ -153,7 +153,7 @@ test('reconcile: uses exact local Money and refuses implicit sub-microdollar qua
   assert.equal(subMicro?.status === 'refused' && subMicro.refusal, 'local_exact_amount_requires_explicit_quantization');
 });
 
-test('reconcile: a day the provider reports and Fiscus never saw is named, not averaged away', () => {
+test('reconcile: a day the provider reports and Segreant never saw is named, not averaged away', () => {
   const result = ok(reconcileOpenAiCosts({
     requestsPrunedBeforeMs: null,
     run: run(),
@@ -181,7 +181,7 @@ test('reconcile: local spend on a day the provider did not report is equally vis
   }));
   assert.equal(result.coverage.localOnlyDays, 1);
   assert.equal(result.days.at(-1)!.residualReason, 'no_provider_report');
-  assert.equal(result.unexplainedVarianceMicros, -4_000_000, 'negative: Fiscus metered more than the provider reported');
+  assert.equal(result.unexplainedVarianceMicros, -4_000_000, 'negative: Segreant metered more than the provider reported');
 });
 
 test('reconcile: refuses a period that may still be accruing rather than reporting lag as variance', () => {
@@ -450,7 +450,7 @@ test('reconcile: the store round-trips a run immutably and reports no reconcilia
 // ---------------------------------------------------------------------------
 
 test('a residual bounds off-path spend only while the local estimate stays under the provider total', () => {
-  // Write P for the provider total, L for what Fiscus metered, T for the true
+  // Write P for the provider total, L for what Segreant metered, T for the true
   // billed cost of on-path traffic and O for off-path. P = T + O, so the
   // residual R = P - L = O + (T - L), and `O <= R` holds exactly when L <= T.
   assert.equal(offPathBoundFromResidual(1_334_567, 1_000_000, false), 'upper_bound_conditional');

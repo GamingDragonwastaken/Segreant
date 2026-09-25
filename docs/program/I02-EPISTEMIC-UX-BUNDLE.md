@@ -20,7 +20,7 @@ single operator-facing bundle:
 The bounded consumer is:
 
 ```text
-fiscus evidence ux --options <file> --json
+segreant evidence ux --options <file> --json
 ```
 
 Focused RED-first coverage is 4/4 for the bundle/CLI path; root typecheck and

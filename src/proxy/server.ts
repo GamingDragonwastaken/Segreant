@@ -12,11 +12,11 @@
  *    to intercept and no root certificate to install. Safer and honest.
  *  - We force `Accept-Encoding: identity` upstream so the SSE stream is plain
  *    text we can both forward verbatim and parse for usage.
- *  - Cost headers (X-Fiscus-Cost-USD) are added for non-streaming responses. For
+ *  - Cost headers (X-Segreant-Cost-USD) are added for non-streaming responses. For
  *    streaming, headers are already flushed before usage is known, so we emit
  *    remaining-budget headers up front and record the final cost server-side.
  *  - Ordinary upstream transport failures are returned in a provider-shaped
- *    upstream-error body, while budget blocks and Fiscus egress-boundary
+ *    upstream-error body, while budget blocks and Segreant egress-boundary
  *    refusals use distinct stable types. Corrupt or unextendable receipt
  *    history refuses the outbound request before DNS/dial.
  */
@@ -25,7 +25,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
-import type { FiscusConfig } from '../config.ts';
+import type { SegreantConfig } from '../config.ts';
 import { BudgetGuard, unverifiedBasis, type GuardDecision } from '../budget/guard.ts';
 import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
@@ -63,20 +63,20 @@ interface RouteInfo {
  *
  * Some tools expose a base-URL field and nothing else — Antigravity's
  * custom-provider form is the clearest case: no custom-headers field at all, so
- * `x-fiscus-project` is simply unavailable and its traffic could only ever meter
+ * `x-segreant-project` is simply unavailable and its traffic could only ever meter
  * as `unattributed`. But a base URL is configurable, and one provider entry per
  * project gives the operator a place to say which project this is:
  *
- *     http://localhost:8090/fiscus/backend-api/v1
+ *     http://localhost:8090/segreant/backend-api/v1
  *
  * The prefix is stripped before routing and before forwarding, so the upstream
- * sees exactly the path it would have seen without it. `/fiscus/` is not a path
+ * sees exactly the path it would have seen without it. `/segreant/` is not a path
  * any supported provider API uses, so it cannot shadow a real endpoint.
  *
  * This is the SAME trust level as the header: an operator declaration, recorded
  * as `client_declared`, never a verified identity.
  */
-const PROJECT_PATH_PREFIX = /^\/fiscus\/([A-Za-z0-9._-]{1,64})(\/.*)$/;
+const PROJECT_PATH_PREFIX = /^\/segreant\/([A-Za-z0-9._-]{1,64})(\/.*)$/;
 
 /** Split a declared-project path prefix off a request URL. */
 export function splitProjectPath(url: string): { project: string | null; path: string } {
@@ -90,7 +90,7 @@ export function splitProjectPath(url: string): { project: string | null; path: s
   return { project, path: m[2]! };
 }
 
-export function detectRoute(req: http.IncomingMessage, cfg: FiscusConfig): RouteInfo | null {
+export function detectRoute(req: http.IncomingMessage, cfg: SegreantConfig): RouteInfo | null {
   const url = splitProjectPath(req.url ?? '').path;
   const headers = req.headers;
 
@@ -100,7 +100,7 @@ export function detectRoute(req: http.IncomingMessage, cfg: FiscusConfig): Route
   // auth header to the named URL, so it must be explicitly enabled
   // (config.allowOpenAIBaseOverride). For the common case, set config.upstreams.openai
   // instead — no flag, no per-request key-exfil risk. Must be absolute http(s).
-  // Deliberately ignore x-fiscus-openai-base. This proxy forwards Authorization
+  // Deliberately ignore x-segreant-openai-base. This proxy forwards Authorization
   // to its upstream, so a request-controlled destination would make it a
   // credential-forwarding primitive. Set the one trusted destination in config.
   const openaiBase = cfg.upstreams.openai;
@@ -177,7 +177,7 @@ function buildUpstreamHeaders(req: http.IncomingMessage): Record<string, string>
   for (const [k, v] of Object.entries(req.headers)) {
     const key = k.toLowerCase();
     if (HOP_BY_HOP.has(key)) continue;
-    if (key.startsWith('x-fiscus-')) continue; // our metadata, not the provider's
+    if (key.startsWith('x-segreant-')) continue; // our metadata, not the provider's
     if (v === undefined) continue;
     out[k] = Array.isArray(v) ? v.join(', ') : v;
   }
@@ -191,7 +191,7 @@ function copyDownstreamHeaders(upstream: Response): Record<string, string> {
     const k = key.toLowerCase();
     if (HOP_BY_HOP.has(k)) return;
     if (k === 'content-encoding') return; // we requested identity
-    // Fiscus deliberately does not follow upstream redirects. Forwarding a
+    // Segreant deliberately does not follow upstream redirects. Forwarding a
     // Location header would let a client SDK follow one on its own, potentially
     // sending the prompt/body/credential to a destination outside this process
     // boundary. Leave the redirect status visible, but remove the escape route.
@@ -240,41 +240,41 @@ function ensureOpenAIUsage(provider: Provider, stream: boolean, url: string, bod
 
 function providerErrorBody(provider: Provider, message: string): string {
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'fiscus_budget_block', message } });
+    return JSON.stringify({ type: 'error', error: { type: 'segreant_budget_block', message } });
   }
-  return JSON.stringify({ error: { message, type: 'fiscus_budget_block', code: 'budget_exceeded' } });
+  return JSON.stringify({ error: { message, type: 'segreant_budget_block', code: 'budget_exceeded' } });
 }
 
 function providerBudgetUnavailableBody(provider: Provider, message: string): string {
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable', message } });
+    return JSON.stringify({ type: 'error', error: { type: 'segreant_budget_unavailable', code: 'budget_enforcement_unavailable', message } });
   }
-  return JSON.stringify({ error: { message, type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable' } });
+  return JSON.stringify({ error: { message, type: 'segreant_budget_unavailable', code: 'budget_enforcement_unavailable' } });
 }
 
 function providerEgressRefusalBody(provider: Provider, error: EgressError): string {
   const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
     ? ' Repair or restore the local receipt history before retrying.'
     : '';
-  const message = `Fiscus refused this outbound request at its egress boundary: ${error.message}.${repair}`;
+  const message = `Segreant refused this outbound request at its egress boundary: ${error.message}.${repair}`;
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'fiscus_egress_refusal', code: 'egress_refused', subcode: error.code, message } });
+    return JSON.stringify({ type: 'error', error: { type: 'segreant_egress_refusal', code: 'egress_refused', subcode: error.code, message } });
   }
-  return JSON.stringify({ error: { message, type: 'fiscus_egress_refusal', code: 'egress_refused', subcode: error.code } });
+  return JSON.stringify({ error: { message, type: 'segreant_egress_refusal', code: 'egress_refused', subcode: error.code } });
 }
 
 function providerUpstreamErrorBody(provider: Provider, message: string, code: 'upstream_timeout' | 'upstream_unreachable'): string {
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'fiscus_upstream_error', code, message } });
+    return JSON.stringify({ type: 'error', error: { type: 'segreant_upstream_error', code, message } });
   }
-  return JSON.stringify({ error: { message, type: 'fiscus_upstream_error', code } });
+  return JSON.stringify({ error: { message, type: 'segreant_upstream_error', code } });
 }
 
 function providerResourceLimitBody(provider: Provider, message: string): string {
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'fiscus_resource_limit', code: 'capture_limit_exceeded', message } });
+    return JSON.stringify({ type: 'error', error: { type: 'segreant_resource_limit', code: 'capture_limit_exceeded', message } });
   }
-  return JSON.stringify({ error: { message, type: 'fiscus_resource_limit', code: 'capture_limit_exceeded' } });
+  return JSON.stringify({ error: { message, type: 'segreant_resource_limit', code: 'capture_limit_exceeded' } });
 }
 
 function waitForDrainOrClose(res: http.ServerResponse): Promise<'drain' | 'close'> {
@@ -293,7 +293,7 @@ function waitForDrainOrClose(res: http.ServerResponse): Promise<'drain' | 'close
 
 export interface ProxyDeps {
   store: Store;
-  config: FiscusConfig;
+  config: SegreantConfig;
   onLog?: (row: RequestRow, decision: GuardDecision) => void;
 }
 
@@ -315,7 +315,7 @@ export function createProxyServer(deps: ProxyDeps): http.Server {
       // Last-resort guard: never leak a 500 that kills the agent session.
       if (!res.headersSent) {
         res.writeHead(502, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: `fiscus proxy error: ${String(err)}` } }));
+        res.end(JSON.stringify({ error: { message: `segreant proxy error: ${String(err)}` } }));
       } else {
         res.end();
       }
@@ -336,23 +336,23 @@ async function handle(
   const startedAt = Date.now();
 
   // Lightweight health endpoint for the dashboard / readiness checks.
-  if (req.url === '/__fiscus/health') {
+  if (req.url === '/__segreant/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'fiscus-proxy', port: config.port }));
+    res.end(JSON.stringify({ ok: true, service: 'segreant-proxy', port: config.port }));
     return;
   }
 
   const route = detectRoute(req, config);
   if (state.accountingFailure) {
-    const message = 'Fiscus cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Fiscus.';
+    const message = 'Segreant cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Segreant.';
     res.writeHead(503, {
       'content-type': 'application/json',
-      'x-fiscus-blocked': '1',
-      'x-fiscus-reason': 'budget_enforcement_unavailable',
+      'x-segreant-blocked': '1',
+      'x-segreant-reason': 'budget_enforcement_unavailable',
     });
     res.end(route
       ? providerBudgetUnavailableBody(route.provider, message)
-      : JSON.stringify({ error: { type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable', message } }));
+      : JSON.stringify({ error: { type: 'segreant_budget_unavailable', code: 'budget_enforcement_unavailable', message } }));
     return;
   }
   let body: Buffer;
@@ -362,11 +362,11 @@ async function handle(
     if (error instanceof ResourceLimitError) {
       res.writeHead(413, {
         'content-type': 'application/json',
-        'x-fiscus-resource-limit': error.kind,
+        'x-segreant-resource-limit': error.kind,
       });
       res.end(route
         ? providerResourceLimitBody(route.provider, error.message)
-        : JSON.stringify({ error: { type: 'fiscus_resource_limit', code: error.kind, message: error.message } }));
+        : JSON.stringify({ error: { type: 'segreant_resource_limit', code: error.kind, message: error.message } }));
       return;
     }
     throw error;
@@ -378,7 +378,7 @@ async function handle(
       JSON.stringify({
         error: {
           message:
-            'Fiscus could not detect the provider. Point Anthropic clients at ANTHROPIC_BASE_URL=http://localhost:' +
+            'Segreant could not detect the provider. Point Anthropic clients at ANTHROPIC_BASE_URL=http://localhost:' +
             config.port +
             ' and OpenAI clients at OPENAI_BASE_URL=http://localhost:' +
             config.port +
@@ -425,20 +425,20 @@ async function handle(
   // configured endpoint. Both are operator declarations, so both record the same
   // basis — the mechanism differs, the trust does not.
   const pathProject = splitProjectPath(req.url ?? '').project;
-  const declaredProject = headerStr(req, 'x-fiscus-project') ?? pathProject;
+  const declaredProject = headerStr(req, 'x-segreant-project') ?? pathProject;
   const project = declaredProject ?? 'default';
   const attributionBasis: AttributionBasis = declaredProject ? 'client_declared' : 'unattributed';
-  const sessionId = headerStr(req, 'x-fiscus-session-id') ?? null;
-  const user = headerStr(req, 'x-fiscus-user') ?? null;
-  // The connected source/feed (set by `fiscus connect <tool>`). Like every
-  // x-fiscus-* header it is stripped in buildUpstreamHeaders, so it tags our local
+  const sessionId = headerStr(req, 'x-segreant-session-id') ?? null;
+  const user = headerStr(req, 'x-segreant-user') ?? null;
+  // The connected source/feed (set by `segreant connect <tool>`). Like every
+  // x-segreant-* header it is stripped in buildUpstreamHeaders, so it tags our local
   // ledger without ever being forwarded to the provider.
-  const source = headerStr(req, 'x-fiscus-source') ?? null;
-  // Optional full working-directory path (also an x-fiscus-* header, so stripped
+  const source = headerStr(req, 'x-segreant-source') ?? null;
+  // Optional full working-directory path (also an x-segreant-* header, so stripped
   // before the request leaves the machine). Lets proxied traffic be repo-correlated
   // for per-project RoI the same way imported traffic is, when a tool sends it.
-  const cwd = headerStr(req, 'x-fiscus-cwd') ?? null;
-  const rawTaskWeight = Number(headerStr(req, 'x-fiscus-task-weight') ?? '1');
+  const cwd = headerStr(req, 'x-segreant-cwd') ?? null;
+  const rawTaskWeight = Number(headerStr(req, 'x-segreant-task-weight') ?? '1');
   const taskWeight = Number.isFinite(rawTaskWeight) && rawTaskWeight > 0 ? rawTaskWeight : 1;
   const requestId = randomUUID();
   if (sessionId) store.upsertSession(sessionId, project, headerStr(req, 'user-agent') ?? 'unknown', startedAt);
@@ -473,12 +473,12 @@ async function handle(
     const unavailable = budgetFailure;
     const headers: Record<string, string> = {
       'content-type': 'application/json',
-      'x-fiscus-blocked': '1',
-      'x-fiscus-reason': sanitizeHeader(unavailable ? 'budget_enforcement_unavailable' : decision.reason ?? 'budget'),
+      'x-segreant-blocked': '1',
+      'x-segreant-reason': sanitizeHeader(unavailable ? 'budget_enforcement_unavailable' : decision.reason ?? 'budget'),
     };
     res.writeHead(unavailable ? 503 : 429, headers);
     const message = unavailable
-      ? 'Fiscus cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Fiscus.'
+      ? 'Segreant cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Segreant.'
       : decision.reason ?? 'Budget limit reached.';
     res.end(unavailable ? providerBudgetUnavailableBody(provider, message) : providerErrorBody(provider, message));
     // Log the blocked attempt at zero cost for the audit trail.
@@ -536,7 +536,7 @@ async function handle(
   } catch (err) {
     clearTimeout(timeoutTimer);
     // Either the upstream is unreachable (DNS/refused/network drop), it never
-    // started responding within upstreamTimeoutMs, or Fiscus refused its own
+    // started responding within upstreamTimeoutMs, or Segreant refused its own
     // policy/receipt boundary. Keep these categories distinct: a local
     // boundary refusal is not a provider budget decision or a remote failure.
     const timedOut = controller.signal.aborted;
@@ -545,10 +545,10 @@ async function handle(
     const detail = timedOut
       ? `upstream timed out after ${config.upstreamTimeoutMs}ms (no response headers)`
       : egressRefusal
-        ? 'Fiscus egress boundary refused this upstream request: ' + egressRefusal.message
+        ? 'Segreant egress boundary refused this upstream request: ' + egressRefusal.message
       : `upstream unreachable: ${String(err)}`;
-    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-fiscus-upstream-error': '1' };
-    if (egressRefusal) headers['x-fiscus-egress-refusal'] = egressRefusal.code;
+    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-segreant-upstream-error': '1' };
+    if (egressRefusal) headers['x-segreant-egress-refusal'] = egressRefusal.code;
     res.writeHead(status, headers);
     res.end(egressRefusal
       ? providerEgressRefusalBody(provider, egressRefusal)
@@ -584,10 +584,10 @@ async function handle(
   const downHeaders = copyDownstreamHeaders(upstream);
   // Up-front budget context (final cost not yet known for streams).
   if (decision.remainingDailyUsd !== null) {
-    downHeaders['x-fiscus-daily-remaining-usd'] = decision.remainingDailyUsd.toFixed(4);
+    downHeaders['x-segreant-daily-remaining-usd'] = decision.remainingDailyUsd.toFixed(4);
   }
   if (decision.action === 'warn' && decision.reason) {
-    downHeaders['x-fiscus-warning'] = sanitizeHeader(decision.reason);
+    downHeaders['x-segreant-warning'] = sanitizeHeader(decision.reason);
   }
 
   const contentType = upstream.headers.get('content-type') ?? '';
@@ -661,7 +661,7 @@ async function handle(
       if (error instanceof ResourceLimitError) {
         res.writeHead(502, {
           'content-type': 'application/json',
-          'x-fiscus-resource-limit': error.kind,
+          'x-segreant-resource-limit': error.kind,
         });
         res.end(providerResourceLimitBody(provider, error.message));
         safeLog(deps, {
@@ -715,10 +715,10 @@ async function handle(
       /* non-JSON (e.g. error HTML) — usage stays empty */
     }
     const cost = computeCost(provider, resolvedModel, usage);
-    downHeaders['x-fiscus-cost-usd'] = cost.costUsd.toFixed(6);
+    downHeaders['x-segreant-cost-usd'] = cost.costUsd.toFixed(6);
     if (decision.sessionSpendUsd !== null && config.budget.sessionUsd !== null) {
       const remaining = Math.max(0, config.budget.sessionUsd - decision.sessionSpendUsd - cost.costUsd);
-      downHeaders['x-fiscus-session-remaining-usd'] = remaining.toFixed(4);
+      downHeaders['x-segreant-session-remaining-usd'] = remaining.toFixed(4);
     }
     res.writeHead(upstream.status, downHeaders);
     res.end(text);

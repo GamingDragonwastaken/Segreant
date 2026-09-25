@@ -82,9 +82,9 @@ test('every purpose an outbound call site names is one the boundary document dec
 });
 
 test('a receipt retains no raw origin, path, query, or credential material', () => {
-  const previous = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-inventory-redaction-'));
-  process.env.FISCUS_HOME = home;
+  const previous = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-inventory-redaction-'));
+  process.env.SEGREANT_HOME = home;
   try {
     // Everything identifying in this target is material an operator would not
     // expect a local audit log to keep: a real-looking origin, a project
@@ -111,8 +111,8 @@ test('a receipt retains no raw origin, path, query, or credential material', () 
       'status', 'targetClass', 'version',
     ], 'the receipt field set is the retention inventory; a new field is a new retained datum');
   } finally {
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 });

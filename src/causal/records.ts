@@ -223,17 +223,17 @@ function domainHash(domain: string, material: unknown): string {
 }
 
 function verifierHash(value: Omit<OrdinaryLedgerVerifierResultV2, 'resultHash'>): string {
-  return domainHash('fiscus.causal.ordinary-ledger-verifier', value);
+  return domainHash('segreant.causal.ordinary-ledger-verifier', value);
 }
 
 function executionHash(value: Omit<CausalExecutionRecordV2, 'eventHash'>): string {
-  return domainHash('fiscus.causal.execution', value);
+  return domainHash('segreant.causal.execution', value);
 }
 
 function decodeVerifier(value: unknown): OrdinaryLedgerVerifierResultV2 {
   const snapshot = snapshotVerifier(value);
   if (!plainRecord(snapshot)
-      || snapshot.type !== 'fiscus.causal-ordinary-ledger-verifier'
+      || snapshot.type !== 'segreant.causal-ordinary-ledger-verifier'
       || snapshot.version !== 2
       || !denseArray(snapshot.reasonCodes)
       || !digest(snapshot.resultHash)) {
@@ -270,7 +270,7 @@ function decodeVerifier(value: unknown): OrdinaryLedgerVerifierResultV2 {
 function decodeCausalExecutionV2Unchecked(value: unknown): CausalExecutionRecordV2 {
   const snapshot = snapshotExecution(value);
   if (!plainRecord(snapshot)
-      || snapshot.type !== 'fiscus.causal-execution'
+      || snapshot.type !== 'segreant.causal-execution'
       || snapshot.version !== 2) {
     throw new CausalRecordValidationError();
   }
@@ -356,7 +356,7 @@ export function causalExecutionV2EventHash(
 }
 
 function terminalOutcomeHash(value: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'>): string {
-  return domainHash('fiscus.causal.terminal-outcome', value);
+  return domainHash('segreant.causal.terminal-outcome', value);
 }
 
 function terminalOutcomeEvidenceClass(value: unknown): value is CausalEvidenceClassV2 {
@@ -367,7 +367,7 @@ function terminalOutcomeEvidenceClass(value: unknown): value is CausalEvidenceCl
 function decodeCausalTerminalOutcomeV2Unchecked(value: unknown): CausalTerminalOutcomeRecordV2 {
   const snapshot = snapshotTerminalOutcome(value);
   if (!plainRecord(snapshot)
-      || snapshot.type !== 'fiscus.causal-terminal-outcome'
+      || snapshot.type !== 'segreant.causal-terminal-outcome'
       || snapshot.version !== 2
       || !id(snapshot.outcomeId) || !id(snapshot.decisionId) || !id(snapshot.studyId)
       || !digest(snapshot.protocolHash) || !epoch(snapshot.observedAtMs)

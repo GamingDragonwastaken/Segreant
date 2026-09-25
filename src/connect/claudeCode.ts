@@ -48,7 +48,7 @@ export interface TranscriptUsageEvent {
   project: string;
   /** Whether that basename came from a real recorded path or from the tool-name fallback. */
   attributionBasis: AttributionBasis;
-  /** Full working-directory path — the repo Fiscus can find and auto-correlate. */
+  /** Full working-directory path — the repo Segreant can find and auto-correlate. */
   cwd: string | null;
   inputTokens: number;
   outputTokens: number;

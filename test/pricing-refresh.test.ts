@@ -17,14 +17,14 @@ import {
 } from '../src/cost/pricing.ts';
 import { Store } from '../src/store/db.ts';
 
-// These exercise the refresh/override path against an isolated FISCUS_HOME so the
-// real ~/.fiscus is never touched. node's test runner isolates each FILE in
+// These exercise the refresh/override path against an isolated SEGREANT_HOME so the
+// real ~/.segreant is never touched. node's test runner isolates each FILE in
 // its own process, so the module-level pricing memo here can't leak elsewhere.
-const origHome = process.env.FISCUS_HOME;
+const origHome = process.env.SEGREANT_HOME;
 
 function freshHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-pricing-'));
-  process.env.FISCUS_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-pricing-'));
+  process.env.SEGREANT_HOME = dir;
   return dir;
 }
 
@@ -341,6 +341,6 @@ test('default pricing transport refuses corrupt receipt history before DNS or so
 });
 
 test.after(() => {
-  if (origHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = origHome;
+  if (origHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = origHome;
 });

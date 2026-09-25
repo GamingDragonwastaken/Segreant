@@ -3,7 +3,7 @@
  * implementation. Kept as an interface — not just a class — so the HTTP layer
  * (server.ts) can be exercised in tests against an in-memory fake instead of
  * a live Postgres (see test/fakeStore.ts). Same "test through a real
- * interface boundary" instinct as the rest of Fiscus: mock HTTP servers
+ * interface boundary" instinct as the rest of Segreant: mock HTTP servers
  * stand in for upstream/judge endpoints elsewhere; here, a fake store stands
  * in for Postgres so auth/verification/routing logic is provable without an
  * external database in CI.
@@ -60,7 +60,7 @@ export interface PeriodFilter {
  * One distinct observation window among the rollups that fed an aggregate.
  *
  * WHY THIS EXISTS SEPARATELY FROM THE TOTALS. A rollup's window is chosen by
- * whoever pushed it — `fiscus team push --window D` defaults to 30 and takes
+ * whoever pushed it — `segreant team push --window D` defaults to 30 and takes
  * anything — so the snapshots summed into one team total need not cover the
  * same period at all. The server already refuses to filter a snapshot by a
  * partial window, on the stated grounds that it "would present its whole total

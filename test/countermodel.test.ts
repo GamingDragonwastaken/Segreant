@@ -178,14 +178,14 @@ test('every permanent condition of a reconciliation carries a world', () => {
   assert.deepEqual([...assessment.uncoveredAssumptions], []);
 });
 
-test('four of the residual’s conditions can be excluded by nothing Fiscus has', () => {
+test('four of the residual’s conditions can be excluded by nothing Segreant has', () => {
   // The finding, not a gap in the file: the residual is PERMANENTLY conditional.
   // An operator cannot work through this list and arrive at an unconditional
   // number, and the assessment has to be able to say that rather than leaving
   // them to discover it one check at a time.
   const assessment = assessAssumptionFragility([...run().conditions], reconciliationCountermodels(run()));
   assert.equal(assessment.unexcludable.length, 4);
-  assert.equal(assessment.excluded.length, 0, 'a condition Fiscus could rule out would not survive as a condition');
+  assert.equal(assessment.excluded.length, 0, 'a condition Segreant could rule out would not survive as a condition');
   assert.equal(assessment.claimHoldsAsStated, true, 'conditional is not the same as broken');
   for (const model of assessment.unexcludable) {
     assert.equal(model.excludedBy, null);

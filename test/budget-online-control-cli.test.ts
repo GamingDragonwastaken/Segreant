@@ -15,7 +15,7 @@ function runCli(args: string[], dbPath: string, home: string, cwd: string): Prom
     execFile(
       process.execPath,
       [CLI, ...args],
-      { cwd, env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' } },
+      { cwd, env: { ...process.env, SEGREANT_DB: dbPath, SEGREANT_HOME: home, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -50,9 +50,9 @@ function request(index: number, nowMs: number): RequestRow {
 }
 
 test('budget --control is a real fail-closed product route with durable policy state and audit', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-cli-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-budget-control-cli-'));
   const home = join(root, 'home');
-  const db = join(root, 'fiscus.db');
+  const db = join(root, 'segreant.db');
   const policyPath = join(root, 'policy.json');
   mkdirSync(home, { recursive: true });
 
@@ -122,9 +122,9 @@ test('budget --control is a real fail-closed product route with durable policy s
 
 
 test('budget --control rejects an oversized policy before parsing or mutation', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-policy-limit-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-budget-control-policy-limit-'));
   const home = join(root, 'home');
-  const db = join(root, 'fiscus.db');
+  const db = join(root, 'segreant.db');
   const policyPath = join(root, 'oversized-policy.json');
   mkdirSync(home, { recursive: true });
   const config = structuredClone(DEFAULT_CONFIG);

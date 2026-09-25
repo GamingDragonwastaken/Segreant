@@ -40,7 +40,7 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
   try {
     await page.goto(base + '/', { waitUntil: 'networkidle' });
 
-    const firstRun = page.getByRole('dialog', { name: 'How should Fiscus talk to you?' });
+    const firstRun = page.getByRole('dialog', { name: 'How should Segreant talk to you?' });
     await firstRun.waitFor({ state: 'visible' });
     const plain = firstRun.getByRole('button', { name: /Plain language/ });
     const precise = firstRun.getByRole('button', { name: /Precise/ });

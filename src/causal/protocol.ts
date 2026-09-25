@@ -601,7 +601,7 @@ function protocolMaterialV2(draft: CausalStudyProtocolDraftV2): CausalStudyProto
 
 function protocolHashV2Validated(draft: CausalStudyProtocolDraftV2): string {
   const material = protocolMaterialV2(draft);
-  return 'sha256:' + sha256('fiscus.causal.protocol\n2\n' + canonicalJson(material));
+  return 'sha256:' + sha256('segreant.causal.protocol\n2\n' + canonicalJson(material));
 }
 
 function validateCausalProtocolV2(draft: unknown): string[] {

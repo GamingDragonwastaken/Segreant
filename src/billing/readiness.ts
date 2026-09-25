@@ -19,7 +19,7 @@ export type { ReconciliationReadiness };
 /**
  * What still stands between this machine and a reconciliation run, in the order
  * an operator has to do it. Two of these are OWNER actions — creating a
- * least-privilege Admin key and supplying it — and Fiscus deliberately cannot
+ * least-privilege Admin key and supplying it — and Segreant deliberately cannot
  * perform them. The rest it can check.
  */
 export function reconciliationReadiness(store: Store): ReconciliationReadiness {
@@ -28,7 +28,7 @@ export function reconciliationReadiness(store: Store): ReconciliationReadiness {
   if (!scope) {
     missing.push({
       step: 'declare the route scope',
-      detail: 'fiscus billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply',
+      detail: 'segreant billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply',
       ownerAction: false,
     });
   } else if (scope.upstreamDisplay !== 'https://api.openai.com' || !scope.providerProjectRef) {
@@ -47,12 +47,12 @@ export function reconciliationReadiness(store: Store): ReconciliationReadiness {
     // one. The pull is better evidence and stays first.
     missing.push({
       step: 'observe a closed period — route A, a direct read-only pull (better evidence)',
-      detail: 'needs an OpenAI Admin key with the Costs read scope, exported as OPENAI_ADMIN_API_KEY for one command; Fiscus never stores or logs it. Then: fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> --apply',
+      detail: 'needs an OpenAI Admin key with the Costs read scope, exported as OPENAI_ADMIN_API_KEY for one command; Segreant never stores or logs it. Then: segreant billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> --apply',
       ownerAction: true,
     });
     missing.push({
       step: 'observe a closed period — route B, adopt an export you already have (no credential)',
-      detail: 'fiscus billing import --file <your-costs-export.fiscus.json> --apply, then fiscus billing openai-costs adopt --import-id <id> --apply. The result reconciles identically and is permanently stamped operator-supplied.',
+      detail: 'segreant billing import --file <your-costs-export.segreant.json> --apply, then segreant billing openai-costs adopt --import-id <id> --apply. The result reconciles identically and is permanently stamped operator-supplied.',
       ownerAction: true,
     });
   }

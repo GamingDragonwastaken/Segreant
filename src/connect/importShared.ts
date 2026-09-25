@@ -170,7 +170,7 @@ export interface ResolvedAttribution {
  *    (`api`, `server`, `web`) merge into one project.
  *
  * Asking git for the working-tree root fixes both, and — more importantly — it
- * makes the label the SAME one `fiscus realize` and `discoverProjectRepos`
+ * makes the label the SAME one `segreant realize` and `discoverProjectRepos`
  * compute for that repo, so imported spend and per-project RoI line up instead
  * of nearly lining up.
  *

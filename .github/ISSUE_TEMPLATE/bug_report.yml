@@ -52,12 +52,12 @@ body:
     id: output
     attributes:
       label: Error output or diagnostics
-      description: Paste the error, or attach the file from `fiscus diagnostics --json --out fiscus-diagnostics.json` (it is redacted by design).
+      description: Paste the error, or attach the file from `segreant diagnostics --json --out segreant-diagnostics.json` (it is redacted by design).
       render: text
   - type: input
     id: version
     attributes:
-      label: Fiscus version or commit
+      label: Segreant version or commit
       placeholder: "0.1.0, or the output of: git rev-parse --short HEAD"
     validations:
       required: true

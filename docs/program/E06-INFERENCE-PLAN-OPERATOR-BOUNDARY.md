@@ -5,7 +5,7 @@ pre-registration plans and count reported looks. D-279 adds the missing
 operator setup surface:
 
 ```text
-fiscus causal plan --study <study-id> --options <file> [--apply] [--json]
+segreant causal plan --study <study-id> --options <file> [--apply] [--json]
 ```
 
 The default is a pure preview. It validates the plan and prints the planned

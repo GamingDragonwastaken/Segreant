@@ -181,7 +181,7 @@ test('acceptanceForCommit returns null when nothing was proposed (→ gate unkno
 });
 
 test('receipt: sign then verify is valid; tampering invalidates', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rk-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rk-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const funnel = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', survived: 'pass', clean: 'pass' }));
@@ -197,7 +197,7 @@ test('receipt: sign then verify is valid; tampering invalidates', () => {
 });
 
 test('receipt: key pinning rejects a forgery signed by an untrusted key (authenticity, not just integrity)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-pin-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-pin-'));
   try {
     const honest = loadOrCreateKeyPair(join(dir, 'honest.json'));
     const attacker = loadOrCreateKeyPair(join(dir, 'attacker.json'));
@@ -227,7 +227,7 @@ test('receipt: key pinning rejects a forgery signed by an untrusted key (authent
 });
 
 test('receipt: claiming a trusted keyId while signing with another key is detected', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lie-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lie-'));
   try {
     const attacker = loadOrCreateKeyPair(join(dir, 'a.json'));
     const funnel = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', survived: 'pass', clean: 'pass' }));
@@ -1071,7 +1071,7 @@ function g(cwd: string, args: string[], env: Record<string, string> = {}): void 
   execFileSync('git', args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' });
 }
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-v-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-v-'));
   g(dir, ['init', '-q']);
   g(dir, ['config', 'user.email', 't@t.co']);
   g(dir, ['config', 'user.name', 'tester']);

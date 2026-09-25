@@ -18,7 +18,7 @@
  * It also makes it strictly less than a power calculation, and this module
  * refuses to be mistaken for one. Whether the interval clears the registered
  * non-inferiority margin or cost-superiority threshold depends on where the
- * true effect sits, which is the thing the study exists to find out. Fiscus
+ * true effect sits, which is the thing the study exists to find out. Segreant
  * will tell a caller the observed difference that would be REQUIRED at a given
  * n; it will not tell them the probability of observing it, because computing
  * that probability means assuming the answer.

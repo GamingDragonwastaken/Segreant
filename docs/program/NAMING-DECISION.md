@@ -1,5 +1,18 @@
 # Naming decision
 
+## Decision: Segreant (2026-09-26, D-290)
+
+The owner found Gryf too plain and asked for a name from griffin lore with
+more presence. **Segreant** was chosen: the heraldic word for a griffin reared
+up with wings raised, ready to fight, which is the product's job. Heraldry
+keeps the word almost entirely for griffins (occasionally dragons). It was
+free on npm, PyPI, Homebrew, crates.io and as a GitHub handle, and no company,
+package or repository used it. **Goldtalion** (gold + talon, in the style of
+Warcraft's Ironbeak and Thundertalon) was the runner-up and is also free.
+Names from World of Warcraft itself (Sky'ree, Wildhammer, Aerie Peak) were
+ruled out as Blizzard's. The rest of this document is the earlier analysis
+that recommended Gryf, kept as the record of how the decision was reached.
+
 **Recommendation (2026-09-25): rename Fiscus to Gryf.** It waits only on the
 owner's go-ahead, because a product name is the one decision the owner lives
 with permanently. Publishing to npm stays with the owner either way.

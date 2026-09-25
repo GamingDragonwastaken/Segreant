@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Fiscus is pre-1.0. Security fixes are made on the current `main` branch. Until a
+Segreant is pre-1.0. Security fixes are made on the current `main` branch. Until a
 stable release line exists, older commits are not maintained as supported
 security branches.
 
@@ -21,7 +21,7 @@ local access, browser access, provider credentials, or a team-server deployment.
 
 ## Security model
 
-Fiscus is local-first, not offline-only. Proxy traffic goes to the provider the
+Segreant is local-first, not offline-only. Proxy traffic goes to the provider the
 operator configured, and explicitly invoked features can perform other outbound
 requests. The canonical disclosure is `docs/DATA-BOUNDARIES.md`; security reports
 should be evaluated against that document rather than a generic "no network"
@@ -50,7 +50,7 @@ append-only store does and does not guarantee.
 - **The local dashboard binding to loopback.** This is the intended boundary,
   not an incomplete one; see `docs/DATA-BOUNDARIES.md`. It is expected to
   reject non-local `Host` values, make no external browser requests, and
-  require the `x-fiscus-local: 1` header on mutating routes. A GET endpoint
+  require the `x-segreant-local: 1` header on mutating routes. A GET endpoint
   that mutates persistent state, or a way to reach the dashboard from a
   non-loopback origin, *is* in scope above.
 - Proxy traffic reaching the AI provider the operator configured — that is the

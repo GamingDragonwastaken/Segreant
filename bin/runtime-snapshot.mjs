@@ -3,7 +3,7 @@
 // The launcher has to release the publication gate as soon as the copy exists —
 // holding it for the length of a command would starve every queued build — but
 // the command it launched can go on resolving modules and reading bundled
-// resources long after that. `fiscus start` is the case that decides the shape
+// resources long after that. `segreant start` is the case that decides the shape
 // of this module: it resolves its command promise the moment the proxy and
 // dashboard sockets are listening, then serves for hours, and the dashboard
 // reads the bundled pricing card per REQUEST rather than at import.
@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOCK_STALE_MS, processIsAlive } from './publication-lock.mjs';
 
-export const SNAPSHOT_PREFIX = 'fiscus-runtime-';
+export const SNAPSHOT_PREFIX = 'segreant-runtime-';
 export const SNAPSHOT_OWNER_FILE = 'owner.json';
 
 // The compiled runtime resolves these relative to the PACKAGE root rather than
@@ -66,7 +66,7 @@ function readSnapshotOwner(path) {
 /**
  * Remove snapshots left behind by processes that are gone.
  *
- * Liveness, not age, is the primary test: a `fiscus start` can legitimately own
+ * Liveness, not age, is the primary test: a `segreant start` can legitimately own
  * its snapshot for days, so an age-only reaper would delete a live server's
  * runtime. Age only decides for a directory with no readable owner record,
  * which can exist solely in the sliver between `mkdtemp` and the owner write.

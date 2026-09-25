@@ -49,7 +49,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-gate-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-gate-retention-'));
 
 import { Store, type RequestRow, type ProposalRow } from '../src/store/db.ts';
 import { computeRealization } from '../src/value/realization.ts';
@@ -63,12 +63,12 @@ const LINES = ['export function add(a: number, b: number): number {', '  return 
 const PLAIN = 'no complete proposal captured';
 
 function makeRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-gate-repo-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-gate-repo-'));
   const git = (args: string[], env?: NodeJS.ProcessEnv) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe', env: env ?? process.env });
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.invalid']);
-  git(['config', 'user.name', 'Fiscus test']);
+  git(['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), LINES.join('\n') + '\n');
   git(['add', '.']);
   const when = new Date(COMMIT_MS).toISOString();
@@ -123,7 +123,7 @@ test('a deleted proposal is named as deleted, not reported as never captured', a
     assert.equal(after.verdict, 'unknown');
     assert.ok(
       after.detail !== PLAIN,
-      'a proposal WAS captured here and Fiscus deleted it; "no complete proposal captured" sends the reader to fix working instrumentation',
+      'a proposal WAS captured here and Segreant deleted it; "no complete proposal captured" sends the reader to fix working instrumentation',
     );
     assert.ok(
       /delet|retention|prun/i.test(after.detail),

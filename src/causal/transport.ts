@@ -8,7 +8,7 @@
  * population, treatment, measurement, or time coordinates do not silently pool.
  */
 
-export const CAUSAL_TRANSPORT_TYPE = 'fiscus.causal-transport' as const;
+export const CAUSAL_TRANSPORT_TYPE = 'segreant.causal-transport' as const;
 export const CAUSAL_TRANSPORT_VERSION = 1 as const;
 
 type Digest = `sha256:${string}`;

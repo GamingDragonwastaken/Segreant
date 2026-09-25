@@ -1,5 +1,5 @@
 /**
- * `fiscus judge` CLI-level checks — integration-tested through the real
+ * `segreant judge` CLI-level checks — integration-tested through the real
  * CLI process, same pattern as test/team-push.test.ts.
  *
  * Since the R4 change, `judge` looks up REAL sessions from the store (default:
@@ -22,7 +22,7 @@ function runCli(args: string[], dbPath: string, home: string, cwd?: string): Pro
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' }, cwd },
+      { env: { ...process.env, SEGREANT_DB: dbPath, SEGREANT_HOME: home, NODE_OPTIONS: '' }, cwd },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number' ? ((err as unknown as { code: number }).code) : err ? 1 : 0;
         resolve({ code, stdout: String(stdout), stderr: String(stderr) });
@@ -50,7 +50,7 @@ function seedSession(dbPath: string, sessionId: string, tsEpochMs: number): void
 }
 
 test('judge: with a seeded session and no judge tier configured (the default), judges THAT session algorithmically, exit 0', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-judge-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-judge-'));
   try {
     const db = join(dir, 'judge.db');
     const home = join(dir, 'home');
@@ -74,7 +74,7 @@ test('judge: with a seeded session and no judge tier configured (the default), j
 });
 
 test('judge: default picks the newest-activity session; --session <id> picks a specific one', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-judge-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-judge-'));
   try {
     const db = join(dir, 'judge.db');
     const home = join(dir, 'home');
@@ -92,7 +92,7 @@ test('judge: default picks the newest-activity session; --session <id> picks a s
 });
 
 test('judge: an empty store reports no-sessions honestly — JSON error shape, exit 0, no invented judgment', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-judge-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-judge-'));
   try {
     const db = join(dir, 'judge.db');
     const home = join(dir, 'home');
@@ -107,8 +107,8 @@ test('judge: an empty store reports no-sessions honestly — JSON error shape, e
 });
 
 test('judge: no --project and cwd is not a git repo reports a clear error, exit 1, nothing crashes', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-judge-'));
-  const notARepo = mkdtempSync(join(tmpdir(), 'fiscus-judge-notrepo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-judge-'));
+  const notARepo = mkdtempSync(join(tmpdir(), 'segreant-judge-notrepo-'));
   try {
     const db = join(dir, 'judge.db');
     const home = join(dir, 'home');
@@ -122,7 +122,7 @@ test('judge: no --project and cwd is not a git repo reports a clear error, exit 
 });
 
 test('judge: non-JSON mode prints human-readable output naming the session and tool, without throwing', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-judge-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-judge-'));
   try {
     const db = join(dir, 'judge.db');
     const home = join(dir, 'home');

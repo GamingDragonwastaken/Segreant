@@ -1,14 +1,14 @@
 import type { EstimandDefinition } from './estimand.ts';
 
 /**
- * Canonical local evidence records for Fiscus's randomized causal-study lane.
+ * Canonical local evidence records for Segreant's randomized causal-study lane.
  *
  * These are deliberately narrow structural records. They identify a protocol,
  * randomized allocation, execution lineage, and outcome lineage without making
  * raw prompts, source text, credentials, or model outputs required evidence.
  */
 
-export const CAUSAL_PROTOCOL_TYPE = 'fiscus.causal-study' as const;
+export const CAUSAL_PROTOCOL_TYPE = 'segreant.causal-study' as const;
 export const CAUSAL_PROTOCOL_VERSION = 1 as const;
 export const CAUSAL_PROTOCOL_VERSION_V2 = 2 as const;
 
@@ -73,7 +73,7 @@ export interface CausalStudyArm {
   /**
    * Content hash for the provider/model/prompt-policy/tool/fallback execution
    * plan. The underlying plan belongs in a separately governed local system;
-   * Fiscus needs the identifier, not the prompt or credentials themselves.
+   * Segreant needs the identifier, not the prompt or credentials themselves.
    */
   executionPlanHash: string;
   providerId: string | null;
@@ -334,7 +334,7 @@ export interface CausalAssignmentPlan {
 
 /** Exact persisted v2 assignment-plan record. Raw entropy is never serialized. */
 export interface CausalAssignmentPlanV2 {
-  type: 'fiscus.causal-assignment-plan';
+  type: 'segreant.causal-assignment-plan';
   version: 2;
   studyId: string;
   blockId: string;
@@ -353,7 +353,7 @@ export interface CausalAssignmentPlanV2 {
 
 /** Exact persisted v2 assignment decision. */
 export interface CausalDecisionRecordV2 {
-  type: 'fiscus.causal-decision';
+  type: 'segreant.causal-decision';
   version: 2;
   decisionId: string;
   studyId: string;
@@ -411,7 +411,7 @@ export interface CausalAssignmentManifestDecisionV2 {
 
 /** Exact authoritative manifest derived from all retained v2 assignment rows. */
 export interface CausalAssignmentManifestV2 {
-  type: 'fiscus.causal-assignment-manifest';
+  type: 'segreant.causal-assignment-manifest';
   version: 2;
   studyId: string;
   protocolHash: string;
@@ -435,7 +435,7 @@ export interface CausalAssignmentResultV2 {
  * result hash and does not accept a caller-selected verified result.
  */
 export interface OrdinaryLedgerVerifierUnresolvedV2 {
-  type: 'fiscus.causal-ordinary-ledger-verifier';
+  type: 'segreant.causal-ordinary-ledger-verifier';
   version: 2;
   state: 'unresolved';
   checkedAtMs: null;
@@ -448,14 +448,14 @@ export interface OrdinaryLedgerVerifierUnresolvedV2 {
 /**
  * A read-only verifier result produced from exact retained request ids.
  *
- * `verified` means that Fiscus checked the scalar request evidence against the
+ * `verified` means that Segreant checked the scalar request evidence against the
  * execution window, provider/model, scope declaration, status, cost basis,
  * fixed-point cost total, and retained price-lineage digests. It remains local
  * evidence: provider invoice finality and account ownership are separate
  * reconciliation claims and are never implied by this state.
  */
 export interface OrdinaryLedgerVerifierVerifiedV2 {
-  type: 'fiscus.causal-ordinary-ledger-verifier';
+  type: 'segreant.causal-ordinary-ledger-verifier';
   version: 2;
   state: 'verified';
   checkedAtMs: number;
@@ -471,7 +471,7 @@ export type OrdinaryLedgerVerifierResultV2 =
 
 /** Exact v2 execution record. It is deliberately distinct from the retained v1 shape. */
 export interface CausalExecutionRecordV2 {
-  type: 'fiscus.causal-execution';
+  type: 'segreant.causal-execution';
   version: 2;
   executionId: string;
   decisionId: string;
@@ -495,7 +495,7 @@ export interface CausalExecutionRecordV2 {
 
 /** Exact v2 terminal outcome record. Pending is represented by row absence. */
 export interface CausalTerminalOutcomeRecordV2 {
-  type: 'fiscus.causal-terminal-outcome';
+  type: 'segreant.causal-terminal-outcome';
   version: 2;
   outcomeId: string;
   decisionId: string;
@@ -527,7 +527,7 @@ export interface CausalExecutionRecord {
   assignedExecutionPlanHash: string;
   actualExecutionPlanHash: string | null;
   adherence: ExecutionAdherence;
-  /** Local references to independently metered Fiscus request records. */
+  /** Local references to independently metered Segreant request records. */
   requestIds: string[];
   directAiCostUsd: number | null;
   directCostSourceClass: CostSourceClass;

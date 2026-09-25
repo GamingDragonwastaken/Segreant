@@ -9,8 +9,8 @@
  * Its own docblock said coverage "says nothing about whether the ledger sees
  * every request the organisation made, which no local evidence can establish."
  *
- * THAT SENTENCE IS TRUE OF TRAFFIC THAT NEVER REACHED FISCUS AND FALSE OF ROWS
- * FISCUS DELETED ITSELF. Since D-170 the ledger records its own retention
+ * THAT SENTENCE IS TRUE OF TRAFFIC THAT NEVER REACHED SEGREANT AND FALSE OF ROWS
+ * SEGREANT DELETED ITSELF. Since D-170 the ledger records its own retention
  * boundary, so there is exactly one case where local evidence DOES establish
  * that the ledger no longer sees requests it once saw. The axis was written
  * before that record existed, and after it the answer `complete` over a pruned
@@ -45,7 +45,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-metered-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-metered-retention-'));
 
 import { meteredClaimSupport } from '../src/dashboard/claim-support.ts';
 import { buildOverview } from '../src/dashboard/routes.ts';
@@ -103,7 +103,7 @@ test('with no prune on record nothing is asserted about deletion', () => {
 });
 
 test('the overview payload carries the window coverage it was computed over', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-overview-retention-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-overview-retention-'));
   const store = new Store(join(dir, 'o.db'));
   try {
     const config = structuredClone(DEFAULT_CONFIG);
@@ -131,7 +131,7 @@ test('a window that starts after the boundary is intact even on a pruned ledger'
   // `prune` deletes rows strictly older than the boundary, so a window starting
   // at or after it lost nothing. Erring the other way would mark every window
   // on a pruned ledger partial forever.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-overview-intact-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-overview-intact-'));
   const store = new Store(join(dir, 'o.db'));
   try {
     const config = structuredClone(DEFAULT_CONFIG);

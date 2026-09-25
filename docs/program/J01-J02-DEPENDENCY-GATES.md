@@ -15,22 +15,22 @@ target/logging policy version and digest, explicit overlap constraints and
 bounded reward semantics. It implements IPS, self-normalized IPS and doubly
 robust estimates with explicit clipping and tail-risk disclosure. The Store owns
 an append-only, digest-authenticated action-observation log and
-`fiscus causal ope --options <file>` is a bounded review-only product consumer.
+`segreant causal ope --options <file>` is a bounded review-only product consumer.
 Retrospective model comparisons without action-level propensity/treatment
 provenance remain observational and are refused as OPE.
 
 ## J02 — constrained online control
 
 The owner has explicitly delegated bounded autonomous online action. The first
-implemented target is deliberately narrow: Fiscus may change its own hard daily
-proxy cap, `budget.dailyUsd`, through `fiscus budget --control --policy
+implemented target is deliberately narrow: Segreant may change its own hard daily
+proxy cap, `budget.dailyUsd`, through `segreant budget --control --policy
 <file.json> [--apply]`. This reuses the exact-money BudgetGuard and the existing
 budget DecisionCertificate/DAL path instead of creating a second spend authority.
 
 The runtime contract is:
 
 - **default no action:** without `--apply`, the route is a pure preview; with
-  ordinary observational Fiscus inputs the spend-change assurance gate remains
+  ordinary observational Segreant inputs the spend-change assurance gate remains
   below DAL-3, so even `--apply` makes no spend mutation;
 - **separate delegated authority:** a versioned control policy names the target,
   safe baseline, min/max cap envelope, maximum relative step, expiry,
@@ -61,12 +61,12 @@ The runtime contract is:
   state and audit writes is reconciled on the next invocation as committed,
   aborted or conflicted rather than silently losing provenance;
 - **action semantics proven at the product route:** the CLI exercises the real
-  Fiscus config persistence path, so the target is not an in-memory rollout enum.
+  Segreant config persistence path, so the target is not an in-memory rollout enum.
   A high-assurance synthetic DAL-3 test proves the mutation path can open; a CLI
   integration test over ordinary runtime evidence proves the live product path
   fails closed and leaves the cap unchanged.
 
 This closes J02 as an implementation packet. It does **not** claim that ordinary
-current Fiscus evidence already earns DAL-3, that an autonomous policy has been
+current Segreant evidence already earns DAL-3, that an autonomous policy has been
 operated in a real organization, or that retrospective OPE is causal. Those are
 evidence/field-use questions, not missing controller architecture.

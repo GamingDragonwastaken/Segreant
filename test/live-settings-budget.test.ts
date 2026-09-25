@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/store/db.ts';
-import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../src/egress/receipts.ts';
 import { createProxyServer } from '../src/proxy/server.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
@@ -23,9 +23,9 @@ function close(server: http.Server): Promise<void> {
 }
 
 test('live settings: saving a hard cap through the dashboard governs the already-running proxy', async () => {
-  const originalFiscusHome = process.env.FISCUS_HOME;
-  const testHome = mkdtempSync(join(tmpdir(), 'fiscus-live-settings-home-'));
-  process.env.FISCUS_HOME = testHome;
+  const originalSegreantHome = process.env.SEGREANT_HOME;
+  const testHome = mkdtempSync(join(tmpdir(), 'segreant-live-settings-home-'));
+  process.env.SEGREANT_HOME = testHome;
   const receiptPath = egressReceiptPath();
   assert.equal(receiptPath, join(testHome, 'egress-receipts.jsonl'), 'the test owns an isolated receipt ledger');
 
@@ -39,7 +39,7 @@ test('live settings: saving a hard cap through the dashboard governs the already
   });
   const upstreamBase = await listen(upstream);
   const store = new Store(':memory:');
-  const config: FiscusConfig = structuredClone(DEFAULT_CONFIG);
+  const config: SegreantConfig = structuredClone(DEFAULT_CONFIG);
   config.upstreams.openai = upstreamBase;
   let persisted = structuredClone(config);
   const proxy = createProxyServer({ store, config });
@@ -71,7 +71,7 @@ test('live settings: saving a hard cap through the dashboard governs the already
 
     const update = await fetch(`${dashboardBase}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-segreant-local': '1' },
       body: JSON.stringify({ budget: { dailyUsd: 0.000001 } }),
     });
     assert.equal(update.status, 200);
@@ -80,14 +80,14 @@ test('live settings: saving a hard cap through the dashboard governs the already
     const blocked = await request();
     assert.equal(blocked.status, 429, 'the existing proxy reads the newly saved budget instead of a stale nested object');
     const body = (await blocked.json()) as { error?: { type?: string } };
-    assert.equal(body.error?.type, 'fiscus_budget_block');
+    assert.equal(body.error?.type, 'segreant_budget_block');
   } finally {
     await close(dashboard);
     await close(proxy);
     await close(upstream);
     store.close();
-    if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = originalFiscusHome;
+    if (originalSegreantHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = originalSegreantHome;
     rmSync(testHome, { recursive: true, force: true });
   }
 });

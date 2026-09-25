@@ -54,7 +54,7 @@ test('a claim asserting a measurement strength must name a model at all', () => 
   assert.ok(backing.reasons.some((reason) => /names no measurement model/.test(reason)));
 });
 
-// The concrete laundering this packet exists to stop. Fiscus's one declared
+// The concrete laundering this packet exists to stop. Segreant's one declared
 // measurement model is Git line retention, whose own author wrote
 // `artifact_persistence` / `proxy_unvalidated` on it. Cited behind a validated
 // productivity figure it must fail on both counts at once: a survival ratio is

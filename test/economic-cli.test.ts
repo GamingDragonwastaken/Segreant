@@ -18,7 +18,7 @@ function runCli(args: string[], dbPath: string): Promise<{ code: number; stdout:
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_DB: dbPath, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? ((err as unknown as { code: number }).code)
@@ -36,7 +36,7 @@ function request(overrides: Partial<RequestRow> = {}): RequestRow {
     tsEpochMs: Date.parse('2026-08-01T00:00:00.000Z'),
     provider: 'anthropic',
     model: 'claude-opus-4-8',
-    project: 'fiscus',
+    project: 'segreant',
     taskWeight: 1,
     inputTokens: 1,
     outputTokens: 1,
@@ -145,8 +145,8 @@ test('economic report keeps source and translated coverage on one historical as-
 });
 
 test('economic CLI emits historical translation coverage and provenance', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-report-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-economic-report-cli-'));
+  const db = join(dir, 'segreant.db');
   const asOf = '2026-12-31T00:00:00.000Z';
   try {
     const seed = new Store(db);
@@ -185,8 +185,8 @@ test('economic CLI emits historical translation coverage and provenance', async 
 });
 
 test('economic CLI export preserves effective-at context and requires a target for translation', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-export-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-economic-export-cli-'));
+  const db = join(dir, 'segreant.db');
   const asOf = '2026-12-31T00:00:00.000Z';
   try {
     const seed = new Store(db);
@@ -228,8 +228,8 @@ test('economic CLI export preserves effective-at context and requires a target f
 });
 
 test('economic CLI exposes explicit period-close finalize, status, and reopen operations', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-close-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-economic-close-cli-'));
+  const db = join(dir, 'segreant.db');
   const from = '2026-08-01T00:00:00.000Z';
   const to = '2026-08-02T00:00:00.000Z';
   try {

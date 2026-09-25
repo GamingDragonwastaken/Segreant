@@ -125,7 +125,7 @@ export function decisionCertificationStructure(
  * correct as of this commit. So this is a mechanism built and not wired: the
  * only domain that can currently put a "why is this not certified?" witness in
  * front of an operator is the reconciliation domain, through
- * `src/billing/countermodels.ts` and `fiscus billing reconcile`. The value
+ * `src/billing/countermodels.ts` and `segreant billing reconcile`. The value
  * domain emits no countermodels at all — `src/value/` does not import
  * `countermodel.ts` — so it cannot produce such a witness either.
  *

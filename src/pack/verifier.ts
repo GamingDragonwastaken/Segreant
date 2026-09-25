@@ -1,20 +1,20 @@
 import { createHash, createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
 import {
-  DEFAULT_FISCUS_PACK_LIMITS,
+  DEFAULT_SEGREANT_PACK_LIMITS,
   isSafeRelativeAttachmentPath,
-  resolveFiscusPackLimits,
-  validateFiscusPackEnvelope,
-  validateFiscusPackLimits,
-  validateFiscusPackManifest,
-  type FiscusPackEnvelope,
-  type FiscusPackLimits,
-  type FiscusPackLimitsOverride,
-  type FiscusPackSignatureMetadata,
+  resolveSegreantPackLimits,
+  validateSegreantPackEnvelope,
+  validateSegreantPackLimits,
+  validateSegreantPackManifest,
+  type SegreantPackEnvelope,
+  type SegreantPackLimits,
+  type SegreantPackLimitsOverride,
+  type SegreantPackSignatureMetadata,
 } from './types.ts';
-import { manifestDigest, serializeFiscusPack } from './manifest.ts';
-import { asPublicKey, keyIdForPublicKey, type FiscusPackKeyInput } from './signature.ts';
+import { manifestDigest, serializeSegreantPack } from './manifest.ts';
+import { asPublicKey, keyIdForPublicKey, type SegreantPackKeyInput } from './signature.ts';
 
-export interface FiscusPackSignatureVerification {
+export interface SegreantPackSignatureVerification {
   readonly status: 'absent' | 'metadata_only' | 'valid' | 'invalid';
   readonly cryptographicVerification: 'not_performed' | 'verified' | 'failed';
   readonly pinned: boolean;
@@ -22,13 +22,13 @@ export interface FiscusPackSignatureVerification {
   readonly signedDigest: string | null;
 }
 
-export interface FiscusPackAttachmentVerification {
+export interface SegreantPackAttachmentVerification {
   readonly status: 'none' | 'partial' | 'complete';
   readonly declared: number;
   readonly present: number;
 }
 
-export interface FiscusPackVerificationResult {
+export interface SegreantPackVerificationResult {
   readonly ok: boolean;
   readonly errors: readonly string[];
   readonly manifestDigest: string | null;
@@ -36,15 +36,15 @@ export interface FiscusPackVerificationResult {
   readonly integrity: 'verified' | 'not_verified';
   readonly authenticity: 'verified' | 'not_established';
   readonly truth: 'not_evaluated';
-  readonly signature: FiscusPackSignatureVerification;
-  readonly attachments: FiscusPackAttachmentVerification;
-  readonly limits: FiscusPackLimits;
+  readonly signature: SegreantPackSignatureVerification;
+  readonly attachments: SegreantPackAttachmentVerification;
+  readonly limits: SegreantPackLimits;
 }
 
-export interface VerifyFiscusPackOptions {
-  readonly limits?: FiscusPackLimitsOverride;
+export interface VerifySegreantPackOptions {
+  readonly limits?: SegreantPackLimitsOverride;
   /** An out-of-band trust anchor; embedded keys alone never establish authenticity. */
-  readonly trustedPublicKey?: FiscusPackKeyInput;
+  readonly trustedPublicKey?: SegreantPackKeyInput;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,7 +55,7 @@ function byteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8');
 }
 
-function parseInput(input: unknown, limits: FiscusPackLimits): { value: unknown; errors: string[] } {
+function parseInput(input: unknown, limits: SegreantPackLimits): { value: unknown; errors: string[] } {
   if (typeof input === 'string') {
     if (byteLength(input) > limits.maxEnvelopeBytes) {
       return { value: null, errors: [`pack envelope exceeds resource limit (${limits.maxEnvelopeBytes} bytes)`] };
@@ -79,7 +79,7 @@ function parseInput(input: unknown, limits: FiscusPackLimits): { value: unknown;
   return { value: input, errors: [] };
 }
 
-function canonicalJson(value: unknown, limits: FiscusPackLimits): string {
+function canonicalJson(value: unknown, limits: SegreantPackLimits): string {
   const seen = new WeakSet<object>();
   let nodes = 0;
   const visit = (current: unknown, path: string, depth: number): string => {
@@ -125,15 +125,15 @@ function digest(value: string): string {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
-function emptySignature(): FiscusPackSignatureVerification {
+function emptySignature(): SegreantPackSignatureVerification {
   return { status: 'absent', cryptographicVerification: 'not_performed', pinned: false, keyId: null, signedDigest: null };
 }
 
-function emptyAttachments(): FiscusPackAttachmentVerification {
+function emptyAttachments(): SegreantPackAttachmentVerification {
   return { status: 'none', declared: 0, present: 0 };
 }
 
-function invalidResult(errors: string[], limits: FiscusPackLimits): FiscusPackVerificationResult {
+function invalidResult(errors: string[], limits: SegreantPackLimits): SegreantPackVerificationResult {
   return {
     ok: false,
     errors,
@@ -155,13 +155,13 @@ function decodeCanonicalBase64(value: string): Buffer | null {
 }
 
 function cryptographicSignature(
-  signature: FiscusPackSignatureMetadata | undefined,
+  signature: SegreantPackSignatureMetadata | undefined,
   signedDigest: string | null,
-  trustedPublicKey: FiscusPackKeyInput | undefined,
+  trustedPublicKey: SegreantPackKeyInput | undefined,
   errors: string[],
-): FiscusPackSignatureVerification {
+): SegreantPackSignatureVerification {
   if (signature === undefined) return emptySignature();
-  const metadataOnly: FiscusPackSignatureVerification = {
+  const metadataOnly: SegreantPackSignatureVerification = {
     status: 'metadata_only',
     cryptographicVerification: 'not_performed',
     pinned: false,
@@ -227,9 +227,9 @@ function cryptographicSignature(
  * valid and its canonical manifest digest matches; it does not validate record
  * semantics, external references, signatures, truth, or completeness.
  */
-export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOptions = {}): FiscusPackVerificationResult {
-  const limits = resolveFiscusPackLimits(options.limits);
-  const limitErrors = validateFiscusPackLimits(limits);
+export function verifySegreantPack(input: unknown, options: VerifySegreantPackOptions = {}): SegreantPackVerificationResult {
+  const limits = resolveSegreantPackLimits(options.limits);
+  const limitErrors = validateSegreantPackLimits(limits);
   if (limitErrors.length > 0) {
     return invalidResult(limitErrors, limits);
   }
@@ -239,7 +239,7 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
     return invalidResult(parsed.errors, limits);
   }
 
-  const errors = validateFiscusPackEnvelope(parsed.value, limits);
+  const errors = validateSegreantPackEnvelope(parsed.value, limits);
   const value = parsed.value;
   if (isRecord(value) && typeof value.manifestDigest === 'string' && isRecord(value.manifest)) {
     try {
@@ -288,7 +288,7 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
     : null;
   const signature = isRecord(value) && isRecord(value.manifest) && isRecord(value.manifest.signature)
     ? cryptographicSignature(
-        value.manifest.signature as unknown as FiscusPackSignatureMetadata,
+        value.manifest.signature as unknown as SegreantPackSignatureMetadata,
         computedDigest,
         options.trustedPublicKey,
         errors,
@@ -298,7 +298,7 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
     ? value.manifest.attachments.length
     : 0;
   const presentAttachments = isRecord(value) && Array.isArray(value.attachments) ? value.attachments.length : 0;
-  const attachments: FiscusPackAttachmentVerification = {
+  const attachments: SegreantPackAttachmentVerification = {
     status: declaredAttachments === 0 ? 'none' : presentAttachments === declaredAttachments ? 'complete' : 'partial',
     declared: declaredAttachments,
     present: presentAttachments,
@@ -318,4 +318,4 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
   };
 }
 
-export { isSafeRelativeAttachmentPath, serializeFiscusPack, manifestDigest };
+export { isSafeRelativeAttachmentPath, serializeSegreantPack, manifestDigest };

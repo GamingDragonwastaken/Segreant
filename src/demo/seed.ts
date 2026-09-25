@@ -80,7 +80,7 @@ const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
  * itself fake: `source: 'cursor'` depicts a tool that never ran, `user:
  * 'alice@team'` depicts a developer who does not exist, and `via: 'proxy'`
  * depicts a hop that never happened. Attribution basis was the one axis that
- * self-negated — every row said `synthetic_demo`, so `fiscus project --coverage`
+ * self-negated — every row said `synthetic_demo`, so `segreant project --coverage`
  * and the dashboard's By-project card were structurally blank in the demo and
  * the two attribution mechanisms shipped in T-030/T-037 could not be seen at all
  * without a real repository and a real transcript corpus.
@@ -97,8 +97,8 @@ const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
  * imported row cannot claim it arrived through the proxy.
  */
 export type DemoRoute =
-  | 'proxy_declared'    // routed through Fiscus with x-fiscus-project set
-  | 'proxy_undeclared'  // routed through Fiscus with no project header at all
+  | 'proxy_declared'    // routed through Segreant with x-segreant-project set
+  | 'proxy_undeclared'  // routed through Segreant with no project header at all
   | 'import_repo'       // read out of a tool's local log; cwd resolved to a git repo
   | 'import_inferred'   // read out of a local log; cwd is a directory, not a repo
   | 'import_fallback';  // read out of a local log that recorded no cwd
@@ -130,11 +130,11 @@ const ROUTES: Record<DemoRoute, RouteShape> = {
 // Six named devs — deliberately above the k-anonymity floor (5) so the demo can
 // show the per-user VALUE distribution. Real deployments still default this off.
 const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team', 'dave@team', 'erin@team', 'frank@team'];
-// Background traffic includes some unattributed calls (no x-fiscus-user header).
+// Background traffic includes some unattributed calls (no x-segreant-user header).
 const USERS: Array<string | null> = [...NAMED_USERS, null];
-// Connected sources (feeds) — the AI tools routed through Fiscus. opencode is
+// Connected sources (feeds) — the AI tools routed through Segreant. opencode is
 // the first first-class connector; the rest are a realistic multi-tool mix, plus
-// some untagged traffic (no x-fiscus-source header) that reads as 'direct'.
+// some untagged traffic (no x-segreant-source header) that reads as 'direct'.
 const SOURCES: Array<string | null> = ['opencode', 'cursor', 'claude-code', null];
 
 /**
@@ -515,7 +515,7 @@ function seedUnitTraffic(ctx: Ctx, spec: UnitSpec, u: WorkUnit): void {
   const user = pick(ctx.rng, NAMED_USERS);
   const source = pick(ctx.rng, ['opencode', 'cursor']);
   // One project is metered by IMPORT rather than by the proxy — a subscription
-  // coding agent whose spend Fiscus reads out of local transcripts after the
+  // coding agent whose spend Segreant reads out of local transcripts after the
   // fact. Attaching it to a project that also has shipped commits is the point:
   // realized-value evidence has to work over imported spend, not only over
   // traffic that happened to be routed. It is also where the demo's
@@ -661,7 +661,7 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
   // Non-coding sessions, seeded per-user so the per-user VALUE distribution is
   // real: a spread of extraction across the team (some extract nearly all their
   // spend, some little), which drives dispersion + coaching headroom in
-  // `fiscus team`. Outcomes stay honest (redone = negative, null = unreported),
+  // `segreant team`. Outcomes stay honest (redone = negative, null = unreported),
   // so no user shows a fake 100%. Each dev gets 3 sessions.
   const perUserOutcomes: Array<{ user: string; outcomes: Array<string | null> }> = [
     { user: 'alice@team', outcomes: ['published', 'resolved', 'used'] }, // extracts a lot

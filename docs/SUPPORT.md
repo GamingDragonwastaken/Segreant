@@ -16,17 +16,17 @@ specifically).
 ## What a useful report contains
 
 - The exact command run, or the GUI action taken.
-- Fiscus version (`fiscus version`) and Node version (`node --version`).
+- Segreant version (`segreant version`) and Node version (`node --version`).
 - The `git rev-parse HEAD` of the checkout, if built from source.
 - What you expected versus what happened, including exact output where
   possible.
 - Whether the issue needs a provider credential, browser access, or a
   team-server deployment to reproduce.
 
-Run `fiscus diagnostics` (redacted local runtime/database/egress diagnostics —
+Run `segreant diagnostics` (redacted local runtime/database/egress diagnostics —
 see its `--json` output for the full field set) and attach its output when the
 report concerns metering, budget enforcement, or egress behavior. It reads
-local state only and does not contact a Fiscus-operated service.
+local state only and does not contact a Segreant-operated service.
 
 ## What is not support
 

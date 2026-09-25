@@ -17,7 +17,7 @@
  * complete.
  *
  * MEASURED. Ten proxy requests carrying the declaration, $180.00. With the
- * scope active: `on $180.00/10 req`. After `fiscus billing scope clear`:
+ * scope active: `on $180.00/10 req`. After `segreant billing scope clear`:
  *
  *     on $0.00/0 req   imported $0.00   off-scope $0.00/0 req
  *
@@ -64,7 +64,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-coverage-partition-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-coverage-partition-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { reconciliationReadiness } from '../src/billing/readiness.ts';

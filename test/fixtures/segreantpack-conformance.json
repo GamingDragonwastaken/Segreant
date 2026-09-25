@@ -1,13 +1,13 @@
 {
-  "format": "fiscuspack-conformance-v1",
+  "format": "segreantpack-conformance-v1",
   "vectors": [
     {
       "name": "valid-unsigned",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -23,7 +23,7 @@
           "externalReferences": [],
           "attachments": []
         },
-        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+        "manifestDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
       },
       "expected": {
         "ok": true,
@@ -41,10 +41,10 @@
     {
       "name": "valid-metadata-only",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -63,10 +63,10 @@
             "algorithm": "ed25519",
             "keyId": "key:metadata",
             "signature": "operator-attestation",
-            "signedDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+            "signedDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
           }
         },
-        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+        "manifestDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
       },
       "expected": {
         "ok": true,
@@ -84,13 +84,13 @@
     {
       "name": "valid-signature-with-anchor",
       "options": {
-        "trustedPublicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY="
+        "trustedPublicKey": "MCowBQYDK2VwAyEAEzMmMdtRsqlzJqUZE4AgRTWffbrTfKTzkzL3XAS1+KQ="
       },
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:signed-vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -114,13 +114,13 @@
           ],
           "signature": {
             "algorithm": "ed25519",
-            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
-            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
-            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
-            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+            "keyId": "sha256:464d245af3075a5c76cae76528cc6befa4123e72bc4426f831f8a6e1eb183a6c",
+            "publicKey": "MCowBQYDK2VwAyEAEzMmMdtRsqlzJqUZE4AgRTWffbrTfKTzkzL3XAS1+KQ=",
+            "signature": "9Ex0RyLnayLzOdydDpEjfS9fpohJRTKeBwbUvF1CUhhQpXeCX9W84+/Ph26Y8qrFyJA7w8/l0AnaEBlRo3KWCQ==",
+            "signedDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60"
           }
         },
-        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "manifestDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60",
         "attachments": [
           {
             "path": "evidence/vector.txt",
@@ -147,10 +147,10 @@
         "trustedPublicKey": "MCowBQYDK2VwAyEASkyFebuZ4hnhafkx7hHd5Y3za6s6OXemooOooPNFkKM="
       },
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:signed-vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -174,13 +174,13 @@
           ],
           "signature": {
             "algorithm": "ed25519",
-            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
-            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
-            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
-            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+            "keyId": "sha256:464d245af3075a5c76cae76528cc6befa4123e72bc4426f831f8a6e1eb183a6c",
+            "publicKey": "MCowBQYDK2VwAyEAEzMmMdtRsqlzJqUZE4AgRTWffbrTfKTzkzL3XAS1+KQ=",
+            "signature": "9Ex0RyLnayLzOdydDpEjfS9fpohJRTKeBwbUvF1CUhhQpXeCX9W84+/Ph26Y8qrFyJA7w8/l0AnaEBlRo3KWCQ==",
+            "signedDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60"
           }
         },
-        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "manifestDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60",
         "attachments": [
           {
             "path": "evidence/vector.txt",
@@ -205,10 +205,10 @@
     {
       "name": "manifest-tamper",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -224,7 +224,7 @@
           "externalReferences": [],
           "attachments": []
         },
-        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+        "manifestDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
       },
       "expected": {
         "ok": false,
@@ -243,10 +243,10 @@
     {
       "name": "attachment-tamper",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:signed-vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -270,13 +270,13 @@
           ],
           "signature": {
             "algorithm": "ed25519",
-            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
-            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
-            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
-            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+            "keyId": "sha256:464d245af3075a5c76cae76528cc6befa4123e72bc4426f831f8a6e1eb183a6c",
+            "publicKey": "MCowBQYDK2VwAyEAEzMmMdtRsqlzJqUZE4AgRTWffbrTfKTzkzL3XAS1+KQ=",
+            "signature": "9Ex0RyLnayLzOdydDpEjfS9fpohJRTKeBwbUvF1CUhhQpXeCX9W84+/Ph26Y8qrFyJA7w8/l0AnaEBlRo3KWCQ==",
+            "signedDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60"
           }
         },
-        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "manifestDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60",
         "attachments": [
           {
             "path": "evidence/vector.txt",
@@ -301,10 +301,10 @@
     {
       "name": "malformed-signature-base64",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:signed-vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -324,10 +324,10 @@
             "keyId": "key:malformed",
             "publicKey": "not-base64",
             "signature": "also-not-base64",
-            "signedDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+            "signedDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
           }
         },
-        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+        "manifestDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
       },
       "expected": {
         "ok": false,
@@ -346,10 +346,10 @@
     {
       "name": "partial-attachments",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:signed-vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -372,7 +372,7 @@
             }
           ]
         },
-        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+        "manifestDigest": "sha256:fdc2e4712cdb7499964c8f8d3c60c928af60c16def20f7474ef26cd2db9d3d60"
       },
       "expected": {
         "ok": true,
@@ -390,10 +390,10 @@
     {
       "name": "unsafe-attachment-path",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -429,10 +429,10 @@
     {
       "name": "unsupported-version",
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 2,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -466,10 +466,10 @@
         }
       },
       "pack": {
-        "schema": "fiscuspack",
+        "schema": "segreantpack",
         "version": 1,
         "manifest": {
-          "schema": "fiscuspack.manifest",
+          "schema": "segreantpack.manifest",
           "version": 1,
           "packId": "pack:vector",
           "createdAt": "2026-09-15T00:00:00.000Z",
@@ -485,7 +485,7 @@
           "externalReferences": [],
           "attachments": []
         },
-        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+        "manifestDigest": "sha256:bd72f43b2c7d4a85b7072b49a68df7154835247ffe5afbb51391a4b84c6e701a"
       },
       "expected": {
         "ok": false,

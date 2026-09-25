@@ -1,6 +1,6 @@
 # Commercial use
 
-Fiscus is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Segreant is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
 This page explains who needs a commercial license, and then states the
 commercial license itself.
 
@@ -10,13 +10,13 @@ commercial license itself.
 - Charities, schools and universities, public research institutions, and
   government bodies, whatever their funding.
 - Reading, modifying and sharing the code for any of those purposes.
-- Evaluating Fiscus at work for up to 30 days to decide whether to license
+- Evaluating Segreant at work for up to 30 days to decide whether to license
   it. The licensor grants this permission here; the PolyForm text alone does
   not.
 
 ## Needs a commercial license
 
-Using Fiscus for a business: inside a company, for paid client work, or as
+Using Segreant for a business: inside a company, for paid client work, or as
 part of a product or service you sell. That includes using it to manage your
 company's own AI spend, and freelancers using it on paid work.
 
@@ -42,13 +42,13 @@ above, unless a separate signed agreement says otherwise.
 
 1. **Grant.** The licensor (the copyright holder named in [LICENSE](LICENSE))
    grants the licensee organization a worldwide, non-exclusive,
-   non-transferable license to use, copy and modify Fiscus for any business
+   non-transferable license to use, copy and modify Segreant for any business
    purpose of the licensee, in addition to the rights the PolyForm
    Noncommercial License already gives everyone.
 2. **Who is covered.** The licensee organization, the entities it controls,
-   and the employees and contractors using Fiscus on their behalf. There is no
+   and the employees and contractors using Segreant on their behalf. There is no
    limit on users, machines, projects or team servers.
-3. **Not covered.** Selling, sublicensing or redistributing Fiscus, or
+3. **Not covered.** Selling, sublicensing or redistributing Segreant, or
    offering it (or a modified version) to third parties as a product or hosted
    service. That needs a separate agreement.
 4. **Start.** The license starts when the first payment succeeds. Written
@@ -58,8 +58,8 @@ above, unless a separate signed agreement says otherwise.
 6. **Keep what you paid for.** After twelve consecutive paid months, the
    licensee keeps a perpetual license to every version released during those
    twelve months, even if the subscription later ends.
-7. **No warranty.** Fiscus is provided as is, without any warranty, the same
-   as under the PolyForm license. Fiscus reports estimates and evidence; it is
+7. **No warranty.** Segreant is provided as is, without any warranty, the same
+   as under the PolyForm license. Segreant reports estimates and evidence; it is
    not accounting, tax or financial advice.
 8. **Liability.** The licensor's total liability under this license is limited
    to the amount the licensee paid in the twelve months before the claim.

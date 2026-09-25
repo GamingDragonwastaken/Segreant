@@ -92,7 +92,7 @@ export function causalQualitySurrogateBridgeRef(protocol: CausalQualityMeasureme
 
 function studyScope(protocol: CausalQualityMeasurementSource) {
   return scope({
-    ledger: 'fiscus-causal',
+    ledger: 'segreant-causal',
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
   });

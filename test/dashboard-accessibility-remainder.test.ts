@@ -146,7 +146,7 @@ test('defect 4: the drawer commit button exposes its blocked reason through aria
 });
 
 /**
- * Defect 5: the System view's parity table — the one place Fiscus proves "the
+ * Defect 5: the System view's parity table — the one place Segreant proves "the
  * GUI can do everything the CLI can" from live data rather than a README —
  * has no accessible name (no `aria-label`/`aria-labelledby`, no `<caption>`)
  * and its `<th>` header cells have no `scope`, so a screen reader reading a

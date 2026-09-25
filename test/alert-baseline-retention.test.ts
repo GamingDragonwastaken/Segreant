@@ -8,9 +8,9 @@
  *     no prior active day exists yet, so there is no baseline to exceed
  *
  * MEASURED. A ledger with twenty-six consecutive active days, then
- * `fiscus prune` on the operator's own retention policy: the row goes
+ * `segreant prune` on the operator's own retention policy: the row goes
  * `live: false` with exactly that sentence. The word "yet" tells someone who
- * metered for a month that they have not accumulated history. They have. Fiscus
+ * metered for a month that they have not accumulated history. They have. Segreant
  * deleted it. **This is the false-cause defect on the one surface whose entire
  * job is to give causes**, which makes it the sharpest place in the product for
  * it to happen.
@@ -48,7 +48,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-alert-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-alert-retention-'));
 process.env.TZ = 'UTC';
 
 import { Store, type RequestRow } from '../src/store/db.ts';
@@ -99,7 +99,7 @@ test('a baseline retention emptied is not reported as history never accumulated'
     assert.notEqual(
       after.darkBecause,
       DARK_WITHOUT_HISTORY,
-      '"yet" tells an operator who metered for a month that they have not started; they had, and Fiscus deleted it',
+      '"yet" tells an operator who metered for a month that they have not started; they had, and Segreant deleted it',
     );
     assert.ok(
       /delet|retention|prun/i.test(after.darkBecause),

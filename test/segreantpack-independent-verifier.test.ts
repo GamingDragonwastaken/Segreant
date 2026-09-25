@@ -6,8 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const VECTOR_PATH = join(ROOT, 'test', 'fixtures', 'fiscuspack-conformance.json');
-const VERIFIER_PATH = join(ROOT, 'standalone', 'fiscuspack-verifier.mjs');
+const VECTOR_PATH = join(ROOT, 'test', 'fixtures', 'segreantpack-conformance.json');
+const VERIFIER_PATH = join(ROOT, 'standalone', 'segreantpack-verifier.mjs');
 
 interface Vector {
   readonly name: string;
@@ -31,18 +31,18 @@ interface Vector {
 const vectors = (JSON.parse(readFileSync(VECTOR_PATH, 'utf8')) as { format: string; vectors: Vector[] });
 
 test('fixed conformance vectors are independent of the producer implementation', () => {
-  assert.equal(vectors.format, 'fiscuspack-conformance-v1');
+  assert.equal(vectors.format, 'segreantpack-conformance-v1');
   const source = readFileSync(VERIFIER_PATH, 'utf8');
   assert.doesNotMatch(source, /(?:\.\.\/)?src[\\/](?:pack|store|producer)(?:[\\/]|\b)/i);
   assert.doesNotMatch(source, /from\s+['"](?:node_modules|\.\.\/src)/i);
 });
 
 test('standalone verifier matches every committed conformance vector', async () => {
-  const verifier = await import('../standalone/fiscuspack-verifier.mjs') as {
-    verifyFiscusPack: (pack: unknown, options?: Record<string, unknown>) => any;
+  const verifier = await import('../standalone/segreantpack-verifier.mjs') as {
+    verifySegreantPack: (pack: unknown, options?: Record<string, unknown>) => any;
   };
   for (const vector of vectors.vectors) {
-    const result = verifier.verifyFiscusPack(vector.pack, vector.options);
+    const result = verifier.verifySegreantPack(vector.pack, vector.options);
     assert.equal(result.ok, vector.expected.ok, vector.name);
     assert.equal(result.integrity, vector.expected.integrity, vector.name);
     assert.equal(result.authenticity, vector.expected.authenticity, vector.name);
@@ -73,11 +73,11 @@ test('standalone verifier CLI accepts JSON on stdin and returns machine-readable
 });
 
 test('an embedded signature proves pack integrity but never establishes authenticity without an anchor', async () => {
-  const verifier = await import('../standalone/fiscuspack-verifier.mjs') as {
-    verifyFiscusPack: (pack: unknown, options?: Record<string, unknown>) => any;
+  const verifier = await import('../standalone/segreantpack-verifier.mjs') as {
+    verifySegreantPack: (pack: unknown, options?: Record<string, unknown>) => any;
   };
   const vector = vectors.vectors.find((candidate) => candidate.name === 'valid-signature-with-anchor')!;
-  const result = verifier.verifyFiscusPack(vector.pack);
+  const result = verifier.verifySegreantPack(vector.pack);
   assert.equal(result.ok, true);
   assert.equal(result.integrity, 'verified');
   assert.equal(result.signature.cryptographicVerification, 'verified');
@@ -87,15 +87,15 @@ test('an embedded signature proves pack integrity but never establishes authenti
 });
 
 test('the verifier accepts supplied UTF-8 bytes without mutating the JSON value', async () => {
-  const verifier = await import('../standalone/fiscuspack-verifier.mjs') as {
-    verifyFiscusPack: (pack: unknown, options?: Record<string, unknown>) => any;
+  const verifier = await import('../standalone/segreantpack-verifier.mjs') as {
+    verifySegreantPack: (pack: unknown, options?: Record<string, unknown>) => any;
   };
   const vector = vectors.vectors.find((candidate) => candidate.name === 'valid-unsigned')!;
   const before = JSON.stringify(vector.pack);
-  const result = verifier.verifyFiscusPack(Buffer.from(before, 'utf8'));
+  const result = verifier.verifySegreantPack(Buffer.from(before, 'utf8'));
   assert.equal(result.ok, true);
   assert.equal(JSON.stringify(vector.pack), before);
-  const malformedUtf8 = verifier.verifyFiscusPack(Uint8Array.from([0xff, 0xfe, 0xfd]));
+  const malformedUtf8 = verifier.verifySegreantPack(Uint8Array.from([0xff, 0xfe, 0xfd]));
   assert.equal(malformedUtf8.ok, false);
   assert.match(malformedUtf8.errors.join('\n'), /UTF-8/i);
 });
@@ -105,6 +105,6 @@ test('the package exposes the independent verifier as a standalone executable', 
     bin?: Record<string, string>;
     files?: readonly string[];
   };
-  assert.equal(packageJson.bin?.['fiscuspack-verify'], 'standalone/fiscuspack-verifier.mjs');
+  assert.equal(packageJson.bin?.['segreantpack-verify'], 'standalone/segreantpack-verifier.mjs');
   assert.ok(packageJson.files?.includes('standalone'));
 });

@@ -2,23 +2,23 @@
  * Pruning the ledger left no trace, so a deleted history read as a history
  * that never happened.
  *
- * WHAT `fiscus prune` DID. `Store.prune(beforeMs)` runs one `DELETE FROM
+ * WHAT `segreant prune` DID. `Store.prune(beforeMs)` runs one `DELETE FROM
  * requests WHERE ts_epoch_ms < ?`, vacuums, and returns a row count that is
  * printed once and then gone. Nothing durable recorded that a boundary had
  * ever been applied. Retention defaults to 180 days and the operator can set
  * it to anything, so the deletion is policy working as intended — the defect
- * is that afterwards nothing can tell a period Fiscus never observed from a
- * period Fiscus observed and then deleted.
+ * is that afterwards nothing can tell a period Segreant never observed from a
+ * period Segreant observed and then deleted.
  *
  * THE OPERATOR-FACING INSTANCE, WHICH IS THE SHARPEST ONE IN THE PROGRAM SO
  * FAR. `GuideFacts.requestsAllTime` comes from `store.summary(0, now)` and
  * `buildGuide` reads it as `f.requestsAllTime > 0 ? "N requests metered" :
  * "no traffic yet"`, and sets the metering step's `done` from the same
- * comparison. Prune a ledger past every row it holds and `fiscus guide` — and
+ * comparison. Prune a ledger past every row it holds and `segreant guide` — and
  * `/api/guide`, which builds from the same function — tells the operator they
  * have no traffic yet and sends them off to configure a proxy they configured
  * months ago. The most confident thing this surface can say arrives exactly
- * when Fiscus knows least, which is the thirteenth instance of the class this
+ * when Segreant knows least, which is the thirteenth instance of the class this
  * program has been chasing since D-140: **an absence of a result reported as a
  * result.** Here it is not an empty list rendered as a clean bill; it is a step
  * marked NOT DONE because the evidence that it was done has been deleted.
@@ -51,7 +51,7 @@
  * WHAT THIS DOES NOT ESTABLISH. That every surface reading `requests`
  * discloses truncation. This packet covers the prune record, the retention
  * floor, and the guide — the one place that turns a count into a statement
- * about whether something ever happened. `fiscus today/week/month`,
+ * about whether something ever happened. `segreant today/week/month`,
  * `report`, `usage` and `export` still print window totals with no coverage
  * line; their windows are recent enough that the default 180-day floor rarely
  * reaches them, which is a reason to do them next and not a reason they are

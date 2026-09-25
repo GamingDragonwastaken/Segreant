@@ -21,7 +21,7 @@
 ## Invariants
 
 - provider forwarding and local evidence retention are separate concerns;
-- the proxy never forwards Fiscus metadata headers to the provider;
+- the proxy never forwards Segreant metadata headers to the provider;
 - resource-limit rejection happens before an upstream dial for oversized input;
 - truncated proposal fragments are not used to claim first-pass acceptance.
 - oversized non-stream responses are refused with a typed provider-shaped error

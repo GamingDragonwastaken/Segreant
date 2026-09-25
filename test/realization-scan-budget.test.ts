@@ -38,10 +38,10 @@ function git(cwd: string, args: string[]): void {
 
 /** A one-commit repository whose single added line demonstrably survives. */
 function fixture(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-scan-budget-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-scan-budget-'));
   git(repo, ['init', '-q']);
   git(repo, ['config', 'user.email', 'test@example.invalid']);
-  git(repo, ['config', 'user.name', 'Fiscus test']);
+  git(repo, ['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
   git(repo, ['add', '.']);
   git(repo, ['commit', '-qm', 'feat: one durable line']);

@@ -1,7 +1,7 @@
 /**
  * Formatting, and the register that governs it.
  *
- * Fiscus has two audiences on the same screens: someone who could use the CLI
+ * Segreant has two audiences on the same screens: someone who could use the CLI
  * but should not have to, and someone who will never open a terminal. That is
  * not a beginner mode and an expert mode — the DATA is identical. It is a
  * register: how precisely the same fact is stated.
@@ -16,7 +16,7 @@ import { signal } from './signal.ts';
 
 export type Register = 'plain' | 'precise';
 
-const STORAGE_KEY = 'fiscus.register';
+const STORAGE_KEY = 'segreant.register';
 
 function initialRegister(): Register | null {
   try {
@@ -118,7 +118,7 @@ export function relative(ms: number | null | undefined): string {
 }
 
 /**
- * Turn a provenance sentinel into words. Every figure in Fiscus carries the
+ * Turn a provenance sentinel into words. Every figure in Segreant carries the
  * basis it came from; a label the operator cannot read is not provenance, it is
  * a database value leaking onto a screen.
  */

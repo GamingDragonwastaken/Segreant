@@ -5,7 +5,7 @@
  * by `test/countermodel.test.ts` as machinery. Machinery nothing runs is not a
  * property of the product, and this repository has a name for that state —
  * `reach: 'unreached'` on the issuance map — so the wiring needs its own test at
- * the surface an operator actually meets: `fiscus billing reconcile`.
+ * the surface an operator actually meets: `segreant billing reconcile`.
  *
  * WHAT THIS PINS THAT THE UNIT TESTS CANNOT. That the terminal says the residual
  * is PERMANENTLY conditional rather than pending a check, and that a negative
@@ -26,7 +26,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-fragility-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-fragility-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 
@@ -41,7 +41,7 @@ function runCli(args: string[], dbPath: string): Promise<{ code: number; stdout:
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_DB: dbPath, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -142,8 +142,8 @@ interface FragilityPayload {
 }
 
 test('a reconciliation tells an operator that its conditions can be closed by nothing', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-fragility-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-fragility-'));
+  const db = join(dir, 'segreant.db');
   try {
     // Provider $30, local $29 — an ordinary positive residual.
     seed(db, ['10', '20'], [9, 20]);
@@ -155,7 +155,7 @@ test('a reconciliation tells an operator that its conditions can be closed by no
     // The finding, at the terminal. Not "these conditions are unverified" —
     // unverified reads as an errand, and four of these are not.
     assert.match(human.stdout, /If a condition does not hold/);
-    assert.match(flat(human.stdout), /4 of 4 cannot be ruled out by anything Fiscus can observe/);
+    assert.match(flat(human.stdout), /4 of 4 cannot be ruled out by anything Segreant can observe/);
     assert.match(flat(human.stdout), /permanently conditional rather than pending a check/);
     // Nothing is established on a positive residual, so nothing is announced as
     // broken. A block that cried wolf on every run would be ignored on the one
@@ -179,8 +179,8 @@ test('a reconciliation tells an operator that its conditions can be closed by no
 });
 
 test('a negative residual is reported as a broken condition, not as a small number', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-fragility-neg-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-fragility-neg-'));
+  const db = join(dir, 'segreant.db');
   try {
     // Provider $30, local $40. R < 0 means L > P >= T, which refutes the
     // rate-card condition outright rather than leaving it merely unexcluded.

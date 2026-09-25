@@ -29,7 +29,7 @@ outcome's event-chain link. Any missing or contradictory evidence returns an
 The request-to-unit digest is calculated over this domain-separated material:
 
 ```text
-fiscus.causal.producer-unit
+segreant.causal.producer-unit
 1
 canonical({
   type, version, studyId, protocolHash,
@@ -83,7 +83,7 @@ routing, budgets, or qualification claims.
 ## Receipt and replay
 
 An eligible assessment returns one immutable local
-`fiscus.causal-producer-receipt` envelope. The envelope contains scalar IDs,
+`segreant.causal-producer-receipt` envelope. The envelope contains scalar IDs,
 digests, request count, exact request cost in microdollars, scope identity,
 realization and outcome evidence digests, sequence, and a previous-receipt
 hash. The receipt hash is a domain-separated SHA-256 over every other field.

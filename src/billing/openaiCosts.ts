@@ -1,7 +1,7 @@
 /**
  * Read-only OpenAI Organization Costs observation connector.
  *
- * This module intentionally knows nothing about Fiscus request metering, caps,
+ * This module intentionally knows nothing about Segreant request metering, caps,
  * RoI, allocation, or recommendations. It collects a narrowly scoped provider
  * report and returns immutable observations for a separate store collection.
  * It never writes credentials, response bodies, or provider data by itself.

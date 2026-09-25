@@ -14,11 +14,11 @@ whole tree loaded.
 | Metering a request, proxy behaviour | `src/proxy/` | `src/cost/`, `src/store/CONTEXT.md` |
 | Where a row's project label came from | `src/store/CONTEXT.md` | `docs/EVIDENCE-PROVENANCE.md` |
 | Prices, rate cards, repricing | `src/cost/` | `pricing/`, `docs/METHODOLOGY.md` |
-| Exact Money, economic events, conservation projections | `src/economics/` | `src/store/CONTEXT.md`, `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` |
+| Exact Money, economic events, conservation projections | `src/economics/` | `src/store/CONTEXT.md`, `docs/program/SEGREANT-REMAINING-WORK-AUDIT.md` |
 | Budgets, caps, alerts | `src/budget/`, `src/alerts/` | — |
 | Importing tool logs | `src/connect/`, `src/cli/importCmd.ts` | `docs/INTEGRATIONS.md` |
-| Robust decisions, regret, and VoI | `src/decision/` | `docs/ECONOMIC-CONTROL-FOUNDATION.md`, `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` |
-| Epistemic state, derivation, and revocation | `src/epistemic/` | `docs/THE-STANDARD.md`, `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` |
+| Robust decisions, regret, and VoI | `src/decision/` | `docs/ECONOMIC-CONTROL-FOUNDATION.md`, `docs/program/SEGREANT-REMAINING-WORK-AUDIT.md` |
+| Epistemic state, derivation, and revocation | `src/epistemic/` | `docs/THE-STANDARD.md`, `docs/program/SEGREANT-REMAINING-WORK-AUDIT.md` |
 | What a figure is a measurement OF; surrogates and construct laundering | `src/measurement/CONTEXT.md` | `docs/METHODOLOGY.md`, `src/epistemic/CONTEXT.md` |
 | Provider billing, reconciliation | `src/billing/CONTEXT.md` | `docs/PROVIDER-RECONCILIATION.md` |
 | Cost centres, allocation rules | `src/alloc/CONTEXT.md` | `docs/ALLOCATION.md` |
@@ -28,7 +28,7 @@ whole tree loaded.
 | Team rollups | `src/team/`, `team-server/` | `docs/TEAM-TIER-DESIGN.md` |
 | Releasing | `docs/RELEASE-GATE.md` | `CLAUDE.md` |
 | Backup/restore and recovery | `src/store/backup.ts` | `src/store/CONTEXT.md`, `docs/RELEASE-GATE.md` |
-| Portable verifiable record bundles (`.fiscuspack`) | `src/pack/CONTEXT.md` | `standalone/fiscuspack-verifier.mjs`, `docs/DATA-BOUNDARIES.md` |
+| Portable verifiable record bundles (`.segreantpack`) | `src/pack/CONTEXT.md` | `standalone/segreantpack-verifier.mjs`, `docs/DATA-BOUNDARIES.md` |
 | Reliability/performance evidence | `scripts/benchmark.mjs` | `docs/RELIABILITY-PERFORMANCE.md` |
 | Local diagnostics and redacted support bundles | `src/diagnostics.ts` | `docs/RELIABILITY-PERFORMANCE.md`, `docs/RELEASE-GATE.md` |
 
@@ -55,7 +55,7 @@ and dated release-gate rows are historical evidence at their named revision.
 
 ## Layer 4 — working artifacts (change constantly; process as input)
 
-The ledger (`~/.fiscus/fiscus.db`, and `demo.db` beside it), imported
+The ledger (`~/.segreant/segreant.db`, and `demo.db` beside it), imported
 transcripts, provider exports, gate evidence, demo seeds. Never treated as
 reference — a value in the ledger is evidence about one machine, not a rule.
 

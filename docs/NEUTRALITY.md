@@ -1,6 +1,6 @@
 # Neutrality
 
-Fiscus's core product runs with no hosted service, no account, and, for
+Segreant's core product runs with no hosted service, no account, and, for
 noncommercial use, no payment. Money, when it is taken, is kept outside the
 product (see "Sponsorship" below). This states what that means concretely and
 which paths are opt-in add-ons rather than requirements.
@@ -9,7 +9,7 @@ which paths are opt-in add-ons rather than requirements.
 
 `npm install && npm run demo` or `npm run start` runs entirely against a local
 SQLite ledger and a local proxy/dashboard — no signup, no license key, no
-Fiscus-operated account, no telemetry by default
+Segreant-operated account, no telemetry by default
 (`docs/DATA-BOUNDARIES.md`). No donation, sponsorship prompt, or paid tier
 gates any function described in `PRODUCT.md`. This document exists
 so that claim stays checkable rather than aspirational: every egress path
@@ -25,18 +25,18 @@ runs by default:
 
 | Path | Requires |
 | --- | --- |
-| Proxy traffic to an AI provider | Pointing a tool at the Fiscus proxy — this is the product's function, not a Fiscus-operated service |
-| Pricing manifest refresh | `fiscus pricing --refresh` or `pricing.autoRefresh` |
-| Baseline manifest refresh | `fiscus baseline --refresh --url ...`, operator-supplied URL |
-| Alert webhook delivery | `fiscus alerts --set-webhook ...` |
-| Provider cost observation | `fiscus billing openai-costs pull ... --apply`, one fixed OpenAI endpoint |
-| Team rollup | `fiscus team push --url ...`, to an operator-run team server |
+| Proxy traffic to an AI provider | Pointing a tool at the Segreant proxy — this is the product's function, not a Segreant-operated service |
+| Pricing manifest refresh | `segreant pricing --refresh` or `pricing.autoRefresh` |
+| Baseline manifest refresh | `segreant baseline --refresh --url ...`, operator-supplied URL |
+| Alert webhook delivery | `segreant alerts --set-webhook ...` |
+| Provider cost observation | `segreant billing openai-costs pull ... --apply`, one fixed OpenAI endpoint |
+| Team rollup | `segreant team push --url ...`, to an operator-run team server |
 | Hosted judge | An explicitly configured hosted judge provider |
 
-None of these is a Fiscus-operated account, subscription, or telemetry
+None of these is a Segreant-operated account, subscription, or telemetry
 collector — they are, respectively, a public manifest fetch, an
 operator-configured webhook, a provider's own billing endpoint, and an
-operator-run server. Fiscus has no billing relationship with any user and
+operator-run server. Segreant has no billing relationship with any user and
 collects nothing centrally.
 
 ## Product and project neutrality
@@ -45,7 +45,7 @@ collects nothing centrally.
   no account, key or payment; commercial use needs a license from the
   maintainer (`COMMERCIAL-LICENSE.md`). No function behaves differently for
   licensed and unlicensed users: the license is a legal term, not a feature
-  gate. Earlier commits carried MIT, copyright "Fiscus contributors".
+  gate. Earlier commits carried MIT, copyright "Segreant contributors".
 - `docs/RELEASE-GATE.md`'s "Product claims allowed at this stage" section
   fixes the precise language this project may use about itself and forbids
   overclaiming (not "AI financial advice," not "zero egress," not a verified
@@ -58,7 +58,7 @@ collects nothing centrally.
 
 ## Sponsorship
 
-Fiscus does not take sponsorship today; there is no Sponsor button. Paid
+Segreant does not take sponsorship today; there is no Sponsor button. Paid
 commercial licenses (`COMMERCIAL-LICENSE.md`) are the only money involved. If
 sponsorship or any other payment channel is opened, these rules apply to it
 and to the commercial license alike:
@@ -66,7 +66,7 @@ and to the commercial license alike:
 - **Nothing is gated.** Every function works the same for someone who never
   sponsors. There is no license key, no "supporter edition", and no feature
   that sponsorship unlocks.
-- **No sponsorship from vendors Fiscus compares.** Fiscus prices and compares
+- **No sponsorship from vendors Segreant compares.** Segreant prices and compares
   AI providers, gateways and model hosts. Money from any of them would make the
   comparison surfaces look bought, so none is accepted. Individuals and
   companies that only use AI tools are fine.

@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
 import { Store } from '../src/store/db.ts';
 import { importClaudeCode } from '../src/connect/claudeCode.ts';
@@ -24,7 +24,7 @@ import { ATTRIBUTION_BASES, isDeclaredAttribution } from '../src/value/character
 
 /** A real git repository — the resolver asks git, so a fake directory proves nothing. */
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-repo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-repo-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 'T'], { cwd: dir });
@@ -51,7 +51,7 @@ test('import attribution: a session started in a SUBDIRECTORY attributes to the 
   mkdirSync(sub, { recursive: true });
   const repoName = repo.split(/[\\/]/).filter(Boolean).pop()!;
 
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-transcripts-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-transcripts-'));
   writeFileSync(join(root, 's1.jsonl'), transcriptLine({ cwd: sub }) + '\n');
 
   const store = new Store(':memory:');
@@ -72,7 +72,7 @@ test('import attribution: a session started in a SUBDIRECTORY attributes to the 
 test('import attribution: a directory that IS the repo root needs no relabel', async () => {
   const repo = makeRepo();
   const repoName = repo.split(/[\\/]/).filter(Boolean).pop()!;
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-transcripts-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-transcripts-'));
   writeFileSync(join(root, 's1.jsonl'), transcriptLine({ cwd: repo }) + '\n');
 
   const store = new Store(':memory:');
@@ -86,9 +86,9 @@ test('import attribution: a directory that IS the repo root needs no relabel', a
 
 test('import attribution: outside a repository it degrades to the previous behaviour and says so', async () => {
   // A plain scratch directory, deliberately not a git working tree.
-  const plain = mkdtempSync(join(tmpdir(), 'fiscus-plain-'));
+  const plain = mkdtempSync(join(tmpdir(), 'segreant-plain-'));
   const leaf = plain.split(/[\\/]/).filter(Boolean).pop()!;
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-transcripts-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-transcripts-'));
   writeFileSync(join(root, 's1.jsonl'), transcriptLine({ cwd: plain }) + '\n');
 
   const store = new Store(':memory:');
@@ -101,7 +101,7 @@ test('import attribution: outside a repository it degrades to the previous behav
 });
 
 test('import attribution: a transcript with no cwd still degrades to the tool-name placeholder', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-transcripts-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-transcripts-'));
   writeFileSync(join(root, 's1.jsonl'), transcriptLine({}) + '\n');
 
   const store = new Store(':memory:');
@@ -132,7 +132,7 @@ test('attribution basis: the resolved basis counts as a deliberate attribution',
 });
 
 test('project path prefix: a header-less client can declare its project in the base URL', () => {
-  const r = splitProjectPath('/fiscus/backend-api/v1/chat/completions');
+  const r = splitProjectPath('/segreant/backend-api/v1/chat/completions');
   assert.equal(r.project, 'backend-api');
   // The upstream must see exactly the path it would have seen without the
   // prefix, or the declaration would change what the provider is asked for.
@@ -140,7 +140,7 @@ test('project path prefix: a header-less client can declare its project in the b
 });
 
 test('project path prefix: an ordinary path is untouched', () => {
-  for (const url of ['/v1/chat/completions', '/v1/messages', '/', '/fiscus', '/fiscusx/v1/chat']) {
+  for (const url of ['/v1/chat/completions', '/v1/messages', '/', '/segreant', '/segreantx/v1/chat']) {
     const r = splitProjectPath(url);
     assert.equal(r.project, null, url);
     assert.equal(r.path, url, url);
@@ -151,14 +151,14 @@ test('project path prefix: an unusable label is refused rather than silently str
   // `.` and `..` match the character class but are not project names, and a
   // prefix with nothing after it is not a request. Leaving the path intact makes
   // the mistake fail visibly upstream instead of metering under a nonsense label.
-  for (const url of ['/fiscus/./v1/chat', '/fiscus/../v1/chat', '/fiscus/proj', '/fiscus//v1/chat']) {
+  for (const url of ['/segreant/./v1/chat', '/segreant/../v1/chat', '/segreant/proj', '/segreant//v1/chat']) {
     const r = splitProjectPath(url);
     assert.equal(r.project, null, url);
     assert.equal(r.path, url, url);
   }
   // A label with characters outside the allowed set is also refused, not sanitized.
-  assert.equal(splitProjectPath('/fiscus/pro j/v1/chat').project, null);
-  assert.equal(splitProjectPath('/fiscus/pro%2Fj/v1/chat').project, null);
+  assert.equal(splitProjectPath('/segreant/pro j/v1/chat').project, null);
+  assert.equal(splitProjectPath('/segreant/pro%2Fj/v1/chat').project, null);
 });
 
 test('project path prefix: routing sees the stripped path, so the provider is still detected', async () => {
@@ -167,6 +167,6 @@ test('project path prefix: routing sees the stripped path, so the provider is st
   const mk = (url: string) => ({ url, headers: { authorization: 'Bearer k' } }) as never;
   // Anthropic and OpenAI are detected by path, so a prefix that was not stripped
   // before routing would make every prefixed request an unroutable 400.
-  assert.equal(detectRoute(mk('/fiscus/proj/v1/messages'), DEFAULT_CONFIG)?.provider, 'anthropic');
-  assert.equal(detectRoute(mk('/fiscus/proj/v1/chat/completions'), DEFAULT_CONFIG)?.provider, 'openai');
+  assert.equal(detectRoute(mk('/segreant/proj/v1/messages'), DEFAULT_CONFIG)?.provider, 'anthropic');
+  assert.equal(detectRoute(mk('/segreant/proj/v1/chat/completions'), DEFAULT_CONFIG)?.provider, 'openai');
 });

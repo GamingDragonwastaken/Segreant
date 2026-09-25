@@ -38,7 +38,7 @@ export interface BudgetEnforcementDescriptor {
     countsTowardInPathCap: boolean;
   };
   providerNative: {
-    /** Fiscus does not currently inspect or attest provider-side limits. */
+    /** Segreant does not currently inspect or attest provider-side limits. */
     state: 'unknown';
     inspected: false;
   };

@@ -1,4 +1,4 @@
-# Fiscus agent operating contract
+# Segreant agent operating contract
 
 > **Current phase (2026-09-24): pre-launch.** The reconstruction program
 > (Foundational Audit II, Execution Dossier III) is closed. Start every session

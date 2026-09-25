@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest something Fiscus should do
+description: Suggest something Segreant should do
 title: "[feature] "
 labels: [enhancement]
 body:
@@ -38,4 +38,4 @@ body:
     id: evidence
     attributes:
       label: What would make the answer trustworthy? (optional)
-      description: Fiscus keeps estimates, bills, allocations and value apart. If your idea produces a number, what data would back it, and what should stay marked unknown?
+      description: Segreant keeps estimates, bills, allocations and value apart. If your idea produces a number, what data would back it, and what should stay marked unknown?

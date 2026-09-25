@@ -1,7 +1,7 @@
 /**
  * "All clear" from detectors that could not have fired (WP-D06, WP-R04).
  *
- * THE DEFECT. `detectAlerts` returns an array. `fiscus ops` reads an empty one
+ * THE DEFECT. `detectAlerts` returns an array. `segreant ops` reads an empty one
  * as a finding and prints it in green:
  *
  *   ✓ Alerts      all clear
@@ -27,7 +27,7 @@
  * Six channels, six dark, zero alerts, and a green tick. A new user is told
  * their setup is clear on the strength of no evidence whatsoever.
  *
- * THIS IS THE COMPLETENESS RULE, AND FISCUS ALREADY OWNS IT.
+ * THIS IS THE COMPLETENESS RULE, AND SEGREANT ALREADY OWNS IT.
  * `assessCompleteness` exists so that "no incident was observed" may not become
  * "no incident occurred" without positive evidence that the source could have
  * seen one. This surface makes the same inference and asks for nothing. The
@@ -152,7 +152,7 @@ test('the summary states coverage rather than asserting a clear result', () => {
   assert.match(lit, /6 of 6|all six|every channel/i);
 });
 
-test('fiscus ops no longer prints an unconditional all clear', () => {
+test('segreant ops no longer prints an unconditional all clear', () => {
   // A COPY REGRESSION PIN. The defect was one template string, and the cheapest
   // way for it to return is someone restoring the shorter line.
   const source = readFileSync(join(import.meta.dirname, '..', 'src', 'cli', 'opsCmd.ts'), 'utf8');

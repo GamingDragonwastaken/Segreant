@@ -88,7 +88,7 @@ export interface CapitalFairnessResult {
 }
 
 export interface CapitalAccountResult {
-  readonly type: 'fiscus.capital.account';
+  readonly type: 'segreant.capital.account';
   readonly version: typeof CAPITAL_VERSION;
   readonly accountId: string;
   readonly policyId: string;
@@ -296,7 +296,7 @@ export function evaluateCapitalAccount(input: CapitalAccountInput): CapitalAccou
     });
   }
   return Object.freeze({
-    type: 'fiscus.capital.account',
+    type: 'segreant.capital.account',
     version: CAPITAL_VERSION,
     accountId: input.accountId,
     policyId: input.policyId,

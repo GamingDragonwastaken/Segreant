@@ -13,10 +13,10 @@ function git(cwd: string, args: string[], env: Record<string, string> = {}): voi
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-contribution-consumer-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-contribution-consumer-'));
   git(dir, ['init', '-q']);
   git(dir, ['config', 'user.email', 'test@example.invalid']);
-  git(dir, ['config', 'user.name', 'Fiscus test']);
+  git(dir, ['config', 'user.name', 'Segreant test']);
   return dir;
 }
 

@@ -339,7 +339,7 @@ function terminatingDecimal(numerator: bigint, denominator: bigint): string | nu
 
 /**
  * Exact conversion only. If the rational result has a non-terminating decimal
- * representation, Fiscus refuses to invent a rounding mode or precision. A later
+ * representation, Segreant refuses to invent a rounding mode or precision. A later
  * quantization API must make that policy explicit.
  */
 export function applyExactRate(value: Money, rate: ExactRate, targetBasis: EconomicBasis): Money {

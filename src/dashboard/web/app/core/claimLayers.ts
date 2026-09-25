@@ -61,7 +61,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: o === null
       ? 'could not read the ledger'
       : 'counted from requests, priced from a rate card',
-    nextStep: o === null ? 'Check that Fiscus is running.' : undefined,
+    nextStep: o === null ? 'Check that Segreant is running.' : undefined,
     inspection: {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,

@@ -132,7 +132,7 @@ function windowDays(window: ObservationWindow): number {
  * cover the same period.
  *
  * THE FIGURE HAD NO PERIOD AT ALL. Each rollup declares its own observation
- * window, chosen by whoever pushed it — `fiscus team push --window D` defaults
+ * window, chosen by whoever pushed it — `segreant team push --window D` defaults
  * to 30 and accepts anything — and `aggregateProjects` sums one rollup per
  * developer whatever length each window is. A seven-day machine and a
  * ninety-day machine added up to one `totalCostUsd` and the response said

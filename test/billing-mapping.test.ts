@@ -34,8 +34,8 @@ function mappingFor(record: ImportedBillingRecordIdentity, overrides: Partial<Pa
     sourceRecordId: record.sourceRecordId,
     sourceRecordSha256: record.sourceRecordSha256,
     firstImportId: record.firstImportId,
-    targetProject: 'fiscus-project',
-    targetAccountRef: 'fiscus-account',
+    targetProject: 'segreant-project',
+    targetAccountRef: 'segreant-account',
     mappingVersion: 1,
     declaredAtMs: 1_000,
     ...overrides,
@@ -64,8 +64,8 @@ test('mapping evaluates only exact source identities and reports residuals witho
   assert.equal(coverage.mappedMicros, 12_345_678);
   assert.equal(coverage.residualMicros, -1_000_000);
   assert.deepEqual(coverage.targets, [{
-    targetProject: 'fiscus-project',
-    targetAccountRef: 'fiscus-account',
+    targetProject: 'segreant-project',
+    targetAccountRef: 'segreant-account',
     recordCount: 1,
     amountMicros: 12_345_678,
   }]);

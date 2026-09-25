@@ -33,8 +33,8 @@ function sourceEvidence(id = 'evidence:frontier:observational-separation'): Evid
   return {
     id,
     evidenceType: 'value.model_switch_recommendation',
-    sourceIdentity: 'fiscus:frontier',
-    sourceClass: 'fiscus_local_observational_comparison',
+    sourceIdentity: 'segreant:frontier',
+    sourceClass: 'segreant_local_observational_comparison',
     payload: { confidence: 'observational_separation' },
     scope: scope({ ledger: 'test', decision: 'switch-default-model' }),
     grain: grain(['decision']),
@@ -98,7 +98,7 @@ test('an observational separation is refused as the basis of a spend-changing de
       },
     }),
     /assurance/i,
-    'an observational separation must not become the evidence for changing what Fiscus spends',
+    'an observational separation must not become the evidence for changing what Segreant spends',
   );
 });
 

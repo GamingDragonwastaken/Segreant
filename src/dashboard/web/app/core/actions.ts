@@ -27,7 +27,7 @@ const BUILDERS: Record<string, Builder> = {
         applicable: true,
         summary: isPrecise()
           ? 'Deletes every captured proposal row. Acceptance and first-pass-accept rates derived from them become uncomputable.'
-          : 'This deletes the AI suggestions Fiscus has recorded. Anything that measured how many suggestions you accepted will stop working, and cannot be recalculated.',
+          : 'This deletes the AI suggestions Segreant has recorded. Anything that measured how many suggestions you accepted will stop working, and cannot be recalculated.',
         rows: [
           { label: 'Kept for', value: typeof retention === 'number' ? `${retention} days` : 'unset', note: 'current retention setting' },
           { label: 'Reversible', value: 'no', note: 'there is no undo and no automatic backup' },
@@ -65,10 +65,10 @@ const BUILDERS: Record<string, Builder> = {
         blockedReason: found.length === 0 ? 'No supported tool logs were located on this machine.' : undefined,
         summary: isPrecise()
           ? `Reads ${found.length} located tool log(s) and inserts previously unseen usage records into the local ledger. Existing records are not duplicated.`
-          : `Reads usage that ${found.length} of your tools already recorded on this computer, and adds anything new to Fiscus.`,
+          : `Reads usage that ${found.length} of your tools already recorded on this computer, and adds anything new to Segreant.`,
         rows: found.map((i) => ({ label: i.label, value: 'found', note: i.blurb })),
         notes: [
-          'This import reads files already on this machine and does not invoke a Fiscus outbound path; provider/tool traffic is outside this read.',
+          'This import reads files already on this machine and does not invoke a Segreant outbound path; provider/tool traffic is outside this read.',
           'Imported subscription usage is observed after the fact, so by default it does not count toward budget enforcement.',
         ],
       };
@@ -110,7 +110,7 @@ const BUILDERS: Record<string, Builder> = {
         applicable: true,
         summary: isPrecise()
           ? 'Detection is read-only and has already run to produce this preview. Applying performs the import and correlation passes.'
-          : 'We have looked around and found the following. Applying will bring this usage into Fiscus.',
+          : 'We have looked around and found the following. Applying will bring this usage into Segreant.',
         rows: [
           { label: 'AI tools detected', value: count(tools.length) },
           { label: 'Git repositories', value: count(sc.repoCount) },
@@ -172,7 +172,7 @@ const BUILDERS: Record<string, Builder> = {
           applicable: true,
           summary: isPrecise()
             ? 'Writes the daily cap to the local config file. Enforcement happens at the proxy, so only spend routed through it can be blocked.'
-            : 'Saves a new daily limit on this machine. Fiscus can only actually block spend that goes through it.',
+            : 'Saves a new daily limit on this machine. Segreant can only actually block spend that goes through it.',
           rows: [
             { label: 'Current cap', value: current === null ? 'unlimited' : usd(current) },
             {
@@ -230,7 +230,7 @@ const BUILDERS: Record<string, Builder> = {
         ? 'Streams the request ledger as CSV from this local server. One row per request, with the recorded attribution basis and pricing basis on each.'
         : 'Downloads every request we recorded as a spreadsheet file, including where each cost figure came from.',
       notes: [
-        'The file is generated locally; sharing it is an explicit operator export action. Fiscus egress rules do not make this machine-wide.',
+        'The file is generated locally; sharing it is an explicit operator export action. Segreant egress rules do not make this machine-wide.',
         'Each row carries its own attribution and pricing basis, so the export can be checked the same way the screens can.',
       ],
     }),
@@ -252,14 +252,14 @@ const BUILDERS: Record<string, Builder> = {
           value: settings.egress.mode === 'local_locked' ? 'local locked' : 'controlled cloud',
           note: settings.egress.receipts.ok
             ? settings.egress.rules.length + ' exact rule(s); ' + settings.egress.receipts.receiptCount + ' receipt(s); chain valid'
-            : 'receipt history INVALID; outbound requests refuse before dial until it is repaired. Restore the history; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify: ' + (settings.egress.receipts.errors[0] ?? 'history could not be verified'),
+            : 'receipt history INVALID; outbound requests refuse before dial until it is repaired. Restore the history; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify: ' + (settings.egress.receipts.errors[0] ?? 'history could not be verified'),
         },
-        { label: 'Egress scope', value: 'Fiscus process only', note: settings.egress.scope },
+        { label: 'Egress scope', value: 'Segreant process only', note: settings.egress.scope },
       ];
       return {
         applicable: false,
-        blockedReason: 'Use fiscus egress plan to review a cloud permission and fiscus egress apply --apply to persist it. The GUI exposes status and receipt-chain health only.',
-        summary: isPrecise() ? 'Current local configuration.' : 'How Fiscus is set up on this machine right now.',
+        blockedReason: 'Use segreant egress plan to review a cloud permission and segreant egress apply --apply to persist it. The GUI exposes status and receipt-chain health only.',
+        summary: isPrecise() ? 'Current local configuration.' : 'How Segreant is set up on this machine right now.',
         rows,
       };
     },

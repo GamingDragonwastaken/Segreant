@@ -183,5 +183,5 @@ export function actionCard(id: string): Node | null {
         ? h('span', { class: `tag tag-${cap.consequence}`, text: cap.consequence })
         : null,
       !hasRunner(cap) ? h('span', { class: 'tag tag-planned', text: 'CLI only' }) : null,
-      () => (register() === 'precise' ? h('span', { class: 'tag', text: cap.command.replace(/^fiscus /, '') }) : null)));
+      () => (register() === 'precise' ? h('span', { class: 'tag', text: cap.command.replace(/^segreant /, '') }) : null)));
 }

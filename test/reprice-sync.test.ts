@@ -2,8 +2,8 @@
  * Reprice ↔ realized-value consistency.
  *
  * A reprice rewrites what the request ledger says a window cost. Persisted work
- * units were built from that same spend, so unless they move too, `fiscus spend`
- * and `fiscus value` answer "what did this cost" with two different prices and
+ * units were built from that same spend, so unless they move too, `segreant spend`
+ * and `segreant value` answer "what did this cost" with two different prices and
  * neither says so. These tests pin the money, the refusals, and — most
  * importantly — that a price change can never alter an OUTCOME.
  */
@@ -13,8 +13,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Isolate from any real ~/.fiscus pricing override.
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
+// Isolate from any real ~/.segreant pricing override.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
 import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow, type RepriceUpdate, type CostScope } from '../src/store/db.ts';
@@ -243,9 +243,9 @@ test('reprice: a project-scoped unit ignores another project\'s repriced spend; 
 
 test('reprice: project scoping follows the alias family, not the raw label', () => {
   const store = new Store(':memory:');
-  store.insertRequest(req({ project: 'fiscus-ts' }));
-  store.setProjectAlias('fiscus-ts', 'fiscus');
-  saveUnit(store, 'project', {}, 'fiscus');
+  store.insertRequest(req({ project: 'segreant-ts' }));
+  store.setProjectAlias('segreant-ts', 'segreant');
+  saveUnit(store, 'project', {}, 'segreant');
   // The unit and the request name the same project through different labels. If
   // scoping compared raw strings this would look like unrelated spend and the
   // snapshot would keep a price its own ledger rows no longer have.
@@ -314,7 +314,7 @@ test('reprice: stale units are excluded from model comparison and counted, never
 });
 
 test('reprice: a pre-migration snapshot table gains the columns without inventing a basis or a staleness', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-migrate-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-migrate-'));
   const file = join(dir, 'legacy.db');
   // The realization_units shape from before cost provenance existed.
   const legacy = new DatabaseSync(file);

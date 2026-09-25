@@ -15,7 +15,7 @@
  * `--ignore-scripts` on `npm ci` is not free for the root package: its
  * `prepare` script is `npm run build`, and both jobs that run `npm test`
  * relied on that running automatically to produce `dist/` first —
- * `bin/fiscus.mjs` imports `dist/cli.js`, not `src/`, and several tests read
+ * `bin/segreant.mjs` imports `dist/cli.js`, not `src/`, and several tests read
  * the emitted tree rather than the source.
  *
  * `pretest` IS currently the full `node scripts/build.mjs`, so on today's tree

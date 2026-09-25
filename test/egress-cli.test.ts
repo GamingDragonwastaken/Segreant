@@ -10,7 +10,7 @@ const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 function run(args: string[], home: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, 'egress', ...args], {
-      env: { ...process.env, FISCUS_HOME: home, FISCUS_DB: join(home, 'fiscus.db'), NODE_OPTIONS: '' },
+      env: { ...process.env, SEGREANT_HOME: home, SEGREANT_DB: join(home, 'segreant.db'), NODE_OPTIONS: '' },
     }, (error, stdout, stderr) => {
       const code = error && typeof (error as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (error as unknown as { code: number }).code : error ? 1 : 0;
@@ -30,7 +30,7 @@ const RULE = [
 ];
 
 test('egress CLI plans without mutation and requires an explicit apply acknowledgement', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-cli-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-cli-'));
   try {
     const before = await run(['status', '--json'], home);
     assert.equal(before.code, 0);

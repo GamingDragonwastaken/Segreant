@@ -1,7 +1,7 @@
 /**
- * `fiscus pack export|verify|inspect` — the CLI face of `src/pack/` (D-229).
+ * `segreant pack export|verify|inspect` — the CLI face of `src/pack/` (D-229).
  *
- * `export` reads the local epistemic ledger and writes a `.fiscuspack`
+ * `export` reads the local epistemic ledger and writes a `.segreantpack`
  * envelope to `--out`; nothing is written without `--out`, and an existing
  * file is never overwritten. `--sign <private-key.pem>` signs the manifest
  * with Ed25519 and embeds the public key. `verify` runs the same verifier the
@@ -16,15 +16,15 @@ import { resolve } from 'node:path';
 import { dbPath } from '../config.ts';
 import { Store } from '../store/db.ts';
 import { exportLedgerPack } from '../pack/export.ts';
-import { serializeFiscusPack } from '../pack/manifest.ts';
-import { verifyFiscusPack } from '../pack/verifier.ts';
+import { serializeSegreantPack } from '../pack/manifest.ts';
+import { verifySegreantPack } from '../pack/verifier.ts';
 import type { Flags } from './flags.ts';
 import { C, color, printJson } from './ui.ts';
 
 function printUsage(): void {
-  console.log('  fiscus pack export --out <file> [--sign <private-key.pem>] [--json]');
-  console.log('  fiscus pack verify <file> [--trust <public-key.pem|base64>] [--json]');
-  console.log('  fiscus pack inspect <file> [--json]');
+  console.log('  segreant pack export --out <file> [--sign <private-key.pem>] [--json]');
+  console.log('  segreant pack verify <file> [--trust <public-key.pem|base64>] [--json]');
+  console.log('  segreant pack inspect <file> [--json]');
 }
 
 function stringFlag(flags: Flags, name: string): string | null {
@@ -57,11 +57,11 @@ function cmdPackExport(flags: Flags): void {
     const createdAt = new Date().toISOString();
     const { pack, summary } = exportLedgerPack({
       ledger: store.epistemic(),
-      packId: `fiscuspack:ledger:${createdAt}`,
+      packId: `segreantpack:ledger:${createdAt}`,
       createdAt,
       ...(sign === null ? {} : { signingKey: readKeyMaterial(sign) }),
     });
-    const encoded = serializeFiscusPack(pack);
+    const encoded = serializeSegreantPack(pack);
     writeFileSync(destination, encoded, { encoding: 'utf8', flag: 'wx' });
     const result = { path: destination, bytes: Buffer.byteLength(encoded, 'utf8'), manifestDigest: pack.manifestDigest, ...summary };
     if (flags.json) { printJson(result); return; }
@@ -96,7 +96,7 @@ function cmdPackVerify(flags: Flags): void {
   const input = readPack(flags);
   if (input === null) return;
   const trust = stringFlag(flags, 'trust');
-  const result = verifyFiscusPack(input, trust === null ? {} : { trustedPublicKey: readKeyMaterial(trust) });
+  const result = verifySegreantPack(input, trust === null ? {} : { trustedPublicKey: readKeyMaterial(trust) });
   if (!result.ok) process.exitCode = 1;
   if (flags.json) { printJson(result); return; }
   const tty = process.stdout.isTTY ?? false;
