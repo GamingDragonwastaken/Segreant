@@ -11,6 +11,9 @@
  * Honesty notes, enforced here rather than assumed:
  *  - One API request streams as SEVERAL transcript lines sharing a requestId
  *    with identical usage — dedupe on requestId, first entry wins.
+ *  - Resuming a session copies its earlier requests into the NEW transcript
+ *    file under the new session id; the store keeps the first record and
+ *    counts a copy whose charge differs (importShared.recordInsert).
  *  - Synthetic entries (model "<synthetic>") are Claude Code's own error
  *    placeholders, not billable traffic — skipped.
  *  - The dollar figure is consumption valued at API list rates. On a flat
@@ -139,7 +142,10 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
   const resolveProject = createRepoResolver();
 
   for (const file of files) {
-    const seenInFile = new Set<string>(); // one API request = many transcript lines; first wins
+    // One API request = many transcript lines; first wins. A copy in ANOTHER file
+    // (a resumed session) goes to the store, which recognises the same charge as a
+    // duplicate and counts a different charge as a conflict instead of hiding it.
+    const seenInFile = new Set<string>();
     const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
     for await (const line of rl) {
       if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {

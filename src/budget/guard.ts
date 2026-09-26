@@ -306,7 +306,10 @@ export class BudgetGuard {
     const sessionSpend = session === null ? null : session.usd;
 
     const windowMs = cfg.runawayWindowSec * 1000;
-    const exactWindow = typeof this.store.exactSpendInWindow === 'function'
+    // Only a runaway cap is enforced against the window. Without one, the exact
+    // projection bought nothing but a full re-verification of the window's
+    // charges on every request; the figure then carries the unverified basis.
+    const exactWindow = caps.runawayMaxUsd !== null && typeof this.store.exactSpendInWindow === 'function'
       ? this.store.exactSpendInWindow(now, windowMs, liveOnly)
       : null;
     const floatWindow = this.store.spendInWindow(now, windowMs, liveOnly);

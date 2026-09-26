@@ -141,6 +141,7 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'budget-recommend', label: 'Suggest a budget', plain: 'Propose a cap from your actual history.', territory: 'control', consequence: 'read', coverage: 'partial', command: 'segreant budget --recommend' },
   { id: 'alerts', label: 'Alerts', plain: 'Get told before a cap is hit, not after.', territory: 'control', consequence: 'local', coverage: 'partial', command: 'segreant alerts' },
   { id: 'exec', label: 'Run under a cap', plain: 'Run a command with a hard spending limit around it.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant exec -- <command>' },
+  { id: 'launch', label: 'Start a tool metered', plain: 'Start an AI tool pointed at Segreant, only while Segreant is running.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant launch -- <command>' },
 
   // ---- Allocation ---------------------------------------------------------
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'segreant project --coverage' },

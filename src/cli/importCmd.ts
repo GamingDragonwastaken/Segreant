@@ -7,7 +7,8 @@
 
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
-import { dbPath } from '../config.ts';
+import { dbPath, loadConfig } from '../config.ts';
+import { pricingStatus } from '../cost/pricing.ts';
 import { realizeDiscoveredProjects, projectValueBreakdown } from '../value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
@@ -150,6 +151,9 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
       sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
     ].filter(Boolean).join(', ');
     console.log(color(tty, C.yellow, `  Coverage     TRUNCATED${details ? ` (${details})` : ''} — imported values are not a complete source capture.`));
+  }
+  if (sum.conflictingObservations) {
+    console.log(color(tty, C.yellow, `  Conflicts    ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
   }
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
@@ -409,6 +413,18 @@ export async function cmdScan(flags: Flags): Promise<void> {
     renderScanDiff(tty, diff);
   }
 
+  // Imported rows keep the price they were recorded at, so a stale card turns
+  // every model newer than it into a fallback estimate for good (until a
+  // reprice). Say so BEFORE the import, where it can still be avoided.
+  const prices = pricingStatus(loadConfig().pricing.maxAgeDays);
+  if (prices.stale && !flags.json) {
+    const age = prices.ageDays === null ? 'of unknown age' : `${num(prices.ageDays)} days old`;
+    console.log(color(tty, C.yellow, `  Prices are ${age}: models released since then will be priced by a fallback estimate.`));
+    console.log(color(tty, C.gray, '  Update them first with  segreant pricing --refresh  (it prints the one permission it needs),'));
+    console.log(color(tty, C.gray, '  or afterwards with  segreant reprice  to re-price what was imported.'));
+    console.log('');
+  }
+
   if (!flags.setup) {
     // Dry run: tell them exactly what --setup would do, and why it is safe.
     if (present.length === 0 && plan.repos.length === 0) {
@@ -451,6 +467,9 @@ export async function cmdScan(flags: Flags): Promise<void> {
         `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
           `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
       );
+      if (sum.conflictingObservations) {
+        console.log(color(tty, C.yellow, `      ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
+      }
     }
   }
   if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));

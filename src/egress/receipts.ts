@@ -10,7 +10,6 @@
 import {
   closeSync,
   fstatSync,
-  fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -489,7 +488,9 @@ function writeReceiptCheckpoint(historyPath: string, receiptCount: number, valid
         if (written <= 0) throw new EgressReceiptError('persistence', 'egress receipt checkpoint wrote no bytes');
         offset += written;
       }
-      fsyncSync(fd);
+      // No fsync, like the receipt line it summarizes: the checkpoint never
+      // authorizes an append and only its presence is relied on, which the
+      // rename below publishes.
     } finally {
       bytes.fill(0);
     }

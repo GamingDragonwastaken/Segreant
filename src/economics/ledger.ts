@@ -143,7 +143,33 @@ function canonicalBoundary(value: Instant): Instant {
   }
 }
 
+// Verification (parse, canonicalize, digest, identity) is a pure function of
+// the stored row's bytes and yields a deeply frozen event, so a row whose every
+// stored column is unchanged reuses it; any byte difference re-verifies.
+const VERIFIED_EVENT_CACHE_MAX = 20_000;
+const verifiedEvents = new Map<string, { row: StoredEconomicRow; event: EconomicEvent }>();
+
+function sameStoredRow(a: StoredEconomicRow, b: StoredEconomicRow): boolean {
+  return a.event_json === b.event_json && a.event_digest === b.event_digest && a.event_kind === b.event_kind
+    && a.subject === b.subject && a.occurred_at === b.occurred_at && a.recorded_at === b.recorded_at;
+}
+
 function storedRecord(rowValue: StoredEconomicRow): EconomicEvent {
+  const hit = verifiedEvents.get(rowValue.event_id);
+  if (hit !== undefined && sameStoredRow(hit.row, rowValue)) return hit.event;
+  const event = verifyStoredRecord(rowValue);
+  if (verifiedEvents.size >= VERIFIED_EVENT_CACHE_MAX) verifiedEvents.delete(verifiedEvents.keys().next().value!);
+  verifiedEvents.set(rowValue.event_id, {
+    row: {
+      event_id: rowValue.event_id, event_kind: rowValue.event_kind, subject: rowValue.subject, occurred_at: rowValue.occurred_at,
+      recorded_at: rowValue.recorded_at, event_json: rowValue.event_json, event_digest: rowValue.event_digest,
+    },
+    event,
+  });
+  return event;
+}
+
+function verifyStoredRecord(rowValue: StoredEconomicRow): EconomicEvent {
   if (typeof rowValue.event_json !== 'string' || typeof rowValue.event_digest !== 'string') throw new Error(`stored economic event ${rowValue.event_id} is malformed`);
   let parsed: unknown;
   try { parsed = JSON.parse(rowValue.event_json); } catch { throw new Error(`stored economic event ${rowValue.event_id} has invalid JSON`); }
@@ -1024,7 +1050,10 @@ export class EconomicLedger {
     // than the active one: a rule written against `activeFinalizationId` would
     // leave an earlier close falsifiable.
     const closedThrough = new Map<string, number>();
-    for (const control of this.events()) {
+    // Only close-control events can make a period refuse this append. Reading
+    // just those keeps an append O(closes) instead of O(ledger): the full read
+    // here made every proxied request slower than the last.
+    for (const control of this.closeControlEvents()) {
       if (control.kind === 'close_finalized') {
         const metadata = closeFinalizationMetadata(control.metadata);
         const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
@@ -1345,6 +1374,45 @@ export class EconomicLedger {
     if (value === null) return null;
     this.validateReferenceClosure(value);
     return value;
+  }
+
+  /** Validated close_finalized / close_reopened events, in recorded order. */
+  private closeControlEvents(): readonly EconomicEvent[] {
+    const rows = this.db.prepare(
+      "SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_kind IN ('close_finalized', 'close_reopened') ORDER BY recorded_at ASC, event_id ASC",
+    ).all() as unknown as StoredEconomicRow[];
+    const values = rows.map(storedRecord);
+    const validated = new Set<string>();
+    for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
+    return values;
+  }
+
+  /**
+   * An append-only high-water mark: the largest rowid and the row count. A
+   * reader that cached a projection at one mark can tell whether later rows
+   * were only appended (count grew by exactly the rows above the old rowid)
+   * or whether rows were removed or renumbered (VACUUM), which voids the cache.
+   */
+  appendMark(): { rowid: number; count: number } {
+    const row = this.db.prepare('SELECT COALESCE(MAX(rowid), 0) AS rowid, COUNT(*) AS count FROM economic_events').get() as { rowid: number; count: number };
+    return { rowid: Number(row.rowid), count: Number(row.count) };
+  }
+
+  /** Rows appended after `rowid`: how many, and which event kinds. */
+  appendedAfter(rowid: number): { count: number; kinds: readonly string[] } {
+    const rows = this.db.prepare('SELECT event_kind AS kind, COUNT(*) AS n FROM economic_events WHERE rowid > ? GROUP BY event_kind').all(rowid) as Array<{ kind: string; n: number }>;
+    return { count: rows.reduce((sum, row) => sum + Number(row.n), 0), kinds: rows.map((row) => row.kind) };
+  }
+
+  /** Validated events appended after `rowid` whose occurrence lies in [startMs, endMs). */
+  eventsAppendedAfterInOccurrenceRange(rowid: number, startMs: number, endMs: number): readonly EconomicEvent[] {
+    const rows = this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE rowid > ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
+    ).all(rowid, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as unknown as StoredEconomicRow[];
+    const values = rows.map(storedRecord);
+    const validated = new Set<string>();
+    for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
+    return Object.freeze(values);
   }
 
   events(asOf?: Instant): readonly EconomicEvent[] {

@@ -100,7 +100,10 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
     line(color(tty, C.yellow, '● DEMO DATA — synthetic, isolated in demo.db. Real metering is untouched.'));
     console.log('');
   }
-  line(color(tty, C.bold, 'Point your tools here (PowerShell):'));
+  line(color(tty, C.bold, 'Start your tools through Segreant:'));
+  line(color(tty, C.gray, '  segreant launch -- claude        (or codex, aider, opencode, …)'));
+  line(color(tty, C.gray, '  Metered while this proxy runs; starts unmetered with a warning when it does not.'));
+  line(color(tty, C.bold, 'Or point a tool here yourself (PowerShell):'));
   line(color(tty, C.gray, `  $env:ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`));
   line(color(tty, C.gray, `  $env:OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`));
   console.log('');
@@ -110,7 +113,8 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
     line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
   }
   console.log('');
-  line(color(tty, C.gray, 'Press Ctrl+C to stop. Traffic falls straight through if Segreant is off.'));
+  line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));
+  line(color(tty, C.gray, 'Segreant is stopped; unset the two variables, or use segreant launch, to go direct.'));
   console.log('');
 }
 
@@ -245,6 +249,17 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — pricing still works; only the update was skipped.')}`);
+      // A fresh install is local-locked, so the first refresh is always refused.
+      // Hand over the one exact rule that permits it instead of leaving the
+      // operator to reconstruct it from the egress docs.
+      if (!url && /policy_denied|egress policy/.test(String(result.error))) {
+        const src = new URL(DEFAULT_MANIFEST_URL);
+        console.error('');
+        console.error(`  ${color(on, C.bold, 'To allow price updates from this one address (a GET that sends nothing about you):')}`);
+        console.error(`    segreant egress apply --apply --mode controlled_cloud --id pricing-refresh --purpose pricing_refresh \\`);
+        console.error(`      --data-class pricing_manifest --method GET --origin ${src.origin} --path-prefix ${src.pathname.split('/').slice(0, 2).join('/')}/`);
+        console.error(`  ${color(on, C.dim, 'then run:  segreant pricing --refresh   (and segreant pricing --auto to keep it current)')}`);
+      }
       process.exitCode = 1;
     }
     return;

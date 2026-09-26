@@ -12,7 +12,7 @@
 
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Store, RequestRow } from '../store/db.ts';
+import { RequestObservationConflictError, type Store, type RequestRow } from '../store/db.ts';
 import { repoToplevel } from '../git/correlate.ts';
 import { projectKey, projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
@@ -43,6 +43,12 @@ export interface ImportSummary {
   truncatedFiles?: number;
   truncatedLines?: number;
   truncatedRows?: number;
+  /**
+   * Rows whose request id was already recorded with a DIFFERENT charge. The
+   * first record stands and these are left out; a non-zero count is disclosed
+   * because it means two local logs disagree about one request.
+   */
+  conflictingObservations?: number;
 }
 
 export function emptyImportSummary(files = 0): ImportSummary {
@@ -137,7 +143,15 @@ export function recordInsert(store: Store, summary: ImportSummary, row: RequestR
   summary.eventsSeen += 1;
   // Every imported row is stamped once here: sunk subscription cost, observed
   // after the fact — cap enforcement excludes it by default (budget.capIncludesImported).
-  if (!store.insertRequestIfNew({ ...row, via: 'import' })) return false;
+  let inserted: boolean;
+  try {
+    inserted = store.insertRequestIfNew({ ...row, via: 'import' });
+  } catch (err) {
+    if (!(err instanceof RequestObservationConflictError)) throw err;
+    summary.conflictingObservations = (summary.conflictingObservations ?? 0) + 1;
+    return false;
+  }
+  if (!inserted) return false;
   summary.inserted += 1;
   summary.costUsd += row.costUsd;
   if (estimated) summary.estimatedCostUsd += row.costUsd;

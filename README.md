@@ -119,9 +119,19 @@ npm run start          # proxy on :8090, dashboard on :8091
 ```
 
 ```bash
+segreant launch -- claude     # or codex, opencode, aider, ...
+```
+
+`launch` points only that one tool at the proxy, and only while the proxy is
+running. If the proxy is stopped, the tool starts unmetered with a warning, or
+not at all when a budget cap is set. To point a shell at it yourself instead:
+
+```bash
 export ANTHROPIC_BASE_URL="http://localhost:8090"
 export OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
+
+A tool pointed at the proxy this way cannot connect while Segreant is stopped.
 
 Segreant starts **locked**: it forwards nothing to a cloud provider until you
 grant that exact route with `segreant egress apply`; the two commands for OpenAI

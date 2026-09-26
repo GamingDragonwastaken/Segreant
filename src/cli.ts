@@ -28,6 +28,7 @@ import { cmdCapital } from './cli/capitalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
+import { cmdLaunch } from './cli/launchCmd.ts';
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 import { cmdPack } from './cli/packCmd.ts';
@@ -133,6 +134,9 @@ function cmdHelp(): void {
     evidence github       Signed, offline CI evidence. 'emit' runs in a protected
                           workflow; 'import' verifies a locally pinned key plus
                           exact repository, branch, workflow, and policy binding.
+    launch -- <command>   Start a tool metered through the proxy while it runs, and
+                          unmetered (with a warning) when it does not. With a budget
+                          cap set, a stopped proxy refuses unless --allow-unmetered
     exec -- <command>     AMBIENT outcome capture: run any command and report its
                           exit code as the outcome — wrap "npm test" once, every
                           run reports itself ([--kind tested|shipped|…] [--commit R|--session S])
@@ -243,8 +247,9 @@ async function main(): Promise<void> {
   // `exec` wraps another command: everything after the bare `--` belongs to the
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
-  const flags = parseFlags(cmd === 'exec' && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
-  const wrapped = cmd === 'exec' && sep !== -1 ? argv.slice(sep + 1) : [];
+  const wraps = cmd === 'exec' || cmd === 'launch';
+  const flags = parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
+  const wrapped = wraps && sep !== -1 ? argv.slice(sep + 1) : [];
 
   // Demo mode: point every store-open at an isolated demo.db and flag surfaces
   // to render the DEMO label. One switch covers the CLI and the in-process
@@ -257,6 +262,13 @@ async function main(): Promise<void> {
   if (cmd === 'demo' || flags.demo) {
     process.env[envOverrideKey('DB')] = demoDbPath();
     process.env[envOverrideKey('DEMO')] = '1';
+  }
+
+  // `segreant start --help` used to start the server: no command reads --help
+  // itself, so any command asked for help gets the usage text and does nothing.
+  if (flags.help === true && !wraps) {
+    cmdHelp();
+    return;
   }
 
   switch (cmd) {
@@ -365,6 +377,9 @@ async function main(): Promise<void> {
       break;
     case 'exec':
       await cmdExec(flags, wrapped);
+      break;
+    case 'launch':
+      await cmdLaunch(flags, wrapped);
       break;
     case 'import':
       await cmdImport(flags);
