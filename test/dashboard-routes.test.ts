@@ -147,6 +147,8 @@ const HISTORICAL_ALLOW: Record<string, string> = {
   '/api/settings': 'GET, POST',
   '/api/settings/update': 'POST',
   '/api/settings/clear-proposals': 'POST',
+  // New write route, not inherited: pinned here because it is POST-only.
+  '/api/outcome/record': 'POST',
 };
 
 /**

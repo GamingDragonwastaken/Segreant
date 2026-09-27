@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "43f86fd75cdf6a6f74f14d9976b0ffdd194ac3d9620c16b8e1cf601ee408a359";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "187595dadf32511268476c64e32f7a4d3d8311ba296c86670c73cae0863e8cd0";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1110,6 +1110,127 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "WindowRetentionCoveragePayload"
     }
   ],
+  "ReportedValueCellPayload": [
+    {
+      "name": "key",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "outcomes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "accepted",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "used",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "linked",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costPerAcceptedUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "costPerUsedUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "SelfReportedValuePayload": [
+    {
+      "name": "status",
+      "optional": false,
+      "type": "'available' | 'disabled'"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "units",
+      "optional": false,
+      "type": "Array<{"
+    },
+    {
+      "name": "byKind",
+      "optional": false,
+      "type": "ReportedValueCellPayload[]"
+    },
+    {
+      "name": "byModel",
+      "optional": false,
+      "type": "ReportedValueCellPayload[]"
+    },
+    {
+      "name": "unlinkedOutcomes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "inferredLinks",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "codingComparison",
+      "optional": false,
+      "type": "'separate_basis'"
+    }
+  ],
+  "OutcomeRecordPayload": [
+    {
+      "name": "apply",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "event",
+      "optional": false,
+      "type": "{ outcomeId: string; kind: 'chat' | 'image' | 'other'; link: { basis: 'recorded' | 'inferred' }; signals: Array<{ type: string; source: string; observedAtMs: number }> }"
+    },
+    {
+      "name": "matchedRequests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "matchedCostUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "linkStatus",
+      "optional": false,
+      "type": "'matched' | 'unmatched'"
+    }
+  ],
   "ReconciliationRunRecord": [
     {
       "name": "reconciliationRunId",
@@ -1618,6 +1739,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "usage",
       "optional": true,
       "type": "UsagePayload"
+    },
+    {
+      "name": "selfReported",
+      "optional": false,
+      "type": "SelfReportedValuePayload"
     },
     {
       "name": "budget",

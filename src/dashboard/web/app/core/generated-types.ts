@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 43f86fd75cdf6a6f74f14d9976b0ffdd194ac3d9620c16b8e1cf601ee408a359 */
+/** Source SHA-256: 187595dadf32511268476c64e32f7a4d3d8311ba296c86670c73cae0863e8cd0 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -555,6 +555,47 @@ export interface UsagePayload {
   retention: WindowRetentionCoveragePayload;
 }
 
+export interface ReportedValueCellPayload {
+  key: string;
+  outcomes: number;
+  accepted: number;
+  used: number;
+  linked: number;
+  costUsd: number;
+  costPerAcceptedUsd: number | null;
+  costPerUsedUsd: number | null;
+  basis: string;
+}
+
+export interface SelfReportedValuePayload {
+  status: 'available' | 'disabled';
+  basis: string;
+  units: Array<{
+    outcomeId: string;
+    kind: 'chat' | 'image' | 'other';
+    model: string;
+    matchedRequests: number;
+    attributedCostUsd: number | null;
+    basis: string;
+    link: { basis: 'recorded' | 'inferred' };
+    ladder: { produced: string; reviewed: string; accepted: string; used: string; stillInUse: string; basis: string };
+  }>;
+  byKind: ReportedValueCellPayload[];
+  byModel: ReportedValueCellPayload[];
+  unlinkedOutcomes: number;
+  inferredLinks: number;
+  codingComparison: 'separate_basis';
+}
+
+export interface OutcomeRecordPayload {
+  apply: boolean;
+  basis: string;
+  event: { outcomeId: string; kind: 'chat' | 'image' | 'other'; link: { basis: 'recorded' | 'inferred' }; signals: Array<{ type: string; source: string; observedAtMs: number }> };
+  matchedRequests: number;
+  matchedCostUsd: number | null;
+  linkStatus: 'matched' | 'unmatched';
+}
+
 /** One recorded run. `result` is the immutable reconciliation record itself. */
 export interface ReconciliationRunRecord {
   reconciliationRunId: string;
@@ -860,6 +901,7 @@ export interface ValuePayload {
     } | null;
   } | null;
   usage?: UsagePayload;
+  selfReported: SelfReportedValuePayload;
   budget?: BudgetAdvice | null;
 }
 
@@ -1296,6 +1338,7 @@ export interface DashboardResponseMap {
   guide: GuidePayload;
   judge: JudgePayload;
   value: ValuePayload;
+  'outcome-record': OutcomeRecordPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
   'settings-update': SettingsSnapshot;

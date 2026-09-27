@@ -181,3 +181,55 @@ signed it. `src/value/receipt.ts`.
   realized, not whether it is elegant. Complexity-delta is a future gate.
 - **Not retrospective-only.** Acceptance and the early gates give same-session
   feedback; survival/clean mature over the window.
+
+---
+
+## 9. The self-reported ladder for work without a Git artifact
+
+Chat answers, images, drafts and other outputs have a different unit of work:
+one named result, identified by an operator-supplied outcome ID. They do not
+inherit the coding gates. Their evidence is the person's own verdict and later
+actions, retained as timestamped signals with `source: operator`. The
+`non-coding-self-reported-v1` outcome adapter evaluates those signals through
+the same `WorkUnit` and `OutcomeContract` machinery as the coding adapter.
+
+| Stage | Pass | Fail | Unknown |
+|---|---|---|---|
+| Produced | A result record exists | Not representable by a result record | No result record |
+| Reviewed | A rating or decision was reported | Not inferred from a low rating | Neither reported |
+| Accepted | Accepted as-is or edited before use | Explicitly rejected | No decision |
+| Used | Explicitly exported, copied, shipped or published | Explicitly marked not used | No use report |
+| Still in use | Explicit later yes | Explicit later no | No durability report |
+
+A 1–5 rating and its optional short note describe the person's assessment; a
+rating never silently turns into acceptance. Regeneration and the number of
+attempts until acceptance describe rework, and neither silently passes a stage.
+The latest report of a mutable stage is the current verdict; every earlier
+signal remains in the append-only ledger with its original source and time.
+Unknown is never counted as fail or pass. A reported use does not establish
+business impact, and “still in use” does not establish independent durability.
+
+Each result carries exactly one spend link: a recorded request ID, a recorded
+session ID, or a time window of at most 24 hours plus a tool/source name. The
+last form is labelled **inferred** at every output. A recorded ID is still
+operator-supplied association, not provider attestation. Unmatched links have
+unknown attributed cost; they cannot make cost per accepted or used result
+look artificially cheap. When several results claim one metered request, its
+cost is divided equally among them, conserving that request's spend. A result
+whose linked requests span models is reported under `mixed`; a result with no
+matched request is `unlinked`. The cost-per-result denominator counts all
+results in the cell's matched work population, including rejected attempts:
+
+```
+cost per accepted = attributed metered cost of all results / number explicitly accepted
+cost per used     = attributed metered cost of all results / number explicitly used
+```
+
+These quotients are withheld when any result in the cell lacks matched spend or
+the denominator is zero. Every cell carries the **self-reported** basis. Coding
+git outcomes retain their separate git-verified basis; no combined “value”
+number is formed from the two. The price is metered/list-price evidence, not a
+provider bill; the verdict is a self-report, not an independent audit or a
+causal estimate of benefit. The operator can preview `segreant outcome record`
+without writing and append only with `--apply`. The local dashboard uses the
+same preview/apply function behind its guarded POST route.

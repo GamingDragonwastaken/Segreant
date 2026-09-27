@@ -37,6 +37,7 @@ import { loadRealization, realizeDiscoveredProjects } from '../value/realization
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
 import { valueReport } from '../value/report.ts';
+import { recordReportedOutcome, type OutcomeInput } from '../value/selfReported.ts';
 import { projectName } from '../git/correlate.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
@@ -941,6 +942,7 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
         projects: value.projects,
         projectAllocation,
         usage: value.usage,
+        selfReported: value.selfReported,
         team: value.team,
         drift: spine?.drift === null || spine?.drift === undefined
           ? null
@@ -949,6 +951,35 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
       });
     } catch (err) {
       return json(res, 500, { error: String(err) });
+    }
+  })();
+}
+
+/** Same local-only POST guard as other mutations. A POST with apply:false is
+ * the preview; only a second deliberate POST with apply:true appends evidence. */
+export function handleOutcomeRecord({ req, res, store }: RouteContext): void {
+  void (async () => {
+    try {
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      for await (const part of req) {
+        const chunk = part as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
+          req.resume();
+          return json(res, 413, { error: 'outcome request exceeds bounded dashboard limit' });
+        }
+        chunks.push(chunk);
+      }
+      const raw: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('outcome request must be an object');
+      const body = raw as Record<string, unknown>;
+      const allowed = new Set(['apply', 'outcomeId', 'kind', 'link', 'rating', 'note', 'decision', 'regenerated', 'attempts', 'use', 'stillInUse']);
+      if (Object.keys(body).some((key) => !allowed.has(key))) throw new Error('outcome request has an unknown field');
+      if (typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
+      return json(res, 200, recordReportedOutcome(store, body as unknown as OutcomeInput, body.apply));
+    } catch (error) {
+      return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
     }
   })();
 }
@@ -1161,6 +1192,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('guide', handleGuide),
   apiRoute('judge', handleJudge),
   apiRoute('value', handleValue),
+  apiRoute('outcome-record', handleOutcomeRecord),
   apiRoute('causal', handleCausal),
   apiRoute('kernel', handleKernel),
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the

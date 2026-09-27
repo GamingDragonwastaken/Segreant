@@ -553,6 +553,47 @@ export interface UsagePayload {
   retention: WindowRetentionCoveragePayload;
 }
 
+export interface ReportedValueCellPayload {
+  key: string;
+  outcomes: number;
+  accepted: number;
+  used: number;
+  linked: number;
+  costUsd: number;
+  costPerAcceptedUsd: number | null;
+  costPerUsedUsd: number | null;
+  basis: string;
+}
+
+export interface SelfReportedValuePayload {
+  status: 'available' | 'disabled';
+  basis: string;
+  units: Array<{
+    outcomeId: string;
+    kind: 'chat' | 'image' | 'other';
+    model: string;
+    matchedRequests: number;
+    attributedCostUsd: number | null;
+    basis: string;
+    link: { basis: 'recorded' | 'inferred' };
+    ladder: { produced: string; reviewed: string; accepted: string; used: string; stillInUse: string; basis: string };
+  }>;
+  byKind: ReportedValueCellPayload[];
+  byModel: ReportedValueCellPayload[];
+  unlinkedOutcomes: number;
+  inferredLinks: number;
+  codingComparison: 'separate_basis';
+}
+
+export interface OutcomeRecordPayload {
+  apply: boolean;
+  basis: string;
+  event: { outcomeId: string; kind: 'chat' | 'image' | 'other'; link: { basis: 'recorded' | 'inferred' }; signals: Array<{ type: string; source: string; observedAtMs: number }> };
+  matchedRequests: number;
+  matchedCostUsd: number | null;
+  linkStatus: 'matched' | 'unmatched';
+}
+
 /** One recorded run. `result` is the immutable reconciliation record itself. */
 export interface ReconciliationRunRecord {
   reconciliationRunId: string;
@@ -858,6 +899,7 @@ export interface ValuePayload {
     } | null;
   } | null;
   usage?: UsagePayload;
+  selfReported: SelfReportedValuePayload;
   budget?: BudgetAdvice | null;
 }
 
@@ -1294,6 +1336,7 @@ export interface DashboardResponseMap {
   guide: GuidePayload;
   judge: JudgePayload;
   value: ValuePayload;
+  'outcome-record': OutcomeRecordPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
   'settings-update': SettingsSnapshot;

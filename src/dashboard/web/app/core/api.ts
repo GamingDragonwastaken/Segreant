@@ -48,6 +48,9 @@ import type {
   RealizationEconomicRollupPayload,
   UsageUnitPayload,
   UsagePayload,
+  SelfReportedValuePayload,
+  ReportedValueCellPayload,
+  OutcomeRecordPayload,
   ReconciliationRunRecord,
   CostCentre,
   AllocationRule,
@@ -101,6 +104,9 @@ export type {
   RealizationEconomicRollupPayload,
   UsageUnitPayload,
   UsagePayload,
+  SelfReportedValuePayload,
+  ReportedValueCellPayload,
+  OutcomeRecordPayload,
   ReconciliationRunRecord,
   CostCentre,
   AllocationRule,
@@ -246,6 +252,8 @@ export const api = {
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
+    outcome: (input: Record<string, unknown>, apply: boolean) =>
+      request<OutcomeRecordPayload>(routePath('outcome-record'), { method: 'POST', body: JSON.stringify({ ...input, apply }) }),
     settings: (patch: Record<string, unknown>) =>
       request<SettingsSnapshot>(routePath('settings-update'), { method: 'POST', body: JSON.stringify(patch) }),
     clearProposals: () =>
