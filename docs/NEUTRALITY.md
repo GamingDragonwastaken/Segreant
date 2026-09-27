@@ -75,7 +75,7 @@ and to the commercial license alike:
   the dashboard today. If one is ever added it must be local-only (no network
   call to decide whether to show it), shown rarely, dismissible permanently,
   never printed in `--json` output, non-interactive sessions, or CI, and
-  recorded in `docs/program/DECISION-LOG.md` before it ships.
+  documented in the public change review before it ships.
 
 ## Public-interest governance note
 
@@ -90,5 +90,5 @@ page.
 It does not control what a configured AI provider does with data it receives,
 and it is not a guarantee that a future version will keep every path above
 free — a change to that would need to survive the review this page exists to
-invite, and would be recorded here and in `docs/program/DECISION-LOG.md` when
+invite, and would be recorded here and in the public change review when
 it happens.

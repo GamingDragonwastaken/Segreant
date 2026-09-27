@@ -58,9 +58,8 @@ For any behavior change — a bug fix, a new invariant, a correctness property �
 reproduce the defect as a concrete counterexample, write the smallest test that
 fails against the current code, and record that it actually goes RED (test
 name, pass/fail count) before writing the fix. A test added alongside a fix
-with no recorded RED run has not demonstrated it catches anything. This is not
-a style preference; every entry in `docs/program/DECISION-LOG.md` follows this
-shape and reviewers will ask for the RED count.
+with no recorded RED run has not demonstrated it catches anything. Reviewers
+will ask for the RED count.
 
 ## Pull requests
 
@@ -72,7 +71,7 @@ test seam exists.
 "Done" means the full suite is green (`npm test`, all three typecheck domains,
 `npm run build`) at the exact commit under review, plus a passing CI run for
 that same commit SHA — not a prior run on an earlier commit, and not a
-predicted result. `docs/RELEASE-GATE.md` records this discipline at release
+predicted result. `docs/RELEASE-PROCESS.md` defines this discipline at release
 granularity; the same rule applies to an ordinary PR at PR granularity.
 
 Preserve these invariants:
@@ -102,8 +101,8 @@ says nothing fired"). The body states the counterexample that showed the
 defect, the fix, and the RED/GREEN test counts; it does not carry attribution
 lines. Before requesting review, run the same checks CI runs and inspect the
 packaged artifact when the change touches build, CLI startup, dashboard assets,
-or release behavior. Release claims must follow `docs/RELEASE-GATE.md`; a green
-test command in a commit message is not release evidence by itself.
+or release behavior. Release claims must follow `docs/RELEASE-PROCESS.md`; a
+green test command in a commit message is not release evidence by itself.
 
 ## Further reading
 

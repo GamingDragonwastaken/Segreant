@@ -375,7 +375,7 @@ carries the cost basis beneath it and self-labels as allocating *local
 estimates*; on demo data that reads `synthetic_demo, unpriced`. Allocation
 appears in no budget, RoI, or recommendation surface.
 
-**Stated plainly, and recorded in `VISION-AUDIT.md` §3:** this layer was built
+**Stated plainly in the contemporaneous audit:** this layer was built
 ahead of the sequencing that audit recommended. **No reconciliation has run
 against real provider data**, so the residual remains unexamined and every
 cost-centre figure is an estimate of unknown accuracy. The structural guards
@@ -441,7 +441,7 @@ retained for history.
 | --- | --- |
 | Candidate identity | **Pass.** `git rev-parse HEAD` = `7bfb6dda107a6f5f841915c54ff21ecbc07d64b7`; `git status --short` empty before and after. |
 | Source validation | **Pass.** `npm run typecheck` clean, `npm test` **493 tests / 492 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
-| Packed artifact | **Pass.** `npm pack` → 98 files, SHA-256 `665ce684ca1d142cf431b46d404e1bd961d25f670422672b309636f1ced125f3`; all 6 key paths present. The file count rose by one against `1398fe3` because `docs/` ships with the package and this candidate adds `docs/VISION-AUDIT.md` — no new code path. |
+| Packed artifact | **Pass.** `npm pack` → 98 files, SHA-256 `665ce684ca1d142cf431b46d404e1bd961d25f670422672b309636f1ced125f3`; all 6 key paths present. The file count rose by one against `1398fe3` because `docs/` ships with the package and that candidate added an audit page — no new code path. |
 | Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
 | Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests, $89.66), packaged dashboard on :8097. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`. Terminated cleanly, port confirmed closed. |
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, 4 assumptions, `costStaleUnits: 0`, `unitsExcludedStalePricing: 0`; $0.20 vs $1.22 per 100 changed lines, 3 vs 3 sessions. Unchanged by this candidate — the rebalanced roster was not touched. |
@@ -556,7 +556,7 @@ infrastructure requirements in the separate gate below.
 **Repository visibility:** the GitHub repository is **public** (its Actions page
 loads without authentication). Anything committed here is published on push, so
 the pre-push check must include a scan for credentials, personal data, and local
-filesystem paths. The absolute working-copy path was removed from `HANDOFF.md`
+filesystem paths. An absolute working-copy path was removed from an internal handoff record
 before the `91b468b` push for exactly that reason.
 
 ## Product claims allowed at this stage

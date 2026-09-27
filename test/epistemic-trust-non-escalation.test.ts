@@ -227,7 +227,7 @@ test('replaying an identical claim stays idempotent rather than failing the seco
 });
 
 test('a claim citing no evidence has no ceiling to compare against, so it is refused rather than left unbounded', () => {
-  // WP-R05's own tracking note (`docs/program/PACKET-INVENTORY.md`) still lists
+  // An earlier work packet still lists
   // this as open: "a claim citing NO evidence has no ceiling to compare with and
   // is unbounded here." Measured directly: `claim()` (claim.ts:333) calls
   // `stringList(value.evidenceIds, 'evidenceIds', true)`, and `stringList`
@@ -247,7 +247,7 @@ test('a claim citing no evidence has no ceiling to compare against, so it is ref
   // `EpistemicLedger` is ever reached.
   //
   // This test does not newly close anything; `claim()`'s requirement already
-  // does. It exists so the PACKET-INVENTORY line above stops describing a real
+  // does. It exists so the old tracking note stops describing a real
   // hole and starts describing a stale tracking note, and so a future change
   // that loosens `evidenceIds` back to optional fails here first.
   assert.throws(

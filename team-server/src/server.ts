@@ -6,7 +6,7 @@
  * exposure is the operator's job (a reverse proxy, load balancer, etc. — see
  * team-server/README.md); this process speaks plain HTTP and trusts whatever
  * fronts it to terminate TLS, matching "Segreant provides the software,
- * never the operation" (docs/TEAM-TIER-DESIGN.md §1).
+ * never the operation" (team-server/README.md).
  *
  * Three trust domains, three auth mechanisms:
  *  - POST /developers (admin registers a developer's rollup-signing public
@@ -20,7 +20,7 @@
  *    gated by an OIDC ID token (a human's SSO login), verified against the
  *    operator's own issuer via oidc.ts. This is the human-facing layer —
  *    a separate trust domain from the machine-to-machine rollup signature
- *    above, on purpose (docs/TEAM-TIER-DESIGN.md §3).
+ *    above, on purpose (team-server/README.md).
  *
  * The two /dashboard/* routes additionally run through aggregate.ts's privacy
  * gate before anything is returned: /dashboard/projects suppresses any single

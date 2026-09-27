@@ -21,7 +21,7 @@
  * contributor's project total just IS their personal total under another
  * name, the same re-identification risk one level down. Team-wide spend by
  * project is otherwise the core, expected FinOps view
- * (docs/TEAM-TIER-DESIGN.md's own stated target), so unlike the developer
+ * (see team-server/README.md), so unlike the developer
  * breakdown it needs no separate opt-in — only the per-row floor.
  */
 

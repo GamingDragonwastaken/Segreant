@@ -3,8 +3,9 @@
 Segreant is pre-1.0. This repository carries no tag and no GitHub release, so
 everything below is unreleased. This file records user-visible changes from the
 point at which release discipline was formalized; Git history remains the
-authoritative record for earlier development, and `docs/RELEASE-GATE.md` remains
-the release authority — an entry here is not release evidence.
+authoritative record for earlier development. The verification procedure in
+`docs/RELEASE-PROCESS.md` remains the release authority — an entry here is not
+release evidence.
 
 The format follows Keep a Changelog and releases will use Semantic Versioning.
 

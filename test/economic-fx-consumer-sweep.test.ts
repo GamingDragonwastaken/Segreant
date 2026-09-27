@@ -22,7 +22,7 @@
  * WHY THE COUNT IS PART OF THE RESULT. A sweep is worth exactly the corpus it
  * ran over. A partial sweep whose size is not stated reads as coverage, and that
  * is this repository's most-recorded defect class — twenty-one instances, written
- * up in `docs/program/METHOD-ABSENCE-AS-RESULT.md`, step 7. The counts below are
+ * up in an internal method review. The counts below are
  * asserted with floors so a regex that stops matching fails loudly instead of
  * quietly sweeping nothing.
  *

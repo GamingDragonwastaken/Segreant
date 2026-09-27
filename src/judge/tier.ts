@@ -1,6 +1,6 @@
 /**
  * The Lift judge trust ladder — a single, pure gate deciding which judge tier is
- * active. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 for the design.
+ * active. See docs/DATA-BOUNDARIES.md for the public egress contract.
  *
  * This is the one place that decision gets made. Everything above the always-on
  * algorithmic default (src/value/liftEfficiency.ts) is off unless the user has
@@ -19,7 +19,7 @@ import type { JudgeConfig } from '../config.ts';
 export type JudgeTier = 'algorithmic' | 'local-structural' | 'local-full' | 'hosted-structural' | 'hosted-full';
 
 /**
- * Matches SessionJudgment.confidence (LIFT-AI-SIDE-JUDGE-DESIGN.md §3). Local
+ * Matches SessionJudgment.confidence. Local
  * structural and local full share one tag on purpose: the payload distinction is
  * independent of the egress bit, which separately reports whether the configured
  * endpoint is a validated loopback destination.
@@ -61,7 +61,7 @@ function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean 
  * the reverse proxy forwards. Reusing the metered key would be circular (using the
  * thing being measured to also measure itself) and would show judge calls up as
  * confusing extra spend on the same ledger they're supposed to be judging
- * (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2). Never logged, never persisted to
+ * (see docs/DATA-BOUNDARIES.md). Never logged, never persisted to
  * config.json, never returned by this function — only whether it's set.
  */
 export function hasHostedJudgeApiKey(
@@ -78,7 +78,7 @@ export function hasHostedJudgeApiKey(
  * judge.localBaseUrl) — the alternative (silently preferring hosted) would mean
  * a config that types out to "local is available" can still send content off
  * the user's machine, which is exactly the silent-escalation shape
- * docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 rules out.
+ * the egress contract rules out.
  */
 export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean): JudgeTierDecision {
   const notes: string[] = [];

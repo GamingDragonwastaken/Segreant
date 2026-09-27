@@ -202,7 +202,7 @@ SQLite, seven tables (`src/store/db.ts`). Timestamps stored as both ISO string a
 - **gate_signals** — ingested outcome verdicts (`tested`/`merged`/`shipped`/`incident`) from `segreant report`, optionally linked to a commit hash.
 - **receipts** — emitted Value Receipts, one per certified unit.
 
-The schema diverges from the source research in three deliberate ways, all in `docs/RESEARCH-REVIEW.md`: cache-write/cache-read columns added (they drive real cost), the fictional `reasoning_tokens` *multiplier* removed (reasoning tokens are billed as output), and the `efficiency_metrics` table (TER/AES) deferred rather than shipped.
+The schema has cache-write/cache-read columns because they affect cost. Reasoning tokens are billed as output, without a separate multiplier. A per-developer efficiency score is not shipped.
 
 ---
 
@@ -238,7 +238,7 @@ Design properties that make it a standard rather than a dashboard:
 - **Maturity holds the line on honesty**: Survived and Clean are `unknown` until the window elapses, so no unit is called realized prematurely.
 - **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. A third question is asked separately from both (D-231): whether the ledger the receipt was signed over still says the same — `receipt --reconcile <file> [--as-of <instant>]` reads the v2 lineage against the local economic ledger and answers `agrees`, `ledger_moved` (a correction retained after signing), `disagrees`, or `not_reconcilable` (a v1 body, or another ledger's events). This is what turns a private number into a portable, auditable unit of account.
 - **Realization kernel bridge** (`src/value/epistemic.ts`): the canonical persisted realization path automatically and atomically issues one idempotent `value.realization_recorded` Evidence/Claim per mature unit whose eight declared gates are all observed `pass` and whose effective request-lineage attribution is complete and re-derived from the Store ledger. The payload retains commit/window/gate/economic provenance and a digest-bound identity. Its profile is provisional, self-authenticated and non-causal; it does not assert business value, provider billing, settlement or project-specific cost when the source scope is the project-blind window basis. Partial, maturing, stale, synthetic-demo and legacy snapshots remain outside this bridge.
-- **Honest scope**: proposal capture covers **both streaming (SSE tool-call reassembly, `src/proxy/stream-proposals.ts`) and non-streaming** responses through identical extraction; Tested/Merged/Shipped depend on ingested signals; Survived/Clean are "to date". None of these are faked — unobserved gates read `unknown`. (Full reasoning in RESEARCH-REVIEW §3.)
+- **Honest scope**: proposal capture covers **both streaming (SSE tool-call reassembly, `src/proxy/stream-proposals.ts`) and non-streaming** responses through identical extraction; Tested/Merged/Shipped depend on ingested signals; Survived/Clean are "to date". None of these are faked — unobserved gates read `unknown`. See [THE-STANDARD.md](THE-STANDARD.md) for the gate rules.
 
 ### D6 — Fail open for measurement, fail closed for declared egress integrity
 DB write failure, parse failure, or another ordinary measurement error falls
@@ -318,8 +318,8 @@ did succeed — see `src/proxy/usage.ts` and `src/proxy/server.ts`). What's stil
 genuinely open:
 
 1. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
-   dashboard; SSO; support/SLA. Numeric-only, opt-in, signed. Scoped in
-   [docs/TEAM-TIER-DESIGN.md](TEAM-TIER-DESIGN.md) as a bring-your-own
+   dashboard; SSO; support/SLA. Numeric-only, opt-in, signed. The
+   [team-server operator guide](../team-server/README.md) describes the bring-your-own
    server/hosting/SSO deployment model, keeping Segreant as software an operator
    deploys rather than a service we run — that framing hasn't changed. **The
    client half is now built:** `src/team/rollup.ts` (`buildRollupBody`/
@@ -428,8 +428,8 @@ genuinely open:
    rollout JSONL — bounded excerpt, clipping disclosed, nothing persisted;
    the store still never stores prompt/response text), and `segreant judge`
    judges real sessions looked up from the store (`--session <id>` to pick).
-   See [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's
-   boxed note. Genuinely still open: a real controlled A/B, and automatic
+   The bounded transcript is read at judge time and is not persisted in the
+   Segreant store; see [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md). Still open: a real controlled A/B, and automatic
    invocation from the Lift surface. There is no segreant lift command to
    invoke it from -- named here without code formatting on purpose, since
    formatting it as a command is what would imply it can be typed -- and

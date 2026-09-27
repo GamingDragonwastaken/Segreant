@@ -302,7 +302,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
  * zero-cost algorithmic signal — that's the expected steady state, not a
  * degraded one. For the full-content tiers, a Claude Code session's own
  * on-disk transcript is read ephemerally (judge/transcript.ts) — nothing is
- * persisted. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 for the trust ladder.
+ * persisted. See docs/DATA-BOUNDARIES.md for the trust ladder.
  */
 export async function cmdJudge(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
@@ -382,7 +382,7 @@ export async function cmdJudge(flags: Flags): Promise<void> {
   if (judgment.confidence === 'algorithmic') {
     console.log('');
     console.log(color(tty, C.gray, '  No LLM judge tier is configured — this is the always-on algorithmic signal.'));
-    console.log(color(tty, C.gray, '  Opt into a local or hosted LLM judge via config.judge.* — see docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4.'));
+    console.log(color(tty, C.gray, '  Opt into a local or hosted LLM judge via config.judge.* — see docs/DATA-BOUNDARIES.md.'));
   }
   console.log('');
 }
@@ -569,7 +569,7 @@ async function signAndPushRollup(
 
 /**
  * Push a signed, numeric-only rollup of this machine's per-project value/RoI to
- * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — Segreant hosts
+ * an enterprise-run team server. See team-server/README.md — Segreant hosts
  * nothing; --url points at infrastructure the team already runs and trusts.
  * Uses a SEPARATE keypair from `receipt --pubkey` on purpose (src/team/rollup.ts).
  * `--watch` keeps pushing on an interval (--every seconds) — see cmdTeamPushWatch,

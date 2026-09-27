@@ -37,8 +37,8 @@ are intentionally not automated from a local coding task:
 
 1. Confirm the public package name/scope is available and that the publisher
    account is authorized to use it — see
-   [`NAME-COLLISION-REVIEW.md`](NAME-COLLISION-REVIEW.md) for what a check of
-   `npm view segreant` found; it is a finding, not a rename decision.
+   check the current registry and repository names at release time. A prior
+   availability check is not authority for a later publication.
 2. Choose the release version, changelog/release notes, and support/security
    contact; verify LICENSE ownership/attribution before changing historical
    copyright text.

@@ -31,7 +31,7 @@ local state only and does not contact a Segreant-operated service.
 ## What is not support
 
 Feature requests and design discussion are welcome as issues but are judged
-against `PRODUCT.md` and the open items in `docs/program/PACKET-INVENTORY.md`,
+against `PRODUCT.md` and the current public capability contract,
 not guaranteed a response or a timeline. A request that asks the maintainer to
 interpret your own financial or budget data is out of scope — see
 `PRODUCT.md`'s "not AI financial advice" line — and will be redirected there.

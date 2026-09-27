@@ -47,9 +47,5 @@ needed to use it.
 |---|---|
 | [RELEASE-PROCESS.md](RELEASE-PROCESS.md), [RELEASE-GATE.md](RELEASE-GATE.md) | How a release is gated, and the commit-bound evidence for each candidate |
 | [REAL-PROVIDER-RECONCILIATION-RUNBOOK.md](REAL-PROVIDER-RECONCILIATION-RUNBOOK.md) | The procedure for validating reconciliation on a real provider account |
-| [NAME-COLLISION-REVIEW.md](NAME-COLLISION-REVIEW.md) | Registry and GitHub findings for the name |
-| [DESIGN-DIRECTION.md](DESIGN-DIRECTION.md) | The visual and interaction system |
-| [CAUSAL-PRODUCER-CONTRACT.md](CAUSAL-PRODUCER-CONTRACT.md), [LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md), [TEAM-TIER-DESIGN.md](TEAM-TIER-DESIGN.md) | Design scopes for specific subsystems |
-| [ECONOMIC-CONTROL-FOUNDATION.md](ECONOMIC-CONTROL-FOUNDATION.md), [TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md](TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md) | Research-direction documents |
-| [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md), [VISION-AUDIT.md](VISION-AUDIT.md), [RESEARCH-REVIEW.md](RESEARCH-REVIEW.md) | Historical direction and audit records |
-| [program/](program/README.md) | The completed reconstruction program: decisions, evidence, final gate |
+| [CAUSAL-PRODUCER-CONTRACT.md](CAUSAL-PRODUCER-CONTRACT.md) | The request-to-study-unit identity boundary |
+| [team-server operator guide](../team-server/README.md) | Operating the optional team server |

@@ -555,9 +555,7 @@ everywhere else. The only honest prior available is the user's own broader
 history.
 
 **Why a fourth point-multiplier, not a separate interval-narrowing mechanic.**
-The earlier design sketch (`docs/LIFT-AI-SIDE-JUDGE-DESIGN.md` §1) described
-this signal as something that should "narrow or widen the Lift interval's
-confidence." The shipped implementation instead feeds `efficiency` into
+The shipped implementation feeds the structural efficiency signal into
 `boundedLift` as a fourth discount alongside `selection`/`substitution`/
 `concurrency` — all four multiply into the same `point` estimate, and because
 `low = point × 0.7` when no A/B floor is supplied, a high-efficiency session's

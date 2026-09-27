@@ -130,9 +130,10 @@ Seal" set) are in the repository.
   9,499 requests is OpenAI arriving by native import.
 - A labelled demo seed (`segreant demo`) depicting five acquisition routes, which
   self-identifies as demo in every payload.
-- `docs/RELEASE-GATE.md` — commit-bound gate records with real artifact digests
-  and observed CI runs.
-- `docs/VISION-AUDIT.md` — clause-by-clause audit of source against stated vision.
+- `docs/CAPABILITY-EVIDENCE-CONTRACT.md` — the public boundary between current
+  capabilities, intended direction, and claims the evidence does not establish.
+- `docs/RELIABILITY-PERFORMANCE.md` — reproducible local performance and
+  reliability observations with their measurement limits.
 - **Absent, and never to be fabricated:** no completed reconciliation against a
   real provider bill; no npm publication; no production team deployment; no
   customers, testimonials, benchmarks, or pricing.

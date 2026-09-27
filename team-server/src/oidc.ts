@@ -1,5 +1,5 @@
 /**
- * OIDC relying-party JWT verification. Per docs/TEAM-TIER-DESIGN.md §3:
+ * OIDC relying-party JWT verification. Per team-server/README.md:
  * "verify an incoming JWT against a configured issuer URL and JWKS endpoint,
  * extract an identity claim, done." This is the human-facing auth layer —
  * separate from src/team/rollup.ts's ed25519 machine-to-machine trust for

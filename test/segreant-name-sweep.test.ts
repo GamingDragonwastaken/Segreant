@@ -17,13 +17,6 @@
  *     the procedure rows above them describe what to do NOW and get no
  *     exemption, which is what stops the allowance from widening.
  *
- *   - `docs/superpowers/plans/` holds dated, already-executed plans that quote
- *     the code as it stood on their date.
- *
- *   - `docs/NAME-COLLISION-REVIEW.md` and `docs/program/NAMING-DECISION.md`
- *     are ABOUT the old name: the npm collision that forced the rename and the
- *     choice of the new one. They cannot make that case without naming it.
- *
  *   - The repository URL `GamingDragonwastaken/Fiscus` stays until the GitHub
  *     repository itself is renamed; a link to a URL that does not exist yet
  *     would be broken. A line passes only if nothing legacy remains once the
@@ -38,7 +31,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,17 +45,11 @@ const SELF = [
   'test/segreant-home-cli.test.ts',
 ];
 
-/** Documents whose subject is the old name. */
-const NAMING_DOCS = ['docs/NAME-COLLISION-REVIEW.md', 'docs/program/NAMING-DECISION.md'];
-
 /** The repository URL, until the repository is renamed. */
 const REPO_URL = /GamingDragonwastaken\/Fiscus/g;
 
 /** The single sentence that records the former name for users. */
 const RENAME_NOTE = /It was called Fiscus until \d{4}-\d{2}-\d{2}/;
-
-/** Dated, already-executed plans quoting then-current code. */
-const ARCHIVED_PLANS = 'docs/superpowers/plans/';
 
 /** Gate rows are exempt only where they record an observed result. */
 const GATE = 'docs/RELEASE-GATE.md';
@@ -71,7 +58,7 @@ const RECORDED_RESULT = /\*\*(Pass|Fail|Blocked)\.?\*\*/;
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: REPO, encoding: 'utf8' })
     .split('\n')
-    .filter(Boolean);
+    .filter((rel) => rel.length > 0 && existsSync(join(REPO, rel)));
 }
 
 function textOf(rel: string): string | null {
@@ -84,7 +71,7 @@ test('no current-tense file still calls the product by its old name', () => {
   const offenders: string[] = [];
 
   for (const rel of trackedFiles()) {
-    if (SELF.includes(rel) || rel.startsWith(ARCHIVED_PLANS) || NAMING_DOCS.includes(rel)) continue;
+    if (SELF.includes(rel)) continue;
     const text = textOf(rel);
     if (text === null || !LEGACY.test(text)) continue;
 
@@ -133,7 +120,7 @@ test('no HTTP header, route, or reason code still carries the old name', () => {
   const offenders: string[] = [];
 
   for (const rel of trackedFiles()) {
-    if (SELF.includes(rel) || rel.startsWith(ARCHIVED_PLANS) || rel === GATE || NAMING_DOCS.includes(rel)) continue;
+    if (SELF.includes(rel) || rel === GATE) continue;
     const text = textOf(rel);
     if (text === null) continue;
     for (const [re, what] of banned) {

@@ -10,7 +10,7 @@
  * model when one does, and `src/store/CONTEXT.md` said "all amounts are integer
  * microdollars" about a store whose amounts are arbitrary-scale decimals.
  *
- * D-188's lesson was that `ISSUANCE-MAP.md` claimed to be the readable
+ * An earlier readable projection of the issuance map claimed to be the
  * projection of the map and drifted in every column the test did not compare.
  * The same argument applies here with the same force, so this checks the claim
  * forms that CAN be checked mechanically.
@@ -38,7 +38,7 @@
  * SO THE GATE STATES ITS OWN COVERAGE, and that is not decoration. A check that
  * silently examines three sentences out of two hundred and reports success is
  * the defect class this repository has recorded twenty-one times and written up
- * in `docs/program/METHOD-ABSENCE-AS-RESULT.md`: an absence reported as a
+ * in the internal method review: an absence reported as a
  * result. The last test in this file asserts the number of checked claims
  * cannot silently fall, and prints what it did not check.
  *

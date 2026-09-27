@@ -41,8 +41,8 @@ append-only store does and does not guarantee.
   bypass an egress rule, or exfiltrate a credential/prompt/ledger row through a
   path not listed in `docs/DATA-BOUNDARIES.md`'s declared-egress table.
 - **Team-server authentication and authorization.** `team-server/`'s OIDC
-  discovery, token validation, and role checks — see `docs/TEAM-TIER-DESIGN.md`
-  for the intended model and `docs/RELEASE-GATE.md`'s separate team-server gate
+  discovery, token validation, and role checks — see `team-server/README.md`
+  for the operator model and `docs/RELEASE-GATE.md`'s separate team-server gate
   for what is and is not validated against real infrastructure today.
 
 ## Not a vulnerability

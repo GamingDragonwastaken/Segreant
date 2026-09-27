@@ -43,7 +43,7 @@
  * record; an exception without one is a hole.
  *
  * SCOPED TO CODE SPANS AND FENCES, DELIBERATELY. "The segreant for your AI spend"
- * in `docs/DESIGN-DIRECTION.md` is prose about the project's name, and the URL
+ * in a public paragraph is prose about the project's name, and the URL
  * bar of a device mockup on the landing page is a picture. Neither is an
  * instruction, and a sweep that flagged them would have to be taught to ignore
  * them by name -- which is how allowlists grow until they mean nothing. Reading
@@ -76,10 +76,7 @@ const read = (relative: string): string => readFileSync(join(ROOT, relative), 'u
  * allowed to appear. Adding a name here is a decision that has to be defensible
  * in review; leaving one out is what makes the sweep worth running.
  */
-const PLANNED: Record<string, string> = {
-  lab: 'docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md introduces `segreant lab complexity` under "Proposed product '
-    + 'boundary" and lists "Build the Complexity Lab" as future work, so its own text tells the reader it does not exist',
-};
+const PLANNED: Record<string, string> = {};
 
 /**
  * Operator-facing Markdown: README plus `docs/`, minus the program record.
@@ -89,7 +86,6 @@ const PLANNED: Record<string, string> = {
  * instructions. Its commands ran against isolated ports (`--port 18390`)
  * precisely so they could not touch a real ledger, and holding a historical
  * observation to today's defaults would be asking a record to change.
- * `docs/program/**` is already out of scope by not being read at all.
  *
  * Paths are joined with `/` rather than `join()` so the strings this file
  * reports and compares are the same on every platform.
