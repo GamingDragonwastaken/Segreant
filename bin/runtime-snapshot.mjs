@@ -32,11 +32,11 @@ export const SNAPSHOT_PREFIX = 'segreant-runtime-';
 export const SNAPSHOT_OWNER_FILE = 'owner.json';
 
 // The compiled runtime resolves these relative to the PACKAGE root rather than
-// to its own module: the bundled pricing card, the Lift baselines, and the
-// package version. A snapshot without them is not behaviourally equivalent to
+// to its own module: the bundled pricing card, the Lift baselines, the public
+// market snapshot, and the package version. A snapshot without them is not behaviourally equivalent to
 // the checked-out or installed layout, and the difference only surfaces at the
 // first request that needs one.
-const ROOT_RESOURCES = ['pricing', 'baselines', 'package.json'];
+const ROOT_RESOURCES = ['pricing', 'baselines', 'market', 'package.json'];
 
 const REMOVE_OPTIONS = { recursive: true, force: true, maxRetries: 20, retryDelay: 25 };
 

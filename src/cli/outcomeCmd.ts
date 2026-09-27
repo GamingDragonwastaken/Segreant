@@ -1,6 +1,6 @@
 /** Explicit non-code self-reports. Every write previews before --apply. */
 import { Store } from '../store/db.ts';
-import { dbPath } from '../config.ts';
+import { dbPath, loadConfig } from '../config.ts';
 import { recordReportedOutcome, selfReportedValueReport, type OutcomeInput, type SpendLink } from '../value/selfReported.ts';
 import type { Flags } from './flags.ts';
 import { printJson, usd } from './ui.ts';
@@ -55,10 +55,15 @@ function inputFromFlags(flags: Flags): OutcomeInput {
   };
 }
 
-export function cmdOutcome(flags: Flags, enabled = true): void {
+export function cmdOutcome(flags: Flags, enabled = loadConfig().features.selfReportedOutcomes): void {
   const action = flags._[0];
   if (action !== 'record' && action !== 'report') {
     throw new Error('usage: segreant outcome record|report [--id ID --kind chat|image|other --request ID|--session ID|--from ISO --to ISO --tool TOOL] [--rating 1..5 --note TEXT --decision accepted_as_is|edited_before_use|rejected --attempts N --regenerated true|false --use exported|copied|shipped|published|not_used --still-in-use true|false] [--apply]');
+  }
+  if (action === 'record' && !enabled) {
+    console.error('Self-reported outcomes are switched off; nothing was recorded. Enable with: segreant features on selfReportedOutcomes --apply');
+    process.exitCode = 1;
+    return;
   }
   const store = new Store(dbPath());
   try {
@@ -78,7 +83,7 @@ export function cmdOutcome(flags: Flags, enabled = true): void {
     const now = Date.now();
     const report = selfReportedValueReport(store, now - days * 86400000, now + 1000, enabled);
     if (flags.json) { printJson(report); return; }
-    if (report.status === 'disabled') { console.log('Self-reported value is disabled; nothing was computed.'); return; }
+    if (report.status === 'disabled') { console.log('Self-reported value is switched off (segreant features); nothing was computed.'); return; }
     console.log('Self-reported value · chat, image, other');
     console.log(`  ${report.basis}`);
     console.log(`  ${report.units.length} outcome(s); ${report.unlinkedOutcomes} unlinked; ${report.inferredLinks} inferred spend link(s)`);

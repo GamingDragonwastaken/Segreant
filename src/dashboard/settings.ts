@@ -6,8 +6,8 @@
  */
 
 import type { Store, ProviderConnection } from '../store/db.ts';
-import type { SegreantConfig, BudgetConfig } from '../config.ts';
-import { segreantHome, configPath, dbPath, validateBudgetConfig } from '../config.ts';
+import type { SegreantConfig, BudgetConfig, FeaturesConfig, FeatureKey } from '../config.ts';
+import { segreantHome, configPath, dbPath, validateBudgetConfig, FEATURE_DEFAULTS } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 
@@ -21,6 +21,7 @@ export interface SettingsSnapshot {
   retentionDays: number;
   proposalRetentionDays: number;
   metadataOnly: boolean;
+  features: FeaturesConfig;
   budget: BudgetConfig;
   enforcement: BudgetEnforcementDescriptor;
   egress: {
@@ -49,6 +50,7 @@ export function buildSettingsSnapshot(
     retentionDays: config.retentionDays,
     proposalRetentionDays: config.proposalRetentionDays,
     metadataOnly: config.metadataOnly,
+    features: { ...config.features },
     budget: config.budget,
     enforcement: describeBudgetEnforcement(config.budget),
     egress: {
@@ -66,6 +68,8 @@ export interface SettingsPatch {
   retentionDays?: number;
   proposalRetentionDays?: number;
   budget?: Partial<BudgetConfig>;
+  /** Optional-subsystem switches. Budget caps are not among them. */
+  features?: Partial<FeaturesConfig>;
 }
 
 export class SettingsValidationError extends Error {
@@ -81,7 +85,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-const PATCH_KEYS = new Set(['metadataOnly', 'retentionDays', 'proposalRetentionDays', 'budget']);
+const PATCH_KEYS = new Set(['metadataOnly', 'retentionDays', 'proposalRetentionDays', 'budget', 'features']);
 const BUDGET_KEYS = new Set([
   'dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayWindowSec', 'runawayMaxUsd', 'capIncludesImported',
 ]);
@@ -92,7 +96,15 @@ export function applySettingsPatch(config: SegreantConfig, patch: SettingsPatch)
   for (const key of Object.keys(patch)) {
     if (!PATCH_KEYS.has(key)) throw new SettingsValidationError(`unsupported patch key: ${key}`);
   }
-  const next: SegreantConfig = { ...config, budget: { ...config.budget } };
+  const next: SegreantConfig = { ...config, budget: { ...config.budget }, features: { ...config.features } };
+  if ('features' in patch) {
+    if (!isRecord(patch.features)) throw new SettingsValidationError('features must be an object');
+    for (const [key, value] of Object.entries(patch.features)) {
+      if (!Object.hasOwn(FEATURE_DEFAULTS, key)) throw new SettingsValidationError(`unsupported feature key: ${key}`);
+      if (typeof value !== 'boolean') throw new SettingsValidationError(`features.${key} must be boolean`);
+      next.features[key as FeatureKey] = value;
+    }
+  }
   if ('metadataOnly' in patch && typeof patch.metadataOnly !== 'boolean') {
     throw new SettingsValidationError('metadataOnly must be boolean');
   }

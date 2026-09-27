@@ -176,6 +176,11 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'views/value.ts', token: 'api.causal()', note: 'the Value view reads causal status; registration and gates stay on the CLI' },
   },
   { id: 'realize', label: 'Realized value', plain: 'Work that actually shipped, not work that was proposed.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant realize' },
+  {
+    id: 'market', label: 'Public model market', plain: 'Compare models on public evidence of quality per dollar, before you have your own.',
+    territory: 'value', consequence: 'read', coverage: 'partial', command: 'segreant market',
+    guiEvidence: { file: 'views/value.ts', token: 'marketCard(', note: 'the Value view shows the bundled public boards; refreshing a source stays on the CLI because it needs an egress grant' },
+  },
   { id: 'frontier', label: 'Model comparison', plain: 'Whether a cheaper model would have done the same job.', territory: 'value', consequence: 'read', coverage: 'full', command: 'segreant frontier' },
   { id: 'saved', label: 'Savings', plain: 'What routing decisions have avoided so far.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'segreant saved' },
   { id: 'yield', label: 'Yield', plain: 'Output per dollar across projects.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'segreant yield' },
@@ -194,6 +199,11 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'demo', label: 'Demo data', plain: 'Load labelled sample data to see how it works.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant demo' },
 
   // ---- System -------------------------------------------------------------
+  {
+    id: 'features', label: 'Optional features', plain: 'Switch optional parts of Segreant on or off. Budget caps are not one of them.',
+    territory: 'system', consequence: 'local', coverage: 'full', command: 'segreant features off <key> --apply',
+    guiEvidence: { file: 'core/actions.ts', token: 'features: (cap)', note: 'the Features drawer previews one switch and saves it through the settings route' },
+  },
   {
     id: 'egress', label: 'Egress assurance', plain: 'Which cloud routes Segreant itself may use, with local receipts.',
     territory: 'system', consequence: 'egress', coverage: 'partial', command: 'segreant egress status',
@@ -305,10 +315,10 @@ const API_BINDINGS: Readonly<Record<string, readonly string[]>> = Object.freeze(
   budget: ['/api/settings/update'], 'budget-recommend': ['/api/value'], alerts: ['/api/overview'], project: ['/api/overview'], 'project-alias': ['/api/settings/update'],
   'alloc-centres': ['/api/allocation'], 'alloc-rules': ['/api/allocation'], 'alloc-run': ['/api/allocation'], 'billing-scope': ['/api/billing'],
   'billing-readiness': ['/api/billing'], 'billing-adopt': ['/api/billing'], 'billing-pull': ['/api/billing'], 'billing-reconcile': ['/api/billing'], receipt: ['/api/value'], evidence: ['/api/billing'], audit: ['/api/billing'],
-  roi: ['/api/value'], outcome: ['/api/outcome/record', '/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
+  roi: ['/api/value'], market: ['/api/market'], outcome: ['/api/outcome/record', '/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
   sources: ['/api/overview'], discover: ['/api/importers'], connect: ['/api/importers'], import: ['/api/import'], scan: ['/api/scan'], baseline: ['/api/value'], demo: ['/api/overview'],
   economic: ['/api/economic'],
-  egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
+  features: ['/api/settings', '/api/settings/update'], egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
 });
 
 const DOC_BINDINGS: Readonly<Record<Territory, readonly string[]>> = Object.freeze({

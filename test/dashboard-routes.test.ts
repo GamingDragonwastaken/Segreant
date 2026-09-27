@@ -192,6 +192,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/': 'GET, HEAD',
   '/index.html': 'GET, HEAD',
   '/classic': 'GET, HEAD',
+  '/api/market': 'GET, HEAD',
 };
 
 test('405 responses send the same Allow header they always have', async () => {

@@ -421,7 +421,7 @@ export interface ValueReportOptions extends ValueSpineOptions {
   nowMs?: number;
   /** The spend/usage/cohort window, in days. */
   spendWindowDays?: number;
-  /** Integration point for the future features config section. */
+  /** Overrides `config.features.selfReportedOutcomes` (tests). */
   selfReportedOutcomesEnabled?: boolean;
 }
 
@@ -463,7 +463,7 @@ export async function valueReport(
   const spendWindowDays = opts.spendWindowDays ?? DEFAULT_SPEND_WINDOW_DAYS;
 
   const usage = usageValue(store, config, { windowDays: spendWindowDays, nowMs: now });
-  const selfReported = selfReportedValueReport(store, now - spendWindowDays * DAY_MS, now + 1000, opts.selfReportedOutcomesEnabled ?? true);
+  const selfReported = selfReportedValueReport(store, now - spendWindowDays * DAY_MS, now + 1000, opts.selfReportedOutcomesEnabled ?? config.features.selfReportedOutcomes);
 
   // Per-user VALUE — distribution only, gated by opt-in + k-anonymity. When
   // disabled/suppressed this carries no per-user data (suppressed:true), so a

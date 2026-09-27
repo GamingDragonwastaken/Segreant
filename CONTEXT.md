@@ -22,6 +22,7 @@ whole tree loaded.
 | Provider billing, reconciliation | `src/billing/CONTEXT.md` | `docs/PROVIDER-RECONCILIATION.md` |
 | Cost centres, allocation rules | `src/alloc/CONTEXT.md` | `docs/ALLOCATION.md` |
 | RoI, realized value, model trials | `src/value/CONTEXT.md` | `docs/RETURN-ON-INTELLIGENCE.md`, `docs/METHODOLOGY.md` |
+| Public model market | `src/market/CONTEXT.md` | `docs/MARKET-SOURCES.md`, `market/snapshot.json` |
 | The web GUI | `src/dashboard/CONTEXT.md` | `PRODUCT.md`, `docs/ARCHITECTURE.md` |
 | A CLI verb | `src/cli/` | `src/cli.ts` (dispatch) |
 | Team rollups | `src/team/`, `team-server/` | `team-server/README.md` |

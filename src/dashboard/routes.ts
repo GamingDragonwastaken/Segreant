@@ -38,6 +38,7 @@ import { loadRealization, realizeDiscoveredProjects } from '../value/realization
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
 import { valueReport } from '../value/report.ts';
 import { recordReportedOutcome, type OutcomeInput } from '../value/selfReported.ts';
+import { buildMarketReport, loadMarket } from '../market/market.ts';
 import { projectName } from '../git/correlate.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
@@ -955,9 +956,18 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
   })();
 }
 
+/** Public market, read-only: the bundled snapshot plus any refresh already on disk. Never fetches. */
+export function handleMarket({ res, config }: RouteContext): void {
+  try {
+    return json(res, 200, buildMarketReport(loadMarket(), config.features));
+  } catch (error) {
+    return json(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 /** Same local-only POST guard as other mutations. A POST with apply:false is
  * the preview; only a second deliberate POST with apply:true appends evidence. */
-export function handleOutcomeRecord({ req, res, store }: RouteContext): void {
+export function handleOutcomeRecord({ req, res, store, config }: RouteContext): void {
   void (async () => {
     try {
       const chunks: Buffer[] = [];
@@ -977,6 +987,7 @@ export function handleOutcomeRecord({ req, res, store }: RouteContext): void {
       const allowed = new Set(['apply', 'outcomeId', 'kind', 'link', 'rating', 'note', 'decision', 'regenerated', 'attempts', 'use', 'stillInUse']);
       if (Object.keys(body).some((key) => !allowed.has(key))) throw new Error('outcome request has an unknown field');
       if (typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
+      if (!config.features.selfReportedOutcomes) return json(res, 409, { error: 'self-reported outcomes are switched off (segreant features on selfReportedOutcomes --apply)' });
       return json(res, 200, recordReportedOutcome(store, body as unknown as OutcomeInput, body.apply));
     } catch (error) {
       return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
@@ -1193,6 +1204,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('judge', handleJudge),
   apiRoute('value', handleValue),
   apiRoute('outcome-record', handleOutcomeRecord),
+  apiRoute('market', handleMarket),
   apiRoute('causal', handleCausal),
   apiRoute('kernel', handleKernel),
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the

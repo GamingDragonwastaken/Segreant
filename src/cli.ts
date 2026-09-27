@@ -36,6 +36,8 @@ import { cmdPlugin } from './cli/pluginCmd.ts';
 import { cmdEconomic } from './cli/economicCmd.ts';
 import { cmdOutcome } from './cli/outcomeCmd.ts';
 import { cmdBudgetControl } from './cli/controlCmd.ts';
+import { cmdFeatures } from './cli/featuresCmd.ts';
+import { cmdMarket } from './cli/marketCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -111,6 +113,11 @@ function cmdHelp(): void {
                           honestly banded and split by task type (--window D, --json)
     frontier --repo <p>   Compare models on like tasks; surface lower-cost,
                           same-observed-outcome trials and local headroom (--window D, --json)
+    market                Public quality per dollar by kind of work (coding,
+                          chat, image) from a bundled dated snapshot. Public
+                          evidence, never mixed with yours (--repo P shows yours
+                          beside it; --category C, --all, --json).
+                          market --refresh <source|all> fetches through egress.
     usage                 RoI for usage WITHOUT code signals — chat, research,
                           drafting, plus coding tools that don't report diffs.
                           Sessions scored from reported outcomes (--days N, --json)
@@ -177,6 +184,8 @@ function cmdHelp(): void {
     init                  Write default config + print setup steps
     doctor                First-run health check: config, DB, proxy, caps, data quality
     config                Show config and file paths    (--json)
+    features              List optional subsystems and their switches;
+                          features on|off <key> previews, --apply saves.
     pricing               Show the rate card: source, age, model count (--json).
                           Update it:  pricing --refresh  (pulls the latest rates
                           from the community price feed; --url <manifest> to
@@ -319,6 +328,12 @@ async function main(): Promise<void> {
       break;
     case 'config':
       cmdConfig(flags);
+      break;
+    case 'features':
+      cmdFeatures(flags);
+      break;
+    case 'market':
+      await cmdMarket(flags);
       break;
     case 'budget':
       if (flags.control) await cmdBudgetControl(flags);

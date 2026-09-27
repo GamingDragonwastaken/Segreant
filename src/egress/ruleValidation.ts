@@ -1,12 +1,12 @@
 import type { EgressDataClass, EgressPurpose, EgressRule } from '../config.ts';
 
 export const EGRESS_PURPOSES = [
-  'provider_inference', 'pricing_refresh', 'baseline_refresh', 'alert_delivery',
+  'provider_inference', 'pricing_refresh', 'market_refresh', 'baseline_refresh', 'alert_delivery',
   'provider_cost_observation', 'team_rollup', 'hosted_judge', 'local_judge', 'local_healthcheck',
 ] as const satisfies readonly EgressPurpose[];
 
 export const EGRESS_DATA_CLASSES = [
-  'provider_request', 'pricing_manifest', 'baseline_manifest', 'alert_metadata',
+  'provider_request', 'pricing_manifest', 'market_manifest', 'baseline_manifest', 'alert_metadata',
   'provider_cost_aggregate', 'team_rollup', 'judge_structural_summary',
   'judge_transcript_excerpt', 'healthcheck',
 ] as const satisfies readonly EgressDataClass[];

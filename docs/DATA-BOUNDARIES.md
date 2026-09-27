@@ -146,6 +146,7 @@ added without appearing on this page.
 | --- | --- | --- | --- |
 | `provider_inference` | `provider_request` | prompts, source snippets, tool payloads, and the caller's provider credential, exactly as the provider API requires | any tool pointed at the Segreant proxy |
 | `pricing_refresh` | `pricing_manifest` | nothing about you — a plain GET for a public pricing manifest | `segreant pricing --refresh`, or `pricing.autoRefresh` |
+| `market_refresh` | `market_manifest` | nothing about you — plain GETs for the public leaderboard and price files listed in `docs/MARKET-SOURCES.md` | `segreant market --refresh <source|all>` |
 | `baseline_refresh` | `baseline_manifest` | nothing about you — a plain GET for the manifest at an operator-supplied URL | `segreant baseline --refresh --url ...` |
 | `alert_delivery` | `alert_metadata` | configured alert summaries; never prompts, source, or credentials | `segreant alerts --set-webhook ...` |
 | `provider_cost_observation` | `provider_cost_aggregate` | a read-only day-range query, plus `OPENAI_ADMIN_API_KEY` read from the process environment for that one request | `segreant billing openai-costs pull ... --apply` |
