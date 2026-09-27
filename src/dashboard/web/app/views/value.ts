@@ -22,7 +22,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
-import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload } from '../core/api.ts';
+import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, type MarketPayload, type MarketBoardPayload, type MarketBenchmarkRowPayload, type MarketRatingRowPayload } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -144,6 +144,69 @@ function selfReportedCard(report: ValuePayload['selfReported'], refresh: () => v
       () => error() ? h('p', { class: 'drawer-error', role: 'alert', text: error()! }) : null,
       () => preview() ? h('p', { class: 'basis', role: 'status', text:
         `${preview()!.apply ? 'Recorded' : 'Preview'}: ${preview()!.matchedRequests} request(s) matched; ${preview()!.linkStatus}; ${preview()!.event.link.basis} link; ${preview()!.basis}` }) : null));
+}
+
+const MARKET_ROWS = 8;
+
+function marketBoard(b: MarketBoardPayload): Node {
+  const head = h('div', { class: 'card-head' },
+    h('span', { class: 'card-title', text: b.label }),
+    h('span', { class: 'basis', text: `${b.licence}` }));
+  if (b.status !== 'available') {
+    return h('div', { class: 'card', style: 'margin-top: var(--s3)' }, head,
+      h('p', { class: 'basis', text: b.status === 'disabled' ? 'Switched off in Features — not computed.' : 'No data for this source yet. Run segreant market --refresh ' + b.sourceId + '.' }));
+  }
+  const dated = b.newestRowDate ?? b.publishedAt;
+  const ageDays = dated ? Math.floor((Date.now() - Date.parse(`${dated}T00:00:00Z`)) / 86_400_000) : null;
+  const when = `${b.origin === 'refreshed' ? 'Refreshed' : 'Bundled snapshot'}, fetched ${b.fetchedAt?.slice(0, 10) ?? '—'}; newest result ${dated ?? 'undated'}`
+    + (ageDays !== null && ageDays > 120 ? ` (${ageDays} days old — the source has not published newer results)` : '');
+  const bench = b.sourceId === 'aider';
+  const rows = b.rows.slice(0, MARKET_ROWS);
+  const table = h('div', { class: 'table-wrap' },
+    h('table', { 'aria-label': `${b.label}, top ${rows.length}` },
+      h('thead', null, h('tr', null, ...(bench
+        ? ['Model', 'Pass rate', 'Published run cost', 'Cost per solved task', 'Frontier']
+        : ['Model', 'Rating (interval)', 'Votes', 'List price', 'Frontier']).map((t) => h('th', { scope: 'col', text: t })))),
+      h('tbody', null, ...rows.map((r) => {
+        if (bench) {
+          const x = r as MarketBenchmarkRowPayload;
+          return h('tr', null,
+            h('td', { text: x.model }),
+            h('td', { text: `${x.passRatePercent.toFixed(1)}%` }),
+            h('td', { text: x.runCostUsd === null ? 'not published' : usd(x.runCostUsd) }),
+            h('td', { text: x.costPerSolvedTaskUsd === null ? '—' : usd(x.costPerSolvedTaskUsd) }),
+            h('td', { text: x.frontier === null ? '—' : x.frontier ? 'yes' : '' }));
+        }
+        const x = r as MarketRatingRowPayload;
+        const price = x.price === null ? 'no public price'
+          : (x.price.blendedUsdPerMillion !== undefined ? `${usd(x.price.blendedUsdPerMillion)}/M tokens` : `${usd(x.price.usdPerImage ?? 0)}/image`)
+            + (x.price.match === 'normalized' ? ` (as ${x.price.pricedAs})` : '');
+        return h('tr', null,
+          h('td', { text: x.model }),
+          h('td', { text: `${x.rating.toFixed(0)} (${x.ratingLower.toFixed(0)}–${x.ratingUpper.toFixed(0)})` }),
+          h('td', { text: count(x.votes) }),
+          h('td', { text: price }),
+          h('td', { text: x.frontier === null ? '—' : x.frontier ? 'yes' : '' }));
+      }))));
+  return h('div', { class: 'card', style: 'margin-top: var(--s3)' }, head,
+    h('p', { class: 'basis', text: when }),
+    table,
+    b.rows.length > rows.length ? h('p', { class: 'basis', text: `${b.rows.length - rows.length} more on the command line: segreant market --all` }) : null,
+    b.frontier.length ? h('p', { class: 'basis', text: `Frontier: ${b.frontier.slice(0, 10).join(', ')}${b.frontier.length > 10 ? ` and ${b.frontier.length - 10} more` : ''}` }) : null,
+    ...b.notes.map((n) => h('p', { class: 'basis', text: n })));
+}
+
+/** Public evidence only. It never reads the ledger and never enters a figure above it. */
+function marketCard(payload: MarketPayload | null, failure: string | null): Node {
+  const title = h('h2', { class: 'section-title', text: 'Public model market — public evidence, not your results' });
+  if (failure) return h('section', { class: 'section' }, title, h('p', { class: 'drawer-error', role: 'alert', text: failure }));
+  if (!payload) return h('section', { class: 'section' }, title, h('p', { class: 'basis', text: 'Loading the bundled public snapshot…' }));
+  if (payload.status === 'disabled') return h('section', { class: 'section' }, title, h('p', { class: 'basis', text: 'Switched off in Features — nothing was computed.' }));
+  return h('section', { class: 'section' }, title,
+    h('p', { class: 'basis', text: 'What published benchmarks and list prices say about quality per dollar, before you have results of your own. Nothing here is fetched from this screen.' }),
+    ...payload.categories.map((c) => h('div', null, h('h3', { class: 'drawer-h3', text: c.label }), ...c.boards.map(marketBoard))),
+    h('details', { class: 'card', style: 'margin-top: var(--s3)' }, h('summary', { text: 'What these numbers are and are not' }),
+      ...payload.boundary.map((line) => h('p', { class: 'basis', text: line }))));
 }
 
 function causalStudyCard(payload: CausalPayload | null, failure: string | null): Node {
@@ -286,12 +349,17 @@ export function valueView(): Node {
   const error = signal<string | null>(null);
   const causal = signal<CausalPayload | null>(null);
   const causalError = signal<string | null>(null);
+  const market = signal<MarketPayload | null>(null);
+  const marketError = signal<string | null>(null);
   const refresh = (): void => {
     void api.value().then((payload) => data.set(payload)).catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
   };
 
   scopedEffect(() => {
     refresh();
+    void api.market()
+      .then((payload) => market.set(payload))
+      .catch((e: unknown) => marketError.set(e instanceof Error ? e.message : String(e)));
     void api.causal()
       .then((payload) => causal.set(payload))
       .catch((e: unknown) => causalError.set(e instanceof Error ? e.message : String(e)));
@@ -326,6 +394,7 @@ export function valueView(): Node {
           causalStudyCard(causal(), causalError()),
           usageCoverageCard(d.usage),
           selfReportedCard(d.selfReported, refresh),
+          marketCard(market(), marketError()),
           actions());
       }
 
@@ -574,6 +643,7 @@ export function valueView(): Node {
         modelSwitchCoverageCard(d.frontier),
         usageCoverageCard(d.usage),
         selfReportedCard(d.selfReported, refresh),
+        marketCard(market(), marketError()),
 
         // Per-user. The guardrail state is the content when the cohort is suppressed.
         team

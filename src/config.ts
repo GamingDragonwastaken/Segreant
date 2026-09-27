@@ -344,6 +344,7 @@ export interface JudgeConfig {
 export type EgressPurpose =
   | 'provider_inference'
   | 'pricing_refresh'
+  | 'market_refresh'
   | 'baseline_refresh'
   | 'alert_delivery'
   | 'provider_cost_observation'
@@ -355,6 +356,7 @@ export type EgressPurpose =
 export type EgressDataClass =
   | 'provider_request'
   | 'pricing_manifest'
+  | 'market_manifest'
   | 'baseline_manifest'
   | 'alert_metadata'
   | 'provider_cost_aggregate'
@@ -381,7 +383,44 @@ export interface EgressConfig {
   rules: EgressRule[];
 }
 
+/**
+ * Optional subsystems the operator can switch off. Each key is wired to the
+ * code it names and a disabled subsystem reports itself disabled where its
+ * output would appear. Budget enforcement is deliberately absent: caps are
+ * governed by the budget section and always fail closed. Switches that already
+ * live elsewhere (perUser.enabled, the judge tier, the alert webhook) stay there.
+ */
+export const FEATURE_DEFAULTS = Object.freeze({
+  selfReportedOutcomes: true,
+  market: true,
+  marketLiteLLM: true,
+  marketAider: true,
+  marketArena: true,
+} as const);
+export type FeatureKey = keyof typeof FEATURE_DEFAULTS;
+export type FeaturesConfig = { [K in FeatureKey]: boolean };
+
+export function validateFeaturesConfig(value: unknown): asserts value is FeaturesConfig {
+  if (!isRecord(value)) throw new ConfigValidationError('features must be an object');
+  for (const key of Object.keys(value)) {
+    if (!Object.hasOwn(FEATURE_DEFAULTS, key)) throw new ConfigValidationError(`features.${key} is unknown`);
+    if (typeof value[key] !== 'boolean') throw new ConfigValidationError(`features.${key} must be boolean`);
+  }
+  for (const key of Object.keys(FEATURE_DEFAULTS)) {
+    if (typeof value[key] !== 'boolean') throw new ConfigValidationError(`features.${key} must be boolean`);
+  }
+}
+
+function validateFeatureOverrides(value: unknown): void {
+  if (!isRecord(value)) throw new ConfigValidationError('features must be an object');
+  for (const [key, enabled] of Object.entries(value)) {
+    if (!Object.hasOwn(FEATURE_DEFAULTS, key)) throw new ConfigValidationError(`features.${key} is unknown`);
+    if (typeof enabled !== 'boolean') throw new ConfigValidationError(`features.${key} must be boolean`);
+  }
+}
+
 export interface SegreantConfig {
+  features: FeaturesConfig;
   port: number;
   dashboardPort: number;
   upstreams: {
@@ -433,6 +472,7 @@ export interface SegreantConfig {
 }
 
 export const DEFAULT_CONFIG: SegreantConfig = {
+  features: { ...FEATURE_DEFAULTS },
   port: 8090,
   dashboardPort: 8091,
   upstreams: {
@@ -660,6 +700,7 @@ export function loadConfig(): SegreantConfig {
       );
     }
     if (!isRecord(raw)) throw new ConfigValidationError(`configuration root in ${path} must be an object`);
+    if (Object.hasOwn(raw, 'features')) validateFeatureOverrides(raw.features);
     cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<SegreantConfig>);
     cfg = { ...cfg, egress: sanitizeEgressConfig(raw.egress) };
   }
@@ -672,6 +713,7 @@ export function loadConfig(): SegreantConfig {
     dashboardPort: sanitizePort(cfg.dashboardPort, DEFAULT_CONFIG.dashboardPort),
   };
   validateBudgetConfig(cfg.budget);
+  validateFeaturesConfig(cfg.features);
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 
@@ -758,6 +800,7 @@ function assertConfigMutationLock(lock: ConfigMutationLock): void {
 function persistConfigUnlocked(config: SegreantConfig): void {
   ensureHome();
   validateBudgetConfig(config.budget);
+  validateFeaturesConfig(config.features);
   const path = configPath();
   const tempPath = `${path}.tmp-${randomUUID()}`;
   const backupPath = `${path}.bak`;

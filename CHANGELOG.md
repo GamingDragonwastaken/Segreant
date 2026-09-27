@@ -20,6 +20,24 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   old name is not migrated: identifiers stored inside it changed with the
   name. It stays on disk untouched; Segreant starts a fresh ledger.
 
+- **`segreant market`: compare models on public evidence before you have your
+  own.** Coding uses the Aider polyglot leaderboard, whose published run costs
+  give a real cost per solved task; chat, WebDev and image use LMArena ratings
+  with their intervals and LiteLLM list prices. It works offline from a dated
+  bundled snapshot, refreshes only through the egress gate
+  (`market --refresh`, purpose `market_refresh`), states each source's licence
+  and staleness, never forms a per-dollar ratio from ratings, and keeps your
+  own realized value (`--repo`) beside the public figures, never inside them.
+  Also in the Value view.
+- **`segreant outcome`: value for chat, image and other AI work.** Record a
+  result's rating, decision, attempts, use and later durability; see cost per
+  accepted and per used result by kind and model, always labelled
+  self-reported and never added to git-verified coding value.
+- **`segreant features`: switch optional subsystems off.** The market, each of
+  its sources, and self-reported outcomes; preview, then `--apply`, or the
+  Features drawer in System. A switched-off subsystem says so where its output
+  would appear. Budget caps are not a switch.
+
 ### Security
 
 - Budget/config persistence now fails closed: malformed or unenforceable caps

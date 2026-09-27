@@ -46,6 +46,7 @@
     "standalone",
     "dist",
     "pricing",
+    "market",
     "baselines",
     "docs/*.md",
     "web/assets/seal-256.png",

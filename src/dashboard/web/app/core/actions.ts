@@ -237,6 +237,49 @@ const BUILDERS: Record<string, Builder> = {
     download: '/api/export.csv',
   }),
 
+  features: (cap) => {
+    const LABELS: Record<string, string> = {
+      selfReportedOutcomes: 'Self-reported chat, image and other results',
+      market: 'Public model market',
+      marketLiteLLM: 'Market: LiteLLM list prices',
+      marketAider: 'Market: Aider coding benchmark',
+      marketArena: 'Market: LMArena ratings',
+    };
+    const key = signal('market');
+    const turnOn = signal('off');
+    return {
+      capability: cap,
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'feature-key' }, 'Switch'),
+        h('select', { id: 'feature-key', class: 'drawer-input', onchange: (event: Event) => key.set((event.target as HTMLSelectElement).value) },
+          ...Object.entries(LABELS).map(([id, text]) => h('option', { value: id, text, selected: id === 'market' }))),
+        h('label', { class: 'drawer-h3', for: 'feature-state' }, 'Set it to'),
+        h('select', { id: 'feature-state', class: 'drawer-input', onchange: (event: Event) => turnOn.set((event.target as HTMLSelectElement).value) },
+          h('option', { value: 'off', text: 'Off', selected: true }), h('option', { value: 'on', text: 'On' }))),
+      preview: async (): Promise<PreviewResult> => {
+        const settings = await api.settings();
+        const current = settings.features ?? {};
+        const target = turnOn() === 'on';
+        return {
+          applicable: current[key()] !== target,
+          blockedReason: current[key()] === target ? 'That switch is already set that way, so nothing would change.' : undefined,
+          summary: isPrecise()
+            ? 'Writes one features.<key> boolean to the local config. A switched-off subsystem reports itself disabled wherever its output would appear.'
+            : 'Turns one optional part of Segreant on or off on this machine. Anything switched off says so instead of showing empty results.',
+          rows: [
+            { label: LABELS[key()] ?? key(), value: `${current[key()] ? 'on' : 'off'} → ${target ? 'on' : 'off'}` },
+            ...Object.entries(LABELS).filter(([id]) => id !== key()).map(([id, text]) => ({ label: text, value: current[id] ? 'on' : 'off' })),
+          ],
+          notes: ['Budget caps are not a feature switch: they are always enforced and fail closed.'],
+        };
+      },
+      commit: async () => {
+        const next = await api.write.settings({ features: { [key()]: turnOn() === 'on' } });
+        return { ok: true, message: `Saved. ${LABELS[key()] ?? key()} is now ${next.features?.[key()] ? 'on' : 'off'}.` };
+      },
+    };
+  },
+
   settings: (cap) => ({
     capability: cap,
     preview: async (): Promise<PreviewResult> => {

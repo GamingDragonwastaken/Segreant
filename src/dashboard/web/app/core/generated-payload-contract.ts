@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "187595dadf32511268476c64e32f7a4d3d8311ba296c86670c73cae0863e8cd0";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "83f757f5bc4a11638b0563b5e524ab0aade924b933a2b406efede056b86efcef";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1231,6 +1231,251 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "'matched' | 'unmatched'"
     }
   ],
+  "MarketPriceBasisPayload": [
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "'public_list_price'"
+    },
+    {
+      "name": "source",
+      "optional": false,
+      "type": "'litellm'"
+    },
+    {
+      "name": "asOf",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "pricedAs",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "match",
+      "optional": false,
+      "type": "'exact' | 'normalized'"
+    },
+    {
+      "name": "inputUsdPerMillion",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "outputUsdPerMillion",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "blendedUsdPerMillion",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "usdPerImage",
+      "optional": true,
+      "type": "number"
+    }
+  ],
+  "MarketBenchmarkRowPayload": [
+    {
+      "name": "kind",
+      "optional": false,
+      "type": "'benchmark_run'"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "passRatePercent",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "cases",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "runCostUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "costPerSolvedTaskUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "date",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "'public_benchmark_run_cost'"
+    },
+    {
+      "name": "frontier",
+      "optional": false,
+      "type": "boolean | null"
+    },
+    {
+      "name": "personal",
+      "optional": false,
+      "type": "null | { model: string; units: number; realizationRate: number; costPerRealizedUnitUsd: number | null; basis: 'operator_realized_value' }"
+    }
+  ],
+  "MarketRatingRowPayload": [
+    {
+      "name": "kind",
+      "optional": false,
+      "type": "'rating'"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "rating",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "ratingLower",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "ratingUpper",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "votes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "'public_preference_rating'"
+    },
+    {
+      "name": "price",
+      "optional": false,
+      "type": "MarketPriceBasisPayload | null"
+    },
+    {
+      "name": "perDollar",
+      "optional": false,
+      "type": "null"
+    },
+    {
+      "name": "frontier",
+      "optional": false,
+      "type": "boolean | null"
+    },
+    {
+      "name": "personal",
+      "optional": false,
+      "type": "MarketBenchmarkRowPayload['personal']"
+    }
+  ],
+  "MarketBoardPayload": [
+    {
+      "name": "sourceId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "homepage",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "licence",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "optional": false,
+      "type": "'available' | 'disabled' | 'missing'"
+    },
+    {
+      "name": "origin",
+      "optional": false,
+      "type": "'bundled' | 'refreshed' | null"
+    },
+    {
+      "name": "fetchedAt",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "publishedAt",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "newestRowDate",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "rows",
+      "optional": false,
+      "type": "Array<MarketBenchmarkRowPayload | MarketRatingRowPayload>"
+    },
+    {
+      "name": "frontier",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "priceSource",
+      "optional": false,
+      "type": "{ status: 'available' | 'disabled' | 'missing'; asOf: string | null } | null"
+    },
+    {
+      "name": "notes",
+      "optional": false,
+      "type": "string[]"
+    }
+  ],
+  "MarketPayload": [
+    {
+      "name": "status",
+      "optional": false,
+      "type": "'available' | 'disabled'"
+    },
+    {
+      "name": "categories",
+      "optional": false,
+      "type": "Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; boards: MarketBoardPayload[] }>"
+    },
+    {
+      "name": "boundary",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "cacheErrors",
+      "optional": false,
+      "type": "string[]"
+    }
+  ],
   "ReconciliationRunRecord": [
     {
       "name": "reconciliationRunId",
@@ -1932,6 +2177,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "metadataOnly",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "features",
+      "optional": false,
+      "type": "Record<string, boolean>"
     },
     {
       "name": "budget",
@@ -2726,6 +2976,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "value",
       "optional": false,
       "type": "ValuePayload"
+    },
+    {
+      "name": "market",
+      "optional": false,
+      "type": "MarketPayload"
     },
     {
       "name": "causal",

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 187595dadf32511268476c64e32f7a4d3d8311ba296c86670c73cae0863e8cd0 */
+/** Source SHA-256: 83f757f5bc4a11638b0563b5e524ab0aade924b933a2b406efede056b86efcef */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -596,6 +596,65 @@ export interface OutcomeRecordPayload {
   linkStatus: 'matched' | 'unmatched';
 }
 
+/** `/api/market`: public evidence only. Mirrors src/market/market.ts MarketReport. */
+export interface MarketPriceBasisPayload {
+  basis: 'public_list_price';
+  source: 'litellm';
+  asOf: string;
+  pricedAs: string;
+  match: 'exact' | 'normalized';
+  inputUsdPerMillion?: number;
+  outputUsdPerMillion?: number;
+  blendedUsdPerMillion?: number;
+  usdPerImage?: number;
+}
+export interface MarketBenchmarkRowPayload {
+  kind: 'benchmark_run';
+  model: string;
+  passRatePercent: number;
+  cases: number;
+  runCostUsd: number | null;
+  costPerSolvedTaskUsd: number | null;
+  date: string;
+  basis: 'public_benchmark_run_cost';
+  frontier: boolean | null;
+  personal: null | { model: string; units: number; realizationRate: number; costPerRealizedUnitUsd: number | null; basis: 'operator_realized_value' };
+}
+export interface MarketRatingRowPayload {
+  kind: 'rating';
+  model: string;
+  rating: number;
+  ratingLower: number;
+  ratingUpper: number;
+  votes: number;
+  basis: 'public_preference_rating';
+  price: MarketPriceBasisPayload | null;
+  perDollar: null;
+  frontier: boolean | null;
+  personal: MarketBenchmarkRowPayload['personal'];
+}
+export interface MarketBoardPayload {
+  sourceId: string;
+  label: string;
+  homepage: string;
+  licence: string;
+  status: 'available' | 'disabled' | 'missing';
+  origin: 'bundled' | 'refreshed' | null;
+  fetchedAt: string | null;
+  publishedAt: string | null;
+  newestRowDate: string | null;
+  rows: Array<MarketBenchmarkRowPayload | MarketRatingRowPayload>;
+  frontier: string[];
+  priceSource: { status: 'available' | 'disabled' | 'missing'; asOf: string | null } | null;
+  notes: string[];
+}
+export interface MarketPayload {
+  status: 'available' | 'disabled';
+  categories: Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; boards: MarketBoardPayload[] }>;
+  boundary: string[];
+  cacheErrors: string[];
+}
+
 /** One recorded run. `result` is the immutable reconciliation record itself. */
 export interface ReconciliationRunRecord {
   reconciliationRunId: string;
@@ -1038,6 +1097,8 @@ export interface SettingsSnapshot {
   retentionDays: number;
   proposalRetentionDays: number;
   metadataOnly: boolean;
+  /** Optional-subsystem switches, keyed as in `segreant features`. */
+  features: Record<string, boolean>;
   budget: BudgetConfig;
   enforcement: BudgetEnforcement;
   egress: {
@@ -1339,6 +1400,7 @@ export interface DashboardResponseMap {
   judge: JudgePayload;
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
+  market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
   'settings-update': SettingsSnapshot;
