@@ -1,30 +1,41 @@
 name: Feature request
-description: Propose a capability or evidence improvement
+description: Suggest something Fiscus should do
 title: "[feature] "
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Not sure it is a feature yet? Start in [Ideas](https://github.com/GamingDragonwastaken/Fiscus/discussions/categories/ideas) and it can become an issue once it has shape.
   - type: textarea
     id: problem
     attributes:
-      label: Operator problem
-      description: What decision or workflow is currently impossible or misleading?
+      label: What are you trying to do?
+      description: The situation and the decision you need to make. "I want to know which repo burned the budget last night" beats "add a chart".
     validations:
       required: true
   - type: textarea
-    id: evidence
+    id: today
     attributes:
-      label: Evidence required
-      description: What data would make the new claim defensible, and what should remain unknown?
-    validations:
-      required: true
-  - type: textarea
-    id: boundaries
-    attributes:
-      label: Privacy / egress / mutation boundary
-      description: Does this require network access, credentials, new persistence, or a consequential write?
-    validations:
-      required: true
+      label: What do you do today instead?
+      description: Workarounds, other tools, spreadsheets, or nothing.
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed behavior
+      label: What would good look like?
+      description: The command, screen or output you imagine.
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is this for?
+      options:
+        - Me, as an individual developer
+        - A team lead or engineering manager
+        - Finance, FinOps or procurement
+        - A security or platform team
+        - Someone else
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What would make the answer trustworthy? (optional)
+      description: Fiscus keeps estimates, bills, allocations and value apart. If your idea produces a number, what data would back it, and what should stay marked unknown?

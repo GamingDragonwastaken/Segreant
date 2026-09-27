@@ -192,7 +192,7 @@ test('checked-out npm entry points declare a build freshness lifecycle', () => {
   assert.equal(pkg.scripts?.predemo, 'npm run build');
   const readme = readFileSync(join(import.meta.dirname, '..', 'README.md'), 'utf8');
   const gettingStarted = readFileSync(join(import.meta.dirname, '..', 'docs', 'GETTING-STARTED.md'), 'utf8');
-  const claude = readFileSync(join(import.meta.dirname, '..', 'CLAUDE.md'), 'utf8');
+  const claude = readFileSync(join(import.meta.dirname, '..', '.claude', 'CLAUDE.md'), 'utf8');
   const landing = readFileSync(join(import.meta.dirname, '..', 'web', 'index.html'), 'utf8');
   assert.doesNotMatch(readme, /node(?:\s+--[^\n]+)?\s+bin\/fiscus\.mjs/);
   assert.doesNotMatch(gettingStarted, /node(?:\s+--[^\n]+)?\s+bin\/fiscus\.mjs/);

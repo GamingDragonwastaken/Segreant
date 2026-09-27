@@ -3870,3 +3870,108 @@ coverage is 1/1; the existing Store/inference tranche remains green.
 cross-study family or correlation-adjusted multiplicity model, and precision
 planning still reports width rather than probability/power. The command does
 not weaken the pre-registration or no-action semantics.
+
+## D-285 — voluntary sponsorship is accepted, kept outside the product
+
+**Decision.** The owner asked for a sponsor button. `.github/FUNDING.yml`
+enables GitHub Sponsors and `README.md` mentions it once. `docs/NEUTRALITY.md`
+now states the rules: nothing is gated; no sponsorship from AI providers,
+gateways or model hosts that Fiscus prices or compares; no sponsorship affects
+a figure; and no in-product prompt exists. Any future prompt must be local-only,
+rare, permanently dismissible, absent from machine-readable output,
+non-interactive sessions and CI, and recorded here before it ships.
+
+**Reason.** `docs/NEUTRALITY.md` promised "no donation link" and said a change
+would be recorded as a decision, not a quiet edit. The claim that actually
+matters to a user is that nothing is gated and nothing is bought. The vendor
+exclusion exists because Fiscus's comparison surfaces lose their value the
+moment a compared vendor funds the project.
+
+**Boundary.** The button only works once the owner enables a GitHub Sponsors
+profile. The in-app notice the owner mentioned is deferred until there are
+users; there is nothing to fund-raise from before then.
+
+
+## D-286 — the August research primitives are recovered into main as research-only code
+
+**Problem.** A symbol-level audit of every historical branch against `main`
+(2026-09-25) found that the dossier lanes (`gpt56/*`, `luna-next/*`,
+`codex/high-assurance-foundation`) are fully represented on `main`, but the
+August `agent/truth-closure` lane carried about 1,400 lines, from commit
+`bd43529`, whose exported names appear nowhere on `main`: exact Shapley spend
+decomposition, an evidence-constrained frontier, a budget-risk scarcity dual,
+staged promotion decisions, metric-safety classes, hierarchical capital
+buckets, a hash-chained decision ledger, self-normalized IPS and doubly-robust
+estimators, and the Complexity Lab's calibration (Brier, ECE) and IRT models.
+Some ideas were rebuilt in production form (`src/causal/ope.ts`,
+`src/capital.ts`, `src/budget/capDecision.ts`); the rest existed only on an
+archived branch.
+
+**Decision.** Port the eleven self-contained modules and their thirteen tests
+unchanged into `src/research/economics/` and `src/research/complexity/`, with
+module contracts stating research status. Nothing in the product imports them.
+
+**Reason.** The work was real and tested; keeping it only on a branch slated
+for deletion would lose it. Recovering it as research code keeps it compiled
+and tested without letting it reach a figure, a budget or a recommendation,
+which D-219 and the J03 promotion gates still forbid.
+
+**Boundary.** Two branch tests (`property-invariants`, `voi`) were not ported:
+they target interfaces `main` has since replaced. `lab.ts` exports its own
+`buildComplexityProfile`, distinct from the WP-J03 one in `profile.ts`; the
+two are not interchangeable.
+
+## D-287 — license changes from MIT to PolyForm Noncommercial with commercial licensing
+
+**Decision.** At the owner's direction, `LICENSE` is now the PolyForm
+Noncommercial License 1.0.0 (verbatim SPDX text) with a Required Notice naming
+the maintainer. `COMMERCIAL-LICENSE.md` explains what is free, what needs a
+commercial license, and how to get one (GitHub Sponsors Commercial tier, or
+contact through Discussions). `package.json` declares
+`PolyForm-Noncommercial-1.0.0`. `CONTRIBUTING.md` asks contributors to agree
+their work may be distributed under both licenses.
+
+**Reason.** The owner's intent is free use for individuals, research, education
+and nonprofits, with businesses paying a small fee. MIT permits unlimited
+commercial use and resale without asking; it could not express that.
+PolyForm Noncommercial is a standard, lawyer-drafted license built for exactly
+this, and it grants a patent license that MIT does not.
+
+**Consequences stated plainly.** Fiscus is no longer OSI "open source"; it is
+source-available. Some companies block non-OSI licenses outright, and every
+company user, including the enterprise audience in `PRODUCT.md`, now needs a
+commercial license. Commits up to `28dc6dd` stay MIT forever. Relicensing was
+possible without anyone's consent only because no outside contributor has
+code in the repository; the contributor clause keeps that true going forward.
+A lawyer should review the commercial terms and contributor clause before the
+first paid license is issued.
+
+## D-288 — the egress transport answers Node's `all: true` lookup; hostname dials work again
+
+**Problem.** The transport resolves a target once, checks every address
+against the policy class, then pins the socket to the checked address through
+a custom `lookup`. Since Node 20, sockets call that `lookup` with
+`{ all: true }` and require an array; the pinned lookup answered in the
+single-address form, so every dial to a hostname failed with
+`ERR_INVALID_IP_ADDRESS`, reported as `transport_failed`. On the Node 24
+runtime the package requires, that includes proxy forwarding to
+`api.openai.com` and `api.anthropic.com`. Reproduced on 2026-09-25: a pre-fix
+build returned HTTP 502 `upstream_unreachable` for a chat completion to a
+hostname upstream; `fiscus team push --url http://localhost:8092` failed the
+same way.
+
+**Why nothing caught it.** Every real-socket egress test dialled an IP
+literal, which never calls `lookup`, and every hostname test used the dial
+hook. CI was green throughout.
+
+**Fix.** The pinned lookup answers in whichever form Node asks for, still with
+the single checked address. `test/egress-hostname-dial.test.ts` dials
+`localhost` over a real socket with no hook; it failed before the fix and
+passes after. End to end after the fix: a proxied chat completion to a
+hostname upstream returned 200 and was metered at the expected $0.000360, and
+a team push to `http://localhost:8092` landed three signed project rollups in
+a real PostgreSQL 16.
+
+**Also added.** CI job `team-server-postgres` runs the existing real-PostgreSQL
+integration test (`team-server/integration/postgres.test.ts`) on every change;
+it previously ran only by hand.

@@ -1,0 +1,13 @@
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should Fiscus do, and what problem would it solve for you?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: How you use AI tools today, team size, what you would stop doing if this existed.

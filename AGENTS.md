@@ -1,5 +1,13 @@
 # Fiscus agent operating contract
 
+> **Current phase (2026-09-24): pre-launch.** The reconstruction program
+> (Foundational Audit II, Execution Dossier III) is closed. Start every session
+> from [docs/program/HANDOFF.md](docs/program/HANDOFF.md), then
+> [docs/program/ACTIVE-EXECUTION.md](docs/program/ACTIVE-EXECUTION.md) for the
+> current checklist. The `docs/program/*` records remain the specification for
+> existing behaviour; they are not a work queue, and historical branches are not
+> sources to merge from.
+
 This repository is executed under the Expert Mode / Magnum Opus standard. The
 agent responsible for a task owns discovery, implementation, verification,
 reconciliation, durable evidence, and handoff. A worker report, a plan, or a

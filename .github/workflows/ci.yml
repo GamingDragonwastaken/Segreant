@@ -249,6 +249,55 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The team server's store is PostgreSQL in every real deployment, but the
+  # matrix above runs against its in-memory double. This job runs the
+  # repository's real-PostgreSQL integration test against a disposable
+  # database, so signed-rollup persistence, replay identity, restart state and
+  # rollback are proven on every change rather than only by hand.
+  team-server-postgres:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fiscus
+          POSTGRES_PASSWORD: fiscus-ci-only
+          POSTGRES_DB: fiscus_team
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fiscus -d fiscus_team"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: team-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: team-server/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Real PostgreSQL integration test
+        env:
+          DATABASE_URL: postgres://fiscus:fiscus-ci-only@localhost:5432/fiscus_team
+        run: npm run test:postgres
+
   # The pull_request event's default checkout is GitHub's synthetic merge ref.
   # Keep this separate from the integration matrix and explicitly verify the
   # candidate head so a green merge-ref run cannot be misreported as head proof.

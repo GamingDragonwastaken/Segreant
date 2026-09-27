@@ -9,6 +9,8 @@ whole tree loaded.
 
 | Working on | Start at | Also read |
 |---|---|---|
+| Project status, current phase, what to do next | `docs/program/HANDOFF.md` | `docs/program/ACTIVE-EXECUTION.md` |
+| Public story: README, user docs | `docs/README.md` | `docs/CAPABILITY-EVIDENCE-CONTRACT.md` |
 | Metering a request, proxy behaviour | `src/proxy/` | `src/cost/`, `src/store/CONTEXT.md` |
 | Where a row's project label came from | `src/store/CONTEXT.md` | `docs/EVIDENCE-PROVENANCE.md` |
 | Prices, rate cards, repricing | `src/cost/` | `pricing/`, `docs/METHODOLOGY.md` |

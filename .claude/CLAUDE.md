@@ -7,7 +7,7 @@ allocate it, reconcile it against provider billing where the evidence allows, an
 measure what it produced. The ledger and GUI are local by default; configured
 provider traffic and other declared egress paths are governed by the
 Fiscus-process boundary described in `docs/DATA-BOUNDARIES.md`. Product truth is
-in [PRODUCT.md](PRODUCT.md); read it before designing anything user-facing.
+in [PRODUCT.md](../PRODUCT.md); read it before designing anything user-facing.
 
 ## The one distinction the whole product is built on
 
@@ -165,7 +165,7 @@ behaviour the owner has not weighed in on. Hold and flag those.
 
 ## Structure
 
-This repository follows [interpretable context structure](CONTEXT.md): module
+This repository follows [interpretable context structure](../CONTEXT.md): module
 directories carry a `CONTEXT.md` contract stating what they consume, guarantee,
 and must never break. When you add a module, give it a contract and update the
 routing table — do not bolt new work into an existing folder because the folder

@@ -9,38 +9,40 @@ Fiscus has no hosted collection or telemetry by default, but proxy traffic still
 goes to the AI provider you configure, and proposal capture is a local storage
 choice.
 
-> **Release status:** this checkout is not yet published to npm. Run commands
-> from a clone with `npm run fiscus -- ...`. The `npx fiscus ...` examples below
-> describe the intended post-publication command and must not be treated as an
-> available package until the registry release is verified.
+> **Release status:** Fiscus is not published to npm yet, and the bare name
+> `fiscus` on the npm registry belongs to an unrelated project, so do **not**
+> run `fiscus`: it would fetch that package, not this one. From a clone, run
+> `npm install` and then `npm link` once; that puts this checkout's `fiscus`
+> command on your `PATH`, and every command below works as written. Without
+> linking, run the same commands as `npm run fiscus -- <verb>`.
 
 ---
 
 ## 1. See it work in 60 seconds (no setup, no keys)
 
 ```bash
-npx fiscus demo          # seed a realistic synthetic dataset (isolated demo.db)
-npx fiscus demo --serve  # ...and open the dashboard on http://localhost:8091
+fiscus demo          # seed a realistic synthetic dataset (isolated demo.db)
+fiscus demo --serve  # ...and open the dashboard on http://localhost:8091
 ```
 
 Everything you see is priced by the real cost engine on synthetic traffic — your
-real metering is never touched. When you're done: `npx fiscus demo --clear`.
+real metering is never touched. When you're done: `fiscus demo --clear`.
 
 Try these against the demo to feel the product:
 
 ```bash
-npx fiscus roi --demo       # the Return-on-Intelligence scorecard
-npx fiscus sources --demo   # spend by connected tool, at honest depth
-npx fiscus budget --recommend --demo   # a cap that fits + the shadow price
+fiscus roi --demo       # the Return-on-Intelligence scorecard
+fiscus sources --demo   # spend by connected tool, at honest depth
+fiscus budget --recommend --demo   # a cap that fits + the shadow price
 ```
 
 For a local recovery checkpoint, create a verified snapshot and restore only
 into a new path:
 
 ```bash
-npx fiscus backup --out ./backups/fiscus.sqlite --json
-npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --json
-npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --apply --json
+fiscus backup --out ./backups/fiscus.sqlite --json
+fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --json
+fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --apply --json
 ```
 
 Restore never overwrites the active ledger. The SQLite file and its manifest are
@@ -50,7 +52,7 @@ assignment material) and are not encrypted by Fiscus.
 If you need to hand a local run to another engineer, export a redacted bundle:
 
 ```bash
-npx fiscus diagnostics --json --out ./support/fiscus-diagnostics.json
+fiscus diagnostics --json --out ./support/fiscus-diagnostics.json
 ```
 
 It contains runtime, schema, egress, pricing, and resource observations with
@@ -67,8 +69,8 @@ configure anything — those tools already log their own usage locally, and Fisc
 can just read it:
 
 ```bash
-npx fiscus scan            # finds the tools + git repos on this machine (read-only)
-npx fiscus scan --setup    # imports everything it found + correlates per-project RoI
+fiscus scan            # finds the tools + git repos on this machine (read-only)
+fiscus scan --setup    # imports everything it found + correlates per-project RoI
 ```
 
 That's it — no base URL, no proxy, no key to point anywhere. Re-run `scan` any time;
@@ -88,7 +90,7 @@ certificate and no traffic interception — your key never touches anyone else, 
 anything you don't route simply isn't metered (honest by design).
 
 ```bash
-npx fiscus start     # proxy on :8090, dashboard on :8091
+fiscus start     # proxy on :8090, dashboard on :8091
 ```
 
 **A — a coding agent that already has providers (e.g. opencode):** wrap a provider
@@ -96,15 +98,15 @@ you already use. This is the most native proxy path — your existing key, all i
 traffic:
 
 ```bash
-npx fiscus connect opencode                       # see your providers + advice
-npx fiscus connect opencode --wrap <provider> --write
+fiscus connect opencode                       # see your providers + advice
+fiscus connect opencode --wrap <provider> --write
 ```
 
 **B — any OpenAI-compatible SDK / script / curl:** point its base URL at the proxy
 and tag the source:
 
 ```bash
-npx fiscus connect api my-app     # prints the exact base URL + header to set
+fiscus connect api my-app     # prints the exact base URL + header to set
 ```
 
 **C — environment variables (Claude Code, aider, etc.):**
@@ -115,13 +117,35 @@ $env:ANTHROPIC_BASE_URL="http://localhost:8090"
 $env:OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
 
+**Grant the provider route.** Fiscus starts in **local-locked** mode and forwards
+nothing to a cloud provider until you allow that exact route. For OpenAI:
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id openai-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.openai.com --path-prefix /v1/
+```
+
+For Anthropic, add a second rule (the OpenAI rule is kept):
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id anthropic-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.anthropic.com --path-prefix /v1/
+```
+
+`fiscus egress status` shows the active mode and rules. The full behaviour,
+including receipt-chain recovery, is in [GUIDE.md](GUIDE.md#egress-control).
+
 See [INTEGRATIONS.md](INTEGRATIONS.md) for per-tool recipes and the one common gotcha
 (don't add `/v1` when a client already appends the request path).
 
 ### Already imported or proxied spend from multiple projects?
 
 ```bash
-npx fiscus discover   # correlate what's already in the ledger into per-project RoI
+fiscus discover   # correlate what's already in the ledger into per-project RoI
 ```
 
 `scan --setup` already does this as its last step; run `discover` on its own after a
@@ -130,9 +154,9 @@ fresh `import` if you skipped `scan`.
 ### Check it's flowing
 
 ```bash
-npx fiscus doctor    # config, DB, proxy reachability, pricing freshness, alerts
-npx fiscus today     # today's spend, by model / user / source
-npx fiscus sources   # which tools you've connected and at what depth
+fiscus doctor    # config, DB, proxy reachability, pricing freshness, alerts
+fiscus today     # today's spend, by model / user / source
+fiscus sources   # which tools you've connected and at what depth
 ```
 
 ## 3. Turn on the value measurement (optional but it's the point)
@@ -141,18 +165,18 @@ Spend metering works immediately. To measure *return*, give Fiscus a git repo to
 read outcomes from, and (optionally) a labor rate so it can price the dollar return:
 
 ```bash
-npx fiscus config              # see all settings + where they live
+fiscus config              # see all settings + where they live
 # set lift.laborRatePerHour to price your supervision time into the honest cost
-npx fiscus realize --repo .    # the Realization funnel over recent commits
-npx fiscus roi --repo . --labor-rate 120
+fiscus realize --repo .    # the Realization funnel over recent commits
+fiscus roi --repo . --labor-rate 120
 ```
 
 Outcomes the proxy can't see (tests, ships) are best captured **ambiently** — wrap
 the command once and every run reports itself, no human in the loop:
 
 ```bash
-npx fiscus exec -- npm test                        # exit 0 → tested=pass, else fail
-npx fiscus exec --kind shipped -- npm run deploy   # deploys report themselves too
+fiscus exec -- npm test                        # exit 0 → tested=pass, else fail
+fiscus exec --kind shipped -- npm run deploy   # deploys report themselves too
 ```
 
 Put it in a package.json script (`"test": "fiscus exec -- vitest"`) and the
@@ -161,17 +185,17 @@ exit code, so pipelines and CI steps behave identically. Manual reporting stays
 available as the fallback:
 
 ```bash
-npx fiscus report --commit <hash> --kind tested
-npx fiscus report --session <id> --kind resolved   # usage without code signals
+fiscus report --commit <hash> --kind tested
+fiscus report --session <id> --kind resolved   # usage without code signals
 ```
 
 ## 4. Govern the spend
 
 ```bash
-npx fiscus budget --daily 25 --soft 18   # hard + soft caps
-npx fiscus budget --recommend            # a cap that fits usage + the shadow price
-npx fiscus alerts                         # budget/spike/throttle/value alerts
-npx fiscus export --csv --days 30         # get the numbers out
+fiscus budget --daily 25 --soft 18   # hard + soft caps
+fiscus budget --recommend            # a cap that fits usage + the shadow price
+fiscus alerts                         # budget/spike/throttle/value alerts
+fiscus export --csv --days 30         # get the numbers out
 ```
 
 ## 5. Per-user value (opt-in, privacy-first)
@@ -182,8 +206,8 @@ surveillance-prone axis), and even then it's withheld below a k-anonymity floor.
 
 ```bash
 # enable in config: perUser.enabled = true  (see: fiscus config)
-npx fiscus team              # team distribution + coaching headroom (no names)
-npx fiscus team --me you@co  # your OWN extraction vs. the team median
+fiscus team              # team distribution + coaching headroom (no names)
+fiscus team --me you@co  # your OWN extraction vs. the team median
 ```
 
 The org view shows the median, the spread, and *coaching headroom* — the latent

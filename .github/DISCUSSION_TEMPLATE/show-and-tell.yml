@@ -1,0 +1,8 @@
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: What did Fiscus show you?
+      description: A runaway agent it caught, a budget it saved, a surprising cost breakdown, an integration you built. Screenshots welcome; redact anything private.
+    validations:
+      required: true

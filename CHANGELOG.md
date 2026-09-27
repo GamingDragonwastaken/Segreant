@@ -59,6 +59,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Fixed
 
+- **Proxy and every other outbound request to a hostname failed on Node 20+.**
+  The egress transport pinned sockets through a `lookup` that answered in the
+  wrong form when Node asked for all addresses, so forwarding to
+  `api.openai.com` / `api.anthropic.com`, pricing refresh, webhooks and team
+  push all failed with `transport_failed` (HTTP 502 through the proxy). Only
+  IP-literal targets worked. Fixed, with a real-socket regression test.
 - The Return on Intelligence index is no longer described as an upper bound on
   the real conversion. An observed-only, renormalized index is not a ceiling:
   measuring a missing lens can move it either way. `instrumentationInterval`
@@ -82,6 +88,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Changed
 
+- Documentation: the README is now a short product page (what Fiscus is, a
+  30-second demo, real use, what it will not claim). The full command and
+  design reference moved to `docs/GUIDE.md`, and `docs/README.md`
+  indexes every document by audience. `docs/GETTING-STARTED.md` now includes
+  the provider egress grant a proxy user needs, and no longer tells anyone to
+  run `npx fiscus`, which would fetch an unrelated package of that name.
 - `fiscus backup --out` creates a verified SQLite `VACUUM INTO` snapshot with a
   hash/schema manifest, and `fiscus restore` is preview-first and restores only
   into a new path. Corrupt, symlinked, or existing destinations fail closed;
@@ -126,5 +138,19 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Repository
 
+- License changed from MIT to PolyForm Noncommercial 1.0.0, with commercial
+  licenses available (`COMMERCIAL-LICENSE.md`). Commits up to `28dc6dd` remain
+  MIT.
+- Research modules recovered from the August `agent/truth-closure` lane into
+  `src/research/` (Shapley decomposition, off-policy estimators, calibration,
+  IRT complexity models and others), research-only and tested.
+- CI runs the team server against a real PostgreSQL on every change.
+- User-facing issue forms, Discussion category forms, and source archives that
+  leave out maintainer and agent files.
+- Voluntary GitHub Sponsors button (`.github/FUNDING.yml`). Nothing is gated,
+  and no sponsorship is accepted from vendors Fiscus compares
+  (`docs/NEUTRALITY.md`).
+- `bin/fiscus.mjs` and `standalone/fiscuspack-verifier.mjs` are committed as
+  executable, so `npm link` from a clone no longer leaves a mode change behind.
 - Added security, contribution, pull-request, issue, and dependency-update
   policy surfaces for public maintenance.

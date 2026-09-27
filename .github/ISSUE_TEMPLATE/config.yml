@@ -1,2 +1,14 @@
-blank_issues_enabled: true
-contact_links: []
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/GamingDragonwastaken/Fiscus/discussions/categories/q-a
+    about: Setup help, "is this expected?", and how-to questions.
+  - name: Share an idea
+    url: https://github.com/GamingDragonwastaken/Fiscus/discussions/categories/ideas
+    about: Rough ideas and feedback that are not a concrete feature yet.
+  - name: Report a security vulnerability
+    url: https://github.com/GamingDragonwastaken/Fiscus/security/advisories/new
+    about: Private report to the maintainer. Please do not open a public issue.
+  - name: Commercial license
+    url: https://github.com/GamingDragonwastaken/Fiscus/blob/main/COMMERCIAL-LICENSE.md
+    about: Using Fiscus in a business? Here is how to get a license.

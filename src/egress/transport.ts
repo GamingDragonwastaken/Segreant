@@ -299,7 +299,13 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
       method,
       headers: outboundHeaders(init.headers),
       servername: decision.target!.hostname.replace(/(^\[|\]$)/g, ''),
-      lookup: (_host, _options, callback) => callback(null, resolved.address, resolved.family),
+      // Pin the socket to the one address that was checked above. Node 20+
+      // calls lookup with `{ all: true }` and then requires the array form;
+      // answering in the single-address form made every hostname dial fail.
+      lookup: (_host: string, options: { all?: boolean } | undefined, callback: (...args: unknown[]) => void) => {
+        if (options?.all) callback(null, [{ address: resolved.address, family: resolved.family }]);
+        else callback(null, resolved.address, resolved.family);
+      },
     } as https.RequestOptions, (incoming) => {
       try {
         receipt({ ...common, event: 'response_received', status: incoming.statusCode ?? 0 });

@@ -114,7 +114,7 @@ test('ordinary value surfaces cannot revive causal break-even copy while the stu
  */
 const CURRENT_CLAIM_SURFACES = [
   'README.md',
-  'CLAUDE.md',
+  '.claude/CLAUDE.md',
   'PRODUCT.md',
   'docs/ARCHITECTURE.md',
   'docs/CAPABILITY-EVIDENCE-CONTRACT.md',
@@ -349,7 +349,7 @@ test('intentional historical or quoted claim matches are explicit and narrow', (
 });
 
 test('current boundary and release-gate docs describe declared egress and historical evidence binding', () => {
-  const claude = read('CLAUDE.md');
+  const claude = read('.claude/CLAUDE.md');
   const product = read('PRODUCT.md');
   const architecture = read('docs', 'ARCHITECTURE.md');
   const server = read('src', 'dashboard', 'server.ts');
