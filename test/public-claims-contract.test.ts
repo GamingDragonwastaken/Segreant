@@ -66,16 +66,6 @@ test('landing metadata scopes provider traffic instead of claiming code never le
   assert.match(head, /routed provider traffic|upstream you configure|configured provider/i);
 });
 
-test('historical direction documents point current readers to the contract', () => {
-  const roadmap = read('docs', 'AI-FINANCIAL-OPERATIONS-ROADMAP.md');
-  const audit = read('docs', 'VISION-AUDIT.md');
-
-  assert.match(roadmap, /direction document, not a current capability claim/i);
-  assert.match(roadmap, /Historical pre-2026-08-18 baseline/i);
-  assert.doesNotMatch(audit, /PRODUCT_BRIEF\.md/);
-  assert.match(audit, /live capability\/evidence contract/i);
-});
-
 test('ordinary value surfaces cannot revive causal break-even copy while the study lane stays evidence-gated', () => {
   const readme = read('README.md');
   const classic = read('src', 'dashboard', 'web', 'classic.html');
@@ -118,14 +108,12 @@ const CURRENT_CLAIM_SURFACES = [
   'PRODUCT.md',
   'docs/ARCHITECTURE.md',
   'docs/CAPABILITY-EVIDENCE-CONTRACT.md',
-  'docs/ECONOMIC-CONTROL-FOUNDATION.md',
   'docs/FAQ.md',
   'docs/INTEGRATIONS.md',
   'docs/METHODOLOGY.md',
   'docs/RETURN-ON-INTELLIGENCE.md',
   'docs/DATA-BOUNDARIES.md',
   'docs/CAUSAL-EVIDENCE-PROTOCOL.md',
-  'docs/LIFT-AI-SIDE-JUDGE-DESIGN.md',
   'docs/RELEASE-GATE.md',
   'src/cli/causalCmd.ts',
   'src/cli/valueCmd.ts',
@@ -325,7 +313,6 @@ test('the ambiguous realized-value identifier cannot return to the source tree',
 
 test('intentional historical or quoted claim matches are explicit and narrow', () => {
   const gate = read('docs', 'RELEASE-GATE.md');
-  const historicalPlan = read('docs', 'superpowers', 'plans', '2026-07-10-ultrareview-bugfixes.md');
   const intentional = [
     {
       source: gate,
@@ -336,11 +323,6 @@ test('intentional historical or quoted claim matches are explicit and narrow', (
       source: gate,
       text: 'proving the prefix never leaves the machine.',
       reason: 'historical path-prefix forwarding evidence retained verbatim',
-    },
-    {
-      source: historicalPlan,
-      text: 'contradicting its core "nothing leaves your machine unless you opt up" pitch.',
-      reason: 'historical research-plan quotation retained verbatim',
     },
   ];
   for (const entry of intentional) {

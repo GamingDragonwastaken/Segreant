@@ -3,9 +3,8 @@
 Comparing what Segreant metered against what the provider reports, at the only
 grain where the two join, with the residual stated rather than removed.
 
-This is Stage 1 of [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md):
-*one organization can compare Segreant observations with one authoritative
-provider cost source.*
+The supported scope is narrow: one organization can compare Segreant observations
+with one provider cost source for a declared project and day.
 
 ---
 
@@ -257,7 +256,5 @@ promotion.
 - [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) — the operator-supplied
   file path, for when an export exists but a credential is not on the table
 - [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) — what leaves this machine, and when
-- [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md) — where
-  this sits in the staged plan
-- [VISION-AUDIT.md](VISION-AUDIT.md) — why allocation must not be built on top of
-  this until the residual is understood
+- [ALLOCATION.md](ALLOCATION.md) — why an unresolved reconciliation residual
+  cannot silently become an allocated provider-billed amount

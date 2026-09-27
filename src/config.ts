@@ -310,7 +310,7 @@ export interface JudgeConfig {
    * of hostedSendFullContent below — turning this on never affects the hosted
    * tier. Still explicit, still off by default, even though the trust boundary
    * ("your machine") isn't crossed any more than it already is by the coding
-   * tool itself (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2).
+   * tool itself (see docs/DATA-BOUNDARIES.md).
    */
   localSendFullContent: boolean;
   /**
@@ -465,7 +465,7 @@ export const DEFAULT_CONFIG: SegreantConfig = {
   judge: {
     // Every judge tier above the always-on algorithmic default is OFF until the
     // user takes an explicit action — no field here defaults to anything that
-    // sends data anywhere. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4.
+    // sends data anywhere. See docs/DATA-BOUNDARIES.md.
     localBaseUrl: null,
     localModel: null,
     localSendFullContent: false,

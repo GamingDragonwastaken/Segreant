@@ -18,7 +18,7 @@
  * **A fact that reaches the wire and no consumer can read is the second
  * recurring class of this program — a mechanism built and never wired — and
  * this instance was created by the fix for the first.** It was named as open in
- * `ACTIVE-EXECUTION.md` at D-175 and is closed here.
+ * an internal execution record and is closed here.
  *
  * WHAT THIS TEST DOES. Boots the real dashboard server against a store whose
  * request rows were pruned from inside a real repository's commit attribution

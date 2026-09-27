@@ -40,14 +40,13 @@ const LAUNCH_DOCS = [
   'docs/RELEASE-PROCESS.md',
   'docs/COMPATIBILITY.md',
   'docs/SUPPORT.md',
-  'docs/NAME-COLLISION-REVIEW.md',
   'docs/NEUTRALITY.md',
 ] as const;
 
 const read = (relative: string): string => readFileSync(join(ROOT, relative), 'utf8');
 
 function trackedFiles(): string[] {
-  return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter((line) => line.length > 0);
+  return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter((line) => line.length > 0 && existsSync(join(ROOT, line)));
 }
 
 function resolves(files: readonly string[], reference: string): boolean {

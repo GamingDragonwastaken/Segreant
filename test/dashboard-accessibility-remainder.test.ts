@@ -1,7 +1,6 @@
 /**
  * WP-I04 remainder: accessibility defects the prior tranche of this packet
- * named but had no scope left to close (see `docs/program/
- * PACKET-INVENTORY.md`, WP-I04's PARTIAL row). Like the rest of the
+ * named but had no scope left to close in an earlier work packet. Like the rest of the
  * accessibility contract suite, these tests read SOURCE, not a rendered DOM —
  * this repository has zero runtime dependencies (only `typescript` and
  * `@types/node` as devDependencies), Node ships no DOM implementation, and

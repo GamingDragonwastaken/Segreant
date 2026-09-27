@@ -6,7 +6,7 @@
  *
  * Team-tier rollup: a signed, numeric-only, cross-project snapshot of ONE
  * developer's local ledger, pushed to an enterprise-run, bring-your-own team
- * server. See docs/TEAM-TIER-DESIGN.md §2 — "this isn't a new crypto
+ * server. See team-server/README.md — "this isn't a new crypto
  * subsystem; it's the existing 'verifiable claim without trusting the source'
  * pattern... pointed at a new payload shape." Reuses value/receipt.ts's
  * `canonical`/`keyIdForPem`/`loadOrCreateKeyPair`/`KeyPair` directly rather
@@ -25,7 +25,7 @@
  * team-rollup key is a longer-lived "this is developer X's machine" identity
  * registered once with a team server. Different trust domains, same
  * separation-of-concerns reasoning as the judge feature's dedicated
- * SEGREANT_JUDGE_API_KEY (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2).
+ * SEGREANT_JUDGE_API_KEY (see docs/DATA-BOUNDARIES.md).
  */
 
 import { sign as cryptoSign, verify as cryptoVerify, createHash, createPublicKey, type KeyObject } from 'node:crypto';
@@ -86,7 +86,7 @@ export interface RollupBodyV1 {
    * signed body.
    */
   scope?: RollupScope;
-  // Numeric-only per docs/TEAM-TIER-DESIGN.md §2: no prompt/response content,
+  // Numeric-only per docs/DATA-BOUNDARIES.md: no prompt/response content,
   // no raw request log — the same aggregate shape already shown to a
   // single-machine budget owner (value/realization.ts's projectValueBreakdown).
   projects: ProjectValue[];

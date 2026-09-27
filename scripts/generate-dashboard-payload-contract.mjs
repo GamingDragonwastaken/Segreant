@@ -41,7 +41,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
  * file. Measured, not predicted — the rename made a green suite red on the first
  * run.
  *
- * The window therefore stands, documented, in `docs/program/ACTIVE-EXECUTION.md`.
+ * The window therefore stands as a limitation of this generated contract.
  * If it is closed later, the fix belongs on the reader: `scripts/build-integrity.mjs`
  * already retries a transient open for exactly this reason, and the one observed
  * failure was a read that errored rather than a read that was short.

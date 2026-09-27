@@ -128,7 +128,7 @@ power-law response curve and its shadow price, μ. It is useful for examining
 assumptions, not a current forecast, routing instruction, budget recommendation,
 or automatic action. A decision-grade marginal-value claim requires a
 within-task controlled allocation contract and independent validation; see
-[ECONOMIC-CONTROL-FOUNDATION.md](ECONOMIC-CONTROL-FOUNDATION.md).
+[CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md).
 
 ## What we're NOT claiming
 

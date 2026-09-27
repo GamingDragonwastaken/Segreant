@@ -1,12 +1,11 @@
 # Segreant agent operating contract
 
-> **Current phase (2026-09-24): pre-launch.** The reconstruction program
-> (Foundational Audit II, Execution Dossier III) is closed. Start every session
-> from [docs/program/HANDOFF.md](docs/program/HANDOFF.md), then
-> [docs/program/ACTIVE-EXECUTION.md](docs/program/ACTIVE-EXECUTION.md) for the
-> current checklist. The `docs/program/*` records remain the specification for
-> existing behaviour; they are not a work queue, and historical branches are not
-> sources to merge from.
+> **Current phase: pre-launch.** Start every session from
+> [CLAUDE.md](CLAUDE.md) for commands and hard rules, [PRODUCT.md](PRODUCT.md)
+> for product truth, and the [CONTEXT.md](CONTEXT.md) routing table for module
+> contracts. Maintainer planning and execution records are kept outside this
+> public repository (locally under the gitignored `.codex/`); historical
+> branches are not sources to merge from.
 
 This repository is executed under the Expert Mode / Magnum Opus standard. The
 agent responsible for a task owns discovery, implementation, verification,
@@ -26,9 +25,10 @@ decisions in the execution evidence when they change scope, design, or proof.
 
 ## Mission and quality rules
 
-- Treat `docs/program/*`, the controlling dossier, and Foundational Audit II as
-  the specification hierarchy. Do not invent a competing architecture without
-  evidence that the approved one is false.
+- Treat the public contracts (`PRODUCT.md`, `docs/THE-STANDARD.md`,
+  `docs/DATA-BOUNDARIES.md`, `docs/CAPABILITY-EVIDENCE-CONTRACT.md`, and each
+  module's `CONTEXT.md`) as the specification. Do not invent a competing
+  architecture without evidence that the current one is false.
 - Preserve the distinction between the local execution overlay and the
   canonical/GitHub-facing packet register. Never infer local completion from a
   remote register, or remote completion from an unverified local claim.
@@ -53,10 +53,9 @@ The root agent is the reconciler and remains responsible for integration. Use
 bounded parallel workers only for genuinely independent packets or design
 questions; isolate their work, give each a precise contract and acceptance
 evidence, and never overwrite a lane with uncommitted work. Reconcile only
-after focused verification and conflict checks. Maintain the durable program
-registers (`LOCAL-EXECUTION-INVENTORY.md`, `PACKET-INVENTORY.md`,
-`AUDIT-REGISTER.md`, `DECISION-LOG.md`, `EVIDENCE-INDEX.md`, and
-`ACTIVE-EXECUTION.md`) at coherent checkpoints. Keep one supervisor at most;
+after focused verification and conflict checks. Keep the durable local state
+(`.codex/operations/PROJECT_STATE.md` and `TASK_LEDGER.md`, never published)
+current at coherent checkpoints. Keep one supervisor at most;
 never create per-worker recurring schedules or duplicate packet jobs.
 
 When state is unchanged, do not manufacture activity. When blocked, name the

@@ -6,10 +6,10 @@ and `lab.ts` (logistic and item-response-theory difficulty models, interaction
 models, distribution summaries) were recovered from the August
 `agent/truth-closure` lane so the work is compiled and tested on `main`.
 
-**Research status.** Nothing in the product uses a complexity score. The ten
-promotion gates in `docs/program/WP-J03-COMPLEXITY-LAB-REPORT.md` stay closed
-until they are met with real data, and any promotion is recorded in
-`docs/program/DECISION-LOG.md`.
+**Research status.** Nothing in the product uses a complexity score. Promotion
+requires real calibration data, independent validation, an explicit privacy
+and authority review, and a public capability-contract update before any
+user-facing claim or action is enabled.
 
 ## Guarantees
 

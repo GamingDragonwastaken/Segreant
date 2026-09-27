@@ -58,8 +58,7 @@ shows up.
 
 ## Not covered by this document
 
-Internal module boundaries under `src/*/CONTEXT.md`, the demo dataset shape,
-and anything under `docs/program/` (working state, not a public contract) can
-change without notice. `team-server/`'s schema and API are pre-infrastructure-
+Internal module boundaries under `src/*/CONTEXT.md` and the demo dataset shape
+can change without notice. `team-server/`'s schema and API are pre-infrastructure-
 gate (`RELEASE-GATE.md`'s separate team-server gate) and are not yet held to
 this policy.

@@ -2,9 +2,8 @@
 
 A separate, optional, BYO-Postgres server for Segreant's team tier. **Segreant
 hosts nothing** — you run this on infrastructure you already own and trust: your
-server, your Postgres, eventually your SSO. See
-[`docs/TEAM-TIER-DESIGN.md`](../docs/TEAM-TIER-DESIGN.md) in the main repo for
-the full design reasoning.
+server, your Postgres, eventually your SSO. The deployment and trust boundaries
+are described here and in [the threat model](../docs/THREAT-MODEL.md).
 
 This is a genuinely separate package (its own `package.json`) so the main
 `segreant` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
@@ -33,7 +32,7 @@ named list). See "Privacy model for the dashboard routes" below — this is the
 part that needed the most care, not the SQL.
 
 **Not yet built:** a UI. These are JSON APIs; a rendered dashboard that calls
-them is out of scope for this release (`docs/TEAM-TIER-DESIGN.md` §1). Linking
+them is out of scope for this release. Linking
 an OIDC identity to a specific developer keyId (for a genuine "my own numbers"
 self-view) is also not built — registration only records a `label` an admin
 chooses, with no claim/verification step tying it to whoever logs in.
@@ -82,8 +81,7 @@ infer group membership or generic roles from provider-specific claims. `GET
 
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
-this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Segreant provides the
-software, never the operation" framing. OIDC discovery/JWKS retrieval is
+this process's. Segreant provides the software; you operate it. OIDC discovery/JWKS retrieval is
 HTTPS-only except for literal loopback test endpoints, follows no redirects,
 limits response bodies, and requires discovered JWKS to remain on the issuer
 origin. An explicitly configured HTTPS `OIDC_JWKS_URL` is the pin for providers

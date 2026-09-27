@@ -7,7 +7,7 @@
  * flailed to the same result identically, because both produce the same wall-clock
  * duration. This module adds a behavioral signal for THAT — how cleanly the
  * AI-assisted time was used — without reading a single token of prompt or code
- * content. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §1 for the full design.
+ * content. See docs/RETURN-ON-INTELLIGENCE.md for the measurement rules.
  *
  * The signal: each realized, baseline-covered work unit already carries an
  * Acceptance rate (`WorkUnit.acceptance`, edit-distance between proposed and kept

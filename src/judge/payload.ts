@@ -1,6 +1,6 @@
 /**
  * The structural payload sent to an LLM judge tier — content-free by construction.
- * See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §1's bullet list for the three signal
+ * See docs/RETURN-ON-INTELLIGENCE.md for the three signal
  * types this draws from (proposal counts, turn/timing, request-size trend).
  *
  * Pure by design (plain rows in, a plain summary out — no store, no fetch) so it

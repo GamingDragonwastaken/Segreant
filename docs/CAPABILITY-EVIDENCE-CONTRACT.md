@@ -22,10 +22,8 @@ claim.
    revision decide what has shipped.
 2. PRODUCT.md defines intended users, purpose, constraints, and requirements.
 3. This document defines permitted current capability and evidence claims.
-4. AI-FINANCIAL-OPERATIONS-ROADMAP.md defines intended direction and staged work,
-   not delivery.
-5. VISION-AUDIT.md and dated release-gate rows are historical evidence only for
-   their named revision.
+4. `docs/RELEASE-GATE.md` records historical candidate evidence only for each
+   named revision; it does not establish the status of a later revision.
 
 ## Financial truth chain
 

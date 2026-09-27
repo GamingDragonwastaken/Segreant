@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DASHBOARD_API_CONTRACTS } from '../src/dashboard/contracts.ts';
 
@@ -63,41 +63,4 @@ test('frontier model comparison conditions on task type and unit size without sc
     /candidateMedianUnitLines/,
     'frontier must report unit size (changed lines) as an observational dimension rather than a collapsed complexity scalar',
   );
-});
-
-test('WP-J03 status in PACKET-INVENTORY.md records the research-only boundary and explicit prerequisites', () => {
-  const inventory = read('docs/program/PACKET-INVENTORY.md');
-  const match = /\|\s*`WP-J03`\s*\|\s*Complexity Lab\s*\|\s*`([^`]+)`\s*\|\s*([^|]+)\|/.exec(inventory);
-  assert.ok(match, 'WP-J03 row must exist in PACKET-INVENTORY.md');
-  const status = match[1]!;
-  const notes = match[2]!;
-  assert.equal(status, 'COMPLETED', 'WP-J03 closes its research-only admission boundary without promoting an estimator');
-  assert.match(
-    notes,
-    /docs\/program\/WP-J03-COMPLEXITY-LAB-REPORT\.md/,
-    'WP-J03 notes must reference the comprehensive design and precondition report',
-  );
-  assert.match(
-    notes,
-    /TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB\.md/,
-    'WP-J03 notes must cite the controlling promotion rules in TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md',
-  );
-  assert.match(notes, /research-only|promotion rules/i, 'WP-J03 notes must state the research-only boundary and prerequisites');
-  assert.match(notes, /promotion rules/i, 'WP-J03 notes must state the explicit research prerequisites');
-});
-
-test('WP-J03 design and precondition report exists and covers all 10 research promotion rules', () => {
-  const reportPath = join(ROOT, 'docs', 'program', 'WP-J03-COMPLEXITY-LAB-REPORT.md');
-  assert.ok(existsSync(reportPath), 'WP-J03 report must exist on disk');
-  const report = readFileSync(reportPath, 'utf8');
-  assert.match(report, /Complexity Lab/);
-  assert.match(report, /Structural complexity/);
-  assert.match(report, /Execution complexity/);
-  assert.match(report, /Promotion Rules/);
-  assert.match(report, /\*\*Status:\*\*\s*`COMPLETED`[^\n]*(?:research|read-only)/i);
-  assert.doesNotMatch(report, /\bBLOCKED\b/, 'the report must use the packet vocabulary and not invent BLOCKED');
-  assert.match(report, /promotion gates? remain|promotion rules.*unfulfilled|not.*production/i, 'completion must not be confused with production promotion');
-  for (let rule = 1; rule <= 10; rule++) {
-    assert.match(report, new RegExp(`Rule\\s+${rule}\\b`, 'i'), `Report must address promotion Rule ${rule}`);
-  }
 });

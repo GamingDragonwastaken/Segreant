@@ -23,8 +23,7 @@ mechanisms do and do not prove. It is a companion to
 - **The egress receipt chain** (`egress-receipts.*`) — the local record that an
   outbound request was policy-checked before it was dialled.
 - **`.segreantpack` bundles and their signatures** — portable evidence bundles
-  (`docs/program/PACKET-INVENTORY.md`'s `WP-G05` row; `signSegreantPack()` /
-  `verifySegreantPack()`).
+  (`signSegreantPack()` / `verifySegreantPack()`).
 
 ## Trust boundaries
 
@@ -39,8 +38,8 @@ machine-wide isolation guarantee.
 
 1. **A malicious or compromised local process on the same machine**, competing
    for the SQLite file, the publication lock, or the egress receipt chain.
-   `docs/program/DECISION-LOG.md` records lock-contention and
-   quarantine-rename hardening (D-072 and its follow-ups) found this way.
+   The store's publication lock and quarantine rename checks address this
+   contention; see `src/store/CONTEXT.md`.
 2. **A network attacker between the proxy and the configured upstream**,
    attempting to redirect traffic to a different destination or read a
    credential in transit. Mitigated by DNS-pinned egress, refusing
@@ -55,8 +54,8 @@ machine-wide isolation guarantee.
    below for the limit of what this defends against.
 5. **An operator who misreads a derived figure as a different kind of claim.**
    Not a network adversary, but the failure this product has produced most —
-   see `CLAUDE.md`'s four-claims rule and `docs/program/DECISION-LOG.md` for
-   the recorded collapses.
+   see [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md) for
+   the public claim boundary.
 
 ## What the append-only store and signatures guarantee — and do not
 
@@ -71,7 +70,7 @@ machine-wide isolation guarantee.
   supplied trust anchor, who signed it. It does not prove the claims inside
   the bundle are true.** `.segreantpack` embedded-key verification is
   integrity-only unless the caller supplies a matching trust anchor
-  (`PACKET-INVENTORY.md`'s `WP-G05` row) — **signature != truth**, the same
+  — **signature != truth**, the same
   distinction the money-claims rule draws for cost figures.
 - **A digest chain proves the receipt history has not been silently truncated
   or reordered since last verified, not that every permitted request was
@@ -90,9 +89,9 @@ machine-wide isolation guarantee.
 | Credential redirected to an attacker-chosen destination | `x-segreant-openai-base` ignored; egress refuses non-loopback targets before DNS in `local_locked` mode | `docs/DATA-BOUNDARIES.md` |
 | Invalid config silently disabling budget enforcement | Budget/settings persistence fails closed | `CLAUDE.md` rule 5, `docs/RELEASE-GATE.md`'s "Budget fail-closed integrity" row |
 | Upstream redirect used to exfiltrate a follow-up request | `Location` stripped from proxied redirect responses | `docs/DATA-BOUNDARIES.md` |
-| Publication-lock race between two Segreant processes | Stale-lock detection requiring no active writer before removal | `docs/program/DECISION-LOG.md` (D-072 and follow-ups) |
+| Publication-lock race between two Segreant processes | Stale-lock detection requiring no active writer before removal | `src/store/CONTEXT.md` |
 | Tampered append-only trigger | Startup integrity check against configured pragmas and trigger authority | `src/store/CONTEXT.md`, D-113, D-139 |
-| Forged or altered `.segreantpack` bundle | Canonical-bytes signing/verification, separate integrity/authenticity/truth outcomes | `docs/program/PACKET-INVENTORY.md` `WP-G05` |
+| Forged or altered `.segreantpack` bundle | Canonical-bytes signing/verification, separate integrity/authenticity/truth outcomes | `src/pack/CONTEXT.md` |
 | A rollup over-claiming its coverage | Explicit `RollupScope`, server-side containment re-check (never trusts the client) | D-199 |
 
 ## Gaps — open packets, not silent holes

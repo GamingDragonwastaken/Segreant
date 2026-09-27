@@ -1,6 +1,6 @@
 /**
  * Team server entrypoint. Configured entirely through environment variables
- * per docs/TEAM-TIER-DESIGN.md §1 — the operator provides a database and,
+ * per team-server/README.md — the operator provides a database and,
  * optionally, an OIDC issuer for human-facing routes; Segreant provides the
  * software only.
  */

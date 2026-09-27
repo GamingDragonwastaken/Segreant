@@ -371,8 +371,9 @@ The full model is in **[docs/THE-STANDARD.md](THE-STANDARD.md)**. The older
 *artifact-persistence lens* — retained introduced lines per dollar. It is not a
 quality grade and does not establish correctness, maintainability, business
 value, or AI/human contribution. The Standard, not this lens, is the headline.
-The historical account of why the research's "AI Efficiency Score" and our own
-first Yield-only attempt were rebuilt is in [docs/RESEARCH-REVIEW.md §3](RESEARCH-REVIEW.md).
+The Acceptance lens measures how much proposed work survived; it is not a
+developer productivity grade. The current measurement rules are in
+[THE-STANDARD.md](THE-STANDARD.md) and [METHODOLOGY.md](METHODOLOGY.md).
 
 ## Budget controls and model trials
 
@@ -682,11 +683,10 @@ destination could forward provider authorization to an untrusted URL.
 
 ## What's real, what's not
 
-This project ships with an honest audit of its own premise in
-**[docs/RESEARCH-REVIEW.md](RESEARCH-REVIEW.md)** — what was verified,
-what was corrected (the cost formula, the MITM design, model ids), and what was
-deliberately left out (a per-developer "efficiency score" that would just
-recreate the metric-gaming it's meant to stop).
+The public capability and evidence boundary is
+**[CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md)**. It separates
+implemented paths from intended work and records which financial and outcome
+claims the present evidence supports.
 
 Cost-reduction percentages depend on your baseline waste. Segreant's job is to
 make that baseline visible and give you the controls to act — not to promise a

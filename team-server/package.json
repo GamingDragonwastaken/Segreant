@@ -2,7 +2,7 @@
   "name": "segreant-team-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Separate, optional, BYO-Postgres team server for Segreant's team tier. Segreant hosts nothing — an enterprise runs this on infrastructure they already own. See docs/TEAM-TIER-DESIGN.md in the main repo.",
+  "description": "Separate, optional, BYO-Postgres team server for Segreant's team tier. Segreant hosts nothing; operators run this on their own infrastructure. See team-server/README.md.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"

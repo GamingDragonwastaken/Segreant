@@ -7,8 +7,8 @@
  * judge/orchestrate.ts — this file either returns a trustworthy SessionJudgment
  * or throws, nothing in between.
  *
- * See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §3 for SessionJudgment's design and §2
- * for why the credential is a dedicated env var, never the metered proxy key.
+ * See docs/DATA-BOUNDARIES.md for the judge egress and credential boundary:
+ * the judge credential is dedicated, never the metered proxy key.
  */
 
 import type { JudgeConfidence } from './tier.ts';

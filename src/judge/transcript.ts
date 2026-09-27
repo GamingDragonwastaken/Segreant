@@ -1,8 +1,7 @@
 /**
  * Ephemeral transcript reading for the judge's full-content tiers.
  *
- * The design doc (LIFT-AI-SIDE-JUDGE-DESIGN.md, the ⚠ note) blocked full-content
- * judging on "transcript capture existing first" — a big privacy decision about
+ * Full-content judging once depended on transcript capture — a privacy decision about
  * data at rest. The resolution here is that no capture is needed: the tools
  * Segreant imports from already keep their own transcripts on disk (Claude Code
  * writes ~/.claude/projects/<dir>/<sessionId>.jsonl with full message content).
