@@ -28,9 +28,9 @@ function required(flags: Flags, name: string): string {
 }
 
 function printUsage(): void {
-  console.error('  Usage: fiscus evidence github emit --repository-id <id> --repository <owner/repo> --commit <40-char-sha> --run-id <id> --attempt <n> --job <name> --ref refs/heads/main --conclusion success|failure --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --private-key <pem> [--out <artifact.json>]');
-  console.error('         fiscus evidence github import --file <artifact.json> --repo <local-repo> --repository-id <id> --ref refs/heads/main --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --public-key <pinned-public.pem>');
-  console.error('         fiscus evidence ux --options <file> [--json]  (read-only epistemic UX bundle)');
+  console.error('  Usage: segreant evidence github emit --repository-id <id> --repository <owner/repo> --commit <40-char-sha> --run-id <id> --attempt <n> --job <name> --ref refs/heads/main --conclusion success|failure --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --private-key <pem> [--out <artifact.json>]');
+  console.error('         segreant evidence github import --file <artifact.json> --repo <local-repo> --repository-id <id> --ref refs/heads/main --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --public-key <pinned-public.pem>');
+  console.error('         segreant evidence ux --options <file> [--json]  (read-only epistemic UX bundle)');
 }
 
 function cmdUx(flags: Flags): void {
@@ -92,7 +92,7 @@ async function cmdGithubEmit(flags: Flags): Promise<void> {
     if (existsSync(out)) throw new Error(`refusing to overwrite existing artifact: ${out}`);
     if (!existsSync(dirname(out))) throw new Error(`artifact directory does not exist: ${dirname(out)}`);
     writeFileSync(out, JSON.stringify(artifact, null, 2) + '\n', 'utf8');
-    console.log(`  Wrote signed Fiscus test-evidence artifact: ${out}`);
+    console.log(`  Wrote signed Segreant test-evidence artifact: ${out}`);
     console.log(`  Key ${artifact.keyId} must be pinned out of band before import.`);
     return;
   }

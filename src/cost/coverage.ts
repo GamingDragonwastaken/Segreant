@@ -1,7 +1,7 @@
 /**
  * Pricing provenance — the one read model, for every surface.
  *
- * `fiscus pricing --coverage` and `GET /api/pricing` answer the same question:
+ * `segreant pricing --coverage` and `GET /api/pricing` answer the same question:
  * for a window of the ledger, how was each recorded amount actually priced?
  * Grouped by the evidence captured AT METERING TIME — cost basis, rate-match
  * kind, card source, card digest — so two different pricing eras never merge

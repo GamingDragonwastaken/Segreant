@@ -28,14 +28,14 @@ const CLOUD: EgressConfig = {
 };
 
 function withHome(label: string): { home: string; restore: () => void } {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-ipv6-' + label + '-'));
-  const previous = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-ipv6-' + label + '-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   return {
     home,
     restore: () => {
-      if (previous === undefined) delete process.env.FISCUS_HOME;
-      else process.env.FISCUS_HOME = previous;
+      if (previous === undefined) delete process.env.SEGREANT_HOME;
+      else process.env.SEGREANT_HOME = previous;
       rmSync(home, { recursive: true, force: true });
     },
   };

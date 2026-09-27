@@ -21,9 +21,9 @@ function input(event: ReceiptInput['event']): ReceiptInput {
 }
 
 test('valid receipt appends persist a redacted checkpoint for the next O(1) append', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-checkpoint-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-checkpoint-'));
+  process.env.SEGREANT_HOME = home;
   try {
     appendEgressReceipt(input('preflight_allowed'));
     appendEgressReceipt(input('dial_started'));
@@ -38,16 +38,16 @@ test('valid receipt appends persist a redacted checkpoint for the next O(1) appe
     ]);
     assert.equal(verifyEgressReceipts().ok, true);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('a malformed checkpoint is overwritten after a verified append', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-checkpoint-repair-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-checkpoint-repair-'));
+  process.env.SEGREANT_HOME = home;
   try {
     appendEgressReceipt(input('preflight_allowed'));
     const checkpointPath = join(home, 'egress-receipts.checkpoint.json');
@@ -57,8 +57,8 @@ test('a malformed checkpoint is overwritten after a verified append', () => {
     assert.equal(checkpoint.receiptCount, 2);
     assert.equal(verifyEgressReceipts(egressReceiptPath()).receiptCount, 2);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
@@ -71,9 +71,9 @@ test('receipt verification does not materialize the complete JSONL history as an
 });
 
 test('malformed receipt history reports a bounded error summary', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-error-bound-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-error-bound-'));
+  process.env.SEGREANT_HOME = home;
   try {
     writeFileSync(egressReceiptPath(), Array.from({ length: 500 }, () => '{"bad":true}\n').join(''), 'utf8');
     const verified = verifyEgressReceipts();
@@ -81,16 +81,16 @@ test('malformed receipt history reports a bounded error summary', () => {
     assert.equal(verified.errors.length <= 65, true, 'error diagnostics must remain bounded');
     assert.equal(verified.errors.some((error) => /additional|omitted/i.test(error)), true);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('a forged self-hashed checkpoint never authorizes a fresh-process append', async () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-egress-forged-checkpoint-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-forged-checkpoint-'));
+  process.env.SEGREANT_HOME = home;
   try {
     appendEgressReceipt(input('preflight_allowed'));
     const receiptPath = egressReceiptPath();
@@ -107,8 +107,8 @@ test('a forged self-hashed checkpoint never authorizes a fresh-process append', 
     const after = JSON.parse(lines.at(-1)!) as { previousHash: string };
     assert.equal(after.previousHash, before.hash, 'append must derive from a freshly verified chain, not checkpoint text');
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

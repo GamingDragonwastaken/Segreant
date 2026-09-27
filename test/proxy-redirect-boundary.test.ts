@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createProxyServer } from '../src/proxy/server.ts';
-import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 import { Store } from '../src/store/db.ts';
 
 async function listen(server: http.Server): Promise<string> {
@@ -21,10 +21,10 @@ function close(server: http.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-test('proxy strips upstream Location so a client cannot follow outside Fiscus policy', async () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const testHome = mkdtempSync(join(tmpdir(), 'fiscus-proxy-redirect-'));
-  process.env.FISCUS_HOME = testHome;
+test('proxy strips upstream Location so a client cannot follow outside Segreant policy', async () => {
+  const previousHome = process.env.SEGREANT_HOME;
+  const testHome = mkdtempSync(join(tmpdir(), 'segreant-proxy-redirect-'));
+  process.env.SEGREANT_HOME = testHome;
   let redirectedRequests = 0;
   const sink = http.createServer((_req, res) => {
     redirectedRequests += 1;
@@ -37,7 +37,7 @@ test('proxy strips upstream Location so a client cannot follow outside Fiscus po
     res.end('provider redirect');
   });
   const upstreamBase = await listen(upstream);
-  const config: FiscusConfig = structuredClone(DEFAULT_CONFIG);
+  const config: SegreantConfig = structuredClone(DEFAULT_CONFIG);
   config.upstreams.openai = upstreamBase;
   const store = new Store(':memory:');
   const proxy = createProxyServer({ store, config });
@@ -51,15 +51,15 @@ test('proxy strips upstream Location so a client cannot follow outside Fiscus po
       body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hello' }] }),
     });
     assert.equal(response.status, 307);
-    assert.equal(response.headers.get('location'), null, 'redirect destinations must not escape the configured Fiscus transport policy');
+    assert.equal(response.headers.get('location'), null, 'redirect destinations must not escape the configured Segreant transport policy');
     assert.equal(redirectedRequests, 0);
   } finally {
     await close(proxy);
     store.close();
     await close(upstream);
     await close(sink);
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(testHome, { recursive: true, force: true });
   }
 });

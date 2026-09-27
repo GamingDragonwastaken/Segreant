@@ -10,7 +10,7 @@
  * and so was a reference to a real model that measures something else entirely.
  *
  * That is construct laundering with a citation attached. The most valuable
- * reference to forge is a true one — Fiscus's only declared measurement model
+ * reference to forge is a true one — Segreant's only declared measurement model
  * is Git line retention, which its own author marked `artifact_persistence` and
  * `proxy_unvalidated`; cited behind a "developer productivity, validated"
  * figure it would have looked like provenance rather than the contradiction it

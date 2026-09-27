@@ -1,10 +1,10 @@
 # pack — portable, verifiable bundles of records
 
-A `.fiscuspack` is a JSON envelope: a manifest that binds records by digest,
+A `.segreantpack` is a JSON envelope: a manifest that binds records by digest,
 states what was left out and what was redacted, and optionally carries an
 Ed25519 signature; plus the attachment bytes the manifest binds. It exists so
 a set of records can leave the machine and be checked elsewhere WITHOUT the
-checker trusting the producer, the transport, or Fiscus.
+checker trusting the producer, the transport, or Segreant.
 
 Three outcomes are kept apart on every verification and never collapsed:
 **integrity** (the bytes are the bytes the manifest bound), **authenticity**
@@ -13,10 +13,10 @@ Three outcomes are kept apart on every verification and never collapsed:
 
 ## Consumes
 
-- `FiscusPackManifestInput`: pack id, creation instant, included record
+- `SegreantPackManifestInput`: pack id, creation instant, included record
   references (`kind`, `id`, `digest`), omissions, redactions, external
   references (metadata only; never dereferenced), attachment descriptors;
-- attachment bytes as canonical base64 (`FiscusPackAttachmentData`);
+- attachment bytes as canonical base64 (`SegreantPackAttachmentData`);
 - an `EpistemicLedger` for the one producer, `export.ts`: every node of the
   ledger graph, read back through the ledger's own readers;
 - a private key for signing and, at verification, an optional trust anchor
@@ -27,7 +27,7 @@ Three outcomes are kept apart on every verification and never collapsed:
 - **Canonical bytes.** Serialization is canonical JSON under declared resource
   limits (`canonical.ts`); the manifest digest is over the manifest with its
   own signature metadata excluded, so signing does not change what is signed.
-- **Verification fails closed and stays local.** `verifyFiscusPack()` parses
+- **Verification fails closed and stays local.** `verifySegreantPack()` parses
   under the same limits, dereferences no path and no URI, and reports every
   error rather than the first.
 - **An embedded key establishes integrity only.** `authenticity` is `verified`
@@ -39,7 +39,7 @@ Three outcomes are kept apart on every verification and never collapsed:
   `null` and a redaction entry naming the ids and field; the reference digest
   still binds the record AS STORED, so a verifier can tell a redacted copy from
   the original.
-- **Independent verification exists.** `standalone/fiscuspack-verifier.mjs`
+- **Independent verification exists.** `standalone/segreantpack-verifier.mjs`
   imports nothing from this module and is run against committed vectors and
   against a freshly exported ledger pack.
 
@@ -47,7 +47,7 @@ Three outcomes are kept apart on every verification and never collapsed:
 
 - `truth` is the literal `'not_evaluated'` on every result. Nothing in this
   module reads a claim's profile, proposition, or evidence.
-- A producer never overwrites: `fiscus pack export --out` refuses an existing
+- A producer never overwrites: `segreant pack export --out` refuses an existing
   path and writes nothing without `--out`.
 - Every digest is `sha256:<hex>`; a bare hex digest is invalid to both
   verifiers.
@@ -55,10 +55,10 @@ Three outcomes are kept apart on every verification and never collapsed:
 ## Verify
 
 ```bash
-node --test --experimental-strip-types test/fiscuspack.test.ts
-node --test --experimental-strip-types test/fiscuspack-production.test.ts
-node --test --experimental-strip-types test/fiscuspack-independent-verifier.test.ts
-node --test --experimental-strip-types test/fiscuspack-ledger-export.test.ts
+node --test --experimental-strip-types test/segreantpack.test.ts
+node --test --experimental-strip-types test/segreantpack-production.test.ts
+node --test --experimental-strip-types test/segreantpack-independent-verifier.test.ts
+node --test --experimental-strip-types test/segreantpack-ledger-export.test.ts
 ```
 
 ## Does not establish

@@ -1,5 +1,18 @@
 # Naming decision
 
+## Decision: Segreant (2026-09-26, D-290)
+
+The owner found Gryf too plain and asked for a name from griffin lore with
+more presence. **Segreant** was chosen: the heraldic word for a griffin reared
+up with wings raised, ready to fight, which is the product's job. Heraldry
+keeps the word almost entirely for griffins (occasionally dragons). It was
+free on npm, PyPI, Homebrew, crates.io and as a GitHub handle, and no company,
+package or repository used it. **Goldtalion** (gold + talon, in the style of
+Warcraft's Ironbeak and Thundertalon) was the runner-up and is also free.
+Names from World of Warcraft itself (Sky'ree, Wildhammer, Aerie Peak) were
+ruled out as Blizzard's. The rest of this document is the earlier analysis
+that recommended Gryf, kept as the record of how the decision was reached.
+
 **Recommendation (2026-09-25): rename Fiscus to Gryf.** It waits only on the
 owner's go-ahead, because a product name is the one decision the owner lives
 with permanently. Publishing to npm stays with the owner either way.
@@ -72,6 +85,25 @@ occupies, and the README should keep leading with it.
 - **npm.** Publish as `gryf` with the command `gryf`. Until the owner
   publishes, the name can be taken by anyone. Reserving it is a
   two-minute `npm publish` of a placeholder, and that is the owner's call.
+
+## Griffith, considered on 2026-09-26
+
+The owner proposed **Griffith**, as a nod to the griffin. It is not
+recommended:
+
+- **npm is taken.** `griffith` is Zhihu's React video player (v1.33.0, about
+  2,500 GitHub stars), so the package and command would need a suffix such as
+  `griffith-cli`.
+- **Search is crowded.** Griffith University, Griffith Observatory, a common
+  surname, and more than 1,400 GitHub repositories named for it.
+- **The best-known Griffith is a traitor.** In *Berserk*, Griffith is famous
+  for betraying the people who trusted him. That is the wrong association for a
+  product whose promise is that its numbers can be trusted, and the audience of
+  developers is likely to know it.
+- **It does not spell griffin.** Readers hear a surname, not the creature.
+
+`gryf` keeps the griffin link, is free on npm, PyPI and Homebrew, and its only
+namesake is a small Rust graph crate in an unrelated field.
 
 ## Where to check a name yourself
 

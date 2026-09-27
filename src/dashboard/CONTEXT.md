@@ -1,6 +1,6 @@
 # dashboard — the web GUI and its local server
 
-<!-- Layer 2 contract. This is a GUI for operating Fiscus, not a read-only dashboard. -->
+<!-- Layer 2 contract. This is a GUI for operating Segreant, not a read-only dashboard. -->
 
 ## Consumes
 
@@ -98,9 +98,9 @@ web/
   `insertAdjacentHTML`, or `document.write` anywhere in `app/`. Ledger data is
   operator-supplied — project names come from folder names — and must never be
   able to become markup. Pinned by `test/dashboard-script.test.ts`.
-- **Mutating routes require `x-fiscus-local: 1`.** A cross-origin page cannot set
+- **Mutating routes require `x-segreant-local: 1`.** A cross-origin page cannot set
   a custom header without a preflight this server never answers, so a malicious
-  site cannot drive the operator's local Fiscus. Never relax this. The gate is
+  site cannot drive the operator's local Segreant. Never relax this. The gate is
   DECLARED per route (`localOnly`) and enforced once, in `server.ts`, so it can
   be audited as a table instead of by reading every branch. A new mutating route
   adds itself to `MUTATING` in `test/dashboard-routes.test.ts`, which fails if

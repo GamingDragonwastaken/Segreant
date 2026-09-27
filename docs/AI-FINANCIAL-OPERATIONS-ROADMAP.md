@@ -1,6 +1,6 @@
-# Fiscus AI Financial Operations Roadmap
+# Segreant AI Financial Operations Roadmap
 
-**Status:** Product-direction decision and staged build plan, 2026-08-11. It describes an intended expansion; it is not a claim that the capabilities below are shipped or that Fiscus is a financial system of record today.
+**Status:** Product-direction decision and staged build plan, 2026-08-11. It describes an intended expansion; it is not a claim that the capabilities below are shipped or that Segreant is a financial system of record today.
 
 **This is a direction document, not a current capability claim.** The public
 status contract is [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md).
@@ -10,9 +10,9 @@ both directions. Where this document and the code disagree on a label that is
 already in migrated databases, the code is authoritative and this document is
 what needs correcting.
 
-## 1. The product Fiscus should become
+## 1. The product Segreant should become
 
-Fiscus should become a **provenance-aware AI Financial Operations Control Plane**:
+Segreant should become a **provenance-aware AI Financial Operations Control Plane**:
 
 > A system that helps an organization observe, reconcile, allocate, govern, and evaluate AI spend - beginning with coding agents - while showing exactly what each financial or outcome claim is based on.
 
@@ -20,13 +20,13 @@ This is not personal finance, investment advice, accounting software, payment pr
 
 The existing local-first tool remains the right first wedge:
 
-> **Fiscus for Coding-Agent Financial Truth:** what intentionally captured agents cost, which team or project owns that cost, what provider evidence confirms it, what controls applied, and what delivery evidence exists about the work.
+> **Segreant for Coding-Agent Financial Truth:** what intentionally captured agents cost, which team or project owns that cost, what provider evidence confirms it, what controls applied, and what delivery evidence exists about the work.
 
 The eventual platform is broader than a local proxy, but it must grow from the real strength already present: granular coding-agent metering tied to explicit evidence of software outcomes. It must not pretend that a price-table estimate is an invoice, or that a passed test proves business value.
 
 ## 2. The fundamental truth model
 
-Fiscus must preserve four distinct layers. They may be related, but they must never be silently collapsed into a single `AI cost` or `ROI` number.
+Segreant must preserve four distinct layers. They may be related, but they must never be silently collapsed into a single `AI cost` or `ROI` number.
 
 ```text
 metered usage != provider-billed cost != allocated cost != realized business value
@@ -34,7 +34,7 @@ metered usage != provider-billed cost != allocated cost != realized business val
 
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
-| **Metered usage** | What Fiscus observed through an explicitly routed proxy or supported local tool log. | All organizational usage, provider invoice totals, contractual discounts, or business value. |
+| **Metered usage** | What Segreant observed through an explicitly routed proxy or supported local tool log. | All organizational usage, provider invoice totals, contractual discounts, or business value. |
 | **Provider cost** | What a provider API, cloud billing export, or bill reports for a defined account and period. | Per-prompt causality unless the provider supplies a compatible request-level source. |
 | **Allocated cost** | How an organization chose to assign source cost under a versioned allocation policy. | That the allocation was provider-native or objectively inevitable. |
 | **Outcome evidence** | What a configured source asserted or attested about one bounded unit of work. | Causality, customer benefit, revenue, universal quality, or productivity. |
@@ -62,11 +62,11 @@ read as a live gap list. Reconciliation and local showback allocation have since
 landed; use [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md)
 for current support, evidence tier, and remaining boundaries.
 
-Fiscus is already a credible **local AI spend-control and outcome-evidence product**. It has a local proxy and supported native imports, a SQLite request ledger, pricing freshness/estimated-cost handling, live local caps, alerts, exports, coding-work realization signals, signed CI `tested` evidence, and an early optional aggregate team-service experiment.
+Segreant is already a credible **local AI spend-control and outcome-evidence product**. It has a local proxy and supported native imports, a SQLite request ledger, pricing freshness/estimated-cost handling, live local caps, alerts, exports, coding-work realization signals, signed CI `tested` evidence, and an early optional aggregate team-service experiment.
 
 That is not yet an AI Financial Operations platform. The gaps below are the minimum work required before making that claim.
 
-| Capability | Current Fiscus position | Minimum missing capability | Priority |
+| Capability | Current Segreant position | Minimum missing capability | Priority |
 | --- | --- | --- | --- |
 | Financial source of truth | Local price-table metering and tool-log estimates. | Authoritative provider/billing ingestion, period close, source identity, currency, credits, discounts, adjustments, and retained source lineage. | P0 |
 | Reconciliation | Repricing can improve an estimate; there is no bill-to-ledger comparison. | A per-provider-account, per-period reconciliation record with coverage, variance, and reason codes. | P0 |
@@ -83,7 +83,7 @@ The first platform milestone is therefore not more model routing, charts, or a g
 
 ## 4. The minimum viable platform
 
-To be an integral component of an AI financial-operations ecosystem, Fiscus minimally needs six connected capabilities:
+To be an integral component of an AI financial-operations ecosystem, Segreant minimally needs six connected capabilities:
 
 1. **Capture:** collect near-real-time, agent-level usage and maintain its local-first edge collector.
 2. **Reconcile:** ingest an authoritative provider source and retain the difference between observed usage and reported/billed cost.
@@ -92,7 +92,7 @@ To be an integral component of an AI financial-operations ecosystem, Fiscus mini
 5. **Allocate:** create transparent showback/chargeback-ready outputs through approved, versioned allocation rules.
 6. **Evidence:** connect cost to delivery evidence and disclose its source strength without claiming causal business return.
 
-Fiscus already has meaningful parts of Capture, local Govern, and Evidence. The decisive platform gaps are Reconcile, organization-grade Attribute, and financial Allocation.
+Segreant already has meaningful parts of Capture, local Govern, and Evidence. The decisive platform gaps are Reconcile, organization-grade Attribute, and financial Allocation.
 
 ### Canonical record model
 
@@ -118,7 +118,7 @@ Original provider records are immutable. Reconciliation, allocation, and correct
 ### Reference architecture
 
 ```text
-AI tools / coding agents ----> local Fiscus collector and proxy ----> provider
+AI tools / coding agents ----> local Segreant collector and proxy ----> provider
                                    |\
                                    | \---- metered-usage evidence (fast, local)
                                    |
@@ -142,7 +142,7 @@ The local collector retains detailed code-agent context. A central deployment sh
 
 ### Stage 0 - Harden the truthful coding-agent wedge
 
-**Result:** Fiscus can be safely described as a local-first evidence-led accounting layer for AI coding-agent consumption.
+**Result:** Segreant can be safely described as a local-first evidence-led accounting layer for AI coding-agent consumption.
 
 - Finish local release truth: package, browser, provider-metric, and documentation validation.
 - Keep every current number labelled as metered estimate, tool-log estimate, or source-specific evidence.
@@ -153,9 +153,9 @@ The local collector retains detailed code-agent context. A central deployment sh
 
 ### Stage 1 - Financial-truth foundation (first platform build)
 
-**Result:** one organization can compare Fiscus observations with one authoritative provider cost source.
+**Result:** one organization can compare Segreant observations with one authoritative provider cost source.
 
-**Current increment (local v1):** Fiscus has a strict operator-supplied OpenAI
+**Current increment (local v1):** Segreant has a strict operator-supplied OpenAI
 billing-evidence import with immutable normalized provider-declared charge
 records, source-file digest, account reference, period, coverage declaration,
 and separate CSV/JSON export. It is intentionally `not_reconciled`: no verified
@@ -163,7 +163,7 @@ provider-account mapping exists on request rows yet, and no provider credential,
 raw-provider parser, or claimed variance has been introduced. See
 [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md).
 
-**Current authenticated observation increment (local v1):** Fiscus also has a
+**Current authenticated observation increment (local v1):** Segreant also has a
 fixture-verified, explicitly invoked read-only OpenAI Organization Costs
 collector. It accepts only an active local declaration for exactly
 `https://api.openai.com` with a `proj_...` project reference; a preview never
@@ -176,7 +176,7 @@ allocation, or a budget/recommendation action. A later changed provider day is
 a new snapshot, not a silent overwrite or additive total.
 
 **Current reconciliation increment (local v1, 2026-08-18):** item 4 below is now
-built. `fiscus billing reconcile` compares a completed provider snapshot with the
+built. `segreant billing reconcile` compares a completed provider snapshot with the
 local ledger at **project-day total** grain — the only compatible join, because
 line items do not map to models or requests — and produces an immutable derived
 run carrying provider total, metered total, and the residual, with a structural
@@ -207,7 +207,7 @@ chargeback.
 
    ```text
    provider-reported or invoiced total
-   - Fiscus metered total for the same defined scope
+   - Segreant metered total for the same defined scope
    - documented adjustments
    = visible unexplained variance
    ```
@@ -232,7 +232,7 @@ chargeback.
 
 ### Stage 3 - Operational platform and ecosystem interface
 
-**Result:** Fiscus becomes a dependable source for an existing FinOps, data, or finance stack.
+**Result:** Segreant becomes a dependable source for an existing FinOps, data, or finance stack.
 
 - Publish a versioned ingestion contract and a stable financial export schema.
 - Add authenticated, read-only API endpoints plus warehouse/BI exports. ERP posting is an export/integration concern, not an accounting-system replacement.
@@ -244,7 +244,7 @@ chargeback.
 
 ### Stage 4 - Forecast, commitments, and approval-gated actions
 
-**Result:** Fiscus can support planning decisions without automating financial decisions.
+**Result:** Segreant can support planning decisions without automating financial decisions.
 
 - Forecast daily/weekly/monthly spend by provider account, project, and model; include cold-start status, prediction interval, model/version, assumptions, and out-of-sample error.
 - Compare budget, forecast, run rate, provider-reported cost, and finalized/reconciled cost.
@@ -263,7 +263,7 @@ Provider billing credentials can expose organization structure, usage, and other
 customer provider or cloud account
   -> customer-run least-privilege reader/export
   -> normalized Cost Evidence Record
-  -> Fiscus evidence ledger (local or customer-hosted)
+  -> Segreant evidence ledger (local or customer-hosted)
 ```
 
 Do not make a personal laptop the default destination for organization-admin billing keys. Prefer a customer-run connector or a dedicated read-only service environment, with raw evidence held in the customer's chosen store unless explicit retention is approved.
@@ -279,9 +279,9 @@ Each connector must be read-only and log its scope, capability set, source query
 
 ### Financial controls are not claims of universal enforcement
 
-Fiscus should show whether a policy is:
+Segreant should show whether a policy is:
 
-- `enforced_in_path` - actively applied to traffic routed through Fiscus;
+- `enforced_in_path` - actively applied to traffic routed through Segreant;
 - `provider_native` - enforced by a configured provider/platform control;
 - `observed_only` - detected after the fact through logs/imports/exports;
 - `proposed` - recommendation awaiting human approval;
@@ -294,7 +294,7 @@ The following are deliberately out of scope, including for later platform stages
 - Personal finance, tax, lending, investment, insurance, payroll, accounting advice, payments, custody, or credit decisions.
 - An autonomous AI CFO that moves money, reallocates budgets, changes cloud accounts, blocks teams, or chooses vendors from inferred ROI.
 - A generic compliance/GRC clone, a certification claim, or an audit-readiness promise without a separately validated program.
-- Hidden traffic interception, TLS MITM, unconsented prompt collection, or a Fiscus-operated warehouse of customer code/prompts.
+- Hidden traffic interception, TLS MITM, unconsented prompt collection, or a Segreant-operated warehouse of customer code/prompts.
 - Employee surveillance, rankings, compensation decisions, or performance management based on AI use/value metrics.
 - A universal productivity or business-value number. Outcome evidence is decision support with explicit uncertainty, not causal proof.
 
@@ -302,7 +302,7 @@ The following are deliberately out of scope, including for later platform stages
 
 ### Recommended position now
 
-**Fiscus for Coding-Agent Financial Truth**
+**Segreant for Coding-Agent Financial Truth**
 
 > The local-first AI FinOps ledger for coding agents: what they cost, which evidence exists that the work survived, and what to fund next.
 
@@ -310,7 +310,7 @@ This preserves the strongest current product truth while the platform builds the
 
 ### Position once Stages 1 and 2 are proven
 
-**Fiscus AI Financial Operations Control Plane**
+**Segreant AI Financial Operations Control Plane**
 
 > Reconcile, allocate, govern, and evaluate AI spend across providers and workloads, with every claim tied to its cost basis and evidence source.
 
@@ -344,4 +344,4 @@ This roadmap uses the following sources as architecture constraints, not as borr
 
 The autonomous product decision is to **keep the current coding-agent FinOps and evidence core, then build financial truth before breadth**.
 
-Fiscus should not chase a vague AI-finance platform or imitate Vanta. It should become the system that can answer, with evidence and caveats: *what did this AI work cost, which financial source supports that amount, who owns it, which policy applied, what remains unallocated or unreconciled, and what outcome evidence exists?*
+Segreant should not chase a vague AI-finance platform or imitate Vanta. It should become the system that can answer, with evidence and caveats: *what did this AI work cost, which financial source supports that amount, who owns it, which policy applied, what remains unallocated or unreconciled, and what outcome evidence exists?*

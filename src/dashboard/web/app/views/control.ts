@@ -14,7 +14,7 @@
  *      than collapsing them into the word "cap".
  *
  *      This view used to warn that a saved cap did not take effect until the
- *      proxy restarted. That was false: `fiscus start` hands ONE config object
+ *      proxy restarted. That was false: `segreant start` hands ONE config object
  *      to both the proxy and the dashboard, and the guard is built as
  *      `new BudgetGuard(store, () => config.budget)` — a getter, re-read per
  *      request — so `Object.assign(config, next)` in the settings handler is
@@ -95,7 +95,7 @@ export function controlView(): Node {
                 h('div', { class: 'stat band-unset', text: 'no cap set' }),
                 h('span', { class: 'basis', text: () => (isPrecise()
                   ? 'No daily cap is configured. Requests are never blocked on spend.'
-                  : 'Nothing is stopping spend right now. Fiscus will measure it, but it will not block it.') }))
+                  : 'Nothing is stopping spend right now. Segreant will measure it, but it will not block it.') }))
             : h('div', null,
                 h('div', { class: 'stat', text: usd(cap) }),
                 spentToday !== null
@@ -114,16 +114,16 @@ export function controlView(): Node {
           h('p', { class: 'scope-note', text: () => (includesImported
             ? (isPrecise()
                 ? 'Basis: all observed spend. Imported subscription usage counts toward the cap even though it cannot be blocked, so the cap governs total spend rather than blockable spend.'
-                : 'This limit counts everything we can see, including usage imported from tools. Fiscus cannot actually block that kind — it is already spent — so treat the limit as a total, not a wall.')
+                : 'This limit counts everything we can see, including usage imported from tools. Segreant cannot actually block that kind — it is already spent — so treat the limit as a total, not a wall.')
             : (isPrecise()
                 ? 'Basis: live proxy spend only. Imported subscription usage is sunk cost observed after the fact and does not count toward enforcement.'
-                : 'This limit only counts spend that goes through Fiscus, where it can genuinely be stopped. Usage imported from other tools is already spent, so it is not counted here.')) }),
+                : 'This limit only counts spend that goes through Segreant, where it can genuinely be stopped. Usage imported from other tools is already spent, so it is not counted here.')) }),
 
           // Enforcement is a location and scope claim, not an on/off flag. Four
           // members, four different claims — see BudgetEnforcement in core/api.ts.
           h('div', { class: 'facts enforcement-facts' },
             h('div', { class: 'fact' },
-              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Local proxy' : 'What Fiscus can stop') }),
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Local proxy' : 'What Segreant can stop') }),
               h('span', { class: 'fact-val', text: () => (isPrecise()
                 ? `${enforcement.localProxy.state.replaceAll('_', ' ')}${enforcement.localProxy.hardControlActive ? ' · hard control active' : ' · no hard blocker configured'}`
                 : (enforcement.localProxy.hardControlActive ? 'future requests are guarded' : 'ready, but no hard limit is set')) })),
@@ -133,7 +133,7 @@ export function controlView(): Node {
                 ? (isPrecise() ? 'live · running proxy re-reads config' : 'take effect straight away')
                 : (isPrecise() ? 'not live' : 'need a restart')) })),
             h('div', { class: 'fact' },
-              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Imported / off-path' : 'Usage Fiscus saw later') }),
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Imported / off-path' : 'Usage Segreant saw later') }),
               h('span', { class: 'fact-val', text: () => (isPrecise()
                 ? `${enforcement.importedSpend.state.replaceAll('_', ' ')} · not blockable${enforcement.importedSpend.countsTowardInPathCap ? ' · counts toward later proxy decisions' : ''}`
                 : 'visible, but already spent') })),
@@ -141,7 +141,7 @@ export function controlView(): Node {
               h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Provider-native limits' : 'Limits at the AI provider') }),
               h('span', { class: 'fact-val', text: () => (isPrecise()
                 ? `${enforcement.providerNative.state} · not inspected`
-                : 'not checked by Fiscus') })))),
+                : 'not checked by Segreant') })))),
 
         // The other three enforcement controls the CLI exposes. Shown together so
         // the GUI states the whole enforcement picture rather than the daily cap

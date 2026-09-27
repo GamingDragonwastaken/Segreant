@@ -31,7 +31,7 @@
  *               Uninstrumented realization widens the total itself to
  *               [0, total spend].
  *
- * That last line is why the certificate is usually `undetermined`: Fiscus does
+ * That last line is why the certificate is usually `undetermined`: Segreant does
  * not know whether the tail days were the valuable ones, and the interval says
  * so rather than assuming either way. Strict dominance is still reachable --
  * when almost nothing realizes and the cap is far tighter than the current one,
@@ -430,7 +430,7 @@ export function budgetCapIssuanceInput(decision: BudgetCapDecision, opts: Budget
   };
   const key = digest(basisPayload);
   const decisionId = `${BUDGET_CAP_PROBLEM.id}:${key}`;
-  const coordinate = { scope: scope({ ledger: 'fiscus-budget', problem: BUDGET_CAP_PROBLEM.id }), grain: grain(['day']) };
+  const coordinate = { scope: scope({ ledger: 'segreant-budget', problem: BUDGET_CAP_PROBLEM.id }), grain: grain(['day']) };
   const validTime = {
     from: new Date(issuedMs - opts.windowDays * 24 * 60 * 60 * 1000).toISOString(),
     to: issuedAt,
@@ -438,8 +438,8 @@ export function budgetCapIssuanceInput(decision: BudgetCapDecision, opts: Budget
   const basis: Evidence = evidence({
     id: `evidence:budget:cap:basis:${key}`,
     evidenceType: 'budget.cap_decision_basis',
-    sourceIdentity: 'fiscus:budget-advisor',
-    sourceClass: 'fiscus_local_daily_spend_series',
+    sourceIdentity: 'segreant:budget-advisor',
+    sourceClass: 'segreant_local_daily_spend_series',
     payload: basisPayload as never,
     scope: coordinate.scope,
     grain: coordinate.grain,

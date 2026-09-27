@@ -35,7 +35,7 @@ function neutralJudgment(sessionId: string, rationale: string): SessionJudgment 
 
 /**
  * Pure except for the outbound HTTP call itself (and reading
- * FISCUS_JUDGE_API_KEY, via hasHostedJudgeApiKey). Takes already-fetched rows so
+ * SEGREANT_JUDGE_API_KEY, via hasHostedJudgeApiKey). Takes already-fetched rows so
  * it stays fully testable with synthetic data — see judgeSessionFromStore below
  * for the store-integrated convenience wrapper.
  */
@@ -57,7 +57,7 @@ export async function judgeSession(
   const localEndpointIsOnDevice = isLocal && !decision.sendsContentOffDevice;
   const baseUrl = isLocal ? cfg.localBaseUrl : cfg.hostedBaseUrl;
   const model = isLocal ? cfg.localModel : cfg.hostedModel;
-  const apiKey = isLocal ? null : (process.env.FISCUS_JUDGE_API_KEY ?? null);
+  const apiKey = isLocal ? null : (process.env.SEGREANT_JUDGE_API_KEY ?? null);
 
   if (!isSet(baseUrl) || !isSet(model)) {
     const field = isLocal ? 'judge.localModel' : 'judge.hostedModel';

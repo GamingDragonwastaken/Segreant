@@ -118,7 +118,7 @@ export function claimProfileRows(profile: ClaimProfilePayload, figure: ClaimFigu
 export const RENDERED_PROFILE_AXES = ['epistemic', 'coverage', 'monetaryBasis'] as const;
 
 /**
- * The axes this GUI does not show. Constant across every claim Fiscus issues
+ * The axes this GUI does not show. Constant across every claim Segreant issues
  * today — which is why they were dropped from the wire, and why that was the
  * wrong call: an operator reading a cost spine has no way to discover from the
  * varying axes that no figure on the page is causal, final, or assessed for
@@ -184,7 +184,7 @@ export type LayerSupport = ClaimSupportPayload;
  */
 export function unreachableSupport(figure: ClaimFigureStatus): LayerSupport {
   // Every axis at its weakest value, including the seven that are constant when
-  // the server DOES answer. That constancy is a fact about the claims Fiscus
+  // the server DOES answer. That constancy is a fact about the claims Segreant
   // issues, and a browser that has heard nothing has no standing to repeat it —
   // restating it here would be the reconstruction WP-B02 removed.
   //

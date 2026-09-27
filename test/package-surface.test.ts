@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function packageEntries(): string[] {
-  const cache = mkdtempSync(join(tmpdir(), 'fiscus-package-surface-cache-'));
+  const cache = mkdtempSync(join(tmpdir(), 'segreant-package-surface-cache-'));
   try {
     const npmArgs = ['pack', '--dry-run', '--ignore-scripts', '--json', '--loglevel=error'];
     // Windows command shims are not directly spawnable in every Node host. Use
@@ -40,7 +40,7 @@ function packagePath(entries: string[], suffix: string): string | undefined {
 
 /** Relative `./x.mjs` specifiers the launcher imports from its own directory. */
 function launcherLocalImports(): string[] {
-  const source = readFileSync(join(ROOT, 'bin', 'fiscus.mjs'), 'utf8');
+  const source = readFileSync(join(ROOT, 'bin', 'segreant.mjs'), 'utf8');
   return [...source.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)].map((match) => match[1]!);
 }
 
@@ -56,7 +56,7 @@ test('npm package surface keeps public docs and the README seal while excluding 
   );
 
   const entries = packageEntries();
-  assert.ok(packagePath(entries, 'bin/fiscus.mjs'), 'the packaged CLI launcher must remain present');
+  assert.ok(packagePath(entries, 'bin/segreant.mjs'), 'the packaged CLI launcher must remain present');
   // Naming one launcher file was not enough: the launcher grew sibling modules
   // (the publication gate, the runtime snapshot) that it imports before it can
   // reach dist/, so any of them missing from the tarball is a CLI that cannot

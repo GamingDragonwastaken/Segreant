@@ -100,7 +100,7 @@ function interruptAt(path: string, faultAt: number): Error {
 }
 
 test('a migration interrupted at any DDL statement rolls back to the legacy schema, and the next open completes it', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-migration-interruption-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-migration-interruption-'));
   try {
     const probe = join(dir, 'probe.sqlite');
     writeLegacy(probe);

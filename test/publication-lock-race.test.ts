@@ -1,7 +1,7 @@
 /**
  * Losing the lock directory before publishing ownership is a lost race.
  *
- * `acquirePublicationLock` creates `.fiscus-build.lock` with `mkdir`, then
+ * `acquirePublicationLock` creates `.segreant-build.lock` with `mkdir`, then
  * writes an owner record into it. Between those two steps the directory exists
  * and carries no owner, which makes it indistinguishable from one an
  * interrupted process abandoned. If it is removed in that window, the
@@ -10,11 +10,11 @@
  * That threw straight out of the CLI. CI run `33502986214` failed
  * `test (windows-latest)` with
  *
- *     Error: ENOENT: ... open '...\.fiscus-build.lock\.owner-<uuid>.tmp'
+ *     Error: ENOENT: ... open '...\.segreant-build.lock\.owner-<uuid>.tmp'
  *       at acquirePublicationLock (bin/publication-lock.mjs:307)
- *       at bin/fiscus.mjs:53
+ *       at bin/segreant.mjs:53
  *
- * so `fiscus --help` died while two builds were publishing. The launcher is
+ * so `segreant --help` died while two builds were publishing. The launcher is
  * right to treat a lock FAILURE as fatal — bypassing the gate would make a
  * reader's artifact guarantee rest on an unverified filesystem assumption — but
  * this is not a failure. This process did not acquire the lock. It belongs in
@@ -58,7 +58,7 @@ const LOCK_MODULE = pathToFileURL(join(ROOT, 'bin', 'publication-lock.mjs')).hre
  *
  * Every failure mode in this file ends in `acquirePublicationLock` waiting, and
  * its own bound is `LOCK_WAIT_MS` — five minutes. A deadlocked worker therefore
- * fails the suite five minutes later with `timed out waiting for another Fiscus
+ * fails the suite five minutes later with `timed out waiting for another Segreant
  * build`, which names the wrong problem: nothing else held the lock. That is
  * how run `33507233437` reported a self-deadlock, and it cost a CI round to
  * read. A kill window well below that bound turns the same defect into a fast,
@@ -96,7 +96,7 @@ function run(
 }
 
 test('a contender whose own lock directory is removed retries instead of dying', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-race-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-race-'));
 
   // The contender: acquire and release, over and over, for a fixed wall-clock
   // budget. Cycles rather than a count, so a slow machine takes fewer laps
@@ -122,7 +122,7 @@ test('a contender whose own lock directory is removed retries instead of dying',
     "import { rmSync } from 'node:fs';",
     "import { join } from 'node:path';",
     'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
-    "const lock = join(root, '.fiscus-build.lock');",
+    "const lock = join(root, '.segreant-build.lock');",
     'while (Date.now() < untilMs) {',
     '  try { rmSync(lock, { recursive: true, force: true }); } catch { /* it may already be gone */ }',
     '}',
@@ -162,7 +162,7 @@ test('a contender never waits on its own half-published lock', async () => {
   // directory. `inspectLock` deliberately recovers a token from that temp, and
   // `lockIsStale` then asks whether the owner's process is alive. The owner is
   // this process. It is alive. So the contender waited on itself for the full
-  // `LOCK_WAIT_MS` and the suite reported `timed out waiting for another Fiscus
+  // `LOCK_WAIT_MS` and the suite reported `timed out waiting for another Segreant
   // build` — naming another build that never existed. Run `33507233437` failed
   // that way on ubuntu and macOS simultaneously.
   //
@@ -172,7 +172,7 @@ test('a contender never waits on its own half-published lock', async () => {
   // `owner.json` does it exactly — `rename` cannot replace a directory, so the
   // publish fails with the temp still in place, which is the state a
   // mid-publish interruption leaves on a real filesystem.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-self-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-self-'));
 
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
@@ -191,7 +191,7 @@ test('a contender never waits on its own half-published lock', async () => {
     "import { mkdirSync } from 'node:fs';",
     "import { join } from 'node:path';",
     'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
-    "const blocker = join(root, '.fiscus-build.lock', 'owner.json');",
+    "const blocker = join(root, '.segreant-build.lock', 'owner.json');",
     // NOT recursive, deliberately: this must only ever plant the blocker inside
     // a lock directory somebody else already created. Creating the lock itself
     // would squat the path as an owner-less directory and test the staleness
@@ -222,7 +222,7 @@ test('a contender never waits on its own half-published lock', async () => {
 
     // And it must not have solved the problem by abandoning the directory: a
     // surviving generation would mean the reclamation moved on without it.
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `lock residue left behind: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -250,7 +250,7 @@ test('ordinary contention leaves no lock residue', async () => {
   // laps. So the budget is wall-clock and the laps are whatever fits — more
   // than twenty-five on a fast machine, fewer on a loaded CI runner, and never
   // a hang either way.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-clean-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-clean-'));
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
@@ -300,11 +300,11 @@ test('ordinary contention leaves no lock residue', async () => {
     );
 
     // THE CANONICAL PATH IS THE STRICT CLAIM. A directory left at
-    // `.fiscus-build.lock` once every worker has exited is a HELD lock, and
+    // `.segreant-build.lock` once every worker has exited is a HELD lock, and
     // whether it can still be recovered depends on whether the token it carries
     // names a living process. That is the defect this test exists for (D-077),
     // and it is asserted immediately, with no sweep allowed first.
-    const canonical = readdirSync(dir).filter((name) => name === '.fiscus-build.lock');
+    const canonical = readdirSync(dir).filter((name) => name === '.segreant-build.lock');
     assert.deepEqual(canonical, [], 'the canonical lock survived every worker exiting, so it was abandoned held');
 
     // QUARANTINES ARE A WEAKER CLAIM, AND ASSERTING THE STRONGER ONE WAS WRONG.
@@ -328,7 +328,7 @@ test('ordinary contention leaves no lock residue', async () => {
     const swept = await run(reaper, [dir]);
     assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
 
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `lock residue survived a sweeping acquisition: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -339,7 +339,7 @@ test('the lost-race branch is not a blanket ENOENT catch', async () => {
   // The retry is reachable ONLY when this process created the directory. An
   // ENOENT from anywhere else — a root that does not exist, say — is a real
   // failure and must still throw rather than spin until the 300s wait timeout.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-arg-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-arg-'));
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
@@ -405,7 +405,7 @@ test('a release that cannot hand the lock back never returns still holding it', 
   // reads that record as an owner; `lockIsStale` clears it as live, because the
   // PID it names is the releasing process and that process is still running.
   // Nothing can recover such a lock. Every contender waits out `LOCK_WAIT_MS`
-  // and then reports `timed out waiting for another Fiscus build` about a build
+  // and then reports `timed out waiting for another Segreant build` about a build
   // that finished minutes earlier.
   //
   // Observed, not theorised: the repository root sat holding
@@ -423,7 +423,7 @@ test('a release that cannot hand the lock back never returns still holding it', 
   // not do, the lock must be acquirable afterwards. So the worker releases and
   // then acquires again in the same process, which is the strictest form of the
   // question — its own PID is alive, so nothing can rescue it by staleness.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-release-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-release-'));
 
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
@@ -433,7 +433,7 @@ test('a release that cannot hand the lock back never returns still holding it', 
     'const root = process.argv[2];',
     'const release = acquirePublicationLock(root);',
     '',
-    "const lock = join(root, '.fiscus-build.lock');",
+    "const lock = join(root, '.segreant-build.lock');",
     '// Block the owner-record claim permanently, and make the obstruction',
     '// non-empty so no platform can quietly replace it.',
     "const blocker = join(lock, '.owner-quarantine.json');",
@@ -464,7 +464,7 @@ test('a release that cannot hand the lock back never returns still holding it', 
 
     // And nothing was left behind at the root. A quarantine here would mean the
     // generation was moved aside but never collected.
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `release left lock residue: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -519,14 +519,14 @@ test('a lock this process left under an earlier token is reclaimed, not waited f
   // the routes are narrow — but that a process which meets one can make
   // progress. A record naming OUR pid was written either by us or by a dead
   // process whose pid we inherited, and reclaiming is right in both readings.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-self-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-self-'));
   const script = join(dir, 'self-orphan.mjs');
   writeFileSync(script, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
     "import { mkdirSync, writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
     'const root = process.argv[2];',
-    "const lock = join(root, '.fiscus-build.lock');",
+    "const lock = join(root, '.segreant-build.lock');",
     'mkdirSync(lock);',
     // A well-formed owner record naming this very process under a token this
     // process is not holding: exactly what an earlier call would have left.
@@ -541,7 +541,7 @@ test('a lock this process left under an earlier token is reclaimed, not waited f
     // kill rather than a slow pass. Well above the reclamation's own budget.
     const result = await run(script, [dir], 60_000);
     assert.equal(result.code, 0, result.stderr || 'the process never stopped waiting for itself');
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `reclaiming left lock residue: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -555,10 +555,10 @@ test('re-entering a lock this process genuinely holds fails fast rather than wai
   // reclaiming it would hand the same lock to two holders at once.
   //
   // Waiting is not the answer either: it is a deadlock with a five-minute
-  // fuse that then reports `timed out waiting for another Fiscus build` about
+  // fuse that then reports `timed out waiting for another Segreant build` about
   // itself. Nothing in this repository acquires re-entrantly; if something
   // starts to, it should find out at the call rather than in CI.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reentrant-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-reentrant-'));
   const script = join(dir, 'reentrant.mjs');
   writeFileSync(script, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
@@ -578,7 +578,7 @@ test('re-entering a lock this process genuinely holds fails fast rather than wai
     assert.equal(result.code, 0, result.stderr || 'the re-entrant acquisition never returned');
     assert.match(result.stdout, /^threw:/, 'a second acquisition must not succeed while the first is held');
     assert.match(result.stdout, /already held by this process/);
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `the held lock was not released: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -598,7 +598,7 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
   // with a raw ENOTEMPTY out of `acquirePublicationLock`:
   //
   //     Error: ENOTEMPTY: directory not empty, rename
-  //       '.../.fiscus-build.lock.quarantine-7086-63ed67ff' -> '.../.fiscus-build.lock'
+  //       '.../.segreant-build.lock.quarantine-7086-63ed67ff' -> '.../.segreant-build.lock'
   //         at restoreQuarantinedLock (bin/publication-lock.mjs:333)
   //         at quarantineUnknownLock (bin/publication-lock.mjs:353)
   //         at acquirePublicationLock (bin/publication-lock.mjs:674)
@@ -639,7 +639,7 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
   // already tolerated. The defect and its repair are visible only where the
   // kernel answers with a code nobody enumerated, which is why the authoritative
   // gate for this one is Ubuntu CI rather than a local run.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-restore-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-restore-'));
   try {
     // A pid that is certainly gone: this process ran, reported itself, exited.
     const corpse = join(dir, 'corpse.mjs');
@@ -663,7 +663,7 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
       'const cell = new Int32Array(new SharedArrayBuffer(4));',
       'let steals = 0;',
       'for (let attempt = 0; attempt < attempts; attempt += 1) {',
-      "  const lock = join(root, '.fiscus-build.lock');",
+      "  const lock = join(root, '.segreant-build.lock');",
       '  try {',
       // mkdir is the claim. Only the process that wins it writes the record, so
       // the thief never overwrites a real builder's owner file.
@@ -731,7 +731,7 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
     const swept = await run(reaper, [dir]);
     assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
 
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `lock residue survived a sweeping acquisition: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -774,11 +774,11 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
  * the race that produces it is not.
  */
 test('an ownerless quarantine is collected at once, not after the canonical grace period', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-ownerless-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-reap-ownerless-'));
   try {
     // Exactly what the mismatch path leaves: a directory with no record at all,
     // at a pathname no creator knows.
-    const orphan = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000001');
+    const orphan = join(dir, '.segreant-build.lock.quarantine-1-00000000-0000-4000-8000-000000000001');
     mkdirSync(orphan);
 
     const sweeper = join(dir, 'sweeper.mjs');
@@ -789,7 +789,7 @@ test('an ownerless quarantine is collected at once, not after the canonical grac
     const swept = await run(sweeper, [dir], 60_000);
     assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
 
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `an ownerless quarantine survived its reaper: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -800,9 +800,9 @@ test('a quarantine whose owner can still act is preserved, not deleted by pathna
   // THE GUARD-RAIL. Collecting every quarantine on sight would satisfy the test
   // above and reintroduce the pathname-based deletion D-072 removed. The owner
   // half of the rule is unchanged: a live owner keeps its generation.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-live-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-reap-live-'));
   try {
-    const held = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000002');
+    const held = join(dir, '.segreant-build.lock.quarantine-1-00000000-0000-4000-8000-000000000002');
     mkdirSync(held);
     // This process is alive for as long as the child sweeps.
     writeFileSync(
@@ -819,7 +819,7 @@ test('a quarantine whose owner can still act is preserved, not deleted by pathna
     const swept = await run(sweeper, [dir], 60_000);
     assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
 
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [held.slice(dir.length + 1)], 'a live owner lost its quarantined generation');
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
@@ -829,7 +829,7 @@ test('a quarantine whose owner can still act is preserved, not deleted by pathna
 test('a quarantine whose owner is demonstrably gone is still collected by liveness', async () => {
   // The half of `lockIsStale` that does transfer, kept visible so a later change
   // cannot quietly narrow the reaper to the ownerless case.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-dead-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-lock-reap-dead-'));
   try {
     const corpse = join(dir, 'corpse.mjs');
     writeFileSync(corpse, 'process.stdout.write(String(process.pid));\n', 'utf8');
@@ -838,7 +838,7 @@ test('a quarantine whose owner is demonstrably gone is still collected by livene
     const deadPid = Number(dead.stdout);
     assert.ok(Number.isInteger(deadPid) && deadPid > 0, `expected a pid, read ${JSON.stringify(dead.stdout)}`);
 
-    const abandoned = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000003');
+    const abandoned = join(dir, '.segreant-build.lock.quarantine-1-00000000-0000-4000-8000-000000000003');
     mkdirSync(abandoned);
     writeFileSync(
       join(abandoned, '.owner-quarantine.json'),
@@ -854,7 +854,7 @@ test('a quarantine whose owner is demonstrably gone is still collected by livene
     const swept = await run(sweeper, [dir], 60_000);
     assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
 
-    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.segreant-build.lock'));
     assert.deepEqual(residue, [], `a dead owner's quarantine survived: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });

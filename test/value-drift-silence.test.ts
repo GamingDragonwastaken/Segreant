@@ -6,7 +6,7 @@
  * guarantee runs in ONE direction. It bounds false alarms and says nothing
  * whatever about missed ones, because an e-process carries no power guarantee.
  *
- * `fiscus value` read the silence as a finding anyway, in green:
+ * `segreant value` read the silence as a finding anyway, in green:
  *
  *   Stability   stable   no drift across 3 watched stream(s): ... (anytime-valid)
  *

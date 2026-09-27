@@ -1,7 +1,7 @@
 /**
  * A scoped push is not a snapshot, and the team server reads it as one (WP-C06).
  *
- * THE DEFECT. `fiscus team push --project <name>` filters the rollup down to one
+ * THE DEFECT. `segreant team push --project <name>` filters the rollup down to one
  * project — the flag is in the command's own help text. The team server treats a
  * developer's LATEST rollup as their complete window snapshot:
  *
@@ -21,7 +21,7 @@
  * WHY THE REFUSAL IS ON THE CLIENT AND NOT A SERVER RULE. The server cannot tell
  * a scoped rollup from a complete one: nothing on the wire says which it is.
  * That is the honest repair — a coverage field in the signed body, so a rollup
- * carries the basis of its own completeness, exactly as every other Fiscus
+ * carries the basis of its own completeness, exactly as every other Segreant
  * figure must — and it is a signed-protocol change with a compatibility story,
  * not a defect fix. Until then the only sound position is that a scoped rollup
  * must not be sent, because there is no way for the receiver to consume it
@@ -49,7 +49,7 @@ function runCli(args: string[], dbPath: string, home: string): Promise<{ code: n
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_DB: dbPath, SEGREANT_HOME: home, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -107,7 +107,7 @@ async function withUpstream<T>(run: (port: number, connections: () => number) =>
 }
 
 test('team push refuses to send a rollup scoped to one project', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-scope-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-scope-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -134,7 +134,7 @@ test('team push refuses to send a rollup scoped to one project', async () => {
 test('team push still sends the complete snapshot when no project is named', async () => {
   // THE GUARD-RAIL. A refusal that also broke the ordinary push would satisfy
   // the test above and delete the feature.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-scope-ok-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-scope-ok-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -155,7 +155,7 @@ test('team push still sends the complete snapshot when no project is named', asy
 test('team push --project keeps its local preview, which sends nothing', async () => {
   // The inspection use of the flag survives. `--dry-run` reaches no socket at
   // all, so scoping it corrupts nothing.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-scope-dry-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-scope-dry-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -174,7 +174,7 @@ test('a scoped push with nothing to send is still reported as nothing to send', 
   // Ordering matters: an empty window has no rollup to corrupt anything with, so
   // it keeps the honest "nothing to push" answer rather than being reported as
   // an unsound scope.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-scope-empty-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-scope-empty-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');

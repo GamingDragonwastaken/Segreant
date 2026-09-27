@@ -1,5 +1,5 @@
 /**
- * Pure, exact policy for Fiscus-process HTTP(S) egress. Socket creation lives
+ * Pure, exact policy for Segreant-process HTTP(S) egress. Socket creation lives
  * only in transport.ts, so a feature cannot silently make its own network path.
  */
 import type { EgressConfig, EgressDataClass, EgressPurpose, EgressRule } from '../config.ts';

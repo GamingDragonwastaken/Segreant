@@ -192,7 +192,7 @@ function reopenView(result: PeriodReopenResult) {
 
 function printCloseStatus(status: EconomicPeriodCloseStatus, tty: boolean): void {
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — economic period close'));
+  console.log(color(tty, C.bold, '  Segreant — economic period close'));
   console.log(color(tty, C.gray, `  ${new Date(status.periodStartMs).toISOString()} → ${new Date(status.periodEndMs).toISOString()} (exclusive end)`));
   console.log(`  status                 ${status.status}`);
   console.log(`  active finalization    ${status.activeFinalizationId ?? 'none'}`);
@@ -324,7 +324,7 @@ export function cmdEconomic(flags: Flags): void {
   try {
     operation = requestedCloseOperation(flags);
   } catch (error) {
-    console.error(`  Fiscus error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`  Segreant error: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;
   }
@@ -334,7 +334,7 @@ export function cmdEconomic(flags: Flags): void {
     try {
       runCloseOperation(store, flags, operation);
     } catch (error) {
-      console.error(`  Fiscus error: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`  Segreant error: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = 1;
     } finally {
       store.close();
@@ -362,7 +362,7 @@ export function cmdEconomic(flags: Flags): void {
     asOf = canonicalFlag(flags, 'as-of');
     effectiveAt = canonicalFlag(flags, 'effective-at');
   } catch (error) {
-    console.error(`  Fiscus error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`  Segreant error: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;
   }
@@ -382,7 +382,7 @@ export function cmdEconomic(flags: Flags): void {
     }
     const tty = process.stdout.isTTY ?? false;
     console.log('');
-    console.log(color(tty, C.bold, '  Fiscus — exact economic ledger'));
+    console.log(color(tty, C.bold, '  Segreant — exact economic ledger'));
     console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
     if (report.demo) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
     console.log(color(tty, C.gray, `  ${all ? 'all recorded time' : `last ${days} days`} · exact charge coverage is disclosed below`));

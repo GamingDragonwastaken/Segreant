@@ -1,12 +1,12 @@
-# Contributing to Fiscus
+# Contributing to Segreant
 
-Fiscus treats accounting truth and evidence boundaries as correctness properties,
+Segreant treats accounting truth and evidence boundaries as correctness properties,
 not presentation details. A change that makes a number easier to read but weaker
 to justify is a regression.
 
 ## Licensing of contributions
 
-Fiscus is published under the PolyForm Noncommercial License 1.0.0 and is also
+Segreant is published under the PolyForm Noncommercial License 1.0.0 and is also
 licensed commercially by its maintainer (`COMMERCIAL-LICENSE.md`). Both need
 the maintainer to hold the right to license every part of the code. By opening
 a pull request you grant the maintainer a perpetual, worldwide, non-exclusive,
@@ -97,7 +97,7 @@ Preserve these invariants:
 
 Prefer small commits that explain *why*. Write the subject line as what changed
 and why, in the imperative, without a `fix:`/`feat:` prefix (`git log` shows the
-convention — e.g. "Say which alert channels were watching when fiscus today
+convention — e.g. "Say which alert channels were watching when segreant today
 says nothing fired"). The body states the counterexample that showed the
 defect, the fix, and the RED/GREEN test counts; it does not carry attribution
 lines. Before requesting review, run the same checks CI runs and inspect the

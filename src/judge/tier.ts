@@ -10,7 +10,7 @@
  * the other. `resolveJudgeTier` takes plain data in and returns plain data out —
  * no network calls, no file reads, no env access — so the gating logic itself is
  * exhaustively testable without mocking anything. The one impure fact it needs
- * (whether FISCUS_JUDGE_API_KEY is set) is read by the separate
+ * (whether SEGREANT_JUDGE_API_KEY is set) is read by the separate
  * `hasHostedJudgeApiKey` below and passed in by the caller.
  */
 
@@ -57,7 +57,7 @@ function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean 
 }
 
 /**
- * Reads FISCUS_JUDGE_API_KEY — deliberately a DIFFERENT env var than any credential
+ * Reads SEGREANT_JUDGE_API_KEY — deliberately a DIFFERENT env var than any credential
  * the reverse proxy forwards. Reusing the metered key would be circular (using the
  * thing being measured to also measure itself) and would show judge calls up as
  * confusing extra spend on the same ledger they're supposed to be judging
@@ -65,16 +65,16 @@ function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean 
  * config.json, never returned by this function — only whether it's set.
  */
 export function hasHostedJudgeApiKey(
-  environment: { FISCUS_JUDGE_API_KEY?: string | null } = process.env,
+  environment: { SEGREANT_JUDGE_API_KEY?: string | null } = process.env,
 ): boolean {
-  return isSet(environment.FISCUS_JUDGE_API_KEY);
+  return isSet(environment.SEGREANT_JUDGE_API_KEY);
 }
 
 /**
  * The trust-ladder gate. Precedence when BOTH local and hosted are fully
  * configured: local wins. It selects the configured local endpoint and does not
  * select a hosted judge, so it is the strictly more conservative choice within
- * the declared Fiscus-process egress boundary; the loser is easy to switch (unset
+ * the declared Segreant-process egress boundary; the loser is easy to switch (unset
  * judge.localBaseUrl) — the alternative (silently preferring hosted) would mean
  * a config that types out to "local is available" can still send content off
  * the user's machine, which is exactly the silent-escalation shape
@@ -90,8 +90,8 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
   if (cfg.hostedEnabled !== hostedApiKeyPresent) {
     notes.push(
       cfg.hostedEnabled
-        ? 'Hosted judge tier: judge.hostedEnabled is true but FISCUS_JUDGE_API_KEY is not set — hosted judging stays off until both are true.'
-        : 'Hosted judge tier: FISCUS_JUDGE_API_KEY is set but judge.hostedEnabled is false — hosted judging stays off until both are true.',
+        ? 'Hosted judge tier: judge.hostedEnabled is true but SEGREANT_JUDGE_API_KEY is not set — hosted judging stays off until both are true.'
+        : 'Hosted judge tier: SEGREANT_JUDGE_API_KEY is set but judge.hostedEnabled is false — hosted judging stays off until both are true.',
     );
   }
 
@@ -124,7 +124,7 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
 
   if (hostedConsent && !isSet(cfg.hostedBaseUrl)) {
     notes.push(
-      'Hosted judge tier: consented (hostedEnabled + FISCUS_JUDGE_API_KEY) but judge.hostedBaseUrl is not ' +
+      'Hosted judge tier: consented (hostedEnabled + SEGREANT_JUDGE_API_KEY) but judge.hostedBaseUrl is not ' +
         'set — falling back to the algorithmic signal.',
     );
   }

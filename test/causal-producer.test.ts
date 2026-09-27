@@ -33,7 +33,7 @@ const START = 1_700_000_001_000;
 
 function producerProtocol(): CommittedCausalStudyProtocolV2 {
   const draft: CausalStudyProtocolDraftV2 = {
-    type: 'fiscus.causal-study',
+    type: 'segreant.causal-study',
     version: 2,
     studyId: 'study:producer',
     seriesId: 'series:producer',
@@ -148,7 +148,7 @@ function decisionIdFor(
   blockId = 'block:producer',
 ): string {
   return 'decision:' + sha256(canonicalJson({
-    domain: 'fiscus.causal.decision-id',
+    domain: 'segreant.causal.decision-id',
     version: 1,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -164,7 +164,7 @@ function decisionFor(
   unitIdDigest: string,
 ): CausalDecisionRecordV2 {
   const material: Omit<CausalDecisionRecordV2, 'eventHash'> = {
-    type: 'fiscus.causal-decision',
+    type: 'segreant.causal-decision',
     version: 2,
     decisionId: decisionIdFor(protocol, unitIdDigest),
     studyId: protocol.studyId,
@@ -184,7 +184,7 @@ function decisionFor(
   };
   return {
     ...material,
-    eventHash: 'sha256:' + sha256('fiscus.causal.decision\n2\n' + canonicalJson(material)),
+    eventHash: 'sha256:' + sha256('segreant.causal.decision\n2\n' + canonicalJson(material)),
   };
 }
 
@@ -195,7 +195,7 @@ function executionFor(
   scope: CausalProducerScopeSnapshotV1,
 ): CausalExecutionRecordV2 {
   const verifierMaterial = {
-    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    type: 'segreant.causal-ordinary-ledger-verifier' as const,
     version: 2 as const,
     state: 'unresolved' as const,
     checkedAtMs: null,
@@ -220,7 +220,7 @@ function executionFor(
     providerScopeDeclarationId: scope.declarationId,
   });
   const material: Omit<CausalExecutionRecordV2, 'eventHash'> = {
-    type: 'fiscus.causal-execution',
+    type: 'segreant.causal-execution',
     version: 2,
     executionId: 'execution:producer',
     decisionId: decision.decisionId,
@@ -253,7 +253,7 @@ function outcomeFor(
   qualityValue = 0.9,
 ): CausalTerminalOutcomeRecordV2 {
   const material: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'> = {
-    type: 'fiscus.causal-terminal-outcome',
+    type: 'segreant.causal-terminal-outcome',
     version: 2,
     outcomeId: 'outcome:producer',
     decisionId: decision.decisionId,

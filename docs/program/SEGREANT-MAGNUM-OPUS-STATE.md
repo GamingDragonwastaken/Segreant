@@ -1,4 +1,4 @@
-# Fiscus Magnum Opus Program State
+# Segreant Magnum Opus Program State
 
 ## Authority
 
@@ -40,14 +40,14 @@ Historical decisions/checkpoints remain in `DECISION-LOG.md` and
   assurance, portable evidence packs/verifier, recovery/database controls,
   generated contracts, bounded OPE, security/supply-chain gates and epistemic UX
   are integrated repository features.
-- WP-J02: bounded online control exists for Fiscus's own `budget.dailyUsd`;
+- WP-J02: bounded online control exists for Segreant's own `budget.dailyUsd`;
   ordinary observational evidence remains fail-closed below the spend-change
   assurance bar.
 - WP-I04: exact NVDA/JAWS/VoiceOver behavior remains external field evidence.
 
 ## Architectural boundary
 
-Fiscus remains **large at the capability boundary and small at the truth boundary**.
+Segreant remains **large at the capability boundary and small at the truth boundary**.
 Adapters, product surfaces and controllers may submit evidence or consume kernel
 claims; they do not gain authority to manufacture stronger truth by setting fields.
 Consequential spend action additionally requires a separate delegated control policy

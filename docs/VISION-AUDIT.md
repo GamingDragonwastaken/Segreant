@@ -15,7 +15,7 @@ of writing.
 This document applies the product's own rule to the product's own plans: an
 important claim should be inspectable through evidence. PRODUCT.md and
 [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md) say
-what Fiscus is meant to be. This historical audit says what it was at the
+what Segreant is meant to be. This historical audit says what it was at the
 audited revision, clause by clause, with a file to check for each answer and
 where each missing piece belonged. For the live capability/evidence contract,
 use [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md).
@@ -36,7 +36,7 @@ Four sources describe it, and they agree:
   Explicitly **not** AI financial advice, not software for performing financial
   services with AI, not a Vanta clone, not a governance/GRC product. The Vanta
   lesson is only *make important claims inspectable through evidence*.
-- **[PRODUCT.md](../PRODUCT.md):** the four questions Fiscus answers (what did
+- **[PRODUCT.md](../PRODUCT.md):** the four questions Segreant answers (what did
   it cost, can it be stopped, did the work become durable software, and what is
   too weakly instrumented to support a decision).
 - **[AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md):**
@@ -150,7 +150,7 @@ by sequencing**, which is a weaker guarantee and worth naming as such:
   estimate allocated today cannot quietly become a control tomorrow.
 
 **What this does not fix:** the residual is still unexamined. If the provider
-reports materially more than Fiscus metered for a period, every cost centre's
+reports materially more than Segreant metered for a period, every cost centre's
 figure for that period is understated by an unknown share, and nothing in the
 allocation layer can detect that. The basis label tells a reader the number is an
 estimate; it does not tell them how wrong it is. **Reconcile before charging

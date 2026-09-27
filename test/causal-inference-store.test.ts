@@ -10,7 +10,7 @@
  * `recordInferentialActs` and `reportCausalStudyEstimate` had **no caller
  * anywhere in `src/`** — not the CLI, not the dashboard, not the store, and no
  * table held an act. The two surfaces that actually reach an operator,
- * `fiscus causal summary` and `GET /api/causal`, each called
+ * `segreant causal summary` and `GET /api/causal`, each called
  * `estimateCausalStudy` directly, so an operator could look at the same study
  * twenty times and every answer would present itself as the first.
  *
@@ -19,7 +19,7 @@
  * outside it is not counted and cannot be." Every estimate in the product was
  * produced outside it.
  *
- * WHY A LOOK IS RECORDED ON A READ PATH. Fiscus is read-only by default and
+ * WHY A LOOK IS RECORDED ON A READ PATH. Segreant is read-only by default and
  * `--apply` persists, and this does not breach that: an inferential act is not a
  * change to the operator's data or to the world — it is an audit record of
  * something that already happened, in the same category as an egress receipt,
@@ -166,8 +166,8 @@ function extendQualified(store: Store, from: number): void {
 }
 
 function withStore(action: (store: Store, file: string) => void): void {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-looks-'));
-  const file = join(temp, 'fiscus.db');
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-looks-'));
+  const file = join(temp, 'segreant.db');
   const store = new Store(file);
   try {
     action(store, file);
@@ -195,8 +195,8 @@ test('a second report of the same study is a second look, and says so', () => {
 test('the acts survive the process, so the count is not per-session', () => {
   // A ledger held in memory would report `looks: 1` forever, which is the same
   // absence with a number attached to it.
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-looks-durable-'));
-  const file = join(temp, 'fiscus.db');
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-looks-durable-'));
+  const file = join(temp, 'segreant.db');
   try {
     const first = new Store(file);
     try {
@@ -325,8 +325,8 @@ test('the dashboard endpoint records its own look, twice', async () => {
   // NOT A STORE METHOD STANDING IN FOR THE SURFACE. The claim is that the two
   // paths an operator actually reaches now count their looks, so this drives
   // the HTTP endpoint and reads the payload the browser would receive.
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-looks-http-'));
-  const store = new Store(join(temp, 'fiscus.db'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-looks-http-'));
+  const store = new Store(join(temp, 'segreant.db'));
   const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
   try {
     const studyId = seedQualified(store, 800);
@@ -404,7 +404,7 @@ test('the CLI records its own look, twice', () => {
   // The other surface an operator reaches, exercised as the packaged command
   // rather than as a Store call, for the same reason `test/causal-cli.test.ts`
   // gives: a Store method is not proof that the user-facing lifecycle is wired.
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-looks-cli-'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-looks-cli-'));
   const dbFile = join(temp, 'causal-cli.db');
   try {
     const store = new Store(dbFile);
@@ -419,7 +419,7 @@ test('the CLI records its own look, twice', () => {
     const run = (): Inspected => JSON.parse(execFileSync(
       process.execPath,
       ['--disable-warning=ExperimentalWarning', join(ROOT, 'src', 'cli.ts'), 'causal', 'inspect', studyId, '--json'],
-      { cwd: ROOT, env: { ...process.env, FISCUS_DB: dbFile, FISCUS_HOME: join(temp, 'home') }, encoding: 'utf8' },
+      { cwd: ROOT, env: { ...process.env, SEGREANT_DB: dbFile, SEGREANT_HOME: join(temp, 'home') }, encoding: 'utf8' },
     )) as Inspected;
 
     const first = run();
@@ -459,8 +459,8 @@ test('a pre-registered inference plan persists before the first look and changes
 });
 
 test('a pre-registered inference plan survives reopening and cannot be replaced after acts exist', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-plan-'));
-  const file = join(temp, 'fiscus.db');
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-plan-'));
+  const file = join(temp, 'segreant.db');
   const plan = registeredPlan();
   try {
     const first = new Store(file);

@@ -11,6 +11,13 @@
  *
  * Idempotent: each turn's request_id is `codex:<sessionId>:<ordinal>`, stable
  * across re-imports because rollout files are append-only and ordered.
+ *
+ * Forked threads are written as rollout-<ts>-<parent>_<child>.jsonl. Their
+ * session_meta repeats the PARENT's id and their first cumulative total starts
+ * from the parent's history, so a fork is keyed by its own child id and its
+ * first event counts only that turn (last_token_usage), never the carried total.
+ * A subagent rollout instead opens with its own session_meta (forked_from_id
+ * set) and then embeds the parent's, so the FIRST session_meta names the thread.
  */
 
 import { createReadStream, existsSync } from 'node:fs';
@@ -96,6 +103,12 @@ export interface CodexUsageRow {
   reasoningTokens: number;
 }
 
+/** The child thread id of a forked rollout file, or null for an ordinary one. */
+export function codexForkThreadId(file: string): string | null {
+  const m = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i.exec(file);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
 export interface CodexParseOptions {
   onRow?: (row: CodexUsageRow) => void | Promise<void>;
   onTruncatedLine?: () => void;
@@ -110,6 +123,9 @@ export interface CodexParseOptions {
 export async function parseCodexRollout(file: string, options: CodexParseOptions = {}): Promise<CodexUsageRow[]> {
   const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
   let sessionId: string | null = null;
+  const forkId = codexForkThreadId(file);
+  let forked = forkId !== null;
+  let firstCount = true;
   let provider = 'openai';
   let model = 'gpt-5';
   let project = 'codex';
@@ -138,7 +154,11 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
     }
     const p = o.payload ?? {};
     if (o.type === 'session_meta') {
-      sessionId = (p.id as string) ?? sessionId;
+      // Only the first session_meta names this file's thread; later ones are
+      // the parent's context replayed into a subagent or fork.
+      if (sessionId !== null) continue;
+      sessionId = typeof p.id === 'string' ? p.id : null;
+      if (typeof p.forked_from_id === 'string') forked = true;
       if (typeof p.cwd === 'string') {
         cwd = p.cwd;
         ({ project, basis: attributionBasis } = projFromCwd(p.cwd));
@@ -156,9 +176,23 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
       continue;
     }
     if (o.type === 'event_msg' && p.type === 'token_count') {
-      const info = p.info as { total_token_usage?: Record<string, number> } | undefined;
+      const info = p.info as { total_token_usage?: Record<string, number>; last_token_usage?: Record<string, number> } | undefined;
       const tot = totalsFrom(info?.total_token_usage);
       if (!tot) continue;
+      if (forked && firstCount) {
+        // The fork's first total includes the parent's history: baseline from it
+        // so only this turn counts (its last_token_usage, or nothing if absent).
+        const last = totalsFrom(info?.last_token_usage);
+        prev = last
+          ? {
+              input: Math.max(0, tot.input - last.input),
+              cachedInput: Math.max(0, tot.cachedInput - last.cachedInput),
+              output: Math.max(0, tot.output - last.output),
+              reasoning: Math.max(0, tot.reasoning - last.reasoning),
+            }
+          : tot;
+      }
+      firstCount = false;
       // Delta since the previous token_count; clamp at 0 across a compaction reset.
       const dIn = Math.max(0, tot.input - prev.input);
       const dCached = Math.max(0, tot.cachedInput - prev.cachedInput);
@@ -174,8 +208,8 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         break;
       }
       const row: CodexUsageRow = {
-        requestId: `codex:${sessionId ?? 'unknown'}:${ordinal++}`,
-        sessionId,
+        requestId: `codex:${forkId ?? sessionId ?? 'unknown'}:${ordinal++}`,
+        sessionId: forkId ?? sessionId,
         tsEpochMs: ts,
         provider,
         model,

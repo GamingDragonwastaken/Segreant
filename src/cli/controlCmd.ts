@@ -1,7 +1,7 @@
 /**
  * WP-J02 product route: one bounded autonomous control step for the live daily
  * budget cap. The operator delegates the envelope with --policy and opts into
- * mutation with --apply; inside that envelope Fiscus chooses/rolls back without
+ * mutation with --apply; inside that envelope Segreant chooses/rolls back without
  * a second prompt. Re-run from a scheduler for continuous control.
  */
 
@@ -29,7 +29,7 @@ import {
   acquireConfigMutationLock,
   dbPath,
   ensureHome,
-  fiscusHome,
+  segreantHome,
   loadConfig,
   saveConfigWithLock,
   type ConfigMutationLock,
@@ -53,9 +53,9 @@ function policyFromFile(path: string): BudgetControlPolicy {
   return budgetControlPolicy(raw as Parameters<typeof budgetControlPolicy>[0]);
 }
 
-function stateFile(): string { return join(fiscusHome(), 'budget-control-state.json'); }
-function auditFile(): string { return join(fiscusHome(), 'budget-control-audit.jsonl'); }
-function pendingFile(): string { return join(fiscusHome(), 'budget-control-pending.json'); }
+function stateFile(): string { return join(segreantHome(), 'budget-control-state.json'); }
+function auditFile(): string { return join(segreantHome(), 'budget-control-audit.jsonl'); }
+function pendingFile(): string { return join(segreantHome(), 'budget-control-pending.json'); }
 
 function durableWrite(path: string, text: string): void {
   const temp = `${path}.tmp-${process.pid}-${randomUUID()}`;
@@ -184,7 +184,7 @@ function recoverPending(policy: BudgetControlPolicy, currentDailyUsd: number | n
 export async function cmdBudgetControl(flags: Flags): Promise<void> {
   const policyPath = typeof flags.policy === 'string' ? flags.policy : null;
   if (policyPath === null) {
-    console.error('  Usage: fiscus budget --control --policy <file.json> [--repo <path>] [--apply] [--json]');
+    console.error('  Usage: segreant budget --control --policy <file.json> [--repo <path>] [--apply] [--json]');
     process.exitCode = 1;
     return;
   }
@@ -196,7 +196,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
   try {
     if (flags.apply) {
       // Hold the shared config generation from read through commit/recovery so
-      // an interactive Fiscus writer cannot be silently overwritten by an
+      // an interactive Segreant writer cannot be silently overwritten by an
       // autonomous decision computed from an older configuration.
       configLock = acquireConfigMutationLock();
     } else if (loadPending() !== null) {

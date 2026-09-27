@@ -1,6 +1,6 @@
 # Governance
 
-Fiscus is maintained by a single maintainer today. This document says what that
+Segreant is maintained by a single maintainer today. This document says what that
 means in practice, what changes without a vote, and what an outsider can rely
 on if the project grows past one person.
 

@@ -72,7 +72,7 @@ export type IssuanceClass =
  * Whether any product path reaches this boundary, on the two axes that differ.
  *
  * `unreached` — the module is not in the transitive import closure of
- * `src/cli.ts` (the entry `bin/fiscus.mjs` runs through `dist/cli.js`) or of the
+ * `src/cli.ts` (the entry `bin/segreant.mjs` runs through `dist/cli.js`) or of the
  * team-server entry, which imports root source directly. It compiles, it is
  * tested, and nothing ships it.
  *
@@ -256,11 +256,11 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
   {
     id: 'billing.countermodels',
     module: 'src/billing/countermodels.ts',
-    asserts: 'What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell.',
+    asserts: 'What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Segreant has could tell.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
     invocation: { symbol: 'reconciliationCountermodels', definedIn: ['src/billing/countermodels.ts'] },
-    note: 'It weakens rather than strengthens, which is why it is not canonical, but it belongs on this map for the opposite reason to most entries: the `realized` status is a positive assertion about the world — a negative residual establishes that the rate card over-prices on-path traffic — and it reaches an operator through `fiscus billing reconcile` without a kernel record behind it. That is tolerable only because it is derived from arithmetic on the run itself rather than from judgement, and it is the thing to migrate first if these worlds ever acquire a source other than the run.',
+    note: 'It weakens rather than strengthens, which is why it is not canonical, but it belongs on this map for the opposite reason to most entries: the `realized` status is a positive assertion about the world — a negative residual establishes that the rate card over-prices on-path traffic — and it reaches an operator through `segreant billing reconcile` without a kernel record behind it. That is tolerable only because it is derived from arithmetic on the run itself rather than from judgement, and it is the thing to migrate first if these worlds ever acquire a source other than the run.',
   },
   {
     id: 'decision.certificate',
@@ -278,7 +278,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     issuanceClass: 'canonical',
     reach: 'product',
     invocation: { symbol: 'issueDecisionToKernel', definedIn: ['src/decision/epistemic.ts'] },
-    note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. Since D-220, `src/budget/capDecision.ts` calls `issueDecisionToKernel` from `fiscus budget --recommend --apply`, persisting the cap decision as an explicit `actionSemantics.mode: "no_action"` bundle — the record exists so a later withdrawal of the basis evidence is visible on read (`pendingInvalidationBy`), and it neither executes nor authorizes the cap change.',
+    note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. Since D-220, `src/budget/capDecision.ts` calls `issueDecisionToKernel` from `segreant budget --recommend --apply`, persisting the cap decision as an explicit `actionSemantics.mode: "no_action"` bundle — the record exists so a later withdrawal of the basis evidence is visible on read (`pendingInvalidationBy`), and it neither executes nor authorizes the cap change.',
   },
 ]);
 

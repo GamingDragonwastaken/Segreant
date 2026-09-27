@@ -13,7 +13,7 @@ const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 function runCli(args: string[], dbPath: string, home: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, ...args], {
-      env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' },
+      env: { ...process.env, SEGREANT_DB: dbPath, SEGREANT_HOME: home, NODE_OPTIONS: '' },
     }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (err as unknown as { code: number }).code : err ? 1 : 0;
@@ -36,7 +36,7 @@ function row(): RequestRow {
 }
 
 test('pricing --coverage is read-only and returns immutable local pricing provenance', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-pricing-coverage-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-pricing-coverage-'));
   const dbPath = join(root, 'ledger.db');
   const home = join(root, 'home');
   const store = new Store(dbPath);
@@ -70,7 +70,7 @@ test('pricing --coverage is read-only and returns immutable local pricing proven
 });
 
 test('pricing --coverage rejects a nonpositive --days window', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-pricing-coverage-invalid-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-pricing-coverage-invalid-'));
   try {
     const result = await runCli(['pricing', '--coverage', '--days', '0', '--json'], join(root, 'ledger.db'), join(root, 'home'));
     assert.equal(result.code, 1);

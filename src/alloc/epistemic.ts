@@ -81,7 +81,7 @@ export function buildExactAllocationKernelIssuance(allocationRunId: string, resu
   const { period, serialized, recordedAt } = validateRecord(allocationRunId, result);
   const computed = computedAt(computedAtMs);
   const validTime = interval(period.start, period.end);
-  const allocationScope = scope({ ledger: 'fiscus-economic', period: period.subject, allocationRunId });
+  const allocationScope = scope({ ledger: 'segreant-economic', period: period.subject, allocationRunId });
   const allocationJson = exactAllocationToJson(result);
   const payload = {
     allocationRunId,
@@ -96,8 +96,8 @@ export function buildExactAllocationKernelIssuance(allocationRunId: string, resu
   const evidenceValue = evidence({
     id: `evidence:economic:allocation:${allocationRunId}`,
     evidenceType: 'economic.allocation',
-    sourceIdentity: 'fiscus:economic-allocation',
-    sourceClass: 'fiscus_local_exact_allocation_projection',
+    sourceIdentity: 'segreant:economic-allocation',
+    sourceClass: 'segreant_local_exact_allocation_projection',
     payload,
     scope: allocationScope,
     grain: grain(['economic_period', 'cost_centre']),

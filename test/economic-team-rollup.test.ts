@@ -11,7 +11,7 @@ import { buildEconomicRollupBody, signRollup, verifyRollup, type EconomicProject
 const period = { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' };
 
 test('economic team rollup v2 carries exact project lineage and verifies', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-rollup-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-economic-rollup-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const exact = economicAttributionView({
@@ -22,7 +22,7 @@ test('economic team rollup v2 carries exact project lineage and verifies', () =>
       unresolvedRequests: 0,
     });
     const project: EconomicProjectValue = {
-      project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
+      project: 'segreant', units: 1, costUsd: 1.234567, realizationRate: 1,
       spendOnRealizedUnitsUsd: 1.234567, acceptanceWeightedSpendUsd: 1, roiIndex: 2,
       sources: ['codex'],
       economic: { coverage: 'exact', total: exact, realized: exact },
@@ -41,11 +41,11 @@ test('economic team rollup v2 carries exact project lineage and verifies', () =>
 });
 
 test('economic team rollup v2 rejects missing exact lineage at construction', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-rollup-invalid-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-economic-rollup-invalid-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     assert.throws(() => buildEconomicRollupBody(keys, [{
-      project: 'fiscus', units: 1, costUsd: 1, realizationRate: 1,
+      project: 'segreant', units: 1, costUsd: 1, realizationRate: 1,
       spendOnRealizedUnitsUsd: 1, acceptanceWeightedSpendUsd: 1, roiIndex: 1, sources: [],
     } as unknown as EconomicProjectValue], period), /economic|lineage|coverage/i);
   } finally {

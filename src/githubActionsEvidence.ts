@@ -2,7 +2,7 @@
  * Signed GitHub Actions outcome evidence.
  *
  * This is deliberately a LOCAL import boundary, not a GitHub integration. A
- * protected workflow emits a small signed artifact; Fiscus verifies the pinned
+ * protected workflow emits a small signed artifact; Segreant verifies the pinned
  * signing key, repository/branch policy, and local commit binding before it
  * writes the existing gate_signals ledger. No workflow logs, source, prompts,
  * credentials, or API calls are involved.
@@ -13,7 +13,7 @@ import type { Store } from './store/db.ts';
 import { projectName, resolveCommit } from './git/correlate.ts';
 import { canonical, keyIdForPem } from './value/receipt.ts';
 
-export const GITHUB_ACTIONS_OUTCOME_TYPE = 'fiscus.github-actions.outcome' as const;
+export const GITHUB_ACTIONS_OUTCOME_TYPE = 'segreant.github-actions.outcome' as const;
 
 /** v1 intentionally instruments only the CI/test gate. */
 export type GithubActionsOutcomeKind = 'tested';
@@ -238,7 +238,7 @@ export function verifyGithubActionsOutcome(value: unknown, trustedPublicKeyPem: 
 
 /**
  * Verify a signed artifact, enforce the explicit local policy, resolve its
- * commit in the selected checkout, and finally write the normal Fiscus gate
+ * commit in the selected checkout, and finally write the normal Segreant gate
  * signal. Failures return before touching the ledger.
  */
 export async function importGithubActionsOutcome(input: GithubActionsEvidenceImport): Promise<GithubActionsEvidenceImportResult> {

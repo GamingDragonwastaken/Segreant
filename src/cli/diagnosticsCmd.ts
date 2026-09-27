@@ -27,11 +27,11 @@ export function cmdDiagnostics(flags: Flags): void {
   }
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — redacted diagnostics'));
+  console.log(color(tty, C.bold, '  Segreant — redacted diagnostics'));
   console.log(`  Operation     ${bundle.operationId}`);
   console.log(`  Config        ${bundle.config.valid ? 'valid' : 'INVALID'} (${bundle.config.path})`);
   console.log(`  Database      ${bundle.database.status.toUpperCase()} (${bundle.database.bytes ?? 'unknown'} bytes)`);
-  // `OK (0 receipt(s))` was the same overclaim as the one `fiscus egress verify`
+  // `OK (0 receipt(s))` was the same overclaim as the one `segreant egress verify`
   // printed: a chain that verified over nothing, reported as a clean result.
   console.log(`  Egress        ${EGRESS_BASIS_LABEL[bundle.egress.basis]} (${bundle.egress.receiptCount} receipt(s))`);
   console.log(`  External net  ${bundle.boundaries.externalNetworkAttempted ? 'attempted' : 'not attempted'}`);

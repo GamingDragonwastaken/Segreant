@@ -19,7 +19,7 @@ function runCli(
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_DB: dbPath, SEGREANT_HOME: home, NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -56,9 +56,9 @@ function request(index: number, nowMs: number): RequestRow {
 }
 
 test('budget recommendation apply fails closed without a DAL-3 certificate, while preview and manual caps remain usable', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-budget-recommend-gate-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-budget-recommend-gate-'));
   const home = join(root, 'home');
-  const db = join(root, 'fiscus.db');
+  const db = join(root, 'segreant.db');
   const configFile = join(home, 'config.json');
   mkdirSync(home, { recursive: true });
 

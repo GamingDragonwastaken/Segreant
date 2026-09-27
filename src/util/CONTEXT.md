@@ -2,7 +2,7 @@
 
 ## Consumes
 
-- Fiscus-owned response objects whose numeric monetary properties use the
+- Segreant-owned response objects whose numeric monetary properties use the
   `*Usd` suffix.
 
 ## Guarantees

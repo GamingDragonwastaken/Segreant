@@ -1,7 +1,7 @@
 /**
  * Evidence — whether the numbers hold up against the provider bill.
  *
- * This is the surface where Fiscus is most likely to disappoint someone, and it
+ * This is the surface where Segreant is most likely to disappoint someone, and it
  * is designed to do that early rather than late. Reconciliation readiness comes
  * BEFORE the pull action, because on a ledger fed by tool-log imports a provider
  * pull reports the entire bill as unexplained residual — and discovering that
@@ -81,15 +81,15 @@ type ResidualBound = NonNullable<
 const RESIDUAL_BOUND_WORDS: Readonly<Record<ResidualBound, { precise: string; plain: string }>> = {
   none_local_estimate_exceeds_provider: {
     precise: 'residual bounds nothing — the local estimate exceeds the provider total, so no upper bound on off-path spend survives',
-    plain: 'This remainder cannot tell you how much went outside Fiscus: our own estimate already came out higher than the provider’s bill.',
+    plain: 'This remainder cannot tell you how much went outside Segreant: our own estimate already came out higher than the provider’s bill.',
   },
   upper_bound_conditional: {
     precise: 'residual is an upper bound on off-path spend while the local estimate does not exceed true on-path billed cost',
-    plain: 'At most this much could have gone outside Fiscus — assuming our own pricing did not overshoot what you were really charged.',
+    plain: 'At most this much could have gone outside Segreant — assuming our own pricing did not overshoot what you were really charged.',
   },
   unknown_local_total_truncated_by_retention: {
     precise: 'residual bounds nothing — retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount',
-    plain: 'This remainder cannot tell you how much went outside Fiscus: some of your own metered requests in this period were deleted by your retention setting, so part of the difference is traffic we did see.',
+    plain: 'This remainder cannot tell you how much went outside Segreant: some of your own metered requests in this period were deleted by your retention setting, so part of the difference is traffic we did see.',
   },
 };
 
@@ -261,7 +261,7 @@ function readinessPanel(d: BillingPayload): Node | null {
     h('ul', { class: 'drawer-notes' }, ...lines),
     h('p', { style: 'margin-top: var(--s3)', text: () => (isPrecise()
       ? 'Only live proxy traffic carrying the declaration can count. Route traffic through the proxy, let a period close, and the local side will have something in it.'
-      : 'Route your tools through Fiscus (fiscus start), let a few days pass, and this becomes checkable.') }));
+      : 'Route your tools through Segreant (segreant start), let a few days pass, and this becomes checkable.') }));
 }
 
 /**
@@ -302,7 +302,7 @@ function mappingPanel(d: BillingPayload): Node | null {
       h('span', { text: () => `${mapped} mapped · ${residual} residual` })),
     h('span', { class: 'basis', text: () => (isPrecise()
       ? `total ${total}; mapping trust ${m.mappingTrust}`
-      : `of ${total} imported provider evidence; Fiscus does not guess a target`) }),
+      : `of ${total} imported provider evidence; Segreant does not guess a target`) }),
     statusRows.length > 0
       ? h('ul', { class: 'drawer-notes', style: 'margin-top: var(--s3)' }, ...statusRows)
       : null,

@@ -96,8 +96,8 @@ export function validateEgressRule(value: unknown): string[] {
     failures.push('id must be 3-64 lowercase letters, digits, _ or -');
   }
   if (typeof value.enabled !== 'boolean') failures.push('enabled must be a boolean');
-  if (!EGRESS_PURPOSES.includes(value.purpose as EgressPurpose)) failures.push('purpose is not a supported Fiscus purpose');
-  if (!EGRESS_DATA_CLASSES.includes(value.dataClass as EgressDataClass)) failures.push('dataClass is not a supported Fiscus data class');
+  if (!EGRESS_PURPOSES.includes(value.purpose as EgressPurpose)) failures.push('purpose is not a supported Segreant purpose');
+  if (!EGRESS_DATA_CLASSES.includes(value.dataClass as EgressDataClass)) failures.push('dataClass is not a supported Segreant data class');
   if (typeof value.method !== 'string' || !/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(value.method)) {
     failures.push('method must be exact uppercase HTTP');
   }

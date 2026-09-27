@@ -27,10 +27,10 @@
  * an internal-consistency floor: a body that passes still rests on whatever the
  * local ledger measured, and `coverage` remains the signer's own non-
  * authoritative claim, combined conservatively by `combineRollupCoverage`. This
- * test says only that Fiscus stops signing statements it can already tell are
+ * test says only that Segreant stops signing statements it can already tell are
  * self-contradictory.
  *
- * NOT REACHABLE FROM THE CLI TODAY, STATED RATHER THAN IMPLIED. `fiscus team
+ * NOT REACHABLE FROM THE CLI TODAY, STATED RATHER THAN IMPLIED. `segreant team
  * push` builds its projects from `src/value/realization.ts`, which derives
  * `spendOnRealizedUnitsUsd` as a subset of `costUsd`, so no user input reaches
  * the violating state through that path. The guard is against an internal
@@ -58,7 +58,7 @@ import type { ProjectValue } from '../src/value/realization.ts';
 
 const PERIOD = { from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T00:00:00.000Z' };
 
-const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-mint-'));
+const keyDir = mkdtempSync(join(tmpdir(), 'segreant-rollup-mint-'));
 process.on('exit', () => rmSync(keyDir, { recursive: true, force: true }));
 
 function keys() {

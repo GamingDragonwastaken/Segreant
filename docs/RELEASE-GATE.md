@@ -1,4 +1,4 @@
-# Fiscus release gate
+# Segreant release gate
 
 This is the operational boundary between a verified local release candidate and
 an external release. Passing source tests is necessary but not a substitute for
@@ -19,17 +19,17 @@ for this checklist against that source tree:
 | Source validation | `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` with exact totals/results |
 | Budget fail-closed integrity | Exercise malformed budget configuration, invalid/oversized dashboard settings, ledger-read failure, and request-persistence failure. Invalid state must be refused before provider dial; after an unpersisted response, the supported proxy circuit must refuse subsequent requests until restart/recovery. |
 | Packed artifact | `npm pack`; record the tarball digest and inspect that `bin`, compiled `dist`, pricing, baselines, and dashboard HTML are present |
-| Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `fiscus --help` |
-| Packaged dashboard/API | Use an isolated `FISCUS_HOME` (records below that predate the rename cite the pre-rename variable, which is what those runs actually used); seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
+| Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `segreant --help` |
+| Packaged dashboard/API | Use an isolated `SEGREANT_HOME` (records below that predate the rename cite the pre-rename variable, which is what those runs actually used); seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
 | Model-trial truthfulness | The packaged value payload must self-label `demo: true`; any seeded model switch must be `trial`, never evidence-supported; the **`/classic`** HTML must contain the labelled renderer. Check `/classic`, not `/`: `/` is the GUI shell and renders every figure in the browser, so fetching it proves only that a shell was served. Prove `/` separately by confirming it carries `id="app"` and its module entry, and that the entry resolves as JavaScript — a shell whose compiled app is missing from the tarball serves a 200 and a blank dashboard |
-| Causal-evidence integrity | Run `test/causal-core.test.ts`, `test/causal-store.test.ts`, `test/causal-cli.test.ts`, `test/causal-dashboard.test.ts`, and the Store-owned producer/ordinary-ledger cohort. In a clean installed artifact, prove `fiscus causal status --json` reports no publicly inspectable retained-v1 study/no causal result by default. Prove v1 registration and assignment preview/apply refuse with `CAUSAL_LEGACY_INSPECT_ONLY`; prove valid-v2 registration preview/apply refuse before Store open or mutation with `CAUSAL_V2_CLI_DEFERRED`; and prove Store-owned v2 assignment is atomic without implying that a v2 registration or assignment CLI exists. Retained v1 assignment replay still verifies. Current CLI/API/dashboard summaries expose retained v1 only; v2-only Store state remains bounded and non-500 rather than becoming the legacy projection. A no-outcome retained-v1 study remains `collecting`, not a causal claim. Verify `/api/causal` is GET/HEAD-only, redacts randomisation material, and exposes no mutation or automatic routing/budget action. This is release-gate evidence, not release approval. The branch now has a Store-owned independent scalar identity and ordinary-ledger adapter, but these are still internal local evidence, not a public result. Public v2 execution/outcome projection, qualification snapshots as a released result, export, and full v2 public projection remain deferred; cost-bearing internal qualification remains fail-closed unless the sidecar, independently derived identity, ordinary ledger evidence, provider/account scope where required, and every other causal gate are valid. |
-| Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, show zero fabricated billing records, and expose exact mapping coverage without promoting operator declarations to provider authority |
+| Causal-evidence integrity | Run `test/causal-core.test.ts`, `test/causal-store.test.ts`, `test/causal-cli.test.ts`, `test/causal-dashboard.test.ts`, and the Store-owned producer/ordinary-ledger cohort. In a clean installed artifact, prove `segreant causal status --json` reports no publicly inspectable retained-v1 study/no causal result by default. Prove v1 registration and assignment preview/apply refuse with `CAUSAL_LEGACY_INSPECT_ONLY`; prove valid-v2 registration preview/apply refuse before Store open or mutation with `CAUSAL_V2_CLI_DEFERRED`; and prove Store-owned v2 assignment is atomic without implying that a v2 registration or assignment CLI exists. Retained v1 assignment replay still verifies. Current CLI/API/dashboard summaries expose retained v1 only; v2-only Store state remains bounded and non-500 rather than becoming the legacy projection. A no-outcome retained-v1 study remains `collecting`, not a causal claim. Verify `/api/causal` is GET/HEAD-only, redacts randomisation material, and exposes no mutation or automatic routing/budget action. This is release-gate evidence, not release approval. The branch now has a Store-owned independent scalar identity and ordinary-ledger adapter, but these are still internal local evidence, not a public result. Public v2 execution/outcome projection, qualification snapshots as a released result, export, and full v2 public projection remain deferred; cost-bearing internal qualification remains fail-closed unless the sidecar, independently derived identity, ordinary ledger evidence, provider/account scope where required, and every other causal gate are valid. |
+| Billing-boundary truthfulness | `segreant billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, show zero fabricated billing records, and expose exact mapping coverage without promoting operator declarations to provider authority |
 | Direct-Costs connector boundary | A packaged local scope with `proj_…` must yield an OpenAI Costs **preview** with `networkAttempted: false` and `credentialRead: false`. It does not validate a provider account, authorize a live pull, or reconcile a provider amount. |
-| Egress disclosure | Reconcile every newly introduced outbound path with DATA-BOUNDARIES.md; distinguish Fiscus-process enforcement, proxy-routed traffic coverage, browser behaviour, and any separately validated OS/network control. Verify corrupt-history refusal, redirect `Location` stripping, checkpoint fallback/full-scan behavior, streaming full-history verification/line bounds, and response-body release for status-only callers. Do not project a process-level test into a workstation-wide or provider-privacy guarantee. |
+| Egress disclosure | Reconcile every newly introduced outbound path with DATA-BOUNDARIES.md; distinguish Segreant-process enforcement, proxy-routed traffic coverage, browser behaviour, and any separately validated OS/network control. Verify corrupt-history refusal, redirect `Location` stripping, checkpoint fallback/full-scan behavior, streaming full-history verification/line bounds, and response-body release for status-only callers. Do not project a process-level test into a workstation-wide or provider-privacy guarantee. |
 | Launcher/publication integrity | The supported launcher must propagate child spawn errors/signals and fail closed when the publication lock cannot be acquired; build/publication tests must exercise both conditions. Direct unmanaged `dist/*` readers and `npm pack` remain outside the supported reader lock unless separately proven. |
 | Backup and recovery integrity | Exercise `backup --out` and `restore --from/--out` against the exact candidate. The snapshot must be created with SQLite `VACUUM INTO`, pass quick/foreign-key checks, emit a hash/schema manifest without ledger rows, reject corrupt or symlinked artifacts, refuse existing destinations, and prove preview is read-only. This is local recovery evidence only—not encryption, disaster-recovery availability, provider billing, or an independent attestation. |
 | Reliability/performance observations | Run `npm run benchmark` on the candidate and retain the JSON plus machine profile. Cover small/current/10× and an explicit 100× stress case where meaningful; record startup, ingest, summary, value/frontier, API latency, memory, and compiled/package size observations. Do not turn a single local run into a universal SLA; choose a regression budget only after repeated runs on the intended release runner. |
-| Redacted diagnostics | Run `fiscus diagnostics --json` and, when support handoff needs a file, `--out <new-file>`. The bundle must carry a correlation operation ID, bounded durations/error classes, runtime/config/database/migration/egress/pricing observations, and explicit no-network/no-credential/no-prompt/source/ledger-row-export boundaries without absolute user paths. Export refuses overwrite and does not mutate the active DB/config. |
+| Redacted diagnostics | Run `segreant diagnostics --json` and, when support handoff needs a file, `--out <new-file>`. The bundle must carry a correlation operation ID, bounded durations/error classes, runtime/config/database/migration/egress/pricing observations, and explicit no-network/no-credential/no-prompt/source/ledger-row-export boundaries without absolute user paths. Export refuses overwrite and does not mutate the active DB/config. |
 | Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run. If the candidate reached the remote inside a multi-commit push, CI ran on the tip; cite that run and record `git diff --stat <candidate> <tip>` so the delta is stated rather than assumed. A tip that differs only by this document does not need its own run — otherwise recording a result would forever require another commit |
 | Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof; verify keyboard/focus, responsive, contrast, chart alternatives, and screen-reader status semantics on the exact candidate. Source/DOM contracts must not be reported as visual/WCAG runtime evidence. |
 
@@ -59,7 +59,7 @@ The follow-up `4e8d387` records its exact supported-reader guarantee and the
 remaining unmanaged-reader boundary. That build protocol adds a source-generation
 fingerprint (captured before compilation and checked again inside the
 publication gate), one bounded retry on source drift, and an exclusive reader
-gate in the supported `bin/fiscus.mjs` launcher. Thus a build that started from
+gate in the supported `bin/segreant.mjs` launcher. Thus a build that started from
 an older source generation cannot publish after a newer generation merely
 because it finished compiling later, and the supported launcher cannot resolve
 the file-by-file publication while it is in progress.
@@ -68,7 +68,7 @@ This guarantee is deliberately scoped. The package-compatible top-level
 `dist/*` paths remain ordinary files, because replacing the non-empty `dist`
 directory is not an atomic overwrite on Windows (and a POSIX remove/rename
 sequence would introduce a reader gap). Direct module imports of `dist/*` and
-tools such as `npm pack` do not acquire the Fiscus gate and therefore remain
+tools such as `npm pack` do not acquire the Segreant gate and therefore remain
 outside the whole-tree reader guarantee; changing that would require a
 generation-pointer or symlink/junction package-layout change that would break
 the existing `dist/cli.js`/deep-import and package-surface contract. The
@@ -102,7 +102,7 @@ browser connector evidence exists.
 | Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The exact 916-test suite covers append-only V1/V2 state, scalar lineage, recursive-trigger conflict protection, replay, and collecting/no-outcome precedence. Packaged status reports no retained public study. A governed prospective study, independent outcomes, provider/account scope, and public qualification remain absent. |
 | Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` remains demo-labelled and `not_reconciled`. An isolated source run of `billing scope set --apply` preserved `operator_declared_unverified`; `billing openai-costs preview` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for a `proj_gate_release` scope. No provider account or amount was validated. |
 | Direct-Costs connector boundary | **Pass for preview only.** The preview above read no credential and made no network request; live collection and reconciliation remain owner-authorized external gates. |
-| Egress disclosure | **Pass for the local process boundary.** Egress, redirect-`Location` stripping, response-body release, checkpoint, streaming full-history, bounded-error, and forged-checkpoint tests pass. New processes validate the full chain before appending; the persisted checkpoint is informational only. The documented scope remains Fiscus-process transport, not a machine-wide firewall or provider-retention guarantee. |
+| Egress disclosure | **Pass for the local process boundary.** Egress, redirect-`Location` stripping, response-body release, checkpoint, streaming full-history, bounded-error, and forged-checkpoint tests pass. New processes validate the full chain before appending; the persisted checkpoint is informational only. The documented scope remains Segreant-process transport, not a machine-wide firewall or provider-retention guarantee. |
 | Launcher/publication integrity | **Pass.** Spawn/signalled-child errors and publication-lock failures are nonzero/fatal in the supported launcher; build-race/source-fingerprint tests pass. Direct unmanaged `dist/*` readers and `npm pack` remain explicitly outside the whole-tree reader lock. |
 | Backup and recovery integrity | **Pass.** The exact `0cfd8f9` packaged CLI created a `VACUUM INTO` snapshot with `integrity: ok`, SHA-256/schema fingerprint, required `requests`/`sessions` contract, restrictive file-mode handling where supported, and a redacted manifest; restore preview reported `applied: false`, and `--apply` restored into a new path. Corrupt/tampered/manifestless/existing-destination tests fail closed; no active ledger was overwritten. |
 | Reliability/performance observations | **Pass as measurement, not SLA.** The exact-head harness (`sourceRevision: a4b91a8`, isolatedHome `true`, Node `v24.18.0`, win32/x64, 12 CPUs) covered 100/1,000/10,000 rows with three samples and a 100,000-row one-sample stress case. The recorded medians are ingest 7.14/59.83/604.77/6,726.06 ms, overview 3.94/12.97/126.74/1,964.87 ms, frontier 0.67/1.93/21.86/510.64 ms, and API p95 8.17/16.94/147.87/1,961.76 ms; RSS deltas and compiled-dist size are recorded in `docs/RELIABILITY-PERFORMANCE.md`. No universal threshold is asserted. |
@@ -137,7 +137,7 @@ evidence.
 | Candidate identity | **Pass.** `git rev-parse HEAD` → `a5d112109b42872a206849cd4f8898743806b7c4`; `git status --short` was empty before and after the source/package validation. |
 | Capability/evidence contract | **Pass.** `docs/CAPABILITY-EVIDENCE-CONTRACT.md`, `docs/CAUSAL-EVIDENCE-PROTOCOL.md`, `docs/CAUSAL-PRODUCER-CONTRACT.md`, the AI FinOps roadmap, and the handoff were reviewed against this source. The full suite includes the public-claims and egress-boundary checks. New producer and mapping claims are explicitly local, operator-declared, residual-bearing, and excluded from provider billing, causal, budget, and routing claims. |
 | Source validation | **Pass.** `npm ci` → 4 packages, 0 vulnerabilities; root typecheck exit 0; browser-app typecheck exit 0; full `npm test` → **877 tests, 875 pass, 0 fail, 2 intentional platform skips**; `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI artifact hash unchanged. |
-| Packed artifact | **Pass for source commit `a5d1121`.** `npm pack --ignore-scripts` → **164 entries, 803,487 bytes**, SHA-256 `2CC9DF3D722E3E5BD9085176C2523DC605EDB50D8A53B720604A5C3ED7DCEA48`; the artifact contains `bin/fiscus.mjs`, `bin/publication-lock.mjs`, compiled causal producer/ledger/store/dashboard code, pricing, baselines, and the reviewed public docs. The subsequent gate-record commit changes only this document. |
+| Packed artifact | **Pass for source commit `a5d1121`.** `npm pack --ignore-scripts` → **164 entries, 803,487 bytes**, SHA-256 `2CC9DF3D722E3E5BD9085176C2523DC605EDB50D8A53B720604A5C3ED7DCEA48`; the artifact contains `bin/segreant.mjs`, `bin/publication-lock.mjs`, compiled causal producer/ledger/store/dashboard code, pricing, baselines, and the reviewed public docs. The subsequent gate-record commit changes only this document. |
 | Clean installed CLI | **Pass.** The tarball was installed offline with `--ignore-scripts` into a fresh prefix; packaged `fiscus --help`, `demo --json`, and `causal status --json` ran successfully. |
 | Packaged dashboard/API | **Pass.** From the installed tarball and isolated `FISCUS_HOME`, `start --demo` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview, value, causal, and billing payloads self-labelled demo mode; causal status contained no public study; `/classic` carried the labelled demo renderer; `/` carried `id="app"`; `/app/main.js` resolved as JavaScript; the dashboard process terminated and the port was closed. |
 | Model-trial truthfulness | **Pass.** The packaged value payload is demo-labelled and the synthetic same-task comparison remains review-only (`trial`), with no evidence-supported switch or automatic routing. The mapping panel is informational and has no write action. |
@@ -163,7 +163,7 @@ Run against `f2f3c9acd50f4e7fd4c0f11a706a9b4b4307758f` in a throwaway worktree
 with a real `npm ci`, worktree clean before and after validation (0 modified
 paths either side, excluding the `npm pack` artifact). **All ten rows pass.**
 Supersedes the `205fbcc` record, which predates the GUI rewrite landing in the
-package, the security fixes, the Fiscus rebrand, and the dependency majors.
+package, the security fixes, the Segreant rebrand, and the dependency majors.
 
 | Requirement | Result |
 | --- | --- |
@@ -197,7 +197,7 @@ no matching logic can close it.
 **One reserved decision was pre-empted and needs owner ratification.** Item 2 of
 *Required before public npm/GitHub release* reserves LICENSE
 ownership/attribution. During the rebrand the copyright line was changed on
-instruction, from the pre-rename product name to `Fiscus contributors`. It is
+instruction, from the pre-rename product name to `Segreant contributors`. It is
 recorded here rather than quietly kept: the owner should ratify or reverse it,
 and this gate does not treat it as settled.
 
@@ -221,7 +221,7 @@ retained for history.
 | Visual check | **Pass, and the previously stated gap is closed.** Packaged dashboard at 375×812: Overview, Billing, Allocation, Value and Settings all report `scrollWidth 375` on a `clientWidth 375` document — **no view overflows**, including Value, which was 483px at `916e1c3`. Desktop 1280 re-checked on the same packaged artifact: `.ihelp` still computes `position: relative`, the popover is 270px with its `::after` arrow shown, `.grid` is still two-column (`1.5fr 1fr`), and the allocation view renders its 3 cards. No console errors. Screenshots remain unavailable in this environment — the browser pane is not displayed, so the page composites no frames and `computer{action:"screenshot"}` times out — so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
 
 **The reconciliation was run against this machine's real ledger, and it
-failed — which is the finding.** `fiscus import all` produced 18,422 real
+failed — which is the finding.** `segreant import all` produced 18,422 real
 requests totalling `$1,574.42`, of which `$832.33` across 9,499 requests is
 OpenAI. None of it can reconcile. Every OpenAI row arrived by **native import**,
 and reconciliation counts only proxy traffic carrying the declared scope. It has
@@ -233,7 +233,7 @@ arithmetically true and operationally useless.
 
 **So the tool now says that before the credential step, not after.** Minting an
 OpenAI Admin key is a real permission decision; discovering afterwards that
-nothing would have counted is discovering it too late. `fiscus billing
+nothing would have counted is discovering it too late. `segreant billing
 reconcile` readiness now reports how much OpenAI spend would count, how much
 arrived by import, and how much is proxy traffic predating the declaration. The
 coverage query returns `null` — not a zero — when the ledger holds no OpenAI
@@ -488,8 +488,8 @@ Supersedes the `e3eb407` record, retained for history.
 rows are all `synthetic_demo` and therefore cannot exercise them. On a scratch
 home: a Claude Code transcript recorded in `<repo>/packages/web` imported as
 project `myrepo` with basis `tool_log_repo_resolved`, and the run reported the
-`web → myrepo` relabel with the `fiscus project alias` remedy; a live proxy round
-trip to `POST /fiscus/backend-api/v1/messages` stored `backend-api` as
+`web → myrepo` relabel with the `segreant project alias` remedy; a live proxy round
+trip to `POST /segreant/backend-api/v1/messages` stored `backend-api` as
 `client_declared` while the mock upstream recorded being asked for
 `/v1/messages`, proving the prefix never leaves the machine.
 
@@ -563,12 +563,12 @@ before the `91b468b` push for exactly that reason.
 
 Use the following precise language:
 
-- Fiscus is a local-first FinOps and outcome-evidence tool for AI coding-agent
+- Segreant is a local-first FinOps and outcome-evidence tool for AI coding-agent
   spend.
 - It meters configured proxy traffic and selected local tool logs, applies local
   budget controls, and presents Return on Intelligence as an evidence-limited
   measurement.
-- Fiscus itself has no hosted telemetry by default. Proxy requests still travel
+- Segreant itself has no hosted telemetry by default. Proxy requests still travel
   to the AI provider configured by the operator.
 - Outcome evidence has explicit classes: manual assertion, local command exit,
   or locally verified signed CI artifact. No class is a blanket claim of safety,
@@ -633,5 +633,5 @@ bodies, generic async-route failure responses, a loopback listen default, and
 normalized empty admin-token handling. These source-level hardening checks do
 not replace the real infrastructure gate above.
 
-The local Fiscus product can advance independently. The team service remains a
+The local Segreant product can advance independently. The team service remains a
 separately gated deployment, not hidden technical debt inside a “ready” claim.

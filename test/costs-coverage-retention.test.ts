@@ -4,8 +4,8 @@
  *
  * THE COUNTEREXAMPLE, MEASURED. A fully paginated OpenAI Costs observation over
  * a past month, and ten live proxy requests on the declared route inside it
- * totalling $180.00. `fiscus billing costs coverage` reported `Declared route
- * 10 live proxy request(s), $180.00`. `fiscus prune` then deleted rows older
+ * totalling $180.00. `segreant billing costs coverage` reported `Declared route
+ * 10 live proxy request(s), $180.00`. `segreant prune` then deleted rows older
  * than the middle of that period, and the same report read:
  *
  *     Declared route 0 live proxy request(s), $0.00 local rate-card estimate
@@ -49,7 +49,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-costs-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-costs-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 

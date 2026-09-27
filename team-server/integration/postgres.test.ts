@@ -44,7 +44,7 @@ test('real PostgreSQL adapter preserves signed rollups, replay identity, restart
   const suffix = randomUUID().replaceAll('-', '');
   const project = `postgres-integration-${suffix}`;
   const rejectedProject = `postgres-reject-${suffix}`;
-  const constraint = `fiscus_integration_reject_${suffix}`;
+  const constraint = `segreant_integration_reject_${suffix}`;
   const keys = keyPair();
   const signed = signRollup(body(keys, project), keys);
   const admin = new Pool({ connectionString: databaseUrl });

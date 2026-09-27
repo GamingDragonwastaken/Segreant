@@ -30,6 +30,6 @@ export function independentCausalUnitIdDigestV2(
   input: IndependentCausalUnitIdentityInputV2,
 ): string {
   return 'sha256:' + sha256(
-    'fiscus.causal.independent-unit\n2\n' + canonicalJson(input),
+    'segreant.causal.independent-unit\n2\n' + canonicalJson(input),
   );
 }

@@ -104,7 +104,7 @@ function clamp(v: number, lo: number, hi: number): number {
  * Calls one OpenAI-compatible Chat Completions endpoint and returns a validated
  * SessionJudgment, or throws JudgeCallError. `apiKey` is null for local calls —
  * no Authorization header is sent in that case, matching how the reverse proxy's
- * own local-server support (x-fiscus-openai-base) never assumes a key either.
+ * own local-server support (x-segreant-openai-base) never assumes a key either.
  */
 export async function callJudgeApi(
   baseUrl: string,
@@ -144,7 +144,7 @@ export async function callJudgeApi(
         ? '; repair/restore the local receipt history before retrying'
         : '';
       throw new JudgeCallError(
-        `Fiscus egress boundary refused the judge request (${err.code}): ${err.message}${repair}`,
+        `Segreant egress boundary refused the judge request (${err.code}): ${err.message}${repair}`,
         'egress-boundary',
         err.code,
       );

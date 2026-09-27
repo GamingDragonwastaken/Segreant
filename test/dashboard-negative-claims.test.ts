@@ -25,7 +25,7 @@
  * fixed together, because fixing the sentence alone would have hidden the gap
  * rather than closed it.
  *
- * AND THE ALERTS PANEL HAD THE SAME SHAPE AS `fiscus ops`. `computeAlerts`
+ * AND THE ALERTS PANEL HAD THE SAME SHAPE AS `segreant ops`. `computeAlerts`
  * returns a bare array and the overview forwarded it, so an empty list reached
  * the browser with no statement of how many detectors could have produced an
  * entry. On a default install all six are dark. The overview now carries the

@@ -13,7 +13,7 @@ function runCli(args: string[], dbPath: string, home?: string): Promise<{ code: 
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: dbPath, ...(home ? { FISCUS_HOME: home } : {}), NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_DB: dbPath, ...(home ? { SEGREANT_HOME: home } : {}), NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? ((err as unknown as { code: number }).code)
@@ -25,8 +25,8 @@ function runCli(args: string[], dbPath: string, home?: string): Promise<{ code: 
 }
 
 test('billing CLI dry-runs by default, applies only with --apply, and exports a separate evidence ledger', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-billing-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-billing-cli-'));
+  const db = join(dir, 'segreant.db');
   try {
     const dry = await runCli(['billing', 'import', '--file', FIXTURE, '--json'], db);
     assert.equal(dry.code, 0, dry.stderr);
@@ -70,8 +70,8 @@ test('billing CLI dry-runs by default, applies only with --apply, and exports a 
 });
 
 test('billing scope is an explicit local declaration and changes only on --apply', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-billing-scope-cli-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-billing-scope-cli-'));
+  const db = join(dir, 'segreant.db');
   try {
     const preview = await runCli(['billing', 'scope', 'set', '--account-ref', 'finops-test', '--json'], db, join(dir, 'home'));
     assert.equal(preview.code, 0, preview.stderr);

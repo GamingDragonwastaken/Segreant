@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Store, type RepriceUpdate } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
-import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, fiscusHome, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type SegreantConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -30,7 +30,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
   // The proposal store may contain literal suggested code. Honor its short
   // retention boundary whenever the local service starts; this does not touch
   // the longer-lived cost ledger, and an operator can still clear proposals
-  // immediately from Settings or `fiscus prune`.
+  // immediately from Settings or `segreant prune`.
   const expiredProposalsBefore = Date.now() - cfg.proposalRetentionDays * 24 * 60 * 60 * 1000;
   const expiredProposals = store.pruneProposals(expiredProposalsBefore);
   if (expiredProposals > 0) {
@@ -86,11 +86,11 @@ export async function cmdStart(flags: Flags): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-function printBanner(cfg: FiscusConfig, tty: boolean): void {
+function printBanner(cfg: SegreantConfig, tty: boolean): void {
   const line = (s: string) => console.log('  ' + s);
   console.log('');
   line(color(tty, C.bold, '╔════════════════════════════════════════════════════════╗'));
-  line(color(tty, C.bold, '║   Fiscus  ·  local AI-spend proxy is running         ║'));
+  line(color(tty, C.bold, '║   Segreant  ·  local AI-spend proxy is running         ║'));
   line(color(tty, C.bold, '╚════════════════════════════════════════════════════════╝'));
   console.log('');
   line(`Proxy      ${color(tty, C.cyan, `http://localhost:${cfg.port}`)}`);
@@ -100,17 +100,21 @@ function printBanner(cfg: FiscusConfig, tty: boolean): void {
     line(color(tty, C.yellow, '● DEMO DATA — synthetic, isolated in demo.db. Real metering is untouched.'));
     console.log('');
   }
-  line(color(tty, C.bold, 'Point your tools here (PowerShell):'));
+  line(color(tty, C.bold, 'Start your tools through Segreant:'));
+  line(color(tty, C.gray, '  segreant launch -- claude        (or codex, aider, opencode, …)'));
+  line(color(tty, C.gray, '  Metered while this proxy runs; starts unmetered with a warning when it does not.'));
+  line(color(tty, C.bold, 'Or point a tool here yourself (PowerShell):'));
   line(color(tty, C.gray, `  $env:ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`));
   line(color(tty, C.gray, `  $env:OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`));
   console.log('');
   if (cfg.budget.dailyUsd !== null) {
-    line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: fiscus budget --daily N)')}`);
+    line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: segreant budget --daily N)')}`);
   } else {
-    line(color(tty, C.gray, 'No budget cap set. Add one: fiscus budget --daily 25 --soft 18'));
+    line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
   }
   console.log('');
-  line(color(tty, C.gray, 'Press Ctrl+C to stop. Traffic falls straight through if Fiscus is off.'));
+  line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));
+  line(color(tty, C.gray, 'Segreant is stopped; unset the two variables, or use segreant launch, to go direct.'));
   console.log('');
 }
 
@@ -130,7 +134,7 @@ export async function cmdDemo(flags: Flags): Promise<void> {
   store.close();
 
   console.log('');
-  console.log(color(tty, C.bold, '  Fiscus — demo data generated'));
+  console.log(color(tty, C.bold, '  Segreant — demo data generated'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(52)));
   console.log(
     `  ${num(res.requests)} requests · ${num(res.blocked)} blocked · ` +
@@ -139,14 +143,14 @@ export async function cmdDemo(flags: Flags): Promise<void> {
   console.log(`  ${color(tty, C.green, usd(res.totalCostUsd))} of synthetic spend across ${res.days} days`);
   console.log('');
   console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, priced by the real engine, isolated in demo.db.'));
-  console.log(color(tty, C.gray, '    It never mixes with real metering. Clear it: fiscus demo --clear'));
+  console.log(color(tty, C.gray, '    It never mixes with real metering. Clear it: segreant demo --clear'));
   console.log('');
   console.log(color(tty, C.bold, '  Explore it:'));
-  console.log(`    fiscus today --demo        ${color(tty, C.gray, '# spend, by-model, by-user')}`);
-  console.log(`    fiscus alerts --demo       ${color(tty, C.gray, '# budget, spike, throttling')}`);
-  console.log(`    fiscus usage --demo        ${color(tty, C.gray, '# RoI for sessions without code signals')}`);
-  console.log(`    fiscus budget --recommend --demo`);
-  console.log(`    fiscus start --demo        ${color(tty, C.gray, '# dashboard, pointed at the demo data')}`);
+  console.log(`    segreant today --demo        ${color(tty, C.gray, '# spend, by-model, by-user')}`);
+  console.log(`    segreant alerts --demo       ${color(tty, C.gray, '# budget, spike, throttling')}`);
+  console.log(`    segreant usage --demo        ${color(tty, C.gray, '# RoI for sessions without code signals')}`);
+  console.log(`    segreant budget --recommend --demo`);
+  console.log(`    segreant start --demo        ${color(tty, C.gray, '# dashboard, pointed at the demo data')}`);
   console.log('');
 
   if (flags.serve || flags.start) {
@@ -184,7 +188,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
         printJson(payload);
         return;
       }
-      console.log(`\n  ${color(on, C.bold, 'Fiscus pricing provenance')} — ${label}`);
+      console.log(`\n  ${color(on, C.bold, 'Segreant pricing provenance')} — ${label}`);
       console.log(`  ${color(on, C.dim, 'Every row is grouped by the local evidence captured at metering time; card revisions and match paths are never merged.')}`);
       if (provenance.length === 0) {
         console.log(`  ${color(on, C.gray, 'No metered requests in this window.')}`);
@@ -217,11 +221,11 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable } }));
     console.log('');
     if (enable) {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "fiscus start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "segreant start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
       console.log(`  ${color(on, C.dim, `Source: ${updated.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
-      console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: fiscus pricing --auto off')}`);
+      console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: segreant pricing --auto off')}`);
     } else {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "fiscus pricing --refresh".`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "segreant pricing --refresh".`);
     }
     console.log('');
     return;
@@ -239,12 +243,23 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     if (result.ok) {
       const action = result.unchanged ? 'Pricing source rechecked — card unchanged' : 'Pricing cached';
       console.log(`  ${color(on, C.green, '✓')} ${action} — ${result.modelCount} models, declared card date ${result.updated}.`);
-      console.log(`  ${color(on, C.dim, `Saved to ${join(fiscusHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(segreantHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
       console.log(`  ${color(on, C.dim, `Provenance: ${result.sourceKind ?? 'unknown'} · ${result.sourceUrl ?? 'local input'} · card ${result.cardSha256?.slice(0, 12) ?? 'unknown'}`)}`);
       console.log(`  ${color(on, C.dim, 'List-price estimate only — not a provider invoice, contract, discount, tax, credit, or reconciliation result. Applies to new traffic and future imports; rows already metered keep their recorded price.')}`);
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — pricing still works; only the update was skipped.')}`);
+      // A fresh install is local-locked, so the first refresh is always refused.
+      // Hand over the one exact rule that permits it instead of leaving the
+      // operator to reconstruct it from the egress docs.
+      if (!url && /policy_denied|egress policy/.test(String(result.error))) {
+        const src = new URL(DEFAULT_MANIFEST_URL);
+        console.error('');
+        console.error(`  ${color(on, C.bold, 'To allow price updates from this one address (a GET that sends nothing about you):')}`);
+        console.error(`    segreant egress apply --apply --mode controlled_cloud --id pricing-refresh --purpose pricing_refresh \\`);
+        console.error(`      --data-class pricing_manifest --method GET --origin ${src.origin} --path-prefix ${src.pathname.split('/').slice(0, 2).join('/')}/`);
+        console.error(`  ${color(on, C.dim, 'then run:  segreant pricing --refresh   (and segreant pricing --auto to keep it current)')}`);
+      }
       process.exitCode = 1;
     }
     return;
@@ -255,8 +270,8 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     printJson(st);
     return;
   }
-  console.log(`\n  ${color(on, C.bold, 'Fiscus pricing')}`);
-  console.log(`  Source     ${st.source === 'cache' ? `${st.sourceKind} local cache (~/.fiscus/pricing)` : 'bundled with the package'}`);
+  console.log(`\n  ${color(on, C.bold, 'Segreant pricing')}`);
+  console.log(`  Source     ${st.source === 'cache' ? `${st.sourceKind} local cache (~/.segreant/pricing)` : 'bundled with the package'}`);
   if (st.sourceUrl) console.log(`  Origin     ${st.sourceUrl}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
@@ -266,14 +281,14 @@ export async function cmdPricing(flags: Flags): Promise<void> {
   console.log(`  Models     ${num(st.modelCount)} across ${st.providers.join(', ')}`);
   console.log(`  ${color(on, C.dim, 'Basis      local list-price estimate; not provider-billed or reconciled spend')}`);
   if (st.stale || st.source === 'bundled') {
-    console.log(`\n  ${color(on, C.dim, 'Refresh now:   fiscus pricing --refresh')}`);
-    console.log(`  ${color(on, C.dim, 'Keep current:  fiscus pricing --auto     (refreshes on start when stale)')}`);
+    console.log(`\n  ${color(on, C.dim, 'Refresh now:   segreant pricing --refresh')}`);
+    console.log(`  ${color(on, C.dim, 'Keep current:  segreant pricing --auto     (refreshes on start when stale)')}`);
   }
   console.log('');
 }
 
 /**
- * `fiscus baseline [--refresh --url <url>] [--json]` — status and refresh for
+ * `segreant baseline [--refresh --url <url>] [--json]` — status and refresh for
  * the Lift population-prior manifest (`baselines/lift-baselines.json`), the CLI
  * surface `docs/RETURN-ON-INTELLIGENCE.md` §7.1 promises but that, until now, had
  * no command to reach it. Deliberately NOT a mirror of `pricing --auto`: there is
@@ -287,14 +302,14 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
   if (flags['refresh']) {
     const url = typeof flags['url'] === 'string' ? flags['url'] : null;
     if (!url) {
-      const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: fiscus baseline --refresh --url <url>';
+      const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: segreant baseline --refresh --url <url>';
       if (flags.json) {
         printJson({ ok: false, error: msg });
         process.exitCode = 1;
         return;
       }
       console.error(`  ${color(on, C.yellow, '✗')} ${msg}`);
-      console.error(`  ${color(on, C.dim, 'Or edit the cache file by hand: ~/.fiscus/baselines/lift-baselines.json')}`);
+      console.error(`  ${color(on, C.dim, 'Or edit the cache file by hand: ~/.segreant/baselines/lift-baselines.json')}`);
       process.exitCode = 1;
       return;
     }
@@ -307,7 +322,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     }
     if (result.ok) {
       console.log(`  ${color(on, C.green, '✓')} Baselines updated — ${result.taskTypeCount} task-type(s), table dated ${result.curated}.`);
-      console.log(`  ${color(on, C.dim, `Saved to ${join(fiscusHome(), 'baselines', 'lift-baselines.json')} (overrides the bundled table).`)}`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(segreantHome(), 'baselines', 'lift-baselines.json')} (overrides the bundled table).`)}`);
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — baselines still work; only the update was skipped.')}`);
@@ -321,14 +336,14 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     printJson(st);
     return;
   }
-  console.log(`\n  ${color(on, C.bold, 'Fiscus Lift baselines')}`);
-  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.fiscus/baselines)' : 'bundled with the package'}`);
+  console.log(`\n  ${color(on, C.bold, 'Segreant Lift baselines')}`);
+  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.segreant/baselines)' : 'bundled with the package'}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
   console.log(`  Curated    ${st.curated}${age}${stale}`);
   console.log(`  Task-types ${num(st.taskTypeCount)}`);
-  console.log(`  ${color(on, C.dim, 'Real per-project numbers (blended with your own git history): fiscus roi')}`);
-  console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  fiscus baseline --refresh --url <url>')}`);
+  console.log(`  ${color(on, C.dim, 'Real per-project numbers (blended with your own git history): segreant roi')}`);
+  console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  segreant baseline --refresh --url <url>')}`);
   console.log(`  ${color(on, C.dim, 'No default source exists for this — unlike pricing, METR publishes research, not a feed.')}`);
   console.log('');
 }
@@ -430,11 +445,11 @@ export function cmdReprice(flags: Flags): void {
         }
         if (sync.unresolvable) {
           console.log(color(tty, C.yellow, `  ! ${num(sync.unresolvable)} older snapshot${sync.unresolvable === 1 ? ' keeps its pre-reprice cost and is' : 's keep their pre-reprice costs and are'} marked stale.`));
-          console.log(color(tty, C.gray, '  They predate the recorded cost basis, so re-attributing them would guess. Re-run: fiscus realize'));
+          console.log(color(tty, C.gray, '  They predate the recorded cost basis, so re-attributing them would guess. Re-run: segreant realize'));
         }
       } else {
-        console.log(color(tty, C.gray, '  Dry run — nothing written. Apply with: fiscus reprice --apply'));
-        console.log(color(tty, C.gray, '  Tip: refresh the card first (fiscus pricing --refresh) so unknown models resolve.'));
+        console.log(color(tty, C.gray, '  Dry run — nothing written. Apply with: segreant reprice --apply'));
+        console.log(color(tty, C.gray, '  Tip: refresh the card first (segreant pricing --refresh) so unknown models resolve.'));
       }
     }
     console.log('');

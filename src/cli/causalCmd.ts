@@ -66,17 +66,17 @@ function emit(payload: unknown, flags: Flags): void {
 
 function usage(): void {
   console.log('');
-  console.log('  Fiscus causal — local randomized-study evidence, review-only');
+  console.log('  Segreant causal — local randomized-study evidence, review-only');
   console.log('  Ordinary Lift, baselines, and value scenarios never become causal evidence here.');
   console.log('');
-  console.log('  fiscus causal status [--json]');
-  console.log('  fiscus causal inspect <study-id> [--json]');
-  console.log('  fiscus causal verify <study-id> [--json]');
-  console.log('  fiscus causal ope --options <file> [--json]');
-  console.log('  fiscus causal design --options <file> [--json]');
-  console.log('  fiscus causal transport --options <file> [--json]');
-  console.log('  fiscus causal plan --study <study-id> --options <file> [--apply] [--json]');
-  console.log('  fiscus causal family --options <file> [--json]');
+  console.log('  segreant causal status [--json]');
+  console.log('  segreant causal inspect <study-id> [--json]');
+  console.log('  segreant causal verify <study-id> [--json]');
+  console.log('  segreant causal ope --options <file> [--json]');
+  console.log('  segreant causal design --options <file> [--json]');
+  console.log('  segreant causal transport --options <file> [--json]');
+  console.log('  segreant causal plan --study <study-id> --options <file> [--apply] [--json]');
+  console.log('  segreant causal family --options <file> [--json]');
   console.log('');
   console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
   console.log('  not a causal treatment effect and never authorizes policy execution.');
@@ -238,7 +238,7 @@ export function cmdCausal(flags: Flags): void {
       emit({
         studies,
         causalEvidence: studies.length === 0
-          ? 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred; current Fiscus value output remains an observed/manual-equivalent scenario.'
+          ? 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred; current Segreant value output remains an observed/manual-equivalent scenario.'
           : 'Retained version-1 local studies are listed for inspection or replay verification; no public causal mutation is available.',
       }, flags);
       return;

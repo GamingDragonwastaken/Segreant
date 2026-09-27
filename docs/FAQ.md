@@ -1,9 +1,9 @@
-# Fiscus FAQ
+# Segreant FAQ
 
 ## Privacy & security
 
 **Does my code or prompts ever leave my machine?**
-Fiscus does not send your prompts or code to a Fiscus-operated telemetry service
+Segreant does not send your prompts or code to a Segreant-operated telemetry service
 by default. Metering, storage, and RoI calculations run locally, but a request
 you deliberately route through the proxy is forwarded to the AI provider you
 configure and can include its prompt, source snippets, tool payloads, and
@@ -12,37 +12,37 @@ alert webhooks, a configured hosted judge, an OpenAI Costs pull, and an opt-in
 team rollup. [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) is the complete,
 current outbound and retention contract.
 
-**Can I make Fiscus itself refuse all cloud traffic?**
-Yes. New configuration begins in `local_locked` mode, where Fiscus refuses
+**Can I make Segreant itself refuse all cloud traffic?**
+Yes. New configuration begins in `local_locked` mode, where Segreant refuses
 non-loopback HTTP(S) targets before DNS. A local model at `localhost` or
-`127.0.0.1` remains available. To permit a cloud route, use `fiscus egress
-plan` to inspect one exact rule and `fiscus egress apply --apply` to persist it;
-`fiscus egress verify` validates the redacted local receipt chain. This is a
-Fiscus-process boundary, not a claim about other applications, direct clients,
+`127.0.0.1` remains available. To permit a cloud route, use `segreant egress
+plan` to inspect one exact rule and `segreant egress apply --apply` to persist it;
+`segreant egress verify` validates the redacted local receipt chain. This is a
+Segreant-process boundary, not a claim about other applications, direct clients,
 the operating system, or provider retention. Only a genuinely absent history
 may establish genesis. If a receipt path is present but empty, malformed,
-truncated, hash-invalid, unreadable, or locked/unwritable, Fiscus refuses the
+truncated, hash-invalid, unreadable, or locked/unwritable, Segreant refuses the
 request before DNS or socket creation and reports the repair/restore action;
-it does not silently reset the chain. For a stale lock, confirm that no Fiscus
-writer is active, then remove only that lock and rerun `fiscus egress verify`;
-Fiscus never auto-deletes an abandoned lock.
+it does not silently reset the chain. For a stale lock, confirm that no Segreant
+writer is active, then remove only that lock and rerun `segreant egress verify`;
+Segreant never auto-deletes an abandoned lock.
 
 **Is my proposed code stored anywhere, even locally?**
 Yes, temporarily. To measure whether an AI's proposed edit was actually
-accepted (the "First-Pass Acceptance" signal), Fiscus stores the proposed
+accepted (the "First-Pass Acceptance" signal), Segreant stores the proposed
 code text in your local database for up to 30 days by default
 (`proposalRetentionDays` in config) — long enough to match it against a
-later git commit. Proposal rows remain local to the Fiscus store unless an
+later git commit. Proposal rows remain local to the Segreant store unless an
 operator explicitly exports or forwards the surrounding data. Set
 `metadataOnly: true`
 to turn this off entirely (you lose Acceptance tracking, keep everything
-else), or run `fiscus prune` / use the dashboard Settings page to purge it
+else), or run `segreant prune` / use the dashboard Settings page to purge it
 early. Provider requests and other declared egress paths follow
 [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md).
 
 **Do you see my API keys?**
 No. Keys stay in your environment / your tool's config. The proxy forwards the auth
-header upstream unchanged and never stores it. Fiscus's author never sees it.
+header upstream unchanged and never stores it. Segreant's author never sees it.
 
 **Do you rank or score individual developers?**
 No — and the code refuses to. Per-user *value* (how much of someone's AI spend
@@ -51,13 +51,13 @@ stays available, but attributing value to named people is opt-in. Even switched 
 the org view is a **distribution only** (median, spread, a coaching-headroom number)
 — never a ranked list — and it is **withheld entirely** below a k-anonymity floor
 (default 5 people), so a small team can't use it to single anyone out. Names appear
-only in a person's own view of themselves (`fiscus team --me <you>`). Thin samples
+only in a person's own view of themselves (`segreant team --me <you>`). Thin samples
 are shrunk toward the team mean, so nobody is judged on two noisy sessions. The
 headline number is *coaching headroom* — the latent value if below-median extractors
 were supported up to the median — an argument for enablement, not for blame.
 
 **Is there a root certificate or traffic interception?**
-No. Fiscus is a base-URL reverse proxy — you explicitly point tools at it. That's
+No. Segreant is a base-URL reverse proxy — you explicitly point tools at it. That's
 a deliberate choice: enterprise security teams (rightly) ban dev-machine root CAs, so
 "connect, don't intercept" is the only enterprise-viable model.
 
@@ -77,7 +77,7 @@ install a root CA to force it. Those are honestly labeled as unmeterable here.
 **Do I have to change a base URL to meter my coding tool?**
 No — that's what **importers** are for. Subscription-mode tools (Claude Code on
 Pro/Max, Codex, opencode) talk straight to vendor servers and never touch a
-proxy, but they each write their exact usage to local disk. `fiscus import
+proxy, but they each write their exact usage to local disk. `segreant import
 claude-code | opencode | codex | all` reads that native record — no base URL, no
 key, no config. It's idempotent (safe to re-run or cron), and `--watch` keeps it
 live, polling read-only so the tool keeps writing uninterrupted. In the dashboard,
@@ -94,7 +94,7 @@ best for API-key tools, scripts, and enterprises with gateways. **Import** meter
 natively with zero wiring — best for subscription tools a proxy can't see. Most
 people import their editor and, if they also run raw API scripts, proxy those.
 
-**What does `fiscus scan` mean when it lists a tool as "detected" but not imported?**
+**What does `segreant scan` mean when it lists a tool as "detected" but not imported?**
 Scan also runs a wider, read-only inventory pass — checking for config directories
 or PATH binaries of AI coding tools beyond the three native importers (today:
 Cursor, Windsurf, Aider, Continue, Zed). Seeing one listed is honestly just an
@@ -125,7 +125,7 @@ never surveys.
 **Why does my RoI Index show missing coverage and a range?**
 Because some of the four value lenses may not be wired yet. The observed-only
 geometric mean is an observational score, not a universal ceiling: measuring a
-missing lens can raise or lower it. Fiscus therefore keeps that observed score
+missing lens can raise or lower it. Segreant therefore keeps that observed score
 separate from the full-instrumentation sensitivity range obtained by evaluating
 unknown necessary lenses at their admissible endpoints. Add evidence to reduce
 what must be assumed and inspect the disclosed direction/size of the change; the
@@ -141,13 +141,13 @@ The same funnel, with the outcome reported instead of read from git. But it's
 *graded*, not pass/fail: an answer you merely *used* counts less than one you
 *resolved* a ticket with, which counts less than something you *published* —
 mapped onto the same reach ladder the code Impact lens uses. The grade is only ever
-what you reported (`fiscus report --session <id> --kind used|resolved|published`),
+what you reported (`segreant report --session <id> --kind used|resolved|published`),
 never inferred from the content of your prompts. Acceptance and survival-over-time
 don't apply to a one-shot answer, so they stay honestly n/a rather than faked.
 
 **What's the "shadow price of intelligence"?**
 The name for a research scenario: a hypothetical power-law response curve can
-produce a marginal-value number, μ. Fiscus does not currently present it as a
+produce a marginal-value number, μ. Segreant does not currently present it as a
 forecast, a general allocation recommendation, a routing instruction, or an
 automatic budget action. A decision-grade version requires a controlled,
 within-task allocation design and independent validation.
@@ -156,7 +156,7 @@ within-task allocation design and independent validation.
 Yes — and that's rarer than it sounds. A classical interval is only valid if you
 look once, at a pre-planned sample size; watched continuously (the way every
 dashboard is actually used), its real error rate explodes — in simulation, a 90%
-classical interval goes wrong at some point in ~64% of runs. Fiscus's
+classical interval goes wrong at some point in ~64% of runs. Segreant's
 realization rate carries an **anytime-valid** interval (a confidence sequence)
 instead: the guarantee holds simultaneously at every glance, so you may peek
 whenever and act whenever. The honest price is a slightly wider interval — shown,
@@ -195,13 +195,13 @@ declared measurement cost to calculate gross and net value.
 
 ## Cost & licensing
 
-**What does Fiscus cost?**
+**What does Segreant cost?**
 The local tool is free. It uses only free tiers and Node built-ins; there's no
 account and no telemetry.
 
 **Is my data mine?**
-Entirely. It's a local file (`~/.fiscus/`). Export anytime with
-`fiscus export --csv`. Delete anytime by removing the directory.
+Entirely. It's a local file (`~/.segreant/`). Export anytime with
+`segreant export --csv`. Delete anytime by removing the directory.
 
 ## Troubleshooting
 
@@ -211,21 +211,21 @@ Usually the `/v1` double-version gotcha: if your client already appends
 [INTEGRATIONS.md](INTEGRATIONS.md).
 
 **`doctor` says the rate card is stale.**
-`fiscus pricing --refresh` pulls current rates from the community price feed
+`segreant pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of
 contributors within days of every model release; the GET sends nothing about
 you). It needs a reviewed `pricing_refresh` egress rule in controlled-cloud
-mode. For self-maintenance, `fiscus pricing --auto` refreshes on start
+mode. For self-maintenance, `segreant pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 
 Pricing updates accept only HTTPS sources without embedded credentials, refuse
 redirects and oversized responses, and archive every accepted normalized card
-under a SHA-256 identity before activating it. `fiscus pricing --json` shows the
+under a SHA-256 identity before activating it. `segreant pricing --json` shows the
 redacted source identity, accepted-cache time, declared source date (when
 provided), and integrity state. A successful 304 response means the source
 revalidated the same local card; it is not presented as a newly published price.
-Every Fiscus rate remains a local list-price estimate, not a provider invoice,
+Every Segreant rate remains a local list-price estimate, not a provider invoice,
 contractual discount, credit, tax, or reconciliation result.
 
 **How does pricing stay correct as new models launch?**
@@ -237,5 +237,5 @@ flat fallback that marks every such request `~est` — surfaced in `doctor` as
 
 **Nothing shows under value / RoI.**
 Attach a git repo (`--repo .`) and let the maturity window elapse, or report outcomes
-with `fiscus report`. Value stays honestly dark until there's something real to
+with `segreant report`. Value stays honestly dark until there's something real to
 show.

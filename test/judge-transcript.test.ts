@@ -42,7 +42,7 @@ function assistantLine(parts: unknown[], model = 'claude-opus-4-8'): string {
 }
 
 function makeRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'fiscus-transcript-'));
+  return mkdtempSync(join(tmpdir(), 'segreant-transcript-'));
 }
 
 test('transcript: finds <sessionId>.jsonl under nested project dirs; hostile ids and absent installs are inert nulls', () => {

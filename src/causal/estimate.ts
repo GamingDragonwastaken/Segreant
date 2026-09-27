@@ -75,7 +75,7 @@ function boundedDifference(
 function standardLimitations(): string[] {
   return [
     'This is a scoped local ITT estimate for the registered eligible population and study period, not a future-performance guarantee.',
-    'Fiscus validates retained protocol, assignment, execution, outcome, and arithmetic lineage locally; it is not an independent audit or provider-invoice certification.',
+    'Segreant validates retained protocol, assignment, execution, outcome, and arithmetic lineage locally; it is not an independent audit or provider-invoice certification.',
     'The result depends on valid randomized assignment, no interference, outcome completeness, and measurement assumptions; adherence is not required for ITT.',
     'ITT is primary: observed noncompliance stays in the assigned arm. Per-protocol and CACE/LATE effects are not estimated or identified by this result.',
     'Interference between units is not assessed by this estimator; the declared no-interference assumption is not an established absence of cross-unit effects.',
@@ -143,7 +143,7 @@ export function resolveCausalJointInference(
 /**
  * Estimate only after all structural qualification gates have passed. A
  * randomized design can be valid yet inconclusive: interval evidence must pass
- * the predeclared decision rule before Fiscus authorises claim language.
+ * the predeclared decision rule before Segreant authorises claim language.
  */
 export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate {
   const qualification = qualifyCausalStudy(data);

@@ -19,7 +19,7 @@
  * this build can produce that field is null -- the list holds only version-1
  * studies, and retained version-1 evidence is inspect-only, so no analysis
  * snapshot CAN be written for any of them. Null reads as "none has been saved".
- * The truth is "none can be". D-158 fixed exactly this on `fiscus causal
+ * The truth is "none can be". D-158 fixed exactly this on `segreant causal
  * inspect`, which now emits `analysisSnapshots: { available, reason, latest }`,
  * and recorded the dashboard half as open. This closes it.
  *

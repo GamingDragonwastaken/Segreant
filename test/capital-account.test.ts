@@ -97,11 +97,11 @@ test('capital evaluation refuses double counting and invalid conservation', () =
 });
 
 test('capital CLI is a bounded review-only consumer of the typed evaluator', () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-capital-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-capital-'));
   const options = join(root, 'options.json');
   try {
     writeFileSync(options, JSON.stringify(input({ targetConsumed: USD('80') })));
-    const stdout = execFileSync(process.execPath, ['bin/fiscus.mjs', 'capital', 'evaluate', '--options', options, '--json'], {
+    const stdout = execFileSync(process.execPath, ['bin/segreant.mjs', 'capital', 'evaluate', '--options', options, '--json'], {
       cwd: process.cwd(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

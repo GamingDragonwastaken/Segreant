@@ -8,7 +8,7 @@
  * measured absence of interference.
  */
 
-export const CAUSAL_DESIGN_TYPE = 'fiscus.causal-design' as const;
+export const CAUSAL_DESIGN_TYPE = 'segreant.causal-design' as const;
 export const CAUSAL_DESIGN_VERSION = 1 as const;
 
 type Digest = `sha256:${string}`;

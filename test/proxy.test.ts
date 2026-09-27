@@ -9,15 +9,15 @@ import { Store } from '../src/store/db.ts';
 import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
 import { StreamUsageAccumulator } from '../src/proxy/usage.ts';
-import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 
-const originalFiscusHome = process.env.FISCUS_HOME;
-const proxyTestHome = mkdtempSync(join(tmpdir(), 'fiscus-proxy-home-'));
-process.env.FISCUS_HOME = proxyTestHome;
+const originalSegreantHome = process.env.SEGREANT_HOME;
+const proxyTestHome = mkdtempSync(join(tmpdir(), 'segreant-proxy-home-'));
+process.env.SEGREANT_HOME = proxyTestHome;
 
 test.after(() => {
-  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = originalFiscusHome;
+  if (originalSegreantHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = originalSegreantHome;
   rmSync(proxyTestHome, { recursive: true, force: true });
 });
 
@@ -171,8 +171,8 @@ function startMockUpstream(): Promise<{ url: string; close: () => Promise<void>;
   });
 }
 
-async function startProxy(store: Store, overrides: Partial<FiscusConfig>, upstreamUrl: string) {
-  const config: FiscusConfig = {
+async function startProxy(store: Store, overrides: Partial<SegreantConfig>, upstreamUrl: string) {
+  const config: SegreantConfig = {
     ...DEFAULT_CONFIG,
     ...overrides,
     upstreams: { anthropic: upstreamUrl, openai: upstreamUrl },
@@ -219,7 +219,7 @@ test('non-streaming Anthropic: forwards body, injects cost header, logs cost', a
 
   const res = await fetch(`${proxy.base}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-project': 'demo' },
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-segreant-project': 'demo' },
     body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
   });
   const text = await res.text();
@@ -227,7 +227,7 @@ test('non-streaming Anthropic: forwards body, injects cost header, logs cost', a
 
   assert.equal(res.status, 200);
   assert.equal(json.model, 'claude-opus-4-8');
-  const header = res.headers.get('x-fiscus-cost-usd');
+  const header = res.headers.get('x-segreant-cost-usd');
   assert.ok(header, 'cost header present');
   assert.ok(Math.abs(Number(header) - 0.015625) < 1e-9, `header cost ${header}`);
 
@@ -258,8 +258,8 @@ test('proxy rejects an oversized inbound request before opening an upstream conn
       body: oversized,
     });
     assert.equal(res.status, 413);
-    assert.equal(res.headers.get('x-fiscus-resource-limit'), 'inbound_request_bytes');
-    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'fiscus_resource_limit');
+    assert.equal(res.headers.get('x-segreant-resource-limit'), 'inbound_request_bytes');
+    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'segreant_resource_limit');
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(upstream.connections(), 0, 'an oversized body is rejected before any upstream socket');
   } finally {
@@ -288,8 +288,8 @@ test('proxy bounds a non-streaming upstream response before retaining it for par
       body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
     });
     assert.equal(res.status, 502);
-    assert.equal(res.headers.get('x-fiscus-resource-limit'), 'upstream_response_bytes');
-    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'fiscus_resource_limit');
+    assert.equal(res.headers.get('x-segreant-resource-limit'), 'upstream_response_bytes');
+    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'segreant_resource_limit');
   } finally {
     await proxy.close();
     upstream.closeAllConnections?.();
@@ -559,7 +559,7 @@ test('streaming proxy captures proposed edits from SSE tool_use (the First-Pass 
 
   const res = await fetch(`${proxy.base}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-project': 'demo' },
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-segreant-project': 'demo' },
     body: JSON.stringify({ model: 'claude-opus-4-8', stream: true, messages: [{ role: 'user', content: 'edit it' }] }),
   });
   const body = await res.text();
@@ -585,7 +585,7 @@ test('streaming proposal truncation is persisted as partial capture, never as a 
   try {
     const res = await fetch(`${proxy.base}/v1/messages`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-project': 'demo' },
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-segreant-project': 'demo' },
       body: JSON.stringify({ model: 'claude-opus-4-8', stream: true, messages: [{ role: 'user', content: 'edit it' }] }),
     });
     assert.equal(res.status, 200);
@@ -636,14 +636,14 @@ test('non-streaming proposal capture over the line budget is marked truncated', 
   }
 });
 
-test('proxy attributes spend to the x-fiscus-user header (per-developer FinOps)', async () => {
+test('proxy attributes spend to the x-segreant-user header (per-developer FinOps)', async () => {
   const upstream = await startMockUpstream();
   const store = new Store(':memory:');
   const proxy = await startProxy(store, {}, upstream.url);
 
   await fetch(`${proxy.base}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-user': 'alice@team', 'x-fiscus-project': 'demo' },
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-segreant-user': 'alice@team', 'x-segreant-project': 'demo' },
     body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
   });
   await new Promise((r) => setTimeout(r, 20));
@@ -658,7 +658,7 @@ test('proxy attributes spend to the x-fiscus-user header (per-developer FinOps)'
   store.close();
 });
 
-test('proxy attributes spend to x-fiscus-source AND strips the tag before forwarding upstream', async () => {
+test('proxy attributes spend to x-segreant-source AND strips the tag before forwarding upstream', async () => {
   // A recording upstream so we can assert the source tag never reaches the provider —
   // "connect, don't intercept": the tag is ours, the provider sees a vanilla request.
   let received: http.IncomingHttpHeaders = {};
@@ -678,7 +678,7 @@ test('proxy attributes spend to x-fiscus-source AND strips the tag before forwar
 
   await fetch(`${proxy.base}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-source': 'opencode', 'x-fiscus-project': 'demo' },
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-segreant-source': 'opencode', 'x-segreant-project': 'demo' },
     body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
   });
   await new Promise((r) => setTimeout(r, 20));
@@ -687,7 +687,7 @@ test('proxy attributes spend to x-fiscus-source AND strips the tag before forwar
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.label, 'opencode');
   assert.ok(rows[0]!.costUsd > 0, 'spend attributed to the source');
-  assert.equal(received['x-fiscus-source'], undefined, 'the source tag is ours — never forwarded to the provider');
+  assert.equal(received['x-segreant-source'], undefined, 'the source tag is ours — never forwarded to the provider');
 
   await proxy.close();
   await new Promise<void>((r) => upstream.close(() => r()));
@@ -725,7 +725,7 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
     body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
   });
   assert.equal(res.status, 429);
-  assert.equal(res.headers.get('x-fiscus-blocked'), '1');
+  assert.equal(res.headers.get('x-segreant-blocked'), '1');
   const json = (await res.json()) as { error?: { type?: string }; type?: string };
   assert.ok(json.type === 'error' || json.error, 'returns provider-shaped error');
 
@@ -734,31 +734,31 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
   store.close();
 });
 
-test('detectRoute: x-fiscus-openai-base is ignored even if legacy config enables it', () => {
+test('detectRoute: x-segreant-openai-base is ignored even if legacy config enables it', () => {
   const off = DEFAULT_CONFIG; // allowOpenAIBaseOverride: false
-  const on: FiscusConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
+  const on: SegreantConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
   const mk = (headers: Record<string, string>, url = '/v1/chat/completions') =>
     ({ url, headers }) as unknown as http.IncomingMessage;
 
   // Off by default → the header is ignored, the configured upstream is used (no
   // key-exfil vector from an attacker-influenced header).
   assert.equal(
-    detectRoute(mk({ authorization: 'Bearer x', 'x-fiscus-openai-base': 'https://evil.example' }), off)?.upstreamBase,
+    detectRoute(mk({ authorization: 'Bearer x', 'x-segreant-openai-base': 'https://evil.example' }), off)?.upstreamBase,
     off.upstreams.openai,
   );
   // Enabled → honored for any OpenAI-compatible provider.
   assert.equal(
-    detectRoute(mk({ authorization: 'Bearer x', 'x-fiscus-openai-base': 'https://openrouter.ai/api' }), on)?.upstreamBase,
+    detectRoute(mk({ authorization: 'Bearer x', 'x-segreant-openai-base': 'https://openrouter.ai/api' }), on)?.upstreamBase,
     on.upstreams.openai,
   );
   // The Anthropic route ignores the OpenAI override regardless.
   assert.equal(
-    detectRoute(mk({ 'x-api-key': 'k', 'x-fiscus-openai-base': 'https://openrouter.ai/api' }, '/v1/messages'), on)?.upstreamBase,
+    detectRoute(mk({ 'x-api-key': 'k', 'x-segreant-openai-base': 'https://openrouter.ai/api' }, '/v1/messages'), on)?.upstreamBase,
     on.upstreams.anthropic,
   );
   // A non-http(s) override is rejected even when enabled (no file://, ssrf-ish schemes).
   assert.equal(
-    detectRoute(mk({ authorization: 'Bearer x', 'x-fiscus-openai-base': 'file:///etc/passwd' }), on)?.upstreamBase,
+    detectRoute(mk({ authorization: 'Bearer x', 'x-segreant-openai-base': 'file:///etc/passwd' }), on)?.upstreamBase,
     on.upstreams.openai,
   );
 });
@@ -778,7 +778,7 @@ test('upstream unreachable: transparent provider-shaped 502, and the failed atte
     body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
   });
   assert.equal(res.status, 502);
-  assert.equal(res.headers.get('x-fiscus-upstream-error'), '1');
+  assert.equal(res.headers.get('x-segreant-upstream-error'), '1');
   const json = (await res.json()) as { type?: string; error?: unknown };
   assert.equal(json.type, 'error', 'Anthropic-shaped error so the client handles it like any provider error');
 
@@ -793,9 +793,9 @@ test('upstream unreachable: transparent provider-shaped 502, and the failed atte
 });
 
 test('corrupt receipt history returns a truthful egress refusal and never opens an upstream socket', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-proxy-receipt-refusal-'));
-  const previousHome = process.env.FISCUS_HOME;
-  process.env.FISCUS_HOME = home;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-proxy-receipt-refusal-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
   writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
   const upstream = await startMockUpstream();
   const store = new Store(':memory:');
@@ -807,10 +807,10 @@ test('corrupt receipt history returns a truthful egress refusal and never opens 
       body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
     });
     assert.equal(res.status, 403);
-    assert.equal(res.headers.get('x-fiscus-egress-refusal'), 'receipt_integrity_failed');
+    assert.equal(res.headers.get('x-segreant-egress-refusal'), 'receipt_integrity_failed');
     const json = (await res.json()) as { type?: string; error?: { type?: string; code?: string; subcode?: string; message?: string } };
     assert.equal(json.type, 'error');
-    assert.equal(json.error?.type, 'fiscus_egress_refusal');
+    assert.equal(json.error?.type, 'segreant_egress_refusal');
     assert.equal(json.error?.code, 'egress_refused');
     assert.equal(json.error?.subcode, 'receipt_integrity_failed');
     assert.match(json.error?.message ?? '', /repair or restore/i);
@@ -821,8 +821,8 @@ test('corrupt receipt history returns a truthful egress refusal and never opens 
     store.close();
     await upstream.close();
     rmSync(home, { recursive: true, force: true });
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
   }
 });
 
@@ -862,7 +862,7 @@ test('upstream hangs past the timeout: transparent 504, fails fast, attempt reco
   });
   const elapsed = Date.now() - started;
   assert.equal(res.status, 504, 'a hung provider yields a Gateway Timeout, not a hang');
-  assert.equal(res.headers.get('x-fiscus-upstream-error'), '1');
+  assert.equal(res.headers.get('x-segreant-upstream-error'), '1');
   assert.ok(elapsed < 2000, `failed fast on the 200ms timeout (took ${elapsed}ms), never hung the client`);
   const json = (await res.json()) as { type?: string };
   assert.equal(json.type, 'error', 'provider-shaped so the client handles it like any error');
@@ -891,9 +891,9 @@ test('proxy records WHY a project label exists: declared vs never declared', asy
       body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
     });
 
-  await send({ 'x-fiscus-project': 'backend-api' });
+  await send({ 'x-segreant-project': 'backend-api' });
   await send({}); // no project header at all
-  await send({ 'x-fiscus-project': 'default' }); // deliberately named 'default'
+  await send({ 'x-segreant-project': 'default' }); // deliberately named 'default'
   await new Promise((r) => setTimeout(r, 30));
 
   const ev = store.attributionEvidenceByProject(0, Date.now() + 1000);
@@ -919,7 +919,7 @@ test('proxy records WHY a project label exists: declared vs never declared', asy
 
 test('proxy: a header-less client can declare its project in the URL, and the upstream never sees it', async () => {
   // Antigravity's custom-provider form has a base URL and no headers field, so
-  // `x-fiscus-project` is unavailable to it. The path prefix is the same
+  // `x-segreant-project` is unavailable to it. The path prefix is the same
   // declaration by the only route that tool has.
   const seenPaths: string[] = [];
   const upstream = await startMockUpstreamRecording(seenPaths);
@@ -933,10 +933,10 @@ test('proxy: a header-less client can declare its project in the URL, and the up
       body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
     });
 
-  await send('/fiscus/backend-api/v1/messages');
+  await send('/segreant/backend-api/v1/messages');
   // A header on a prefixed URL wins: it is the documented primary, and it is set
   // per request where the path is baked into one configured endpoint.
-  await send('/fiscus/backend-api/v1/messages', { 'x-fiscus-project': 'web-frontend' });
+  await send('/segreant/backend-api/v1/messages', { 'x-segreant-project': 'web-frontend' });
   await new Promise((r) => setTimeout(r, 30));
 
   const ev = store.attributionEvidenceByProject(0, Date.now() + 1000);

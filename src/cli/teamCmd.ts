@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
-import { loadConfig, dbPath, fiscusHome } from '../config.ts';
+import { loadConfig, dbPath, segreantHome } from '../config.ts';
 import { discardResponseBody, egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
 import { isGitRepo, projectName } from '../git/correlate.ts';
 import {
@@ -102,7 +102,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
       console.log(color(tty, C.gray, '  and even then this stays a distribution — never a leaderboard.'));
     }
     console.log('');
-    console.log(color(tty, C.gray, '  A person can always see their OWN value:  fiscus team --me <user>'));
+    console.log(color(tty, C.gray, '  A person can always see their OWN value:  segreant team --me <user>'));
     console.log('');
     return;
   }
@@ -125,18 +125,18 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
 
   // Publish this machine's signing identity so others can pin it when verifying.
   if (flags.pubkey) {
-    const keys = loadOrCreateKeyPair(join(fiscusHome(), 'receipt-key.json'));
+    const keys = loadOrCreateKeyPair(join(segreantHome(), 'receipt-key.json'));
     if (flags.json) {
       process.stdout.write(JSON.stringify({ keyId: keys.keyId, publicKey: keys.publicPem }, null, 2) + '\n');
       return;
     }
     console.log('');
-    console.log(color(tty, C.bold, '  Fiscus signing identity') + color(tty, C.gray, '   publish this so others can verify your receipts'));
+    console.log(color(tty, C.bold, '  Segreant signing identity') + color(tty, C.gray, '   publish this so others can verify your receipts'));
     console.log(`  keyId: ${color(tty, C.cyan, keys.keyId)}`);
     console.log('');
     process.stdout.write(keys.publicPem.endsWith('\n') ? keys.publicPem : keys.publicPem + '\n');
     console.log(color(tty, C.gray, '  A buyer/auditor verifies your receipts against this identity with:'));
-    console.log(color(tty, C.gray, `    fiscus receipt --verify <file> --key-id ${keys.keyId}`));
+    console.log(color(tty, C.gray, `    segreant receipt --verify <file> --key-id ${keys.keyId}`));
     console.log('');
     return;
   }
@@ -184,7 +184,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
       console.log(`  Ledger        ${outcome.ledgerAmountText ?? '—'}`);
       for (const reason of outcome.reasons) console.log(`  - ${reason}`);
       for (const item of outcome.notChecked) console.log(color(tty, C.gray, `  not checked: ${item}`));
-      console.log(color(tty, C.gray, '  Integrity and signer are a separate question: fiscus receipt --verify <file>'));
+      console.log(color(tty, C.gray, '  Integrity and signer are a separate question: segreant receipt --verify <file>'));
       console.log('');
     } finally {
       store.close();
@@ -244,7 +244,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const report = await computeRealization(store, repo, { limit, windowDays, persist: false });
   const project = await projectName(repo);
-  const keys = loadOrCreateKeyPair(join(fiscusHome(), 'receipt-key.json'));
+  const keys = loadOrCreateKeyPair(join(segreantHome(), 'receipt-key.json'));
 
   const units = report.units.filter(
     (u) => !u.maturing && (!flags.unit || u.hash.startsWith(String(flags.unit))),
@@ -274,8 +274,8 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   console.log('');
   console.log(color(tty, C.bold, '  Value Receipts') + color(tty, C.gray, `   signed with key ${keys.keyId} (ed25519)`));
   console.log(color(tty, C.gray, '  Portable, verifiable proof of cost → outcome.'));
-  console.log(color(tty, C.gray, `  Publish your identity:  fiscus receipt --pubkey   (keyId ${keys.keyId})`));
-  console.log(color(tty, C.gray, '  Others verify + pin it: fiscus receipt --verify <file> --key-id <keyId>'));
+  console.log(color(tty, C.gray, `  Publish your identity:  segreant receipt --pubkey   (keyId ${keys.keyId})`));
+  console.log(color(tty, C.gray, '  Others verify + pin it: segreant receipt --verify <file> --key-id <keyId>'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (receipts.length === 0) {
     console.log(color(tty, C.gray, `  No matured units to certify yet (need commits older than ${windowDays}d).`));
@@ -345,9 +345,9 @@ export async function cmdJudge(flags: Flags): Promise<void> {
       return;
     }
     console.log('');
-    console.log(color(tty, C.bold, `  Fiscus — session judge · ${project}`));
+    console.log(color(tty, C.bold, `  Segreant — session judge · ${project}`));
     console.log(color(tty, C.gray, `  No sessions with request activity in the last ${windowDays}d for this project.`));
-    console.log(color(tty, C.gray, '  Route traffic through the proxy or run fiscus scan --setup, then retry.'));
+    console.log(color(tty, C.gray, '  Route traffic through the proxy or run segreant scan --setup, then retry.'));
     console.log('');
     return;
   }
@@ -370,7 +370,7 @@ export async function cmdJudge(flags: Flags): Promise<void> {
     : C.red; // 'hosted-llm-full'
 
   console.log('');
-  console.log(color(tty, C.bold, `  Fiscus — session judge · ${project}`));
+  console.log(color(tty, C.bold, `  Segreant — session judge · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   console.log(color(tty, C.gray, `  window: last ${windowDays}d · session ${picked.sessionId}`));
   console.log(color(tty, C.gray, `  tool: ${picked.tool} · ${picked.requestCount} requests in window${sessions.length > 1 ? ` · ${sessions.length} sessions available (pick one with --session <id>)` : ''}`));
@@ -397,7 +397,7 @@ type TeamPushFailureCode = `egress_${EgressErrorCode}` | 'network_error';
 
 function egressRepairAction(code: EgressErrorCode): string | undefined {
   return code === 'receipt_integrity_failed' || code === 'receipt_persistence_failed'
-    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify.'
+    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify.'
     : undefined;
 }
 
@@ -558,7 +558,7 @@ async function signAndPushRollup(
       const action = egressRepairAction(e.code);
       return {
         status: 'error',
-        message: `Fiscus egress boundary refused team push (${e.code}): ${e.message}${action ? ` ${action}` : ''}`,
+        message: `Segreant egress boundary refused team push (${e.code}): ${e.message}${action ? ` ${action}` : ''}`,
         failureCode: `egress_${e.code}`,
         action,
       };
@@ -569,7 +569,7 @@ async function signAndPushRollup(
 
 /**
  * Push a signed, numeric-only rollup of this machine's per-project value/RoI to
- * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — Fiscus hosts
+ * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — Segreant hosts
  * nothing; --url points at infrastructure the team already runs and trusts.
  * Uses a SEPARATE keypair from `receipt --pubkey` on purpose (src/team/rollup.ts).
  * `--watch` keeps pushing on an interval (--every seconds) — see cmdTeamPushWatch,
@@ -577,21 +577,21 @@ async function signAndPushRollup(
  */
 export async function cmdTeamPush(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
-  const keyPath = join(fiscusHome(), 'team-key.json');
+  const keyPath = join(segreantHome(), 'team-key.json');
   const sub = typeof flags._[0] === 'string' ? flags._[0] : '';
 
   if (sub !== 'push') {
     console.log('');
     console.log(color(tty, C.bold, '  Team tier — push a signed rollup to a team server you run'));
-    console.log(color(tty, C.gray, '  Fiscus hosts nothing; --url points at infrastructure your team already trusts.'));
+    console.log(color(tty, C.gray, '  Segreant hosts nothing; --url points at infrastructure your team already trusts.'));
     console.log('');
-    console.log(color(tty, C.gray, '  Usage:  fiscus team push --url <url>          send this window\'s per-project value/RoI'));
-    console.log(color(tty, C.gray, '          fiscus team push --dry-run             preview without sending'));
-    console.log(color(tty, C.gray, '          fiscus team push --pubkey              print this machine\'s rollup signing identity'));
-    console.log(color(tty, C.gray, '          fiscus team push --url <url> --window 7'));
-    console.log(color(tty, C.gray, '          fiscus team push --dry-run --project <name>   preview ONE project; a'));
+    console.log(color(tty, C.gray, '  Usage:  segreant team push --url <url>          send this window\'s per-project value/RoI'));
+    console.log(color(tty, C.gray, '          segreant team push --dry-run             preview without sending'));
+    console.log(color(tty, C.gray, '          segreant team push --pubkey              print this machine\'s rollup signing identity'));
+    console.log(color(tty, C.gray, '          segreant team push --url <url> --window 7'));
+    console.log(color(tty, C.gray, '          segreant team push --dry-run --project <name>   preview ONE project; a'));
     console.log(color(tty, C.gray, '                                                        scoped rollup is never sent'));
-    console.log(color(tty, C.gray, '          fiscus team push --url <url> --watch --every 3600   background interval (seconds)'));
+    console.log(color(tty, C.gray, '          segreant team push --url <url> --watch --every 3600   background interval (seconds)'));
     console.log('');
     return;
   }
@@ -603,7 +603,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
       return;
     }
     console.log('');
-    console.log(color(tty, C.bold, '  Fiscus team-rollup identity') + color(tty, C.gray, '   register this with your team server'));
+    console.log(color(tty, C.bold, '  Segreant team-rollup identity') + color(tty, C.gray, '   register this with your team server'));
     console.log(`  keyId: ${color(tty, C.cyan, keys.keyId)}`);
     console.log('');
     process.stdout.write(keys.publicPem.endsWith('\n') ? keys.publicPem : keys.publicPem + '\n');
@@ -614,7 +614,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   const url = typeof flags['url'] === 'string' ? flags['url'] : null;
   const dryRun = Boolean(flags['dry-run']);
   if (!url && !dryRun) {
-    const msg = 'no team server URL given — pass one your team runs: fiscus team push --url <url>  (or --dry-run to preview without sending)';
+    const msg = 'no team server URL given — pass one your team runs: segreant team push --url <url>  (or --dry-run to preview without sending)';
     if (flags.json) {
       console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
       process.exitCode = 1;
@@ -654,7 +654,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
       return;
     }
     if (!url) {
-      const msg = 'no team server URL given — --watch needs somewhere to push: fiscus team push --url <url> --watch';
+      const msg = 'no team server URL given — --watch needs somewhere to push: segreant team push --url <url> --watch';
       if (flags.json) {
         console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
         process.exitCode = 1;

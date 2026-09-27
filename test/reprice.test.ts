@@ -4,8 +4,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Isolate from any real ~/.fiscus pricing override (incident #3 in the log).
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
+// Isolate from any real ~/.segreant pricing override (incident #3 in the log).
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { computeCost, legacyPricingEvidence, type Provider } from '../src/cost/pricing.ts';

@@ -22,7 +22,7 @@
  * than an inconsistency to be noted. The cut sets OVERSTATE how hard the claim
  * is to refute: they say an auditor must revoke both invoices to cut the billed
  * claim, when revoking either one already cuts it. A figure that overstates its
- * own robustness is the failure mode Fiscus exists to refuse, and "withhold
+ * own robustness is the failure mode Segreant exists to refuse, and "withhold
  * rather than inflate" decides the tie.
  *
  * WHAT THE GRAPH CANNOT SAY. There is no way in this model to express "either e1

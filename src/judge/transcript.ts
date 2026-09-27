@@ -4,10 +4,10 @@
  * The design doc (LIFT-AI-SIDE-JUDGE-DESIGN.md, the ⚠ note) blocked full-content
  * judging on "transcript capture existing first" — a big privacy decision about
  * data at rest. The resolution here is that no capture is needed: the tools
- * Fiscus imports from already keep their own transcripts on disk (Claude Code
+ * Segreant imports from already keep their own transcripts on disk (Claude Code
  * writes ~/.claude/projects/<dir>/<sessionId>.jsonl with full message content).
  * This module reads that file AT JUDGE TIME, read-only, and hands bounded
- * excerpts to the caller. Nothing here ever writes: Fiscus's store still never
+ * excerpts to the caller. Nothing here ever writes: Segreant's store still never
  * persists prompt or response text, and the excerpt lives only for the duration
  * of one judge call. The decision about where the content GOES (local vs hosted
  * LLM) stays entirely with the trust ladder in tier.ts — this module only makes

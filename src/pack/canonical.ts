@@ -1,4 +1,4 @@
-import type { FiscusPackLimits } from './types.ts';
+import type { SegreantPackLimits } from './types.ts';
 
 function byteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8');
@@ -11,7 +11,7 @@ function byteLength(value: string): number {
  */
 export function canonicalPackJson(
   value: unknown,
-  limits: FiscusPackLimits,
+  limits: SegreantPackLimits,
   maxBytes: number,
 ): string {
   const seen = new WeakSet<object>();

@@ -14,7 +14,7 @@ import type { ProjectTotals, DeveloperTotals } from '../src/store.ts';
 
 function project(overrides: Partial<ProjectTotals> = {}): ProjectTotals {
   return {
-    project: 'fiscus',
+    project: 'segreant',
     developerCount: 5,
     rollupCount: 5,
     totalUnits: 100,

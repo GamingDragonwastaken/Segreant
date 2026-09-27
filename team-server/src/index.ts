@@ -1,7 +1,7 @@
 /**
  * Team server entrypoint. Configured entirely through environment variables
  * per docs/TEAM-TIER-DESIGN.md §1 — the operator provides a database and,
- * optionally, an OIDC issuer for human-facing routes; Fiscus provides the
+ * optionally, an OIDC issuer for human-facing routes; Segreant provides the
  * software only.
  */
 
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   });
   server.listen(port, host, () => {
     console.log(
-      `fiscus team-server listening on ${host}:${port} ` +
+      `segreant team-server listening on ${host}:${port} ` +
         `(admin registration: ${adminToken ? 'enabled' : 'DISABLED'}, OIDC: ${oidc ? 'enabled' : 'DISABLED'}, dashboard access: ${dashboardAllowedSubjects ? 'enabled' : 'DISABLED'}, ` +
         `developer breakdown: ${aggregate.exposeDeveloperBreakdown ? 'enabled' : 'DISABLED'}, min cohort: ${aggregate.minCohort})`,
     );

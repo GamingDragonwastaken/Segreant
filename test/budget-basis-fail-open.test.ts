@@ -18,7 +18,7 @@
  *
  * So the cap can be evaded, and in the direction that matters. With $30 of
  * resolved effective charges against a $25 cap, one unpriced request drops the
- * guard back to a stale $10 and it returns `allow` — while Fiscus's own ledger,
+ * guard back to a stale $10 and it returns `allow` — while Segreant's own ledger,
  * in the same call, has already resolved more than the cap. That is
  * enforcement failing OPEN, which is the one direction hard rule 5 forbids.
  *
@@ -154,7 +154,7 @@ test('the dashboard budget bar agrees with the blocker, because it resolves the 
   // while the guard blocked.
   // A real empty Store supplies every other accessor the overview needs; only
   // the two spend readings are planted, which is the whole of the case.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-budget-bar-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-budget-bar-'));
   const real = new Store(join(dir, 'bar.db'));
   try {
     const store: Store = Object.create(real, {

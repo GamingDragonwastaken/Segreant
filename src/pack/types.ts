@@ -1,48 +1,48 @@
 import { createHash } from 'node:crypto';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
-export const FISCUS_PACK_SCHEMA = 'fiscuspack' as const;
-export const FISCUS_PACK_VERSION = 1 as const;
-export const FISCUS_PACK_MANIFEST_SCHEMA = 'fiscuspack.manifest' as const;
-export const FISCUS_PACK_MANIFEST_VERSION = 1 as const;
+export const SEGREANT_PACK_SCHEMA = 'segreantpack' as const;
+export const SEGREANT_PACK_VERSION = 1 as const;
+export const SEGREANT_PACK_MANIFEST_SCHEMA = 'segreantpack.manifest' as const;
+export const SEGREANT_PACK_MANIFEST_VERSION = 1 as const;
 
-export type FiscusPackDigest = string;
-export type FiscusPackRecordKind = string;
+export type SegreantPackDigest = string;
+export type SegreantPackRecordKind = string;
 
-export interface FiscusPackRecordReference {
-  readonly kind: FiscusPackRecordKind;
+export interface SegreantPackRecordReference {
+  readonly kind: SegreantPackRecordKind;
   readonly id: string;
-  readonly digest: FiscusPackDigest;
+  readonly digest: SegreantPackDigest;
 }
 
-export interface FiscusPackOmission {
-  readonly kind: FiscusPackRecordKind;
+export interface SegreantPackOmission {
+  readonly kind: SegreantPackRecordKind;
   readonly count: number;
   readonly ids: readonly string[];
   readonly reason: string;
 }
 
-export interface FiscusPackRedaction {
-  readonly kind: FiscusPackRecordKind;
+export interface SegreantPackRedaction {
+  readonly kind: SegreantPackRecordKind;
   readonly ids: readonly string[];
   readonly fields: readonly string[];
   readonly reason: string;
 }
 
-export interface FiscusPackExternalReference {
+export interface SegreantPackExternalReference {
   readonly id: string;
   readonly kind: string;
-  readonly digest: FiscusPackDigest;
+  readonly digest: SegreantPackDigest;
   /** Metadata only. Verification never dereferences this locator. */
   readonly uri: string;
 }
 
-export interface FiscusPackAttachment {
+export interface SegreantPackAttachment {
   /** Pack-relative POSIX path; no filesystem resolution is performed by verification. */
   readonly path: string;
   readonly mediaType: string;
   readonly sizeBytes: number;
-  readonly digest: FiscusPackDigest;
+  readonly digest: SegreantPackDigest;
 }
 
 /**
@@ -50,44 +50,44 @@ export interface FiscusPackAttachment {
  * envelope stays JSON and the manifest can bind the bytes by digest without
  * asking verification to read a path from the host filesystem.
  */
-export interface FiscusPackAttachmentData {
+export interface SegreantPackAttachmentData {
   readonly path: string;
   readonly data: string;
 }
 
-export interface FiscusPackSignatureMetadata {
+export interface SegreantPackSignatureMetadata {
   readonly algorithm: string;
   readonly keyId: string;
   readonly signature: string;
   /** Digest of the manifest content excluding this metadata object. */
-  readonly signedDigest: FiscusPackDigest;
+  readonly signedDigest: SegreantPackDigest;
   /** Base64-encoded SubjectPublicKeyInfo DER; absent means metadata-only. */
   readonly publicKey?: string;
 }
 
-export interface FiscusPackManifestInput {
+export interface SegreantPackManifestInput {
   readonly packId: string;
   readonly createdAt: string;
-  readonly includedRecords: readonly FiscusPackRecordReference[];
-  readonly omissions: readonly FiscusPackOmission[];
-  readonly redactions: readonly FiscusPackRedaction[];
-  readonly externalReferences: readonly FiscusPackExternalReference[];
-  readonly attachments: readonly FiscusPackAttachment[];
-  readonly signature?: FiscusPackSignatureMetadata;
+  readonly includedRecords: readonly SegreantPackRecordReference[];
+  readonly omissions: readonly SegreantPackOmission[];
+  readonly redactions: readonly SegreantPackRedaction[];
+  readonly externalReferences: readonly SegreantPackExternalReference[];
+  readonly attachments: readonly SegreantPackAttachment[];
+  readonly signature?: SegreantPackSignatureMetadata;
 }
 
-export interface FiscusPackManifest extends FiscusPackManifestInput {
-  readonly schema: typeof FISCUS_PACK_MANIFEST_SCHEMA;
-  readonly version: typeof FISCUS_PACK_MANIFEST_VERSION;
+export interface SegreantPackManifest extends SegreantPackManifestInput {
+  readonly schema: typeof SEGREANT_PACK_MANIFEST_SCHEMA;
+  readonly version: typeof SEGREANT_PACK_MANIFEST_VERSION;
 }
 
-export interface FiscusPackEnvelope {
-  readonly schema: typeof FISCUS_PACK_SCHEMA;
-  readonly version: typeof FISCUS_PACK_VERSION;
-  readonly manifest: FiscusPackManifest;
-  readonly manifestDigest: FiscusPackDigest;
+export interface SegreantPackEnvelope {
+  readonly schema: typeof SEGREANT_PACK_SCHEMA;
+  readonly version: typeof SEGREANT_PACK_VERSION;
+  readonly manifest: SegreantPackManifest;
+  readonly manifestDigest: SegreantPackDigest;
   /** Optional inline attachment bytes. Omission is an explicit partial pack. */
-  readonly attachments?: readonly FiscusPackAttachmentData[];
+  readonly attachments?: readonly SegreantPackAttachmentData[];
 }
 
 /**
@@ -95,7 +95,7 @@ export interface FiscusPackEnvelope {
  * input parsing and the declared collections inside a pack; they are not
  * claims about the completeness or correctness of the records named by it.
  */
-export interface FiscusPackLimits {
+export interface SegreantPackLimits {
   readonly maxEnvelopeBytes: number;
   readonly maxManifestBytes: number;
   readonly maxIncludedRecords: number;
@@ -116,9 +116,9 @@ export interface FiscusPackLimits {
   readonly maxAttachmentBytes: number;
 }
 
-export type FiscusPackLimitsOverride = Partial<FiscusPackLimits>;
+export type SegreantPackLimitsOverride = Partial<SegreantPackLimits>;
 
-export const DEFAULT_FISCUS_PACK_LIMITS: FiscusPackLimits = Object.freeze({
+export const DEFAULT_SEGREANT_PACK_LIMITS: SegreantPackLimits = Object.freeze({
   maxEnvelopeBytes: RESOURCE_LIMITS.evidenceArtifactBytes,
   maxManifestBytes: RESOURCE_LIMITS.evidenceArtifactBytes,
   maxIncludedRecords: 100_000,
@@ -222,7 +222,7 @@ function validArray(value: unknown, maxItems: number, label: string, errors: str
 
 function validateRecordReferences(
   value: unknown,
-  limits: FiscusPackLimits,
+  limits: SegreantPackLimits,
   errors: string[],
 ): void {
   if (!validArray(value, limits.maxIncludedRecords, 'manifest.includedRecords', errors)) return;
@@ -247,7 +247,7 @@ function validateRecordReferences(
   }
 }
 
-function validateOmissions(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateOmissions(value: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (!validArray(value, limits.maxOmissions, 'manifest.omissions', errors)) return;
   for (let index = 0; index < value.length; index += 1) {
     const item = value[index];
@@ -278,7 +278,7 @@ function validateOmissions(value: unknown, limits: FiscusPackLimits, errors: str
   }
 }
 
-function validateRedactions(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateRedactions(value: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (!validArray(value, limits.maxRedactions, 'manifest.redactions', errors)) return;
   for (let index = 0; index < value.length; index += 1) {
     const item = value[index];
@@ -316,7 +316,7 @@ function validateRedactions(value: unknown, limits: FiscusPackLimits, errors: st
   }
 }
 
-function validateExternalReferences(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateExternalReferences(value: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (!validArray(value, limits.maxExternalReferences, 'manifest.externalReferences', errors)) return;
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index += 1) {
@@ -347,7 +347,7 @@ export function isSafeRelativeAttachmentPath(value: unknown): value is string {
   return parts.every((part) => part.length > 0 && part !== '.' && part !== '..');
 }
 
-function validateAttachments(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateAttachments(value: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (!validArray(value, limits.maxAttachments, 'manifest.attachments', errors)) return;
   const seen = new Set<string>();
   let totalBytes = 0;
@@ -389,7 +389,7 @@ function decodeBase64(value: unknown): Buffer | null {
   return decoded.toString('base64') === value ? decoded : null;
 }
 
-function validateAttachmentData(value: unknown, manifestAttachments: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateAttachmentData(value: unknown, manifestAttachments: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (value === undefined) return;
   if (!validArray(value, limits.maxAttachments, 'pack.attachments', errors)) return;
   const declared = new Map<string, { sizeBytes: number; digest: string }>();
@@ -440,7 +440,7 @@ function validateAttachmentData(value: unknown, manifestAttachments: unknown, li
   }
 }
 
-function validateSignature(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
+function validateSignature(value: unknown, limits: SegreantPackLimits, errors: string[]): void {
   if (value === undefined) return;
   const label = 'manifest.signature';
   if (!isRecord(value)) {
@@ -462,9 +462,9 @@ function validateSignature(value: unknown, limits: FiscusPackLimits, errors: str
   }
 }
 
-export function validateFiscusPackLimits(value: FiscusPackLimits): string[] {
+export function validateSegreantPackLimits(value: SegreantPackLimits): string[] {
   const errors: string[] = [];
-  const positiveKeys: readonly (keyof FiscusPackLimits)[] = [
+  const positiveKeys: readonly (keyof SegreantPackLimits)[] = [
     'maxEnvelopeBytes',
     'maxManifestBytes',
     'maxCanonicalNodes',
@@ -479,7 +479,7 @@ export function validateFiscusPackLimits(value: FiscusPackLimits): string[] {
     'maxAttachmentSizeBytes',
     'maxAttachmentBytes',
   ];
-  const countKeys: readonly (keyof FiscusPackLimits)[] = [
+  const countKeys: readonly (keyof SegreantPackLimits)[] = [
     'maxIncludedRecords',
     'maxOmissions',
     'maxRedactions',
@@ -497,22 +497,22 @@ export function validateFiscusPackLimits(value: FiscusPackLimits): string[] {
   return errors;
 }
 
-export function resolveFiscusPackLimits(overrides: FiscusPackLimitsOverride = {}): FiscusPackLimits {
-  return Object.freeze({ ...DEFAULT_FISCUS_PACK_LIMITS, ...overrides });
+export function resolveSegreantPackLimits(overrides: SegreantPackLimitsOverride = {}): SegreantPackLimits {
+  return Object.freeze({ ...DEFAULT_SEGREANT_PACK_LIMITS, ...overrides });
 }
 
-export function manifestDigestMaterial(manifest: FiscusPackManifest): Record<string, unknown> {
+export function manifestDigestMaterial(manifest: SegreantPackManifest): Record<string, unknown> {
   const { signature: _signature, ...material } = manifest;
   return material;
 }
 
-export function validateFiscusPackManifest(value: unknown, limits: FiscusPackLimits = DEFAULT_FISCUS_PACK_LIMITS): string[] {
+export function validateSegreantPackManifest(value: unknown, limits: SegreantPackLimits = DEFAULT_SEGREANT_PACK_LIMITS): string[] {
   const errors: string[] = [];
   if (!isRecord(value)) return ['manifest must be an object'];
   rejectUnexpectedKeys(value, MANIFEST_KEYS, 'manifest', errors);
   requireKeys(value, MANIFEST_KEYS.filter((key) => key !== 'signature'), 'manifest', errors);
-  if (value.schema !== FISCUS_PACK_MANIFEST_SCHEMA) errors.push(`manifest.schema must be ${FISCUS_PACK_MANIFEST_SCHEMA}`);
-  if (value.version !== FISCUS_PACK_MANIFEST_VERSION) errors.push(`manifest.version must be ${FISCUS_PACK_MANIFEST_VERSION}`);
+  if (value.schema !== SEGREANT_PACK_MANIFEST_SCHEMA) errors.push(`manifest.schema must be ${SEGREANT_PACK_MANIFEST_SCHEMA}`);
+  if (value.version !== SEGREANT_PACK_MANIFEST_VERSION) errors.push(`manifest.version must be ${SEGREANT_PACK_MANIFEST_VERSION}`);
   if (!validIdentifier(value.packId, limits.maxIdentifierChars)) errors.push('manifest.packId is invalid');
   if (!validIsoTimestamp(value.createdAt)) errors.push('manifest.createdAt must be an ISO-8601 UTC timestamp');
   validateRecordReferences(value.includedRecords, limits, errors);
@@ -524,19 +524,19 @@ export function validateFiscusPackManifest(value: unknown, limits: FiscusPackLim
   return errors;
 }
 
-export function validateFiscusPackEnvelope(value: unknown, limits: FiscusPackLimits = DEFAULT_FISCUS_PACK_LIMITS): string[] {
+export function validateSegreantPackEnvelope(value: unknown, limits: SegreantPackLimits = DEFAULT_SEGREANT_PACK_LIMITS): string[] {
   const errors: string[] = [];
   if (!isRecord(value)) return ['pack envelope must be an object'];
   rejectUnexpectedKeys(value, TOP_LEVEL_KEYS, 'pack envelope', errors);
   requireKeys(value, ['schema', 'version', 'manifest', 'manifestDigest'], 'pack envelope', errors);
-  if (value.schema !== FISCUS_PACK_SCHEMA) errors.push(`pack envelope.schema must be ${FISCUS_PACK_SCHEMA}`);
-  if (value.version !== FISCUS_PACK_VERSION) errors.push(`pack envelope.version must be ${FISCUS_PACK_VERSION}`);
+  if (value.schema !== SEGREANT_PACK_SCHEMA) errors.push(`pack envelope.schema must be ${SEGREANT_PACK_SCHEMA}`);
+  if (value.version !== SEGREANT_PACK_VERSION) errors.push(`pack envelope.version must be ${SEGREANT_PACK_VERSION}`);
   if (!validDigest(value.manifestDigest)) errors.push('pack envelope.manifestDigest is invalid');
-  errors.push(...validateFiscusPackManifest(value.manifest, limits));
+  errors.push(...validateSegreantPackManifest(value.manifest, limits));
   if (isRecord(value.manifest)) validateAttachmentData(value.attachments, value.manifest.attachments, limits, errors);
   return errors;
 }
 
-export function isFiscusPackDigest(value: unknown): value is FiscusPackDigest {
+export function isSegreantPackDigest(value: unknown): value is SegreantPackDigest {
   return validDigest(value);
 }

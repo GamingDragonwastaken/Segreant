@@ -1,4 +1,4 @@
-# Fiscus — agent orientation
+# Segreant — agent orientation
 
 <!-- Layer 0: identity. Read this first, every session. Routing lives in CONTEXT.md. -->
 
@@ -6,7 +6,7 @@ Local-first **AI Financial Operations** layer: meter AI spend, control it,
 allocate it, reconcile it against provider billing where the evidence allows, and
 measure what it produced. The ledger and GUI are local by default; configured
 provider traffic and other declared egress paths are governed by the
-Fiscus-process boundary described in `docs/DATA-BOUNDARIES.md`. Product truth is
+Segreant-process boundary described in `docs/DATA-BOUNDARIES.md`. Product truth is
 in [PRODUCT.md](../PRODUCT.md); read it before designing anything user-facing.
 
 ## The one distinction the whole product is built on
@@ -33,7 +33,7 @@ another.** Most defects in this repo have been a version of that collapse.
    or an unreadable ledger must stop provider forwarding rather than silently
    becoming an unlimited or unmetered path. Dashboard settings are strict,
    bounded, and validated before persistence.
-6. **Fiscus's own outbound paths are declared and policy-gated.** There is no
+6. **Segreant's own outbound paths are declared and policy-gated.** There is no
    hosted telemetry by default; configured provider forwarding, refreshes,
    webhooks, hosted judging, and team rollups are separate egress paths with
    explicit scope. The GUI talks to the local dashboard only — no CDN, fonts, or
@@ -108,15 +108,15 @@ Exercising the CLI should not touch your own ledger:
 
 ```bash
 # npm lifecycle hooks rebuild the checked-out dist/ before launch
-FISCUS_HOME=/tmp/scratch npm run demo
-FISCUS_HOME=/tmp/scratch npm run start -- --demo --dashboard-port 8621
+SEGREANT_HOME=/tmp/scratch npm run demo
+SEGREANT_HOME=/tmp/scratch npm run start -- --demo --dashboard-port 8621
 ```
 
-`FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the only overrides — there is
-no second family and no fallback. Without one, `fiscus demo` regenerates the
-real `~/.fiscus/demo.db`.
+`SEGREANT_HOME`, `SEGREANT_DB` and `SEGREANT_DEMO` are the only overrides — there is
+no second family and no fallback. Without one, `segreant demo` regenerates the
+real `~/.segreant/demo.db`.
 
-`bin/fiscus.mjs` imports `dist/cli.js`, **not** `src/`. A source edit is
+`bin/segreant.mjs` imports `dist/cli.js`, **not** `src/`. A source edit is
 invisible to it until `npm run build`. Probing a change you have not rebuilt is
 the most reliable way to verify the wrong thing.
 
@@ -125,7 +125,7 @@ the most reliable way to verify the wrong thing.
 One compiler, two passes, no bundler (`scripts/build.mjs`):
 
 - **node runtime** — `tsconfig.build.json` → `dist/`, which is what ships and
-  what `bin/fiscus.mjs` runs.
+  what `bin/segreant.mjs` runs.
 - **browser app** — `src/dashboard/web/app/tsconfig.json`, DOM lib and no node
   types, so server code cannot reach a browser global or the reverse. Emitted
   import specifiers are rewritten to `.js`: `tsc` checks the source tree while

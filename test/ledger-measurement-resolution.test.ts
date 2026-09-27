@@ -99,8 +99,8 @@ function record(id: string, measurementModelRef: string | null): Evidence {
   return evidence({
     id,
     evidenceType: 'ops.incident_feed',
-    sourceIdentity: 'fiscus:local',
-    sourceClass: 'fiscus_local_records',
+    sourceIdentity: 'segreant:local',
+    sourceClass: 'segreant_local_records',
     payload: { value: '1' },
     scope: STUDY_SCOPE,
     grain: STUDY_GRAIN,
@@ -249,7 +249,7 @@ test('GUARD: a registered, construct-matching model strong enough for the rung i
 });
 
 test('GUARD: a proxy_unvalidated claim carrying an unresolvable reference is still accepted', () => {
-  // The floor is ABOVE the bottom rung. Fiscus\'s own causal claims sit at
+  // The floor is ABOVE the bottom rung. Segreant\'s own causal claims sit at
   // `proxy_unvalidated` with a reference synthesized from a stored protocol
   // that no static registry can hold (D-168); they assert nothing on the axis
   // and must keep working in a ledger that knows no models.

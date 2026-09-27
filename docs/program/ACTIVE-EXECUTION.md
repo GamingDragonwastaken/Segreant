@@ -80,9 +80,9 @@ development.
 
 | Decision | State | Blocks |
 |---|---|---|
-| **Name / npm package.** `fiscus` on npm belongs to an unrelated AI-agent payments project (`docs/NAME-COLLISION-REVIEW.md`). Recommendation: rename to **Gryf** (`NAMING-DECISION.md`). | recommended, awaiting owner go | branding, mascot, landing page, npm publication |
+| **Name / npm package.** Renamed to **Segreant** (D-290): the old name belongs to an unrelated AI-agent payments project on npm (`docs/NAME-COLLISION-REVIEW.md`, `NAMING-DECISION.md`). The `segreant` npm name is unclaimed until the owner publishes; the GitHub repository rename is the owner's click. | decided | branding, mascot, landing page, npm publication, repository rename |
 | **License.** Changed to PolyForm Noncommercial 1.0.0 with paid commercial licenses (D-287), at the owner's direction. Commercial terms stated in `COMMERCIAL-LICENSE.md` ($10/month organization-wide, perpetual after twelve paid months). | decided | — |
-| **Sponsorship.** GitHub Sponsors button added (`.github/FUNDING.yml`). Owner created the Sponsors profile on 2026-09-25; tiers per `OWNER-SETUP.md` §1. An in-app notice is deliberately deferred until there are users; its constraints are in `docs/NEUTRALITY.md`. | profile live, tiers pending | — |
+| **Sponsorship.** Deferred by the owner on 2026-09-26 (D-289): the Sponsors signup was never completed and the payment route is still open. `FUNDING.yml` removed; commercial licenses arranged through a discussion until a checkout exists. | deferred | self-serve commercial checkout |
 | **Branch retirement and `main` protection.** Branch history preserved on the product line, so deletion loses nothing; deletion and the ruleset import need the owner's settings access (`REPOSITORY-HYGIENE.md`). | awaiting owner clicks | — |
 
 ### Checklist
@@ -91,8 +91,8 @@ development.
    reference moved to `docs/GUIDE.md`; docs index at `docs/README.md`.
 2. [x] Continuity collapsed: `HANDOFF.md` is a one-page entry point; this file
    is the operational truth.
-3. [x] `npx fiscus` removed from user docs; it would fetch the other project's
-   package.
+3. [x] `npx` of the old name removed from user docs; it would have fetched the
+   other project's package.
 4. [ ] Retire historical branches (owner, `REPOSITORY-HYGIENE.md` §1).
 5. [ ] Protect `main` (owner, `REPOSITORY-HYGIENE.md` §2).
 6. [ ] Name decision, then rebrand: identity, mascot, screenshots, GitHub About

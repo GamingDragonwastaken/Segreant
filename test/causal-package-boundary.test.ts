@@ -17,18 +17,18 @@ function rejectedDeepImport(specifier: string): void {
 }
 
 test('causal package boundary preserves the command and rejects internal deep imports', () => {
-  rejectedDeepImport('fiscus');
-  rejectedDeepImport('fiscus/src/causal/assignment.ts');
-  rejectedDeepImport('fiscus/src/store/causalInternal.ts');
-  rejectedDeepImport('fiscus/test/support/causalDeterministicRng.ts');
+  rejectedDeepImport('segreant');
+  rejectedDeepImport('segreant/src/causal/assignment.ts');
+  rejectedDeepImport('segreant/src/store/causalInternal.ts');
+  rejectedDeepImport('segreant/test/support/causalDeterministicRng.ts');
 
   const command = spawnSync(process.execPath, [
     '--disable-warning=ExperimentalWarning',
-    'bin/fiscus.mjs',
+    'bin/segreant.mjs',
     '--help',
   ], { encoding: 'utf8' });
   assert.equal(command.status, 0, command.stderr);
-  assert.match(command.stdout, /Usage:\s+fiscus/i);
+  assert.match(command.stdout, /Usage:\s+segreant/i);
 });
 
 test('clean production artifact physically omits every causal deterministic and fault-injection module', async () => {

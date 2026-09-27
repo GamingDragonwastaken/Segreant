@@ -74,7 +74,7 @@ function inject(dir: string, bytes: Buffer, offset: number, expected: RequestRow
 }
 
 test('a single-byte fault is refused at open, refused at read, or reads back exactly — and a provenance label never drifts', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-fault-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-fault-'));
   const pristine = join(dir, 'pristine.sqlite');
   try {
     const store = new Store(pristine);

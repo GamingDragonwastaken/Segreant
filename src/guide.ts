@@ -1,7 +1,7 @@
 /**
  * The guide: guidance instead of documentation.
  *
- * Fiscus's journey is five verifiable facts — traffic flows, a cap exists,
+ * Segreant's journey is five verifiable facts — traffic flows, a cap exists,
  * an outcome landed, value computed, dollars disclosed. This module reads those
  * facts (gathered by the caller from the store + config, never from what the
  * user says they did) and returns the whole journey with done-flags plus the
@@ -151,10 +151,10 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? 'Then run your AI tool as usual and watch requests appear.'
         : 'If you have not configured a tool, scan first; otherwise start the proxy before setting the base URL.',
     commands: proxyBlocked
-      ? ['fiscus egress verify']
+      ? ['segreant egress verify']
       : proxyUp
         ? envHints
-        : ['fiscus scan --setup', 'fiscus start', ...envHints],
+        : ['segreant scan --setup', 'segreant start', ...envHints],
   };
 
   const cap: GuideStep = {
@@ -169,8 +169,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
         : 'Set a hard cap and optional soft threshold for governed spend.',
     commands:
       f.spend30dUsd > 0
-        ? ['fiscus budget --recommend', 'fiscus budget --daily 25 --soft 18']
-        : ['fiscus budget --daily 25 --soft 18'],
+        ? ['segreant budget --recommend', 'segreant budget --daily 25 --soft 18']
+        : ['segreant budget --daily 25 --soft 18'],
   };
 
   const outcome: GuideStep = {
@@ -183,7 +183,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         : 'no outcomes yet — spend is a cost with no counterweight',
     why: 'Exit codes are outcomes. Wrap your test command once and every run reports itself.',
     notice: 'Wrap any command whose exit code should become an outcome signal.',
-    commands: ['fiscus exec -- npm test', 'fiscus report --kind merged --commit HEAD'],
+    commands: ['segreant exec -- npm test', 'segreant report --kind merged --commit HEAD'],
   };
 
   const value: GuideStep = {
@@ -196,7 +196,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         : 'outcomes recorded but never scored against the spend',
     why: 'Four lenses — did it stick, did you keep it, did it save time, did it matter — one honest index.',
     notice: 'Use usage for sessions without code signals, such as chat, research, or drafting.',
-    commands: ['fiscus roi --repo .', 'fiscus usage'],
+    commands: ['segreant roi --repo .', 'segreant usage'],
   };
 
   const price: GuideStep = {
@@ -206,7 +206,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
     state: f.laborRateSet ? 'labor rate set — returns priced in dollars' : 'index only — the dollar return stays honestly un-priced',
     why: 'One auditable org input turns the 0–100 index into a break-even answer: was the AI worth it.',
     notice: 'The labor-rate option is a local disclosed input used by every value surface.',
-    commands: ['fiscus roi --repo . --labor-rate 120'],
+    commands: ['segreant roi --repo . --labor-rate 120'],
   };
 
   const journeyDone = [meter, cap, outcome, value, price].every((s) => s.done);
@@ -220,9 +220,9 @@ export function buildGuide(f: GuideFacts): GuideReport {
     why: 'Where does the next dollar go, what should you measure next, when do you actually know, and is the number being bent.',
     notice: 'Review the value-aware cap, frontier, and return surfaces as the evidence grows.',
     commands: [
-      'fiscus budget --recommend --repo .',
-      'fiscus frontier --repo .',
-      'fiscus roi --repo .',
+      'segreant budget --recommend --repo .',
+      'segreant frontier --repo .',
+      'segreant roi --repo .',
     ],
   };
 
@@ -242,9 +242,9 @@ export function buildGuide(f: GuideFacts): GuideReport {
 
   let hint: string | null = null;
   if (f.demo) {
-    hint = 'You are looking at synthetic demo data. Run "fiscus guide" without --demo to see your real journey.';
+    hint = 'You are looking at synthetic demo data. Run "segreant guide" without --demo to see your real journey.';
   } else if (f.requestsAllTime === 0) {
-    hint = 'Want to see every surface populated first? "fiscus demo --serve" builds an isolated, clearly-labeled sandbox.';
+    hint = 'Want to see every surface populated first? "segreant demo --serve" builds an isolated, clearly-labeled sandbox.';
   }
 
   return {

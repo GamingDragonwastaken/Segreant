@@ -29,7 +29,7 @@ export interface EconomicPeriodCloseKernelPersistenceResult {
 }
 
 const CLOSE_ASSUMPTIONS = Object.freeze([
-  'The snapshot is complete for economic events retained by the local Fiscus ledger at the recording boundary.',
+  'The snapshot is complete for economic events retained by the local Segreant ledger at the recording boundary.',
   'Provider billing completeness, provider account scope, and external settlement finality are not established by a local period close.',
 ]);
 
@@ -86,7 +86,7 @@ export function buildEconomicPeriodCloseKernelIssuance(result: PeriodFinalizatio
   const { period, sourceEventIds, balances } = validateResult(result);
   const basis = basisFor(balances);
   const validTime = interval(period.start, period.end);
-  const closeScope = scope({ ledger: 'fiscus-economic', period: period.subject });
+  const closeScope = scope({ ledger: 'segreant-economic', period: period.subject });
   const payload = {
     finalizationId: result.eventId,
     periodStartMs: period.startMs,
@@ -99,8 +99,8 @@ export function buildEconomicPeriodCloseKernelIssuance(result: PeriodFinalizatio
   const evidenceValue = evidence({
     id: `evidence:economic:period-close:${result.eventId}`,
     evidenceType: 'economic.period_close',
-    sourceIdentity: 'fiscus:economic-ledger',
-    sourceClass: 'fiscus_local_append_only_subledger',
+    sourceIdentity: 'segreant:economic-ledger',
+    sourceClass: 'segreant_local_append_only_subledger',
     payload,
     scope: closeScope,
     grain: grain(['economic_period']),

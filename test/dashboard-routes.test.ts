@@ -6,8 +6,8 @@
  * longer it grew:
  *
  *   - which methods each path answers, and with which `Allow` header, and
- *   - which paths are gated behind `x-fiscus-local: 1` — the CSRF guard that is
- *     the only thing stopping a page you visit from driving your local Fiscus.
+ *   - which paths are gated behind `x-segreant-local: 1` — the CSRF guard that is
+ *     the only thing stopping a page you visit from driving your local Segreant.
  *
  * Both were spelled out per-branch, so "is every mutating route guarded?" could
  * only be answered by reading all of them and trusting that you had not missed
@@ -79,7 +79,7 @@ function rawRequest(
 
 // --- the table's own invariants ---------------------------------------
 
-test('route table: every mutating route is gated by the x-fiscus-local header', () => {
+test('route table: every mutating route is gated by the x-segreant-local header', () => {
   for (const path of MUTATING) {
     const route = ROUTES.find((r) => r.path === path);
     assert.ok(route, `${path} is missing from the route table`);
@@ -224,7 +224,7 @@ test('route table: a guarded method without the local header is refused before i
         assert.equal(bare.text, 'forbidden');
 
         // A wrong value is not a present value.
-        const wrong = await rawRequest(srv.base, route.path, method, { 'x-fiscus-local': '0' });
+        const wrong = await rawRequest(srv.base, route.path, method, { 'x-segreant-local': '0' });
         assert.equal(wrong.status, 403, `${method} ${route.path} with a wrong header value`);
       }
     }
@@ -309,7 +309,7 @@ test('a handler can be called directly, with no socket and no server', () => {
   handleHealth({ res: out.res } as unknown as RouteContext);
   assert.equal(out.status, 200);
   assert.equal(out.headers['content-type'], 'application/json; charset=utf-8');
-  assert.deepEqual(JSON.parse(out.body), { ok: true, service: 'fiscus-dashboard' });
+  assert.deepEqual(JSON.parse(out.body), { ok: true, service: 'segreant-dashboard' });
 });
 
 // --- static serving, as its own concern -------------------------------
@@ -358,7 +358,7 @@ test('serveStatic serves a real asset from inside WEB_ROOT with the asset CSP', 
 
 /**
  * `GET /api/scan` is the only route on this server that answers a method no
- * `x-fiscus-local: 1` gate covers AND reached a store write: it called
+ * `x-segreant-local: 1` gate covers AND reached a store write: it called
  * `saveScan` two lines below a doc comment promising it "imports and mutates
  * nothing", and below `scanWithDiff`'s own contract that the caller persists
  * separately "so a pure preview can stay non-writing".
@@ -375,7 +375,7 @@ test('serveStatic serves a real asset from inside WEB_ROOT with the asset CSP', 
  */
 test('GET /api/scan previews without moving the baseline it diffs against', async () => {
   const store = new Store(':memory:');
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-scan-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-scan-'));
   const srv = await boot(store);
   const path = `/api/scan?path=${encodeURIComponent(dir)}`;
   try {
@@ -428,7 +428,7 @@ test('restricting those routes did not break the methods they legitimately serve
   // request measured, which would cost more than the whole suite. Pointing
   // them at an empty non-repo makes them return the same shape in ~60ms. The
   // subject here is method dispatch, not correlation depth.
-  const empty = mkdtempSync(join(tmpdir(), 'fiscus-norepo-'));
+  const empty = mkdtempSync(join(tmpdir(), 'segreant-norepo-'));
   // `/api/kernel` addresses one node and refuses a request that names none
   // (400 by contract), so the dispatch check asks for a node that is not there.
   const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}${path === '/api/kernel' ? '&node=claim:none' : ''}`;
@@ -456,7 +456,7 @@ test('restricting those routes did not break the methods they legitimately serve
  * SERVER is still alive afterwards, which is the property that actually
  * mattered: `decodeURIComponent` threw a URIError out of the request handler,
  * where nothing caught it, so the dashboard did not answer 500 — the process
- * exited. A page the operator visited could stop their local Fiscus with a
+ * exited. A page the operator visited could stop their local Segreant with a
  * single `<img src="http://localhost:8091/app/%ZZ.js">`.
  *
  * The second half of each pair is the real assertion. A 404 that is followed by

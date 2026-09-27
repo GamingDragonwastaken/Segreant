@@ -11,7 +11,7 @@
  * product resolved nothing.
  *
  * WHY THE FIX IS NOT "RESOLVE IT IN `claim()`". There is no repository-wide
- * registry of Fiscus's measurement models to resolve against, and there cannot
+ * registry of Segreant's measurement models to resolve against, and there cannot
  * straightforwardly be one: the only reference the product actually writes,
  * `causal:quality-metric:<metric>@<protocolHash>`, names a model SYNTHESIZED
  * from a protocol, so a static list could never contain it. Building a resolver
@@ -94,8 +94,8 @@ function measuredEvidence(id: string, measurementModelRef: string | null): Evide
   return evidence({
     id,
     evidenceType: 'quality.observation',
-    sourceIdentity: 'fiscus:local',
-    sourceClass: 'fiscus_local_records',
+    sourceIdentity: 'segreant:local',
+    sourceClass: 'segreant_local_records',
     payload: { value: '1' },
     scope: scope({ account: 'acct-1' }),
     grain: grain(['day', 'project']),

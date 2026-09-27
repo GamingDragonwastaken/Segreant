@@ -87,7 +87,7 @@ function firstRun(): Node {
   const body = h('div', { class: 'firstrun', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fr-title', tabindex: '-1' },
     h('div', { class: 'firstrun-card' },
       h('div', { class: 'firstrun-mark' }, brandMark()),
-      h('h1', { id: 'fr-title', text: 'How should Fiscus talk to you?' }),
+      h('h1', { id: 'fr-title', text: 'How should Segreant talk to you?' }),
       h('p', { class: 'lede', text: 'The numbers are identical either way. This only changes how precisely they are worded and how much detail shows by default — and you can switch whenever you like.' }),
       h('div', { class: 'choice-grid' },
         h('button', { class: 'choice', onclick: () => setRegister('plain') },
@@ -124,7 +124,7 @@ function topbar(): Node {
     h('a', { class: 'brand', href: '#/spend', onclick: () => go('spend') },
       brandMark(),
       h('span', { class: 'brand-text' },
-        h('span', { class: 'brand-name', text: 'Fiscus' }),
+        h('span', { class: 'brand-name', text: 'Segreant' }),
         h('span', { class: 'brand-tag', text: 'AI Financial Ops' }))),
 
     h('nav', { class: 'ops', 'aria-label': 'Operations' },

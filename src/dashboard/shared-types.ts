@@ -881,7 +881,7 @@ export interface BudgetAdvice {
   windowDays?: number;
 }
 
-/** Read-only summary of Fiscus's separate causal-study evidence lane. */
+/** Read-only summary of Segreant's separate causal-study evidence lane. */
 export interface CausalPayload {
   demo: boolean;
   generatedAt: string;
@@ -1029,7 +1029,7 @@ export interface SettingsSnapshot {
  *
  * The four members are four different enforcement CLAIMS, and the screen must
  * not collapse them: what the local proxy can stop before it happens, spend that
- * was only ever observed after the fact, provider-side limits Fiscus does not
+ * was only ever observed after the fact, provider-side limits Segreant does not
  * inspect at all, and advice that is a proposal until applied.
  */
 export interface BudgetEnforcement {

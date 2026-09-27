@@ -87,10 +87,10 @@ every such claim rather than skipping the check. **Two production call sites
 resolve through `measurementRegistry`:** `src/causal/measurement.ts` builds a
 registry from the protocol's own quality model, and `src/epistemic/ledger.ts`
 resolves at the floor. `Store` constructs its ledger with no registry, so no
-registry of Fiscus's own models is assembled anywhere and the causal reference
+registry of Segreant's own models is assembled anywhere and the causal reference
 — synthesized from a stored protocol — could not be in a static one; that is
 harmless today only because every production issuer writes `proxy_unvalidated`.
-No surrogate bridge is declared for Fiscus's own `proxy_validated` claims, and
+No surrogate bridge is declared for Segreant's own `proxy_validated` claims, and
 the derivation path (`measurement_validation`) resolves nothing. These are the
 open remainders of WP-D05 and WP-D07.
 

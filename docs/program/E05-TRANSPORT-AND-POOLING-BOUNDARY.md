@@ -18,7 +18,7 @@ boundary. This is not external transport validity or a causal effect.
 The bounded operator consumer is:
 
 ```text
-fiscus causal transport --options <file> --json
+segreant causal transport --options <file> --json
 ```
 
 Focused RED-first coverage is 6/6 including the packaged CLI path. The

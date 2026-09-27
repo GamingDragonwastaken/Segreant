@@ -1,4 +1,4 @@
-# How Fiscus measures Return on Intelligence — in plain language
+# How Segreant measures Return on Intelligence — in plain language
 
 *For anyone deciding whether this tool is trustworthy — no math background needed.
 The full derivation lives in [RETURN-ON-INTELLIGENCE.md](RETURN-ON-INTELLIGENCE.md);
@@ -8,7 +8,7 @@ this is the version you can explain to your CFO.*
 
 ## The problem, in one sentence
 
-Everyone can see their **AI bill**. Nobody can see their **AI return**. Fiscus
+Everyone can see their **AI bill**. Nobody can see their **AI return**. Segreant
 computes an evidence-limited return from records and calculations kept on the
 operator's machine. A request intentionally routed through its proxy still goes
 to the configured AI provider; read
@@ -23,7 +23,7 @@ to the configured AI provider; read
   experienced developers were actually **19% slower** with AI while *believing* they
   were 24% faster. So we never use self-report.
 
-Fiscus only counts things it can **observe**: did the AI's output get kept, ship,
+Segreant only counts things it can **observe**: did the AI's output get kept, ship,
 survive, and matter — measured from the wire and from your git history.
 
 ## The four questions we score (each 0–100%)
@@ -51,7 +51,7 @@ This is the key honesty property: a high observed value on one lens cannot
 compensate for a near-zero observed value on another. A dashboard that simply
 averages lenses can hide a weak necessary condition; this composite cannot.
 That does not make the whole measurement immune to bad instrumentation, so
-Fiscus also reports coverage, assumptions, and unknown lenses.
+Segreant also reports coverage, assumptions, and unknown lenses.
 
 ## The value scenario a CFO can inspect
 
@@ -78,7 +78,7 @@ We will not invent the denominator.
 
 ## Evidence grades: scenario versus causal study
 
-Fiscus deliberately keeps five grades separate:
+Segreant deliberately keeps five grades separate:
 
 1. **Accounted** — provider/request cost and usage with their recorded source.
 2. **Modeled** — a price-card or counterfactual model under named assumptions.
@@ -89,13 +89,13 @@ Fiscus deliberately keeps five grades separate:
 5. **Randomized causal** — a pre-registered, randomized, protocol-qualified
    study of a stated eligible population.
 
-Only the fifth grade can support Fiscus's strongest causal language. The
+Only the fifth grade can support Segreant's strongest causal language. The
 randomized-study contract requires a frozen intervention/control definition,
 assignment before exposure, actual execution and cost lineage, outcome and
 quality evidence, a missingness/attrition account, and conservative intervals.
 The required claim gates are defined in
 [CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md). Until a real study
-passes those gates, Fiscus renders a value scenario, never a causal break-even
+passes those gates, Segreant renders a value scenario, never a causal break-even
 or a promise that a model preserves value.
 
 ## Two things that make it undeniable
@@ -116,14 +116,14 @@ or a promise that a model preserves value.
 3. **It's valid while you watch it.** Ordinary statistics are only guaranteed if you
    check the number once; a live dashboard gets checked constantly, which quietly
    breaks the guarantee (checked continuously, a "90% sure" range is wrong at some
-   point in about two-thirds of cases). Fiscus's headline rate uses **anytime-valid**
+   point in about two-thirds of cases). Segreant's headline rate uses **anytime-valid**
    math instead: the range stays honest at every glance, so acting the moment it
    looks good is statistically safe. The trade — a slightly wider range — is shown,
    not hidden. (See §10 in the technical doc.)
 
 ## The research model: the Shadow Price of Intelligence
 
-Beyond scoring the past, the Fiscus research model can calculate a hypothetical
+Beyond scoring the past, the Segreant research model can calculate a hypothetical
 power-law response curve and its shadow price, μ. It is useful for examining
 assumptions, not a current forecast, routing instruction, budget recommendation,
 or automatic action. A decision-grade marginal-value claim requires a
@@ -141,16 +141,16 @@ but instrumentation and counterfactual assumptions remain visible rather than
 being mistaken for proof. Stating exactly which parts are standard is what makes
 the rest credible.
 
-## Fiscus-hosted data collection is off by default
+## Segreant-hosted data collection is off by default
 
-This historical heading means that Fiscus has no hosted collection or analytics
+This historical heading means that Segreant has no hosted collection or analytics
 by default. It does not mean a request routed through the proxy bypasses your
 configured AI provider. See **[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)** for the
 current, complete disclosure of provider traffic, local proposal retention, and
 each opt-in outbound feature.
 
-The local ledger and calculations live in a file-based database, and Fiscus has
-no Fiscus-hosted product analytics or telemetry by default. That does **not**
+The local ledger and calculations live in a file-based database, and Segreant has
+no Segreant-hosted product analytics or telemetry by default. That does **not**
 mean proxy-routed requests stay offline: they travel to the configured AI
 provider and may include prompts, source snippets, tool payloads, and provider
 credentials. Optional outbound paths also include pricing refresh, configured
@@ -158,8 +158,8 @@ alert webhooks, an explicitly selected hosted judge, a deliberate OpenAI Costs
 pull, and an opt-in numeric team rollup. The complete, current list and each
 retention control are in [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md).
 
-New installations run Fiscus-process HTTP(S) in `local_locked` mode. A
+New installations run Segreant-process HTTP(S) in `local_locked` mode. A
 controlled-cloud action needs an exact purpose/data/method/origin/path rule and
-creates a redacted local receipt trail. This strengthens the Fiscus boundary;
+creates a redacted local receipt trail. This strengthens the Segreant boundary;
 it does not establish machine-wide egress control or a provider-side privacy
 guarantee.

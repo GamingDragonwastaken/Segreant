@@ -25,7 +25,7 @@ import { startFakeIdp } from './fakeIdp.ts';
 function projects(): ProjectValue[] {
   return [
     {
-      project: 'fiscus',
+      project: 'segreant',
       units: 12,
       // CONTAINED, BECAUSE THE PRODUCER CANNOT EMIT ANYTHING ELSE. These three
       // are nested sums over one unit set: realized units are a subset of
@@ -90,7 +90,7 @@ test('team-server: GET /health reports ok', async () => {
   try {
     const res = await fetch(`${srv.url}/health`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true, service: 'fiscus-team-server' });
+    assert.deepEqual(await res.json(), { ok: true, service: 'segreant-team-server' });
   } finally {
     await srv.close();
   }
@@ -125,7 +125,7 @@ test('team-server: POST /developers rejects a missing or wrong admin bearer toke
 });
 
 test('team-server: POST /developers registers a developer given the correct admin token, and rejects a lying keyId', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const store = new FakeRollupStore();
@@ -157,7 +157,7 @@ test('team-server: POST /developers registers a developer given the correct admi
 });
 
 test('team-server: POST /rollups from an unregistered key is rejected (403) — the Sybil-resistance property', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const attacker: KeyPair = loadOrCreateKeyPair(join(dir, 'attacker.json'));
     const body = buildRollupBody(attacker, projects(), period);
@@ -182,7 +182,7 @@ test('team-server: POST /rollups from an unregistered key is rejected (403) — 
 });
 
 test('team-server: POST /rollups from a registered key with a valid signature is accepted (201) and stored', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const body = buildRollupBody(dev, projects(), period);
@@ -204,7 +204,7 @@ test('team-server: POST /rollups from a registered key with a valid signature is
 
       const stored = await store.listRollups({ keyId: dev.keyId });
       assert.equal(stored.length, 1);
-      assert.equal(stored[0]!.body.projects[0]!.project, 'fiscus');
+      assert.equal(stored[0]!.body.projects[0]!.project, 'segreant');
     } finally {
       await srv.close();
     }
@@ -214,7 +214,7 @@ test('team-server: POST /rollups from a registered key with a valid signature is
 });
 
 test('team-server: POST /rollups accepts exact economic v2 and retains its project lineage', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-economic-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-economic-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const exact = economicAttributionView({
@@ -230,7 +230,7 @@ test('team-server: POST /rollups accepts exact economic v2 and retains its proje
       // against costUsd 1.234567 — more money reaching a kept outcome than the
       // project spent — which the producer cannot emit and the server now
       // refuses.
-      project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
+      project: 'segreant', units: 1, costUsd: 1.234567, realizationRate: 1,
       spendOnRealizedUnitsUsd: 1.234567, acceptanceWeightedSpendUsd: 1.234567, roiIndex: 2, sources: ['codex'],
       economic: { coverage: 'exact', total: exact, realized: exact },
     };
@@ -257,7 +257,7 @@ test('team-server: POST /rollups accepts exact economic v2 and retains its proje
 });
 
 test('team-server: POST /rollups treats an exact signed retry as an idempotent replay without changing the recorded receipt', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const signed = signRollup(buildRollupBody(dev, projects(), period), dev);
@@ -294,7 +294,7 @@ test('team-server: POST /rollups treats an exact signed retry as an idempotent r
 });
 
 test('team-server: POST /rollups rejects self-consistently signed payloads with unsafe semantic shapes before storage', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const store = new FakeRollupStore();
@@ -308,7 +308,7 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
       const duplicateProjects = buildRollupBody(dev, [...projects(), { ...projects()[0]! }], period);
       const duplicateSources = buildRollupBody(dev, [{ ...projects()[0]!, sources: ['claude-code', 'claude-code'] }], period);
       const invalidStrata = buildRollupBody(dev, projects(), period, [
-        { project: 'fiscus', taskType: 'bugfix', units: 1, realizedUnits: 2, costUsd: 1 },
+        { project: 'segreant', taskType: 'bugfix', units: 1, realizedUnits: 2, costUsd: 1 },
       ]);
       // THE SAME CONTAINMENT THE STRATA ROW ABOVE ALREADY ENFORCES, ONE FIELD
       // OVER. `realizedUnits > units` is refused; the project dollar figures are
@@ -353,7 +353,7 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
 });
 
 test('team-server: POST /rollups rejects a registered developer\'s rollup once its numbers are tampered', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const body = buildRollupBody(dev, projects(), period);
@@ -522,7 +522,7 @@ test('team-server: GET /dashboard/projects and /dashboard/developers are disable
 });
 
 test('team-server: GET /dashboard/projects weights realizationRate by units and avgRoiIndex by cost — not naive averages, and excludes a null roiIndex from both', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   const idp = await startFakeIdp();
   try {
     const a: KeyPair = loadOrCreateKeyPair(join(dir, 'a.json'));
@@ -625,7 +625,7 @@ test('team-server: aggregate storage rejection becomes a bounded 503 instead of 
 });
 
 test('team-server: GET /dashboard/projects does not double-count when the same developer pushes overlapping-window rollups (cumulative-snapshot pushes, e.g. daily cron)', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -637,14 +637,14 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
       aggregate: { minCohort: 1, exposeDeveloperBreakdown: false },
     });
     try {
-      // Simulates `fiscus team push --window 30` run on two consecutive
+      // Simulates `segreant team push --window 30` run on two consecutive
       // days: each push is a full rolling snapshot of the SAME underlying
       // spend, not incremental new work, so the two periods overlap almost
       // entirely.
       const day1 = { from: '2026-06-04T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' };
       const day2 = { from: '2026-06-05T00:00:00.000Z', to: '2026-07-05T00:00:00.000Z' };
       const snapshot: ProjectValue[] = [
-        { project: 'fiscus', units: 10, costUsd: 100, realizationRate: 0.8, spendOnRealizedUnitsUsd: 80, acceptanceWeightedSpendUsd: 80, roiIndex: 1.0, sources: [] },
+        { project: 'segreant', units: 10, costUsd: 100, realizationRate: 0.8, spendOnRealizedUnitsUsd: 80, acceptanceWeightedSpendUsd: 80, roiIndex: 1.0, sources: [] },
       ];
       await pushRollup(srv, store, dev, snapshot, day1);
       await pushRollup(srv, store, dev, snapshot, day2);
@@ -675,7 +675,7 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
 });
 
 test('team-server: GET /dashboard/projects suppresses a project below the k-anonymity floor and leaks no dollar figures', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -716,7 +716,7 @@ test('team-server: GET /dashboard/projects suppresses a project below the k-anon
 });
 
 test('team-server: GET /dashboard/projects rejects periodFrom/periodTo rather than mislabeling cumulative snapshots as a partial historical window', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -796,7 +796,7 @@ test('team-server: GET /dashboard/developers reports itself disabled (200, enabl
 });
 
 test('team-server: GET /dashboard/developers returns a k-anonymized distribution when enabled and the floor is met — never a named list', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-team-server-'));
   const idp = await startFakeIdp();
   try {
     const a: KeyPair = loadOrCreateKeyPair(join(dir, 'a.json'));

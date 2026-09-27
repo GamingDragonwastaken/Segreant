@@ -41,7 +41,7 @@ export interface OpenAiCostsCaptureCoverage {
   };
   /**
    * Only live proxy rows that carry the same immutable local declaration.
-   * Their cost is still Fiscus's local rate-card estimate, not a provider total.
+   * Their cost is still Segreant's local rate-card estimate, not a provider total.
    */
   capturedOnDeclaredRoute: CapturedUsageSummary;
   /** Disjoint local-ledger categories that cannot join this provider snapshot. */

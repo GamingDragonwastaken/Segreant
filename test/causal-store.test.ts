@@ -790,7 +790,7 @@ function validExecutionV2(
   executionId = 'execution:store-v2',
 ): CausalExecutionRecordV2 {
   const verifierMaterial = {
-    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    type: 'segreant.causal-ordinary-ledger-verifier' as const,
     version: 2 as const,
     state: 'unresolved' as const,
     checkedAtMs: null,
@@ -800,7 +800,7 @@ function validExecutionV2(
   };
   const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
   const material = {
-    type: 'fiscus.causal-execution' as const,
+    type: 'segreant.causal-execution' as const,
     version: 2 as const,
     executionId,
     decisionId: decision.decisionId,
@@ -833,7 +833,7 @@ function validTerminalOutcomeV2(
 ): CausalTerminalOutcomeRecordV2 {
   const material: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'> = maturity === 'matured'
     ? {
-      type: 'fiscus.causal-terminal-outcome',
+      type: 'segreant.causal-terminal-outcome',
       version: 2,
       outcomeId,
       decisionId: execution.decisionId,
@@ -851,7 +851,7 @@ function validTerminalOutcomeV2(
       previousEventHash: execution.eventHash,
     }
     : {
-      type: 'fiscus.causal-terminal-outcome',
+      type: 'segreant.causal-terminal-outcome',
       version: 2,
       outcomeId,
       decisionId: execution.decisionId,
@@ -1333,7 +1333,7 @@ test('policy-bearing qualification keeps absence pending after deadline and give
 });
 
 test('causal clock floor initializes exactly once, rejects rollback, accepts forward jumps, and survives restart', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-clock-floor-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-clock-floor-'));
   const dbPath = join(dir, 'clock.sqlite');
   const initialWallClock = 1_700_000_001_000;
   let protocol: CommittedCausalStudyProtocolV2;
@@ -1456,7 +1456,7 @@ test('causal qualification fails closed when the persisted clock floor is missin
 });
 
 test('multiple Store handles serialize terminal replay and preserve one monotonic floor', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-clock-handles-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-clock-handles-'));
   const dbPath = join(dir, 'clock-handles.sqlite');
   const initialWallClock = 1_700_000_001_000;
   withWallClock(initialWallClock, () => {
@@ -1842,7 +1842,7 @@ test('atomic assignment persistence commits a complete replayable block before d
 });
 
 test('atomic assignment persistence backs up the first file migration and a second open is idempotent', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-migration-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-migration-'));
   const dbPath = join(dir, 'legacy.sqlite');
   const legacy = new DatabaseSync(dbPath);
   legacy.prepare('CREATE TABLE legacy_probe (value TEXT NOT NULL)').run();
@@ -1891,7 +1891,7 @@ test('atomic assignment persistence backs up the first file migration and a seco
 });
 
 test('global study unit uniqueness holds across Store connections without consuming sequence', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-unit-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-unit-'));
   const dbPath = join(dir, 'ledger.sqlite');
   const first = new Store(dbPath);
   const second = new Store(dbPath);
@@ -1942,7 +1942,7 @@ function runAssignmentProcess(dbPath: string, request: ReturnType<typeof assignm
 }
 
 test('assignment manifest is authoritative and concurrent processes allocate gap-free blocks', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-process-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-process-'));
   const dbPath = join(dir, 'ledger.sqlite');
   const setup = new Store(dbPath);
   try {
@@ -2393,7 +2393,7 @@ test('assignment manifest rejects missing prior generations and orphan physical 
 });
 
 test('public assignment manifest reader observes one explicit SQLite snapshot during a writer commit', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-reader-snapshot-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-reader-snapshot-'));
   const dbPath = join(dir, 'ledger.sqlite');
   const setup = new Store(dbPath);
   setup.registerCausalProtocol(v2StoreProtocol('study:store-v2', 8));
@@ -2471,7 +2471,7 @@ test('terminal causal outcome rejects unknown roots and pending maturity before 
     if (typeof method !== 'function') throw new Error('internal v2 terminal outcome operation is unavailable');
 
     const pending = {
-      type: 'fiscus.causal-terminal-outcome',
+      type: 'segreant.causal-terminal-outcome',
       version: 2,
       outcomeId: 'outcome:terminal-red',
       decisionId: decision.decisionId,
@@ -3259,7 +3259,7 @@ test('version-1 causal records are inspect-only at every public Store mutation b
 });
 
 test('causal v2 migration fails atomically with a verified safe backup when an incomplete sentinel exists', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-migration-failure-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-migration-failure-'));
   const dbPath = join(dir, 'legacy.sqlite');
   const legacy = new DatabaseSync(dbPath);
   legacy.prepare('CREATE TABLE legacy_probe (value TEXT NOT NULL)').run();
@@ -3317,7 +3317,7 @@ test('causal v2 migration fails atomically with a verified safe backup when an i
 });
 
 test('exact Slice 3 assignment schema is a named migration predecessor and upgrades both terminal tables atomically', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-s3-predecessor-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-s3-predecessor-'));
   const dbPath = join(dir, 'slice3.sqlite');
   try {
     const seeded = new Store(dbPath);
@@ -3349,7 +3349,7 @@ test('exact Slice 3 assignment schema is a named migration predecessor and upgra
 });
 
 test('complete pre-clock Slice 4 evidence schema migrates by adding only exact clock metadata', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-pre-clock-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-pre-clock-'));
   const dbPath = join(dir, 'pre-clock.sqlite');
   try {
     const seeded = new Store(dbPath);
@@ -3412,7 +3412,7 @@ test('complete pre-clock Slice 4 evidence schema migrates by adding only exact c
 });
 
 test('pre-T-069 complete evidence is a named lineage predecessor and adds an empty scalar sidecar atomically', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-pre-lineage-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-pre-lineage-'));
   const dbPath = join(dir, 'pre-lineage.sqlite');
   try {
     const seeded = new Store(dbPath);
@@ -3450,7 +3450,7 @@ test('pre-T-069 complete evidence is a named lineage predecessor and adds an emp
 });
 
 test('partial Slice 4 terminal schema is not adopted or repaired in place', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-s4-partial-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-s4-partial-'));
   const dbPath = join(dir, 'partial.sqlite');
   try {
     const seeded = new Store(dbPath);
@@ -3543,7 +3543,7 @@ test('causal v2 schema attestation reports an extra-only generation as incomplet
 });
 
 test('file-backed exact-name schema lookalike is backed up before atomic refusal and never opens operationally', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-schema-lookalike-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-schema-lookalike-'));
   const dbPath = join(dir, 'lookalike.sqlite');
   const seed = new DatabaseSync(dbPath);
   createExactNameUnsafeV2Lookalike(seed);
@@ -3731,7 +3731,7 @@ const CAUSAL_DDL_AUTHORITY_VARIANTS: CausalDdlAuthorityVariant[] = [
 
 for (const variant of CAUSAL_DDL_AUTHORITY_VARIANTS) {
   test('causal v2 DDL authority rejects ' + variant.name + ' with backup-first atomic refusal', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-ddl-authority-'));
+    const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-ddl-authority-'));
     const dbPath = join(dir, 'authority.sqlite');
     try {
       const setup = new Store(dbPath);
@@ -3862,7 +3862,7 @@ function renameExplicitIndexQuoted(db: DatabaseSync, currentName: string, hostil
 for (const hostileName of ['odd index', 'odd)name', 'odd-name', 'odd.name']) {
   test('causal v2 hostile index metadata ' + JSON.stringify(hostileName) +
     ' is total, backed up, redacted, and closes the failed Store handle', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-hostile-index-'));
+    const dir = mkdtempSync(join(tmpdir(), 'segreant-causal-hostile-index-'));
     const dbPath = join(dir, 'authority.sqlite');
     const renamedPath = dbPath + '.closed-handle-probe';
     let probe: Awaited<ReturnType<typeof spawnStoreConstructorProbe>> | null = null;

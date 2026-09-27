@@ -119,12 +119,12 @@ test('a legacy three-valued row cannot be read back as a conflict', () => {
 // ---------------------------------------------------------------------------
 
 test('two recorded CI runs that disagree leave the tested gate conflicted, not failed', async () => {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-gate-conflict-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-gate-conflict-'));
   const store = new Store(':memory:');
   try {
     git(repo, ['init', '-q']);
     git(repo, ['config', 'user.email', 'test@example.invalid']);
-    git(repo, ['config', 'user.name', 'Fiscus test']);
+    git(repo, ['config', 'user.name', 'Segreant test']);
     writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
     git(repo, ['add', '.']);
     git(repo, ['commit', '-qm', 'feat: a real commit']);
@@ -163,12 +163,12 @@ test('two recorded CI runs that disagree leave the tested gate conflicted, not f
 test('two recorded runs that agree are not a conflict', async () => {
   // Non-vacuity for the case above: the aggregator must not call every
   // multi-signal gate conflicted.
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-gate-agree-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-gate-agree-'));
   const store = new Store(':memory:');
   try {
     git(repo, ['init', '-q']);
     git(repo, ['config', 'user.email', 'test@example.invalid']);
-    git(repo, ['config', 'user.name', 'Fiscus test']);
+    git(repo, ['config', 'user.name', 'Segreant test']);
     writeFileSync(join(repo, 'app.ts'), 'export const answer = 42;\n');
     git(repo, ['add', '.']);
     git(repo, ['commit', '-qm', 'feat: a real commit']);

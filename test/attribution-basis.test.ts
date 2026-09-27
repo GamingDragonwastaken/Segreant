@@ -72,12 +72,12 @@ test('attribution: the basis moves no money â€” evidence totals equal byProject 
 
 test('attribution: evidence rolls up under the alias canonical, like byProject', () => {
   const store = new Store(':memory:');
-  store.insertRequest(row('a', 'fiscus-ts', 'client_declared', 1));
-  store.insertRequest(row('b', 'fiscus', 'client_declared', 2));
-  store.setProjectAlias('fiscus-ts', 'fiscus');
+  store.insertRequest(row('a', 'segreant-ts', 'client_declared', 1));
+  store.insertRequest(row('b', 'segreant', 'client_declared', 2));
+  store.setProjectAlias('segreant-ts', 'segreant');
   const ev = store.attributionEvidenceByProject(0, 5000);
   assert.equal(ev.length, 1, 'both rows share a canonical label and one basis');
-  assert.equal(ev[0]!.project, 'fiscus');
+  assert.equal(ev[0]!.project, 'segreant');
   assert.equal(ev[0]!.costUsd, 3);
   store.close();
 });
@@ -95,7 +95,7 @@ test('attribution: a row written before the basis existed stays legacy_unknown â
 });
 
 test('attribution: an unrecognized basis is refused at the write boundary, and a stored one refuses at read naming the column', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-basis-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-basis-'));
   const path = join(dir, 'ledger.sqlite');
   try {
     const store = new Store(path);

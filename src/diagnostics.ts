@@ -21,9 +21,9 @@ import {
 import {
   configPath,
   dbPath,
-  fiscusHome,
+  segreantHome,
   loadConfig,
-  type FiscusConfig,
+  type SegreantConfig,
 } from './config.ts';
 import { pricingStatus, type PricingStatus } from './cost/pricing.ts';
 import { egressReceiptPath, verifyEgressReceipts, type ReceiptChainBasis, type ReceiptVerification } from './egress/receipts.ts';
@@ -44,13 +44,13 @@ export interface RedactedDiagnosticBundle {
   version: 1;
   operationId: string;
   generatedAt: string;
-  runtime: { fiscusVersion: string; node: string; platform: string; arch: string };
+  runtime: { segreantVersion: string; node: string; platform: string; arch: string };
   boundaries: { externalNetworkAttempted: false; credentialRead: false; rawPromptSourceOrLedgerRowsExported: false };
   config: {
     valid: boolean;
     path: string;
     budget?: { dailyCapConfigured: boolean; softCapConfigured: boolean; sessionCapConfigured: boolean; includesImported: boolean };
-    egress?: { mode: FiscusConfig['egress']['mode']; ruleCount: number; rules: Array<{ id: string; purpose: string; dataClass: string; method: string; enabled: boolean }> };
+    egress?: { mode: SegreantConfig['egress']['mode']; ruleCount: number; rules: Array<{ id: string; purpose: string; dataClass: string; method: string; enabled: boolean }> };
     metadataOnly?: boolean;
     errorClass?: string;
   };
@@ -104,12 +104,12 @@ function pathEntryExists(path: string): boolean {
 /** Keep useful local layout while never exporting the user's absolute path. */
 export function redactDiagnosticPath(path: string): string {
   const absolute = resolve(path);
-  const home = resolve(fiscusHome());
+  const home = resolve(segreantHome());
   const prefix = home.endsWith(sep) ? home : home + sep;
-  if (absolute.toLowerCase() === home.toLowerCase()) return '<FISCUS_HOME>';
+  if (absolute.toLowerCase() === home.toLowerCase()) return '<SEGREANT_HOME>';
   if (absolute.toLowerCase().startsWith(prefix.toLowerCase())) {
     const suffix = relative(home, absolute).replaceAll('\\', '/');
-    return `<FISCUS_HOME>/${suffix}`;
+    return `<SEGREANT_HOME>/${suffix}`;
   }
   const digest = createHash('sha256').update(absolute, 'utf8').digest('hex').slice(0, 16);
   return `<PATH:${digest}>`;
@@ -130,7 +130,7 @@ function observe<T>(observations: DiagnosticObservation[], name: string, fn: () 
 
 interface ConfigObservation {
   view: RedactedDiagnosticBundle['config'];
-  value: FiscusConfig | null;
+  value: SegreantConfig | null;
 }
 
 function configObservation(observations: DiagnosticObservation[]): ConfigObservation {
@@ -269,7 +269,7 @@ export function buildDiagnostics(): RedactedDiagnosticBundle {
     version: 1,
     operationId: randomUUID(),
     generatedAt: new Date().toISOString(),
-    runtime: { fiscusVersion: packageVersion(), node: process.version, platform: process.platform, arch: process.arch },
+    runtime: { segreantVersion: packageVersion(), node: process.version, platform: process.platform, arch: process.arch },
     boundaries: { externalNetworkAttempted: false, credentialRead: false, rawPromptSourceOrLedgerRowsExported: false },
     config,
     database: db,

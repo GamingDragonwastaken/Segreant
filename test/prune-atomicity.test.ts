@@ -13,7 +13,7 @@
  * constraint, a crash between them -- the rows are gone and the boundary is
  * not on record, which is the D-170 defect reconstructed by a failure path
  * rather than by an absent table. `pruneProposals` and `clearProposals` had the
- * same shape, and `clearProposals` is the most total erasure Fiscus offers.
+ * same shape, and `clearProposals` is the most total erasure Segreant offers.
  *
  * HOW THE FAILURE IS INDUCED. A trigger that raises ABORT on any insert into
  * `retention_prunes`, installed through the raw `DatabaseSync` handle. Reaching
@@ -136,7 +136,7 @@ test('a proposal prune whose record cannot be written deletes nothing', () => {
 });
 
 test('the total proposal erasure deletes nothing when its record cannot be written', () => {
-  // clearProposals is the most total deletion Fiscus offers and the one D-179
+  // clearProposals is the most total deletion Segreant offers and the one D-179
   // made recordable. An unrecorded total erasure is the exact state that made
   // the Acceptance lens tell operators their proposals were never captured.
   const store = new Store(':memory:');

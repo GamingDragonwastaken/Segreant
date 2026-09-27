@@ -71,7 +71,7 @@ function receiptFor(ledger: EconomicLedger, sourceIds: readonly string[]) {
   const economic = economicAttributionView({
     amount, eventIds: [...eventIds].sort(), sourceBases: [...bases].sort() as never, requestCount: sourceIds.length, unresolvedRequests: 0,
   });
-  return buildEconomicReceiptBody('deadbeef', 'fiscus', Number(economic.amountText), null, funnel, economic);
+  return buildEconomicReceiptBody('deadbeef', 'segreant', Number(economic.amountText), null, funnel, economic);
 }
 
 test('a receipt built from the ledger agrees with it', () => {
@@ -106,14 +106,14 @@ test('a correction retained after signing reads as the ledger having moved, not 
 
 test('a receipt whose lineage names events this ledger never had is not reconcilable, and a missing source disagrees', () => {
   const ledger = ledgerWith(charge('economic:request:a:charge', '1'));
-  const foreign = buildEconomicReceiptBody('deadbeef', 'fiscus', 1, null, funnel, economicAttributionView({
+  const foreign = buildEconomicReceiptBody('deadbeef', 'segreant', 1, null, funnel, economicAttributionView({
     amount: money('1', 'USD', 'effective'), eventIds: ['economic:request:elsewhere:charge'], sourceBases: ['list'], requestCount: 1, unresolvedRequests: 0,
   }));
   const result = reconcileReceiptWithLedger(foreign, ledger);
   assert.equal(result.status, 'not_reconcilable');
   assert.deepEqual(result.missingEventIds, ['economic:request:elsewhere:charge']);
 
-  const partly = buildEconomicReceiptBody('deadbeef', 'fiscus', 2, null, funnel, economicAttributionView({
+  const partly = buildEconomicReceiptBody('deadbeef', 'segreant', 2, null, funnel, economicAttributionView({
     amount: money('2', 'USD', 'effective'), eventIds: ['economic:request:a:charge', 'economic:request:gone:charge'], sourceBases: ['list'], requestCount: 2, unresolvedRequests: 0,
   }));
   const partial = reconcileReceiptWithLedger(partly, ledger);
@@ -124,7 +124,7 @@ test('a receipt whose lineage names events this ledger never had is not reconcil
 
 test('a v1 receipt carries no lineage and says so', () => {
   const ledger = ledgerWith(charge('economic:request:a:charge', '1'));
-  const result = reconcileReceiptWithLedger(buildReceiptBody('deadbeef', 'fiscus', 1, null, funnel), ledger);
+  const result = reconcileReceiptWithLedger(buildReceiptBody('deadbeef', 'segreant', 1, null, funnel), ledger);
   assert.equal(result.status, 'not_reconcilable');
   assert.match(result.reasons.join(' '), /v1/);
 });

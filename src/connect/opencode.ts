@@ -47,7 +47,7 @@ export interface OpencodeUsageEvent {
   project: string;
   /** Whether that project came from a real recorded path or from the tool-name fallback. */
   attributionBasis: AttributionBasis;
-  /** Full working-directory path — the repo Fiscus can find and auto-correlate. */
+  /** Full working-directory path — the repo Segreant can find and auto-correlate. */
   cwd: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -155,7 +155,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
       const ev = parseOpencodeMessage(r.id, r.data, r.tc ?? undefined);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
 
-      // OpenCode supplies this number; Fiscus records it as tool-reported rather
+      // OpenCode supplies this number; Segreant records it as tool-reported rather
       // than calling it an invoice. Only a zero amount with an exact local match
       // is replaced by a local list-price calculation.
       let costUsd = ev.reportedCostUsd;

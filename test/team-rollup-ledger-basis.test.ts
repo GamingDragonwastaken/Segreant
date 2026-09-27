@@ -35,7 +35,7 @@
  *
  * WHAT THIS FILE DOES NOT ESTABLISH. That the ledger is right. Every check here
  * is agreement between a body and the local meter that produced it; the meter's
- * own limits — spend that never reached Fiscus, provider-billed cost that is a
+ * own limits — spend that never reached Segreant, provider-billed cost that is a
  * different claim entirely — are untouched and unmeasured by any of it.
  *
  * Recorded at D-199.
@@ -47,7 +47,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-rollup-ledger-home-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-rollup-ledger-home-'));
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { loadOrCreateKeyPair } from '../src/value/receipt.ts';
@@ -66,9 +66,9 @@ import type { ProjectValue } from '../src/value/realization.ts';
 const PERIOD = { from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T00:00:00.000Z' };
 const DAY = 86_400_000;
 
-const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-ledger-'));
+const keyDir = mkdtempSync(join(tmpdir(), 'segreant-rollup-ledger-'));
 process.on('exit', () => rmSync(keyDir, { recursive: true, force: true }));
-process.on('exit', () => rmSync(process.env.FISCUS_HOME!, { recursive: true, force: true }));
+process.on('exit', () => rmSync(process.env.SEGREANT_HOME!, { recursive: true, force: true }));
 
 function keys() {
   return loadOrCreateKeyPair(join(keyDir, 'key.json'));
@@ -212,7 +212,7 @@ test('the builder itself refuses, so the body a receiver would have to catch is 
 // ---- against a real ledger, not a fixture ----------------------------------
 
 test('a real pruned ledger reports a truncated window, and a complete rollup over it cannot be minted', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-real-ledger-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-real-ledger-'));
   try {
     const store = new Store(join(dir, 'ledger.db'));
     try {

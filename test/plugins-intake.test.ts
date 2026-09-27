@@ -5,7 +5,7 @@
  *
  * WP-G02/G03 built the contract and the process host and left them reachable
  * from no product path (directive §21: wire a first-party consumer). D-234
- * adds `src/plugins/intake.ts` and `fiscus plugin run`: one bounded exchange,
+ * adds `src/plugins/intake.ts` and `segreant plugin run`: one bounded exchange,
  * a preview of the Evidence envelopes it would append, and `--apply` to
  * append them.
  *

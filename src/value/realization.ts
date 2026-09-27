@@ -9,7 +9,7 @@
  * Gate sources:
  *   git    — committed (always), survived (blame), clean (revert/incident)
  *   proxy  — proposed / accepted (captured proposals vs committed lines)
- *   signal — tested / merged / shipped (ingested via `fiscus report`)
+ *   signal — tested / merged / shipped (ingested via `segreant report`)
  *
  * An unobservable gate is `unknown`, never `fail`. See THE-STANDARD §5.
  */
@@ -410,7 +410,7 @@ export async function computeRealization(
   const project = await projectName(repoPath);
   // Attribute this project's OWN spend to its commits when the ledger is actually
   // characterized by project (native imports, or proxy traffic tagged with
-  // x-fiscus-project); otherwise fall back to the project-blind window sum so a
+  // x-segreant-project); otherwise fall back to the project-blind window sum so a
   // classic 'default'-tagged proxy store is unchanged. This is the bridge that
   // makes native, no-proxy imported spend produce correct per-project RoI.
   const projectScoped = store.hasProjectSpend(project);
@@ -554,7 +554,7 @@ export async function computeRealization(
             : proposalCaptureCoverage === 'legacy_unknown'
               ? 'proposal capture predates coverage tracking'
               // Otherwise this rung would say "no complete proposal captured"
-              // about a proposal Fiscus captured and then deleted on the
+              // about a proposal Segreant captured and then deleted on the
               // operator's own retention policy, sending them to fix
               // instrumentation that was already working (D-179, D-180).
               : proposalsPrunedBeforeMs !== null && a.windowStartMs < proposalsPrunedBeforeMs
@@ -642,7 +642,7 @@ export async function computeRealization(
     const dominantModelCostShare = modelAuthority.coverage === 'exact' ? modelAuthority.dominantShare : null;
     // Record HOW that model's dollars were priced, not just how many there were.
     // Collapsed to one value or the sentinel 'mixed' here so every reader applies
-    // the same rule; the raw sets stay in the ledger for `fiscus pricing --coverage`.
+    // the same rule; the raw sets stay in the ledger for `segreant pricing --coverage`.
     let dominantModelCostBasis: string | null = null;
     let dominantModelRateCard: string | null = null;
     if (dominantProvider !== null && dominantModel !== null) {
@@ -893,7 +893,7 @@ export function proposalRetentionForUnits(
  *
  * Pure, and takes the rollups rather than the store, so the ordering is
  * testable without a ledger and so a caller decides which projects are in
- * scope. `fiscus team push` filters by project AFTER building the breakdown,
+ * scope. `segreant team push` filters by project AFTER building the breakdown,
  * and the coverage must describe the body that is actually signed.
  */
 export function rollupSpendCoverage(

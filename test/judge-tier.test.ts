@@ -66,7 +66,7 @@ test('resolveJudgeTier: a non-loopback localBaseUrl is reported as off-device', 
 test('resolveJudgeTier: hostedEnabled alone (no API key) never activates hosted judging', () => {
   const d = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'https://api.example.com' }), false);
   assertOff(d);
-  assert.ok(d.notes.some((n) => n.includes('FISCUS_JUDGE_API_KEY is not set')));
+  assert.ok(d.notes.some((n) => n.includes('SEGREANT_JUDGE_API_KEY is not set')));
 });
 
 test('resolveJudgeTier: an API key alone (hostedEnabled false) never activates hosted judging — the adversarial case', () => {
@@ -149,9 +149,9 @@ test('resolveJudgeTier: sendsContentOffDevice reflects the selected endpoint bou
   assert.equal(hostedFull.sendsContentOffDevice, true);
 });
 
-test('hasHostedJudgeApiKey: reads FISCUS_JUDGE_API_KEY, and treats empty/whitespace as unset', () => {
+test('hasHostedJudgeApiKey: reads SEGREANT_JUDGE_API_KEY, and treats empty/whitespace as unset', () => {
   assert.equal(hasHostedJudgeApiKey({}), false);
-  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: '' }), false);
-  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: '   ' }), false);
-  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: 'sk-test-key-123' }), true);
+  assert.equal(hasHostedJudgeApiKey({ SEGREANT_JUDGE_API_KEY: '' }), false);
+  assert.equal(hasHostedJudgeApiKey({ SEGREANT_JUDGE_API_KEY: '   ' }), false);
+  assert.equal(hasHostedJudgeApiKey({ SEGREANT_JUDGE_API_KEY: 'sk-test-key-123' }), true);
 });

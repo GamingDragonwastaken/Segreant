@@ -117,8 +117,8 @@ function v1Draft(): CausalStudyProtocolDraft {
 }
 
 function withStore(action: (store: Store) => void): void {
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-snapshot-'));
-  const store = new Store(join(temp, 'fiscus.db'));
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-snapshot-'));
+  const store = new Store(join(temp, 'segreant.db'));
   try {
     action(store);
   } finally {
@@ -202,8 +202,8 @@ test('the empty snapshot list states why it is empty, and the three reasons diff
 test('the CLI inspect surface carries the reason, not a bare empty list', () => {
   // The surface is the point. A basis the operator never sees would be the
   // mechanism-without-a-caller pattern this round has been working through.
-  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-snapshot-cli-'));
-  const dbFile = join(temp, 'fiscus.db');
+  const temp = mkdtempSync(join(tmpdir(), 'segreant-causal-snapshot-cli-'));
+  const dbFile = join(temp, 'segreant.db');
   try {
     const store = new Store(dbFile);
     let studyId: string;
@@ -220,7 +220,7 @@ test('the CLI inspect surface carries the reason, not a bare empty list', () => 
     const output = JSON.parse(execFileSync(
       process.execPath,
       ['--disable-warning=ExperimentalWarning', join(import.meta.dirname, '..', 'src', 'cli.ts'), 'causal', 'inspect', studyId, '--json'],
-      { cwd: join(import.meta.dirname, '..'), env: { ...process.env, FISCUS_DB: dbFile, FISCUS_HOME: join(temp, 'home') }, encoding: 'utf8' },
+      { cwd: join(import.meta.dirname, '..'), env: { ...process.env, SEGREANT_DB: dbFile, SEGREANT_HOME: join(temp, 'home') }, encoding: 'utf8' },
     )) as { analysisSnapshots: { available: boolean; reason: string; latest: unknown[] } };
 
     assert.equal(output.analysisSnapshots.available, false);

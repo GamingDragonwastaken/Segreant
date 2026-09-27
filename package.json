@@ -1,5 +1,5 @@
 {
-  "name": "fiscus",
+  "name": "segreant",
   "version": "0.1.0",
   "description": "Local-first ledger and spend guard for AI coding agents: metering, budgets, provider-bill reconciliation, cost allocation and outcome evidence.",
   "type": "module",
@@ -7,17 +7,17 @@
     "node": ">=24.0.0"
   },
   "bin": {
-    "fiscus": "bin/fiscus.mjs",
-    "fiscuspack-verify": "standalone/fiscuspack-verifier.mjs"
+    "segreant": "bin/segreant.mjs",
+    "segreantpack-verify": "standalone/segreantpack-verifier.mjs"
   },
   "exports": {
     "./package.json": "./package.json"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs start",
-    "fiscus": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs",
+    "start": "node --disable-warning=ExperimentalWarning bin/segreant.mjs start",
+    "segreant": "node --disable-warning=ExperimentalWarning bin/segreant.mjs",
     "prestart": "npm run build",
-    "prefiscus": "npm run build",
+    "presegreant": "npm run build",
     "pretest": "node scripts/build.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
@@ -28,14 +28,14 @@
     "verify:supply-chain": "node scripts/check-supply-chain.mjs",
     "sbom": "npm sbom --sbom-format cyclonedx --omit dev",
     "verify:sbom": "node scripts/check-sbom.mjs",
-    "verify:fiscuspack": "node standalone/fiscuspack-verifier.mjs",
+    "verify:segreantpack": "node standalone/segreantpack-verifier.mjs",
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "benchmark:contribution": "node --disable-warning=ExperimentalWarning scripts/contribution-benchmark.mjs",
     "test:browser": "npm run build && node --test test/dashboard-runtime-accessibility.browser.mjs",
     "prepare": "npm run build",
     "predemo": "npm run build",
-    "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",
+    "demo": "node --disable-warning=ExperimentalWarning bin/segreant.mjs demo --serve",
     "prepack": "npm run build",
     "prepublishOnly": "npm run verify:security && npm run verify:supply-chain && npm run audit:runtime && npm run typecheck:all && npm test && npm run test:team-server && npm run build",
     "verify:security": "node scripts/check-security.mjs",

@@ -19,12 +19,12 @@ function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, GIT_AUTHOR_NAME: 'Fiscus Test', GIT_AUTHOR_EMAIL: 'test@fiscus.local', GIT_COMMITTER_NAME: 'Fiscus Test', GIT_COMMITTER_EMAIL: 'test@fiscus.local' },
+    env: { ...process.env, GIT_AUTHOR_NAME: 'Segreant Test', GIT_AUTHOR_EMAIL: 'test@segreant.local', GIT_COMMITTER_NAME: 'Segreant Test', GIT_COMMITTER_EMAIL: 'test@segreant.local' },
   }).trim();
 }
 
 function makeRepo(): { dir: string; commit: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-'));
   git(dir, ['init']);
   writeFileSync(join(dir, 'app.ts'), 'export const answer = 42;\n');
   git(dir, ['add', 'app.ts']);
@@ -35,15 +35,15 @@ function makeRepo(): { dir: string; commit: string } {
 function input(commit: string, over: Partial<GithubActionsOutcomeInput> = {}): GithubActionsOutcomeInput {
   return {
     repositoryId: '123456',
-    repositoryFullName: 'example/fiscus-fixture',
+    repositoryFullName: 'example/segreant-fixture',
     commit,
     runId: '987654',
     attempt: 1,
-    job: 'fiscus-outcome',
+    job: 'segreant-outcome',
     ref: 'refs/heads/main',
     conclusion: 'success',
     workflowPath: '.github/workflows/ci.yml',
-    policyId: 'fiscus-ci-v1',
+    policyId: 'segreant-ci-v1',
     workflowDigest: '1'.repeat(64),
     testPlanDigest: '2'.repeat(64),
     observedAt: new Date().toISOString(),
@@ -58,7 +58,7 @@ function importArgs(artifact: ReturnType<typeof signGithubActionsOutcome>, publi
     expectedRepositoryId: '123456',
     allowedRef: 'refs/heads/main',
     expectedWorkflowPath: '.github/workflows/ci.yml',
-    expectedPolicyId: 'fiscus-ci-v1',
+    expectedPolicyId: 'segreant-ci-v1',
     expectedWorkflowDigest: '1'.repeat(64),
     expectedTestPlanDigest: '2'.repeat(64),
     repoPath,
@@ -68,7 +68,7 @@ function importArgs(artifact: ReturnType<typeof signGithubActionsOutcome>, publi
 
 test('github evidence: a valid pinned artifact imports one replay-safe commit-bound tested signal and retains its envelope', async () => {
   const repo = makeRepo();
-  const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-key-'));
+  const keyDir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-key-'));
   const store = new Store(':memory:');
   try {
     const keys = loadOrCreateKeyPair(join(keyDir, 'ci-key.json'));
@@ -85,7 +85,7 @@ test('github evidence: a valid pinned artifact imports one replay-safe commit-bo
     assert.equal(signals[0]!.verdict, 'pass');
     assert.equal(signals[0]!.evidenceSource, 'signed-ci');
     const evidence = store.raw().prepare('SELECT envelope_json AS envelopeJson, policy_id AS policyId FROM gate_evidence WHERE event_id = ?').get(artifact.body.eventId) as { envelopeJson: string; policyId: string };
-    assert.equal(evidence.policyId, 'fiscus-ci-v1');
+    assert.equal(evidence.policyId, 'segreant-ci-v1');
     assert.deepEqual(JSON.parse(evidence.envelopeJson), artifact);
   } finally {
     store.close();
@@ -96,7 +96,7 @@ test('github evidence: a valid pinned artifact imports one replay-safe commit-bo
 
 test('github evidence: a valid failed test artifact overrides a pass through the existing fail-wins realization gate', async () => {
   const repo = makeRepo();
-  const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-fail-'));
+  const keyDir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-fail-'));
   const store = new Store(':memory:');
   try {
     const keys = loadOrCreateKeyPair(join(keyDir, 'ci-key.json'));
@@ -117,7 +117,7 @@ test('github evidence: a valid failed test artifact overrides a pass through the
 
 test('github evidence: altered payloads, an unpinned key, mismatched policy, and absent commits never write a signal', async () => {
   const repo = makeRepo();
-  const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-reject-'));
+  const keyDir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-reject-'));
   const store = new Store(':memory:');
   try {
     const honest = loadOrCreateKeyPair(join(keyDir, 'honest.json'));
@@ -143,7 +143,7 @@ test('github evidence: altered payloads, an unpinned key, mismatched policy, and
 
 test('github evidence: cancelled workflow data cannot be coerced into a pass and conflicting replay is rejected', async () => {
   const repo = makeRepo();
-  const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-conflict-'));
+  const keyDir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-conflict-'));
   const store = new Store(':memory:');
   try {
     const keys = loadOrCreateKeyPair(join(keyDir, 'ci-key.json'));
@@ -167,7 +167,7 @@ test('github evidence: cancelled workflow data cannot be coerced into a pass and
 
 test('github evidence: an invalid local evidence-age policy fails closed before it can write', async () => {
   const repo = makeRepo();
-  const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-github-evidence-age-'));
+  const keyDir = mkdtempSync(join(tmpdir(), 'segreant-github-evidence-age-'));
   const store = new Store(':memory:');
   try {
     const keys = loadOrCreateKeyPair(join(keyDir, 'ci-key.json'));

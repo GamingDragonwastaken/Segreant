@@ -1,14 +1,14 @@
-# Fiscus Constitutional Reconstruction Implementation Plan
+# Segreant Constitutional Reconstruction Implementation Plan
 
 > **For agentic workers:** execute task-by-task with test-first changes, frequent coherent commits, exact-SHA verification, and durable-state updates.
 
-**Goal:** Reconstruct Fiscus so broad AI-economic capabilities sit on a small, machine-checkable epistemic/financial/measurement/decision foundation without discarding the high-assurance work already present.
+**Goal:** Reconstruct Segreant so broad AI-economic capabilities sit on a small, machine-checkable epistemic/financial/measurement/decision foundation without discarding the high-assurance work already present.
 
 **Architecture:** Preserve the current candidate as an adapter-rich operational foundation. Introduce a Trusted Epistemic Kernel beneath legacy value/reporting surfaces, migrate semantics dependency-first, and use compatibility translations rather than allowing old labels to weaken kernel invariants.
 
 **Tech Stack:** TypeScript/Node 24, SQLite, built-in `node:test`, existing CLI/dashboard/team-server packages, GitHub Actions.
 
-**Spec:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md`, SHA-256 `0092098ce085a63006bfcd6d63f5fca7f5dc2d25b4f7b112daa1dd0d8bdeb8cc`.
+**Spec:** owner-approved `SEGREANT_FOUNDATIONAL_AUDIT_II_COMPLETE.md`, SHA-256 `0092098ce085a63006bfcd6d63f5fca7f5dc2d25b4f7b112daa1dd0d8bdeb8cc`.
 
 ## Global constraints
 
@@ -101,7 +101,7 @@ Bound all major buffers, review DB invariants, make the JOSE dependency decision
 
 ### Task 14: Standards interoperability
 
-FOCUS/OTel/PROV/attestation predicates and portable evidence pack without weakening Fiscus-specific semantics.
+FOCUS/OTel/PROV/attestation predicates and portable evidence pack without weakening Segreant-specific semantics.
 
 ### Task 15: Final adversarial reconciliation
 

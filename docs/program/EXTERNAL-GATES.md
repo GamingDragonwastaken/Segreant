@@ -5,7 +5,7 @@ independent reviewer can execute it without inventing the protocol.
 
 | Gate | Requirement | Required evidence | Acceptance criterion | Current blocker |
 |---|---|---|---|---|
-| X-01 Provider billing truth | Reconcile scoped Fiscus observations against authoritative provider cost/bill using `docs/REAL-PROVIDER-RECONCILIATION-RUNBOOK.md` | Provider-authorized export/API evidence with account/project/time identity | Declared grain reconciliation completes with residuals explained/withheld correctly | No real provider evidence supplied |
+| X-01 Provider billing truth | Reconcile scoped Segreant observations against authoritative provider cost/bill using `docs/REAL-PROVIDER-RECONCILIATION-RUNBOOK.md` | Provider-authorized export/API evidence with account/project/time identity | Declared grain reconciliation completes with residuals explained/withheld correctly | No real provider evidence supplied |
 | X-02 Causal financial result | Execute preregistered qualified study | Real assignments, adherence, outcomes, costs, missingness/interference data | Prespecified estimator + simultaneous decision criteria pass | No real governed study executed |
 | X-03 Production team service | Validate actual deployment using `team-server/PRODUCTION-RUNBOOK.md` | Real IdP/Postgres/TLS/secrets/backups/authz/load evidence | Threat model and production checklist satisfied; recovery exercised | No production infrastructure authorized |
 | X-04 Independent security assessment | Third-party adversarial review | Reviewer report/reproduction | No unresolved critical/high issue or documented risk acceptance by owner | External reviewer required |

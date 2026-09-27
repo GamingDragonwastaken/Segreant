@@ -58,7 +58,7 @@ function preview(document: NormalizedBillingImport, fileName: string, fileSha256
   };
 }
 
-/** Read, size-gate, hash, and strictly validate a Fiscus billing-evidence v1 JSON file. */
+/** Read, size-gate, hash, and strictly validate a Segreant billing-evidence v1 JSON file. */
 export function readBillingImportFile(path: string): { input: BillingImportInput; preview: BillingImportPreview } {
   const stat = statSync(path);
   if (!stat.isFile()) throw new Error('billing import --file must point to a regular local file');

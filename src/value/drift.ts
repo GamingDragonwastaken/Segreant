@@ -145,7 +145,7 @@ export function driftEProcess(
 // alarms. It says nothing about missed ones, because an e-process carries no
 // power guarantee — so a silent alarm is the absence of a result, not a result.
 //
-// `fiscus value` used to print the silence as a finding, in green, beside
+// `segreant value` used to print the silence as a finding, in green, beside
 // `DRIFT DETECTED` in red, as though the two were symmetric verdicts of one
 // test. They are not, and the gap is not academic. `rateDriftStreams` emits a
 // stream at `minN`, which defaults to 10, and the most extreme drift a binary

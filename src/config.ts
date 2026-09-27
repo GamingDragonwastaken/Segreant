@@ -1,12 +1,12 @@
 /**
  * Configuration + on-disk paths.
  *
- * Everything Fiscus persists lives under a single directory:
- *   Windows : %USERPROFILE%\.fiscus
- *   macOS   : ~/.fiscus
- *   Linux   : ~/.fiscus
+ * Everything Segreant persists lives under a single directory:
+ *   Windows : %USERPROFILE%\.segreant
+ *   macOS   : ~/.segreant
+ *   Linux   : ~/.segreant
  *
- * Override it with FISCUS_HOME. FISCUS_DB and FISCUS_DEMO override the database
+ * Override it with SEGREANT_HOME. SEGREANT_DB and SEGREANT_DEMO override the database
  * path and the demo flag the same way. See ENV_OVERRIDES below.
  *
  * Config is plain JSON so it stays dependency-free and hand-editable.
@@ -217,7 +217,7 @@ export function exactBudgetCaps(cfg: BudgetConfig): ExactBudgetCaps {
 export interface AlertsConfig {
   /**
    * Opt-in webhook for alert delivery (e.g. a Slack/Teams/PagerDuty incoming URL).
-   * null = off (the default). When set, Fiscus POSTs ONLY alert metadata —
+   * null = off (the default). When set, Segreant POSTs ONLY alert metadata —
    * id, severity, title, detail, and a short metric. Never prompts, code, or keys.
    */
   webhookUrl: string | null;
@@ -248,8 +248,8 @@ export interface LiftConfig {
 
 export interface PricingConfig {
   /**
-   * Remote pricing manifest. `fiscus pricing --refresh` pulls it into
-   * ~/.fiscus/pricing/models.json, which then overrides the bundled table.
+   * Remote pricing manifest. `segreant pricing --refresh` pulls it into
+   * ~/.segreant/pricing/models.json, which then overrides the bundled table.
    * Accepts our native schema OR a LiteLLM price file (auto-detected and
    * transformed). Provider rates drift, and pricing is a core dependability,
    * so this keeps it current without a reinstall. The fetch is a plain GET of
@@ -260,7 +260,7 @@ export interface PricingConfig {
   /** Past this age, the table is flagged stale (in `pricing`, `doctor`). */
   maxAgeDays: number;
   /**
-   * When true, `fiscus start` refreshes pricing on launch if the cache is
+   * When true, `segreant start` refreshes pricing on launch if the cache is
    * older than maxAgeDays. OFF by default so a normal local start has no
    * optional manifest request. Any refresh still needs a matching controlled
    * cloud egress rule; a denied refresh leaves the active local table intact.
@@ -315,7 +315,7 @@ export interface JudgeConfig {
   localSendFullContent: boolean;
   /**
    * Explicit opt-in for the HOSTED judge tier. The credential itself
-   * (FISCUS_JUDGE_API_KEY) must ALSO be set as an environment variable — never
+   * (SEGREANT_JUDGE_API_KEY) must ALSO be set as an environment variable — never
    * stored here. config.json can end up committed, backed up, or shared, and a
    * bearer key for a separate judge account has no business living next to Lift
    * baselines. Both this flag AND the env var must independently be set before
@@ -338,7 +338,7 @@ export interface JudgeConfig {
 }
 
 /**
- * A permission is specific to why Fiscus is sending a request and what class of
+ * A permission is specific to why Segreant is sending a request and what class of
  * data the request may carry. A rule never acts as a generic network wildcard.
  */
 export type EgressPurpose =
@@ -376,12 +376,12 @@ export interface EgressRule {
 }
 
 export interface EgressConfig {
-  /** Local mode refuses every non-loopback Fiscus HTTP(S) target before DNS. */
+  /** Local mode refuses every non-loopback Segreant HTTP(S) target before DNS. */
   mode: 'local_locked' | 'controlled_cloud';
   rules: EgressRule[];
 }
 
-export interface FiscusConfig {
+export interface SegreantConfig {
   port: number;
   dashboardPort: number;
   upstreams: {
@@ -390,7 +390,7 @@ export interface FiscusConfig {
   };
   /**
    * When true, a request may override the OpenAI-compatible upstream per call via
-   * the `x-fiscus-openai-base` header (to meter OpenRouter / Ollama / DeepSeek / a
+   * the `x-segreant-openai-base` header (to meter OpenRouter / Ollama / DeepSeek / a
    * local server from one proxy). OFF by default: that header forwards your
    * provider auth to the named URL, so honoring an attacker-influenced header
    * could exfiltrate the key. For the common case just set `upstreams.openai` to
@@ -427,12 +427,12 @@ export interface FiscusConfig {
    * than `retentionDays`: proposals only need to survive the correlation window
    * (`windowDays`, default 14) plus a safety margin, unlike request/cost history which
    * has standing value for longer. This is the privacy-facing retention control —
-   * `fiscus prune` and the dashboard "clear stored proposals now" button both use it.
+   * `segreant prune` and the dashboard "clear stored proposals now" button both use it.
    */
   proposalRetentionDays: number;
 }
 
-export const DEFAULT_CONFIG: FiscusConfig = {
+export const DEFAULT_CONFIG: SegreantConfig = {
   port: 8090,
   dashboardPort: 8091,
   upstreams: {
@@ -456,7 +456,7 @@ export const DEFAULT_CONFIG: FiscusConfig = {
   lift: {
     // Rough industry baselines (manual minutes per task-type) — illustrative
     // defaults that make Lift work out of the box; tune them to your team via
-    // `fiscus config`. The measured denominator (time with AI) keeps Lift
+    // `segreant config`. The measured denominator (time with AI) keeps Lift
     // honest regardless of these.
     baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
     laborRatePerHour: null,
@@ -488,7 +488,7 @@ export const DEFAULT_CONFIG: FiscusConfig = {
     minCohort: 5,
   },
   // Strong default: local operation works immediately, while any cloud route
-  // needs a deliberate, inspectable exact rule created through `fiscus egress`.
+  // needs a deliberate, inspectable exact rule created through `segreant egress`.
   egress: {
     mode: 'local_locked',
     rules: [],
@@ -499,17 +499,17 @@ export const DEFAULT_CONFIG: FiscusConfig = {
 };
 
 /**
- * The environment overrides. `FISCUS_*` is the only family the product reads.
+ * The environment overrides. `SEGREANT_*` is the only family the product reads.
  *
  * A second family briefly existed, carried over from the name this project used
- * before it was Fiscus, and was honoured as a fallback. It is gone — not
+ * before it was Segreant, and was honoured as a fallback. It is gone — not
  * deprecated, not read, not warned about. Two spellings for one setting is a
  * precedence rule, and a precedence rule is a thing to get wrong: this one was,
- * for exactly one commit, during which an ambient `FISCUS_HOME` silently
+ * for exactly one commit, during which an ambient `SEGREANT_HOME` silently
  * outranked the older name that every test used to isolate itself, and the
  * suite began writing into whatever real home the developer had exported.
  *
- * An EMPTY value counts as unset. `FISCUS_HOME=` in a shell sets the variable
+ * An EMPTY value counts as unset. `SEGREANT_HOME=` in a shell sets the variable
  * to the empty string, and `??` would happily accept it — resolving the home to
  * a relative path and writing the operator's ledger into whatever directory
  * they happened to be standing in.
@@ -517,7 +517,7 @@ export const DEFAULT_CONFIG: FiscusConfig = {
 export const ENV_OVERRIDES = ['HOME', 'DB', 'DEMO'] as const;
 
 function envOverride(name: (typeof ENV_OVERRIDES)[number]): string | undefined {
-  const value = process.env[`FISCUS_${name}`];
+  const value = process.env[`SEGREANT_${name}`];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
@@ -527,24 +527,24 @@ function envOverride(name: (typeof ENV_OVERRIDES)[number]): string | undefined {
  * a caller cannot write a variable this module does not read.
  */
 export function envOverrideKey(name: (typeof ENV_OVERRIDES)[number]): string {
-  return `FISCUS_${name}`;
+  return `SEGREANT_${name}`;
 }
 
-export function fiscusHome(): string {
-  return envOverride('HOME') ?? join(homedir(), '.fiscus');
+export function segreantHome(): string {
+  return envOverride('HOME') ?? join(homedir(), '.segreant');
 }
 
 export function configPath(): string {
-  return join(fiscusHome(), 'config.json');
+  return join(segreantHome(), 'config.json');
 }
 
 export function dbPath(): string {
-  return envOverride('DB') ?? join(fiscusHome(), 'fiscus.db');
+  return envOverride('DB') ?? join(segreantHome(), 'segreant.db');
 }
 
-/** Isolated database for `fiscus demo` — never mixed with real metering. */
+/** Isolated database for `segreant demo` — never mixed with real metering. */
 export function demoDbPath(): string {
-  return join(fiscusHome(), 'demo.db');
+  return join(segreantHome(), 'demo.db');
 }
 
 /** True when the process is running against demo data (set by the `demo` command / `--demo`). */
@@ -565,7 +565,7 @@ export function unlinkDemoDb(): void {
  * session, runaway). Applied only in demo mode, only where the user hasn't set
  * their own value, and NEVER written to disk.
  */
-function withDemoDefaults(cfg: FiscusConfig): FiscusConfig {
+function withDemoDefaults(cfg: SegreantConfig): SegreantConfig {
   const budget = { ...cfg.budget };
   if (budget.dailyUsd === null) budget.dailyUsd = 30;
   if (budget.dailySoftUsd === null) budget.dailySoftUsd = 20;
@@ -587,7 +587,7 @@ function withDemoDefaults(cfg: FiscusConfig): FiscusConfig {
 }
 
 export function ensureHome(): string {
-  const home = fiscusHome();
+  const home = segreantHome();
   if (!existsSync(home)) mkdirSync(home, { recursive: true });
   return home;
 }
@@ -645,9 +645,9 @@ function sanitizeEgressConfig(value: unknown): EgressConfig {
   };
 }
 
-export function loadConfig(): FiscusConfig {
+export function loadConfig(): SegreantConfig {
   const path = configPath();
-  let cfg: FiscusConfig;
+  let cfg: SegreantConfig;
   if (!existsSync(path)) {
     cfg = { ...DEFAULT_CONFIG };
   } else {
@@ -656,11 +656,11 @@ export function loadConfig(): FiscusConfig {
       raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
     } catch (error) {
       throw new ConfigValidationError(
-        `cannot parse ${path}; repair or restore ${path}.bak before starting Fiscus (${error instanceof Error ? error.message : String(error)})`,
+        `cannot parse ${path}; repair or restore ${path}.bak before starting Segreant (${error instanceof Error ? error.message : String(error)})`,
       );
     }
     if (!isRecord(raw)) throw new ConfigValidationError(`configuration root in ${path} must be an object`);
-    cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<FiscusConfig>);
+    cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<SegreantConfig>);
     cfg = { ...cfg, egress: sanitizeEgressConfig(raw.egress) };
   }
   // Ports cross into URL, server, and copy-paste command construction. Never
@@ -693,7 +693,7 @@ function configLockOwner(path: string): { token?: unknown } | null {
 }
 
 /**
- * One Fiscus writer at a time may replace config.json.
+ * One Segreant writer at a time may replace config.json.
  *
  * The lock is deliberately fail-closed and is never stolen on a timer. A stale
  * lock is an operator-visible recovery artifact, which is safer than allowing an
@@ -747,7 +747,7 @@ export function acquireConfigMutationLock(): ConfigMutationLock {
 function assertConfigMutationLock(lock: ConfigMutationLock): void {
   const expected = join(ensureHome(), 'config.lock');
   if (lock.path !== expected) {
-    throw new ConfigValidationError('config mutation lock belongs to a different Fiscus home');
+    throw new ConfigValidationError('config mutation lock belongs to a different Segreant home');
   }
   const owner = configLockOwner(lock.path);
   if (owner?.token !== lock.token) {
@@ -755,7 +755,7 @@ function assertConfigMutationLock(lock: ConfigMutationLock): void {
   }
 }
 
-function persistConfigUnlocked(config: FiscusConfig): void {
+function persistConfigUnlocked(config: SegreantConfig): void {
   ensureHome();
   validateBudgetConfig(config.budget);
   const path = configPath();
@@ -782,21 +782,21 @@ function persistConfigUnlocked(config: FiscusConfig): void {
 }
 
 /** Persist while the caller owns the shared config mutation generation. */
-export function saveConfigWithLock(config: FiscusConfig, lock: ConfigMutationLock): void {
+export function saveConfigWithLock(config: SegreantConfig, lock: ConfigMutationLock): void {
   assertConfigMutationLock(lock);
   persistConfigUnlocked(config);
 }
 
 /**
- * Atomic Fiscus read-modify-write transaction.
+ * Atomic Segreant read-modify-write transaction.
  *
  * Product code that wants to change part of the configuration should use this
  * instead of loading a snapshot and later calling saveConfig(): the latter can
  * overwrite a newer generation even when the final rename itself is serialized.
  */
 export function mutateConfig(
-  mutator: (current: FiscusConfig) => FiscusConfig | void,
-): FiscusConfig {
+  mutator: (current: SegreantConfig) => SegreantConfig | void,
+): SegreantConfig {
   const lock = acquireConfigMutationLock();
   try {
     const current = loadConfig();
@@ -814,7 +814,7 @@ export function mutateConfig(
  * Authoritative full replacement. Prefer mutateConfig() for product
  * read-modify-write paths so the read participates in the same lock generation.
  */
-export function saveConfig(config: FiscusConfig): void {
+export function saveConfig(config: SegreantConfig): void {
   const lock = acquireConfigMutationLock();
   try {
     persistConfigUnlocked(config);

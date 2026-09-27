@@ -7,7 +7,7 @@
  * made of:
  *
  *   - it serves RECORDED runs and never computes one, so the page and
- *     `fiscus alloc run --apply` can never disagree;
+ *     `segreant alloc run --apply` can never disagree;
  *   - a derived allocation never leaks back into metered spend, budgets, or RoI;
  *   - the page states whether the residual under its figures has been examined,
  *     because an allocated estimate presented as settled cost is the one failure
@@ -269,8 +269,8 @@ test('/api/allocation is read-only and keeps the dashboard loopback host protect
 });
 
 test('demo mode seeds no cost centre, rule, or allocation run', async () => {
-  const previousDemo = process.env.FISCUS_DEMO;
-  process.env.FISCUS_DEMO = '1';
+  const previousDemo = process.env.SEGREANT_DEMO;
+  process.env.SEGREANT_DEMO = '1';
   const store = new Store(':memory:');
   const srv = await boot(store);
   try {
@@ -282,8 +282,8 @@ test('demo mode seeds no cost centre, rule, or allocation run', async () => {
   } finally {
     await srv.close();
     store.close();
-    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
-    else process.env.FISCUS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.SEGREANT_DEMO;
+    else process.env.SEGREANT_DEMO = previousDemo;
   }
 });
 

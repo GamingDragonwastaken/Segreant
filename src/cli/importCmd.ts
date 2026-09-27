@@ -7,7 +7,8 @@
 
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
-import { dbPath } from '../config.ts';
+import { dbPath, loadConfig } from '../config.ts';
+import { pricingStatus } from '../cost/pricing.ts';
 import { realizeDiscoveredProjects, projectValueBreakdown } from '../value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
@@ -151,6 +152,9 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
     ].filter(Boolean).join(', ');
     console.log(color(tty, C.yellow, `  Coverage     TRUNCATED${details ? ` (${details})` : ''} — imported values are not a complete source capture.`));
   }
+  if (sum.conflictingObservations) {
+    console.log(color(tty, C.yellow, `  Conflicts    ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
+  }
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
   // over the merge — silently splitting a project's money is the worse failure.
@@ -161,12 +165,12 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
       console.log(color(tty, C.cyan, `    ${r.from} → ${r.to}`));
     }
     console.log(color(tty, C.gray, '  Earlier rows keep their original label — the ledger is never rewritten.'));
-    console.log(color(tty, C.gray, `  Merge them at read time with:  fiscus project alias ${sum.relabelled[0]!.from} ${sum.relabelled[0]!.to}`));
+    console.log(color(tty, C.gray, `  Merge them at read time with:  segreant project alias ${sum.relabelled[0]!.from} ${sum.relabelled[0]!.to}`));
   }
 }
 
 /**
- * `fiscus import <tool|all> [--root <dir>] [--days N] [--watch] [--json]` —
+ * `segreant import <tool|all> [--root <dir>] [--days N] [--watch] [--json]` —
  * native metering for managed/subscription tools: read the usage each tool
  * already writes to local disk. Idempotent (request_id is the natural key), so
  * it is safe to re-run or poll; each run adds only new traffic. `--watch` keeps
@@ -184,7 +188,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
         })();
 
   if (targets.length === 0) {
-    console.error(`  Usage: fiscus import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
+    console.error(`  Usage: segreant import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
     console.error('  Native metering — no base URL, no key. Reads what the tool already logs locally.');
     process.exitCode = 1;
     return;
@@ -223,7 +227,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  WOULD bill via API — not your invoice. Don’t also proxy the same tool for the'));
     console.log(color(tty, C.gray, '  same period, or it would count twice.'));
     console.log('');
-    console.log(color(tty, C.gray, '  Safe to re-run (or add --watch to keep it live). See it: fiscus today · fiscus start'));
+    console.log(color(tty, C.gray, '  Safe to re-run (or add --watch to keep it live). See it: segreant today · segreant start'));
   } else {
     console.log(color(tty, C.gray, '  Nothing new to import. Add --watch to fold in new traffic as it happens.'));
   }
@@ -258,7 +262,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
 
   if (paths.length === 0) {
     console.log(color(tty, C.gray, '  No project working directories on record yet. Import a tool first:'));
-    console.log(color(tty, C.gray, '    fiscus import claude-code | codex | opencode | all'));
+    console.log(color(tty, C.gray, '    segreant import claude-code | codex | opencode | all'));
     console.log(color(tty, C.gray, '  Imports capture each project’s folder — that is what Discover correlates.'));
     console.log('');
     return;
@@ -286,8 +290,8 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `    coded with: ${tools}`));
   }
   console.log('');
-  console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "fiscus roi --repo" scopes to a window — the two can differ.'));
-  console.log(color(tty, C.gray, '  Now live in: fiscus roi · fiscus today · the dashboard (By project).'));
+  console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "segreant roi --repo" scopes to a window — the two can differ.'));
+  console.log(color(tty, C.gray, '  Now live in: segreant roi · segreant today · the dashboard (By project).'));
   console.log('');
 }
 
@@ -310,7 +314,7 @@ function renderScanDiff(tty: boolean, diff: ScanDiff): void {
 }
 
 /**
- * `fiscus scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
+ * `segreant scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
  * discovery pass. It inspects the machine: which supported AI tools have local
  * usage data, and which folders under `path` (default: your home) are git repos.
  * Also surfaces a wider, best-effort inventory of OTHER AI coding tools it
@@ -380,7 +384,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
     console.log(color(tty, C.bold, `  Git repositories under ${roots}`));
     if (plan.repos.length === 0) {
-      console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  fiscus scan <path>'));
+      console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  segreant scan <path>'));
     } else {
       console.log(
         `    ${color(tty, C.green, `${plan.repos.length} repo(s)`)} found` +
@@ -409,11 +413,23 @@ export async function cmdScan(flags: Flags): Promise<void> {
     renderScanDiff(tty, diff);
   }
 
+  // Imported rows keep the price they were recorded at, so a stale card turns
+  // every model newer than it into a fallback estimate for good (until a
+  // reprice). Say so BEFORE the import, where it can still be avoided.
+  const prices = pricingStatus(loadConfig().pricing.maxAgeDays);
+  if (prices.stale && !flags.json) {
+    const age = prices.ageDays === null ? 'of unknown age' : `${num(prices.ageDays)} days old`;
+    console.log(color(tty, C.yellow, `  Prices are ${age}: models released since then will be priced by a fallback estimate.`));
+    console.log(color(tty, C.gray, '  Update them first with  segreant pricing --refresh  (it prints the one permission it needs),'));
+    console.log(color(tty, C.gray, '  or afterwards with  segreant reprice  to re-price what was imported.'));
+    console.log('');
+  }
+
   if (!flags.setup) {
     // Dry run: tell them exactly what --setup would do, and why it is safe.
     if (present.length === 0 && plan.repos.length === 0) {
       console.log(color(tty, C.gray, '  Nothing to set up yet — no supported tools and no repos found here.'));
-      console.log(color(tty, C.gray, '  If your code lives elsewhere, try:  fiscus scan <path-to-your-projects>'));
+      console.log(color(tty, C.gray, '  If your code lives elsewhere, try:  segreant scan <path-to-your-projects>'));
     } else {
       const toolNames = present.map((t) => t.label).join(', ') || 'no detected tools';
       console.log(color(tty, C.bold, '  Ready to set up:'));
@@ -422,7 +438,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
       // ran in (which may live outside this folder), not the raw repo count above.
       console.log(color(tty, C.gray, '    • correlate every project your tools ran in into per-project RoI'));
       console.log('');
-      console.log(`  Do it in one step:  ${color(tty, C.bold, 'fiscus scan' + (root ? ` ${root}` : '') + ' --setup')}`);
+      console.log(`  Do it in one step:  ${color(tty, C.bold, 'segreant scan' + (root ? ` ${root}` : '') + ' --setup')}`);
       console.log(color(tty, C.gray, '  Then re-run scan to see which repos here got valued.'));
     }
     console.log('');
@@ -451,6 +467,9 @@ export async function cmdScan(flags: Flags): Promise<void> {
         `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
           `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
       );
+      if (sum.conflictingObservations) {
+        console.log(color(tty, C.yellow, `      ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
+      }
     }
   }
   if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));
@@ -473,8 +492,8 @@ export async function cmdScan(flags: Flags): Promise<void> {
       console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
     }
     console.log('');
-    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "fiscus roi --repo" scopes to a window — the two can differ.'));
-    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: fiscus today · roi · the dashboard.`));
+    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "segreant roi --repo" scopes to a window — the two can differ.'));
+    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: segreant today · roi · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
     console.log('');
   }

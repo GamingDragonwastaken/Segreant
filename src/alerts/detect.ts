@@ -13,7 +13,7 @@
  */
 
 import type { Store } from '../store/db.ts';
-import type { FiscusConfig } from '../config.ts';
+import type { SegreantConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 
 export type AlertSeverity = 'critical' | 'warn' | 'info';
@@ -85,7 +85,7 @@ function fmt(n: number): string {
  * WHICH DETECTORS COULD HAVE FIRED (WP-D06, D-141).
  *
  * `detectAlerts` returns an array, and an empty one used to be read as a
- * finding: `fiscus ops` printed a green "all clear". Two different situations
+ * finding: `segreant ops` printed a green "all clear". Two different situations
  * produce that empty array. In one, six detectors examined real traffic and none
  * tripped. In the other, the detectors were structurally unable to fire, and the
  * empty array records that nothing was looked at.
@@ -152,7 +152,7 @@ export function alertCoverage(inp: AlertInputs): AlertCoverage {
       channel: 'spend-spike',
       live: baseline > 0,
       // "yet" is a claim about the operator's history, and it is false on a
-      // ledger whose prior days Fiscus deleted on their own retention policy
+      // ledger whose prior days Segreant deleted on their own retention policy
       // (D-182). This is the surface whose whole job is to give the reason a
       // channel is dark, so giving the wrong one here is worse than anywhere.
       darkBecause: baseline > 0
@@ -286,7 +286,7 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
 /** Gather the inputs once, so alerts and their coverage are read from the same observation. */
 function gatherAlertInputs(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: { now?: number; realizedSpendShare?: number | null },
 ): AlertInputs {
   const now = opts.now ?? Date.now();
@@ -345,7 +345,7 @@ function gatherAlertInputs(
 /** Gather alert inputs from the store + config and detect. `realizedSpendShare` is passed in (git-gated). */
 export function computeAlerts(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: { now?: number; realizedSpendShare?: number | null } = {},
 ): Alert[] {
   return detectAlerts(gatherAlertInputs(store, config, opts));
@@ -354,7 +354,7 @@ export function computeAlerts(
 /** The same inputs `computeAlerts` gathers, read for coverage rather than for alerts. */
 export function computeAlertCoverage(
   store: Store,
-  config: FiscusConfig,
+  config: SegreantConfig,
   opts: { now?: number; realizedSpendShare?: number | null } = {},
 ): AlertCoverage {
   return alertCoverage(gatherAlertInputs(store, config, opts));

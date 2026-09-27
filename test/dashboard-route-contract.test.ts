@@ -62,15 +62,15 @@ test('canonical dashboard route contract drives server methods, guards, and brow
 test('shared dashboard payload validator rejects a wrong primitive at the client boundary', () => {
   const contract = dashboardPayloadContract('health', 'GET');
   assert.throws(
-    () => validateDashboardPayload(contract, { ok: 'yes', service: 'fiscus-dashboard' }),
+    () => validateDashboardPayload(contract, { ok: 'yes', service: 'segreant-dashboard' }),
     /health\.ok|expected boolean/i,
   );
-  assert.doesNotThrow(() => validateDashboardPayload(contract, { ok: true, service: 'fiscus-dashboard' }));
+  assert.doesNotThrow(() => validateDashboardPayload(contract, { ok: true, service: 'segreant-dashboard' }));
 });
 
 test('modern browser API fails closed when the server envelope violates the shared contract', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ ok: 'yes', service: 'fiscus-dashboard' }), {
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: 'yes', service: 'segreant-dashboard' }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });

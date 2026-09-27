@@ -19,7 +19,7 @@ import type { ProjectValue } from '../src/value/realization.ts';
 function projects(): ProjectValue[] {
   return [
     {
-      project: 'fiscus',
+      project: 'segreant',
       units: 12,
       costUsd: 41.5,
       realizationRate: 0.8,
@@ -82,7 +82,7 @@ test('team-rollup: direct validation rejects an unrecognized coverage claim', ()
 });
 
 test('team-rollup: legacy v1 bodies without coverage remain signable without changing their bytes', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-legacy-coverage-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-legacy-coverage-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const legacy = buildRollupBody(keys, projects(), period);
@@ -98,7 +98,7 @@ test('team-rollup: legacy v1 bodies without coverage remain signable without cha
 });
 
 test('team-rollup: a signed partial coverage claim remains partial after verification', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-partial-coverage-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-partial-coverage-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildRollupBody(keys, projects(), period);
@@ -112,7 +112,7 @@ test('team-rollup: a signed partial coverage claim remains partial after verific
   }
 });
 test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries period/projects through unchanged', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-build-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-build-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildRollupBody(keys, projects(), period);
@@ -126,7 +126,7 @@ test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries pe
 });
 
 test('team-rollup: sign then verify is valid; tampering a project\'s numbers invalidates (body hash mismatch)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-tamper-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-tamper-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildRollupBody(keys, projects(), period);
@@ -145,7 +145,7 @@ test('team-rollup: sign then verify is valid; tampering a project\'s numbers inv
 });
 
 test('team-rollup: key pinning rejects a forgery signed by an untrusted key (authenticity, not just integrity)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-pin-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-pin-'));
   try {
     const honest = loadOrCreateKeyPair(join(dir, 'honest.json'));
     const attacker = loadOrCreateKeyPair(join(dir, 'attacker.json'));
@@ -174,7 +174,7 @@ test('team-rollup: key pinning rejects a forgery signed by an untrusted key (aut
 });
 
 test('team-rollup: claiming a trusted keyId while signing with another key is detected', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-lie-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-lie-'));
   try {
     const attacker = loadOrCreateKeyPair(join(dir, 'a.json'));
     const body = buildRollupBody(attacker, projects(), period);
@@ -190,7 +190,7 @@ test('team-rollup: claiming a trusted keyId while signing with another key is de
 });
 
 test('team-rollup: a garbled public key fails verification cleanly instead of throwing', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-garbled-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-rollup-garbled-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const signed = signRollup(buildRollupBody(keys, projects(), period), keys);

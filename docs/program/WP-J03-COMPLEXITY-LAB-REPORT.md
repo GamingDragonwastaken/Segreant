@@ -6,7 +6,7 @@
 
 ## Current repository reality
 
-Fiscus now contains the narrow foundation the packet permits:
+Segreant now contains the narrow foundation the packet permits:
 `src/research/complexity/profile.ts` defines an immutable, content-free
 `ComplexityProfile` over structural and execution observables. It deliberately
 does **not** expose a scalar complexity score, routing recommendation, budget
@@ -17,7 +17,7 @@ digest-bound estimator identity. This is an admission surface for future
 research, not a production decision feature.
 
 The production boundary is mechanically guarded. `src/cli.ts` does not dispatch
-`fiscus lab` or top-level `fiscus complexity`; dashboard contracts expose no
+`segreant lab` or top-level `segreant complexity`; dashboard contracts expose no
 complexity route; the production benchmark does not claim a complexity
 operation; and `src/value/frontier.ts` uses task type and changed-line size only
 as observational conditioning/confounder dimensions rather than collapsing them

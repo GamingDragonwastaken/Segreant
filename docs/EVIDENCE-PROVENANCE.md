@@ -1,6 +1,6 @@
 # Outcome evidence and provenance
 
-Fiscus distinguishes an outcome claim from the strength of the evidence that
+Segreant distinguishes an outcome claim from the strength of the evidence that
 entered the local ledger. A passing gate means a recorded signal exists; it does
 not by itself prove independent verification.
 
@@ -8,12 +8,12 @@ not by itself prove independent verification.
 
 | Class | How it enters | What it establishes |
 |---|---|---|
-| `manual` | `fiscus report` | A person asserted the outcome for one immutable commit (or a named non-code session). |
-| `local-command` | `fiscus exec -- ...` | A local wrapped command exited with the recorded status for one commit or named session. |
-| `signed-ci` | `fiscus evidence github import ...` | A signed GitHub Actions test artifact passed the local key, repository, commit, ref, workflow, and policy checks. |
+| `manual` | `segreant report` | A person asserted the outcome for one immutable commit (or a named non-code session). |
+| `local-command` | `segreant exec -- ...` | A local wrapped command exited with the recorded status for one commit or named session. |
+| `signed-ci` | `segreant evidence github import ...` | A signed GitHub Actions test artifact passed the local key, repository, commit, ref, workflow, and policy checks. |
 
 All coding lifecycle signals (`tested`, `merged`, `shipped`, `incident`) must be
-bound to one resolved Git commit. Fiscus does not let an unbound project-window
+bound to one resolved Git commit. Segreant does not let an unbound project-window
 signal certify another commit by timing alone.
 
 ## Signed GitHub Actions test evidence, v1

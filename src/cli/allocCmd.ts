@@ -1,5 +1,5 @@
 /**
- * `fiscus alloc` — cost-centre allocation.
+ * `segreant alloc` — cost-centre allocation.
  *
  * Read-only by default, like every other money-facing command here: computing a
  * period shows it, `--apply` records it. The one thing this command will not do
@@ -18,16 +18,16 @@ import { color, C, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
-  console.error('  Usage: fiscus alloc <centres|centre|rules|rule|revoke|run> [options]');
-  console.error('         fiscus alloc centre <id> --name "<name>" [--owner <who>]   add or update a cost centre');
-  console.error('         fiscus alloc centre <id> --archive                          retain it, stop it receiving');
-  console.error('         fiscus alloc rule <id> --method <direct|fixed_split|proportional_to_direct> \\');
+  console.error('  Usage: segreant alloc <centres|centre|rules|rule|revoke|run> [options]');
+  console.error('         segreant alloc centre <id> --name "<name>" [--owner <who>]   add or update a cost centre');
+  console.error('         segreant alloc centre <id> --archive                          retain it, stop it receiving');
+  console.error('         segreant alloc rule <id> --method <direct|fixed_split|proportional_to_direct> \\');
   console.error('             --centre <id>[:<ratio>][,<id>[:<ratio>]...] [--match-project P] [--match-model M]');
   console.error('             [--match-provider P] [--match-source S] [--match-user U]');
   console.error('             [--priority N] [--from <ISO>] [--until <ISO>] [--owner W] [--note "..."]');
   console.error('             a proportional_to_direct rule derives its split, so its centre takes ratio 0');
-  console.error('         fiscus alloc revoke <rule-id>');
-  console.error('         fiscus alloc run --from <ISO> --to <ISO> [--apply] [--json]');
+  console.error('         segreant alloc revoke <rule-id>');
+  console.error('         segreant alloc run --from <ISO> --to <ISO> [--apply] [--json]');
   console.error('  Allocation is derived: it never modifies a request row, and never feeds budgets or RoI.');
 }
 
@@ -137,7 +137,7 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
         : 'exact — allocated + unallocated = ledger total')
     : 'FAILED'}`));
   console.log(color(tty, C.dim, `  Excluded from ${result.excludedFrom.join(', ')}`));
-  console.log(applied ? color(tty, C.green, '  Recorded as an immutable derived run.') : '  Not recorded. Persist it with: fiscus alloc run … --apply');
+  console.log(applied ? color(tty, C.green, '  Recorded as an immutable derived run.') : '  Not recorded. Persist it with: segreant alloc run … --apply');
 }
 
 export function cmdAlloc(flags: Flags): void {
@@ -149,7 +149,7 @@ export function cmdAlloc(flags: Flags): void {
       const centres = store.costCentres();
       if (flags.json) return void printJson({ costCentres: centres });
       console.log('');
-      if (centres.length === 0) console.log(color(tty, C.gray, '  No cost centres. Add one: fiscus alloc centre eng --name "Engineering"'));
+      if (centres.length === 0) console.log(color(tty, C.gray, '  No cost centres. Add one: segreant alloc centre eng --name "Engineering"'));
       for (const c of centres) {
         console.log(`  ${c.costCentreId.padEnd(24)} ${c.name}${c.owner ? color(tty, C.gray, `  (${c.owner})`) : ''}${c.archivedAtMs ? color(tty, C.yellow, '  [archived]') : ''}`);
       }

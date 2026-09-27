@@ -1,6 +1,6 @@
 # Design Direction — the full rebrand & overhaul
 
-**DECIDED (2026-07-11): the name is FISCUS; the brand device is the Minted Seal — a coin
+**DECIDED (2026-07-11): the name is SEGREANT; the brand device is the Minted Seal — a coin
 bearing an engraved heraldic griffin — not a walking mascot.** The user delegated the
 choice; the mascot idea softened into "use generated assets for uniqueness," and an
 emblem/coin reads premium where a creature-character risks gimmick for a
@@ -16,13 +16,13 @@ Requirement: shorter, historical, influential, "big bang" energy. All checked fr
 
 | Name | Story | Why it hits |
 |---|---|---|
-| **Fiscus** ⭐ | The Roman emperor's personal treasury. Latin *fiscus* = the rush **basket** money was carried in. It is literally the root of the word "fiscal". | 6 letters, pronounceable in every language, exactly on-domain (AI-spend governance = fiscal control), and nobody in dev tooling has it. "The fiscus for your AI spend." |
+| **Segreant** ⭐ | The Roman emperor's personal treasury. Latin *segreant* = the rush **basket** money was carried in. It is literally the root of the word "fiscal". | 6 letters, pronounceable in every language, exactly on-domain (AI-spend governance = fiscal control), and nobody in dev tooling has it. "The segreant for your AI spend." |
 | **Exchequer** | The medieval English treasury — audited the kingdom's money on a checkered cloth and issued **split tally sticks as receipts** (our signed Value Receipts are the same idea, 800 years later). | Iconic word, deep story tie-in to the receipts feature. Longer (9 letters). |
 | **Sesterce** | The Roman coin of daily accounting — ledgers were kept in sesterces. | Beautiful word, coin = unit of spend. Slightly obscure to pronounce. |
-| Aerarium | Rome's *state* treasury (vs the emperor's fiscus). | Great story, but 8 letters and harder to say. |
+| Aerarium | Rome's *state* treasury (vs the emperor's segreant). | Great story, but 8 letters and harder to say. |
 | Drachm / Denar | Greek/Balkan coin names. | Short, clean, less story. |
 
-**Recommendation: Fiscus.** The basket etymology also gives the mascot a wink: the griffin
+**Recommendation: Segreant.** The basket etymology also gives the mascot a wink: the griffin
 guards the basket.
 
 ## 2. The mascot — a griffin
@@ -118,14 +118,14 @@ whole-sprite transforms.
    spotlight, count-up numerals + animated funnel, guardian emblem in the trust band,
    OG banner meta. (Griffin *states* wired to demo data — deferred; the emblem is static.)
 4. ✓ CLI palette echo (the `C` object in `src/cli/ui.ts`): truecolor gold/sage/red with ANSI fallback.
-5. README wordmark ✓ · npm publish as `fiscus` — awaiting the user's OTP-gated `npm publish`.
+5. README wordmark ✓ · npm publish as `segreant` — awaiting the user's OTP-gated `npm publish`.
 
 Optional polish, not blocking: coin-spin loading state from seal-edge.png (P4), griffin
 alert/sleep states.
 
 ---
 
-## FINAL PROMPTS — Fiscus / Minted Seal (supersede §5)
+## FINAL PROMPTS — Segreant / Minted Seal (supersede §5)
 
 Prepend the STYLE LOCK to every prompt. Request PNG at the stated size; transparent
 background where noted. If the tool offers it, ask for "no text anywhere in the image".

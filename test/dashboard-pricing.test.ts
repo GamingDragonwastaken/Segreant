@@ -51,9 +51,9 @@ function boot(store: Store) {
 }
 
 test('GET /api/overview exposes local rate-card freshness and estimated-rate coverage without a pricing refresh', async () => {
-  const oldHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-pricing-'));
-  process.env.FISCUS_HOME = home;
+  const oldHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-dashboard-pricing-'));
+  process.env.SEGREANT_HOME = home;
   const store = new Store(':memory:');
   store.insertRequest(request({
     requestId: 'exact', costUsd: 3, estimated: false,
@@ -116,7 +116,7 @@ test('GET /api/overview exposes local rate-card freshness and estimated-rate cov
     assert.match(html, /Rate-card health/);
     assert.match(html, /Estimated-rate share/);
     assert.match(html, /this page never fetches pricing/);
-    assert.match(html, /fiscus pricing --refresh/);
+    assert.match(html, /segreant pricing --refresh/);
     assert.match(html, /Recorded basis/);
     assert.match(html, /immutable evidence cohort/);
     assert.match(html, /rateCardProvenance/);
@@ -126,8 +126,8 @@ test('GET /api/overview exposes local rate-card freshness and estimated-rate cov
   } finally {
     await srv.close();
     store.close();
-    if (oldHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = oldHome;
+    if (oldHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = oldHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

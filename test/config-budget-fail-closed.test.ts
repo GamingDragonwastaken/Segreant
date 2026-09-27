@@ -8,15 +8,15 @@ import { applySettingsPatch } from '../src/dashboard/settings.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 
 test('loadConfig refuses malformed budget data instead of falling back to unlimited defaults', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-invalid-budget-config-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-invalid-budget-config-'));
+  process.env.SEGREANT_HOME = home;
   try {
     writeFileSync(join(home, 'config.json'), JSON.stringify({ budget: { dailyUsd: 'unlimited' } }), 'utf8');
     assert.throws(() => loadConfig(), /CONFIG_INVALID|budget|repair/i);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
@@ -43,9 +43,9 @@ test('settings patch rejects unknown keys instead of silently dropping them', ()
 });
 
 test('saveConfig retains the last known-good file while replacing the active config', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-config-atomic-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-config-atomic-'));
+  process.env.SEGREANT_HOME = home;
   try {
     const first = structuredClone(DEFAULT_CONFIG);
     first.budget.dailyUsd = 10;
@@ -63,17 +63,17 @@ test('saveConfig retains the last known-good file while replacing the active con
       'temporary config files must not survive a successful replacement',
     );
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 
-test('all Fiscus config writers share one fail-closed mutation lock', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-config-lock-'));
-  process.env.FISCUS_HOME = home;
+test('all Segreant config writers share one fail-closed mutation lock', () => {
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-config-lock-'));
+  process.env.SEGREANT_HOME = home;
   try {
     const first = structuredClone(DEFAULT_CONFIG);
     first.budget.dailyUsd = 10;
@@ -86,7 +86,7 @@ test('all Fiscus config writers share one fail-closed mutation lock', () => {
       assert.throws(
         () => saveConfig(second),
         /config.*(?:active|lock)|mutation.*active|stale lock/i,
-        'a second Fiscus writer must not overwrite a config while another writer owns the mutation generation',
+        'a second Segreant writer must not overwrite a config while another writer owns the mutation generation',
       );
       saveConfigWithLock(second, lock);
       assert.equal(loadConfig().budget.dailyUsd, 20);
@@ -99,17 +99,17 @@ test('all Fiscus config writers share one fail-closed mutation lock', () => {
     saveConfig(third);
     assert.equal(loadConfig().budget.dailyUsd, 30, 'the config lock must be reusable after release');
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 
 test('transactional config mutations compose from the latest generation', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-config-transaction-'));
-  process.env.FISCUS_HOME = home;
+  const previousHome = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-config-transaction-'));
+  process.env.SEGREANT_HOME = home;
   try {
     const initial = structuredClone(DEFAULT_CONFIG);
     initial.budget.dailyUsd = 10;
@@ -128,8 +128,8 @@ test('transactional config mutations compose from the latest generation', () => 
     assert.equal(disk.alerts.webhookUrl, 'https://example.test/hook');
     assert.equal(disk.budget.dailyUsd, 25);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

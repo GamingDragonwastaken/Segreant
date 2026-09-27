@@ -36,9 +36,9 @@ import type {
   CommittedCausalStudyProtocolV2,
 } from './types.ts';
 
-export const CAUSAL_PRODUCER_TYPE = 'fiscus.causal-producer-receipt' as const;
+export const CAUSAL_PRODUCER_TYPE = 'segreant.causal-producer-receipt' as const;
 export const CAUSAL_PRODUCER_VERSION = 1 as const;
-export const CAUSAL_PRODUCER_ID = 'producer:fiscus-local-v1' as const;
+export const CAUSAL_PRODUCER_ID = 'producer:segreant-local-v1' as const;
 
 const DIGEST_RE = /^sha256:[a-f0-9]{64}$/;
 const COMMIT_RE = /^[a-f0-9]{40}$/;
@@ -316,12 +316,12 @@ function domainHash(domain: string, version: number, material: unknown): string 
 
 function decisionHash(decision: CausalDecisionRecordV2): string {
   const { eventHash: _ignored, ...material } = decision;
-  return domainHash('fiscus.causal.decision', 2, material);
+  return domainHash('segreant.causal.decision', 2, material);
 }
 
 function expectedDecisionId(decision: CausalDecisionRecordV2): string {
   return 'decision:' + sha256(canonicalJson({
-    domain: 'fiscus.causal.decision-id',
+    domain: 'segreant.causal.decision-id',
     version: 1,
     studyId: decision.studyId,
     protocolHash: decision.protocolHash,
@@ -423,7 +423,7 @@ function parseRealization(value: unknown): CausalProducerRealizationSnapshotV1 |
 function parseDecision(value: unknown): CausalDecisionRecordV2 | null {
   const record = exactDataRecord(value, DECISION_KEYS);
   if (!record
-      || record.type !== 'fiscus.causal-decision'
+      || record.type !== 'segreant.causal-decision'
       || record.version !== 2
       || !safeIdentifier(record.decisionId)
       || !safeIdentifier(record.studyId)
@@ -476,7 +476,7 @@ function requestIdentityMaterial(
   requests: readonly CausalProducerRequestSnapshotV1[],
 ): Record<string, unknown> {
   return {
-    type: 'fiscus.causal-producer-unit-identity',
+    type: 'segreant.causal-producer-unit-identity',
     version: 1,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -505,7 +505,7 @@ function requestEvidenceMaterial(
   totalCostMicros: number,
 ): Record<string, unknown> {
   return {
-    type: 'fiscus.causal-producer-request-evidence',
+    type: 'segreant.causal-producer-request-evidence',
     version: 1,
     studyId: protocol.studyId,
     protocolHash: protocol.protocolHash,
@@ -553,7 +553,7 @@ function outcomeEvidenceMaterial(
 }
 
 function receiptHash(material: Omit<CausalProducerReceiptV1, 'receiptHash'>): string {
-  return domainHash('fiscus.causal.producer-receipt', CAUSAL_PRODUCER_VERSION, material);
+  return domainHash('segreant.causal.producer-receipt', CAUSAL_PRODUCER_VERSION, material);
 }
 
 function invalidAssessment(
@@ -791,7 +791,7 @@ export function produceCausalUnitReceiptV1(value: unknown): CausalProducerAssess
     }
 
     const identityMaterial = requestIdentityMaterial(protocol, scope, requests);
-    const derivedUnitIdDigest = domainHash('fiscus.causal.producer-unit', CAUSAL_PRODUCER_VERSION, identityMaterial);
+    const derivedUnitIdDigest = domainHash('segreant.causal.producer-unit', CAUSAL_PRODUCER_VERSION, identityMaterial);
     if (derivedUnitIdDigest !== assignedUnitIdDigest) {
       return invalidAssessment(
         ['assigned_identity_mismatch'],
@@ -802,7 +802,7 @@ export function produceCausalUnitReceiptV1(value: unknown): CausalProducerAssess
     }
 
     const requestEvidenceDigest = domainHash(
-      'fiscus.causal.producer-request-evidence',
+      'segreant.causal.producer-request-evidence',
       CAUSAL_PRODUCER_VERSION,
       requestEvidenceMaterial(protocol, scope, requests, pricingDigests, totalCostMicros),
     );
@@ -823,7 +823,7 @@ export function produceCausalUnitReceiptV1(value: unknown): CausalProducerAssess
       return invalidAssessment(['realization_invalid'], assignedUnitIdDigest);
     }
     const outcomeEvidenceDigest = domainHash(
-      'fiscus.causal.producer-outcome-evidence',
+      'segreant.causal.producer-outcome-evidence',
       CAUSAL_PRODUCER_VERSION,
       outcomeEvidenceMaterial(outcome),
     );
@@ -982,7 +982,7 @@ export function causalProducerIdentityMaterialDigestV1(
   requests: readonly CausalProducerRequestSnapshotV1[],
 ): string {
   return domainHash(
-    'fiscus.causal.producer-unit',
+    'segreant.causal.producer-unit',
     CAUSAL_PRODUCER_VERSION,
     requestIdentityMaterial(protocol, scope, [...requests].sort((left, right) => compareIds(left.requestId, right.requestId))),
   );

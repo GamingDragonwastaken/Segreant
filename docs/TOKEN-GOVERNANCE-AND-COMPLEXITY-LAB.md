@@ -1,7 +1,7 @@
 # Token Governance, Internal AI Capital, and the Complexity Lab
 
 > Research design only. This extends `ECONOMIC-CONTROL-FOUNDATION.md`; it does not
-> change released product truth. The purpose is to preserve two original Fiscus
+> change released product truth. The purpose is to preserve two original Segreant
 > ambitions that should not be lost during remediation: ending token-maxxing as a
 > productivity culture, and maintaining a genuinely ambitious complexity engine as an
 > inspectable experimental capability rather than deleting it because simpler decision
@@ -13,10 +13,10 @@ Status: research branch, 2026-08-19.
 
 Two ideas are carried forward together:
 
-1. **Tokens are capital consumed, never productivity produced.** Fiscus may meter,
+1. **Tokens are capital consumed, never productivity produced.** Segreant may meter,
    allocate, budget, forecast, benchmark, explain, and optimize token consumption. It
    must not convert raw token volume into an engineer-productivity score.
-2. **Complexity remains a first-class research capability.** Fiscus should build an
+2. **Complexity remains a first-class research capability.** Segreant should build an
    explicit Complexity Lab that may use sophisticated statistical, information-theoretic,
    psychometric, causal, and optimization models. The Lab is read-only/experimental by
    default. Its outputs become routing inputs only after prospective calibration shows
@@ -38,9 +38,9 @@ observed difficulty != marginal model advantage != optimal compute allocation
 
 ## 1. The token-maxxing problem is now empirically visible
 
-The original Fiscus concern was not hypothetical. In 2026 reporting described internal
+The original Segreant concern was not hypothetical. In 2026 reporting described internal
 AI-usage leaderboards and AI-use signals entering performance discussions at technology
-companies. The exact prevalence across all firms is not established, so Fiscus should
+companies. The exact prevalence across all firms is not established, so Segreant should
 not claim that most enterprises grade engineers by token volume. The defensible claim is
 narrower: **this incentive pattern exists, is visible enough to have become an industry
 term, and creates a direct Goodhart risk.**
@@ -57,7 +57,7 @@ A 2026 agentic-coding study gives a stronger technical reason to reject token vo
 productivity: across repeated runs on the same SWE-bench Verified tasks, token
 consumption could vary by up to 30x, higher token usage did not monotonically increase
 accuracy, and human-rated task difficulty aligned only weakly with actual token cost.
-This is exactly the kind of stochasticity Fiscus must model rather than reward.
+This is exactly the kind of stochasticity Segreant must model rather than reward.
 
 The general developer-productivity literature is consistent with the design principle.
 The SPACE framework explicitly rejects one-dimensional developer-productivity metrics
@@ -65,7 +65,7 @@ and warns against treating activity measures as complete productivity measures.
 
 ### Product consequence
 
-Fiscus should surface a **Metric Safety Classification** for any people/team metric:
+Segreant should surface a **Metric Safety Classification** for any people/team metric:
 
 ```text
 resource_accounting
@@ -80,7 +80,7 @@ compensation_prohibited
 `resource_accounting`; if somebody attempts to configure them as a performance ranking,
 the system should mark that use `incentive_unsafe`.
 
-Fiscus does not have to police an employer. It does have to refuse to make an invalid
+Segreant does not have to police an employer. It does have to refuse to make an invalid
 measurement look scientifically endorsed.
 
 ## 2. The team feature should become an AI capital system, not a leaderboard
@@ -145,7 +145,7 @@ spend.
 
 ### 2.2 Showback before chargeback
 
-Current FinOps practice distinguishes showback from chargeback. Fiscus should support
+Current FinOps practice distinguishes showback from chargeback. Segreant should support
 both but default toward transparent showback during adoption: show the team what its AI
 capital is doing before making the accounting punitive. Chargeback becomes an explicit
 enterprise policy layer when the organization actually wants costs booked to unit
@@ -154,7 +154,7 @@ budgets.
 This matters because internal capital markets have two faces. Central reallocation can
 create value by moving scarce resources toward stronger opportunities, but research on
 internal capital allocation also documents distortions from organizational power and
-agency. Fiscus therefore needs transparent formulas, immutable decision records, and
+agency. Segreant therefore needs transparent formulas, immutable decision records, and
 appeal/review paths; it must not become an opaque algorithm that silently starves one
 team.
 
@@ -201,7 +201,7 @@ is almost useless. A may have handled more work, harder work, larger contexts, a
 expensive region/provider, a different latency/quality SLA, more tool calls, or an
 incident-heavy week.
 
-Fiscus should decompose the difference into named drivers. Candidate factors:
+Segreant should decompose the difference into named drivers. Candidate factors:
 
 ```text
 volume
@@ -293,7 +293,7 @@ Otherwise the answer is `unknown`, not an accusatory savings estimate.
 
 The “mini economy” can be formalized without becoming a game.
 
-Each budget scope owns scarce AI capital. Fiscus maintains a shadow price for scarce
+Each budget scope owns scarce AI capital. Segreant maintains a shadow price for scarce
 budget, forecasts future demand, and proposes transfers toward workloads with stronger
 marginal value evidence.
 
@@ -333,7 +333,7 @@ outcome feeds the Decision Ledger.
 ### 5.2 Fairness and organizational power
 
 Internal-capital-market research warns that powerful managers can obtain excess capital
-and overinvest. Fiscus's answer should be procedural:
+and overinvest. Segreant's answer should be procedural:
 
 - decision records are immutable;
 - the economic basis is inspectable;
@@ -351,7 +351,7 @@ Proposed product boundary:
 
 ```text
 src/research/complexity/        # pure experimental mathematics
-fiscus lab complexity ...       # read-only / local output
+segreant lab complexity ...       # read-only / local output
 ```
 
 The main routing/control plane may consume a Complexity Lab output only after a named
@@ -548,7 +548,7 @@ CIR_theta(x)
 ```
 
 `g_theta` may be geometric/CES, learned monotone GAM, IRT latent score, or another
-registered method. Fiscus should allow **multiple competing complexity estimators** and
+registered method. Segreant should allow **multiple competing complexity estimators** and
 benchmark them rather than canonize one forever.
 
 This is the safe version of the original “impossibly complex equation” ambition: the
@@ -595,8 +595,8 @@ or, where value is monetized:
 dV_g / dc
 ```
 
-A token-maxxing culture rewards `c`. Fiscus should reward neither `c` nor `1/c`; both
-are gameable. Fiscus should estimate where marginal improvement saturates and where
+A token-maxxing culture rewards `c`. Segreant should reward neither `c` nor `1/c`; both
+are gameable. Segreant should estimate where marginal improvement saturates and where
 additional compute becomes economically unjustified.
 
 Recent work on test-time compute supports this framing: more reasoning can exhibit
@@ -668,7 +668,7 @@ Each is an explicit enterprise policy with different privacy requirements. The m
 OIDC-subject-to-developer-key binding must be solved before a trustworthy `self_view` or
 named authorization model exists.
 
-If named manager views are eventually enabled, Fiscus should default to resource and
+If named manager views are eventually enabled, Segreant should default to resource and
 explanation fields, not a synthetic “developer score.” Audit logs should record who
 queried named data and under which policy version.
 
@@ -735,8 +735,8 @@ workstreams; none of the earlier ideas are discarded.
 
 19. **Build the Complexity Lab.** Multiple competing complexity estimators (structural,
     IRT, nonlinear interaction, uncertainty, model-sensitivity, compute-distribution),
-    exposed through a read-only `fiscus lab complexity` surface with full provenance.
-20. **Build the Fiscus Research Harness.** Every sophisticated algorithm must compete
+    exposed through a read-only `segreant lab complexity` surface with full provenance.
+20. **Build the Segreant Research Harness.** Every sophisticated algorithm must compete
     against simple baselines on held-out/prospective data. Track calibration, regret,
     cost, quality, latency, abstention, and distribution shift. A complex method earns
     production authority only when it measurably improves the actual decision.
@@ -757,7 +757,7 @@ A Complexity Lab estimator may move into the production decision engine only whe
 9. the model emits uncertainty/coverage;
 10. a rollback/fallback exists.
 
-This is how Fiscus can pursue impossible-looking mathematics without turning
+This is how Segreant can pursue impossible-looking mathematics without turning
 mathematical ambition into unearned authority.
 
 ## 13. Research references
@@ -789,7 +789,7 @@ mathematical ambition into unearned authority.
 
 The original ambition is retained, but its role is clarified.
 
-Fiscus should be simple where a simple invariant is sufficient and extremely
+Segreant should be simple where a simple invariant is sufficient and extremely
 sophisticated where the decision problem truly demands sophistication. The Complexity
 Lab exists precisely so difficult ideas do not have to be discarded merely because they
 are not yet safe enough to govern money.

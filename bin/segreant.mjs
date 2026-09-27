@@ -5,7 +5,7 @@
 // Node emits the "SQLite is an experimental feature" warning from an internal
 // path that a userland process.emitWarning override can't intercept, so we
 // re-exec ourselves once with --disable-warning to keep output clean. This is
-// the only knob that reliably suppresses it for `npx fiscus`.
+// the only knob that reliably suppresses it for `npx segreant`.
 import { spawnSync } from 'node:child_process';
 import { acquirePublicationLock } from './publication-lock.mjs';
 import { createRuntimeSnapshot, reapOrphanRuntimeSnapshots } from './runtime-snapshot.mjs';
@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 24) {
   console.error(
-    `Fiscus needs Node >= 24 (you have ${process.versions.node}).\n` +
+    `Segreant needs Node >= 24 (you have ${process.versions.node}).\n` +
     `The packaged runtime targets Node 24 or newer.\n` +
     `Upgrade Node from https://nodejs.org/ and re-run.`,
   );
@@ -26,23 +26,23 @@ if (major < 24) {
 
 const self = fileURLToPath(import.meta.url);
 
-if (!process.env.__FISCUS_CHILD) {
+if (!process.env.__SEGREANT_CHILD) {
   const result = spawnSync(
     process.execPath,
     ['--disable-warning=ExperimentalWarning', self, ...process.argv.slice(2)],
-    { stdio: 'inherit', env: { ...process.env, __FISCUS_CHILD: '1' } },
+    { stdio: 'inherit', env: { ...process.env, __SEGREANT_CHILD: '1' } },
   );
   if (result.error) {
-    console.error(`Fiscus could not start its runtime: ${result.error.message}`);
+    console.error(`Segreant could not start its runtime: ${result.error.message}`);
     process.exit(1);
   }
   if (typeof result.status === 'number') process.exit(result.status);
-  console.error(`Fiscus runtime terminated by signal ${result.signal ?? 'unknown'}`);
+  console.error(`Segreant runtime terminated by signal ${result.signal ?? 'unknown'}`);
   process.exit(1);
 } else {
   const here = dirname(self);
   // Collect snapshots whose owning process is gone before adding another one,
-  // so a killed `fiscus start` cannot make temp grow without bound.
+  // so a killed `segreant start` cannot make temp grow without bound.
   reapOrphanRuntimeSnapshots();
 
   // The launcher participates in the same exclusive gate as publication.
@@ -64,7 +64,7 @@ if (!process.env.__FISCUS_CHILD) {
 
   // Registered before the import so a failed import still cleans up. The
   // snapshot has to outlive the imported runtime, not merely the promise that
-  // runtime resolves when its deferred command work settles: `fiscus start`
+  // runtime resolves when its deferred command work settles: `segreant start`
   // settles that promise as soon as its sockets are listening and then serves
   // for hours. Process exit is the only point at which no copied module or
   // resource can still be needed.

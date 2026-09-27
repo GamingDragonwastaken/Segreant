@@ -1,7 +1,7 @@
 /**
  * Retention is not free and deletion is not free either. The egress receipt
- * history is the only local evidence that Fiscus can say what it sent; these
- * tests pin what Fiscus may claim once some of that evidence is gone.
+ * history is the only local evidence that Segreant can say what it sent; these
+ * tests pin what Segreant may claim once some of that evidence is gone.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,20 +24,20 @@ function input(event: ReceiptInput['event']): ReceiptInput {
 }
 
 function withHome<T>(prefix: string, fn: (home: string) => T): T {
-  const previous = process.env.FISCUS_HOME;
+  const previous = process.env.SEGREANT_HOME;
   const home = mkdtempSync(join(tmpdir(), prefix));
-  process.env.FISCUS_HOME = home;
+  process.env.SEGREANT_HOME = home;
   try {
     return fn(home);
   } finally {
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 }
 
 test('deleting the receipt history while its checkpoint survives is a discontinuity, not a fresh chain', () => {
-  withHome('fiscus-retention-discontinuity-', (home) => {
+  withHome('segreant-retention-discontinuity-', (home) => {
     appendEgressReceipt(input('preflight_allowed'));
     appendEgressReceipt(input('dial_started'));
     appendEgressReceipt(input('response_received'));
@@ -58,14 +58,14 @@ test('deleting the receipt history while its checkpoint survives is a discontinu
     assert.throws(
       () => appendEgressReceipt(input('preflight_allowed')),
       /checkpoint/i,
-      'Fiscus must not silently restart a deleted history as genesis',
+      'Segreant must not silently restart a deleted history as genesis',
     );
     assert.equal(existsSync(historyPath), false, 'the refused append writes no new genesis record');
   });
 });
 
-test('a genuinely fresh Fiscus home still establishes genesis', () => {
-  withHome('fiscus-retention-genesis-', (home) => {
+test('a genuinely fresh Segreant home still establishes genesis', () => {
+  withHome('segreant-retention-genesis-', (home) => {
     const empty = verifyEgressReceipts();
     assert.equal(empty.ok, true);
     assert.equal(empty.receiptCount, 0);
@@ -79,7 +79,7 @@ test('a genuinely fresh Fiscus home still establishes genesis', () => {
 });
 
 test('archiving the history together with its checkpoint is the documented operator repair', () => {
-  withHome('fiscus-retention-archive-', (home) => {
+  withHome('segreant-retention-archive-', (home) => {
     appendEgressReceipt(input('preflight_allowed'));
     appendEgressReceipt(input('dial_started'));
 

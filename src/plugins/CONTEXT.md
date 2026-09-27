@@ -11,7 +11,7 @@
 
 - Plugin categories and consequence metadata are closed, typed, and validated.
 - A plugin response is a bounded evidence submission; it cannot contain a
-  Fiscus Claim, decision, action, or recommendation envelope.
+  Segreant Claim, decision, action, or recommendation envelope.
 - The isolation policy requires a separate process and host-mediated `stdio` or
   loopback local-socket transport, with explicit timeouts and resource limits.
 - `runPluginProcess` binds the returned evidence to the active request ID,

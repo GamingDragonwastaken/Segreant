@@ -1,7 +1,7 @@
 /**
  * A scoped rollup and a whole snapshot are the same bytes.
  *
- * THE COUNTEREXAMPLE, MEASURED. `fiscus team push --project api` filters the
+ * THE COUNTEREXAMPLE, MEASURED. `segreant team push --project api` filters the
  * breakdown to one project and mints a body over the remainder. Nothing in that
  * body says it was filtered. A body carrying every project on the machine and a
  * body carrying one of them differ only in how many rows the `projects` array
@@ -45,7 +45,7 @@ import type { ProjectValue } from '../src/value/realization.ts';
 
 const PERIOD = { from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T00:00:00.000Z' };
 
-const keyDir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-scope-'));
+const keyDir = mkdtempSync(join(tmpdir(), 'segreant-rollup-scope-'));
 process.on('exit', () => rmSync(keyDir, { recursive: true, force: true }));
 
 function keys() {

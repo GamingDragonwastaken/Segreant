@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 /**
  * Experimental economic-control primitives.
  *
- * These types describe alternatives Fiscus may compare. They are deliberately
+ * These types describe alternatives Segreant may compare. They are deliberately
  * not wired into the proxy or any enforcement path: an execution plan is a
  * research/decision object, not permission to route traffic.
  */

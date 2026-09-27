@@ -116,7 +116,7 @@
   lineage, and weak temporal evidence remain explicit rather than becoming
   authorship or success claims. Since D-246 it reaches the operator:
   `summarizeContributionEvidence` / `contributionEvidenceLines` in
-  `src/git/contribution.ts` give `fiscus realize` a "Contribution evidence"
+  `src/git/contribution.ts` give `segreant realize` a "Contribution evidence"
   block — counts by status and method, declared confounders, unassessed units
   kept apart from `unresolved`, and the non-claim sentence printed with them;
   nothing is printed when no unit was assessed. JSON output carries the

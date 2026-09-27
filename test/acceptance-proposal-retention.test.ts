@@ -1,19 +1,19 @@
 /**
- * Fiscus told an operator their proposals were never captured, after deleting them.
+ * Segreant told an operator their proposals were never captured, after deleting them.
  *
  * THE COUNTEREXAMPLE, MEASURED. A repository with one commit, and a captured
  * proposal one hour before it whose added lines are what shipped. The report
  * read `firstPassAcceptance: 1` and the Acceptance lens was instrumented, so no
- * note was printed. `fiscus prune` then deleted the PROPOSAL rows on the
+ * note was printed. `segreant prune` then deleted the PROPOSAL rows on the
  * operator's own (much shorter) proposal-retention policy, and the same call
  * over the same repository reported `firstPassAcceptance: null` and printed:
  *
  *     Acceptance uninstrumented: no proposals captured (e.g. streaming-only).
  *
- * Both halves of that sentence are false. Proposals WERE captured — Fiscus
+ * Both halves of that sentence are false. Proposals WERE captured — Segreant
  * captured them — and the suggested cause is not the cause. The operator is
  * told to go and instrument something they had already instrumented, which is
- * the D-174 failure ("tag sessions with X-Fiscus-Session-Id" printed to an
+ * the D-174 failure ("tag sessions with X-Segreant-Session-Id" printed to an
  * operator who had tagged them) reached through a second stream.
  *
  * THE STORE ALREADY KNEW. `retentionFloor()` has returned
@@ -64,7 +64,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-prop-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-prop-retention-'));
 
 import { Store, type RequestRow, type ProposalRow } from '../src/store/db.ts';
 import { valueSpine } from '../src/value/report.ts';
@@ -80,12 +80,12 @@ const LINES = ['export function add(a: number, b: number): number {', '  return 
 const PLAIN = 'Acceptance uninstrumented: no proposals captured (e.g. streaming-only).';
 
 function makeRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), 'fiscus-prop-repo-'));
+  const repo = mkdtempSync(join(tmpdir(), 'segreant-prop-repo-'));
   const git = (args: string[], env?: NodeJS.ProcessEnv) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe', env: env ?? process.env });
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.invalid']);
-  git(['config', 'user.name', 'Fiscus test']);
+  git(['config', 'user.name', 'Segreant test']);
   writeFileSync(join(repo, 'app.ts'), LINES.join('\n') + '\n');
   git(['add', '.']);
   const when = new Date(COMMIT_MS).toISOString();
@@ -137,7 +137,7 @@ test('a proposal prune inside the window is named, not reported as "no proposals
     assert.ok(after.note, 'and the lens must still disclose that it is uninstrumented');
     assert.ok(
       !after.note.includes('no proposals captured'),
-      `proposals WERE captured and Fiscus deleted them; saying otherwise sends the operator to instrument what they already instrumented. Got: ${after.note}`,
+      `proposals WERE captured and Segreant deleted them; saying otherwise sends the operator to instrument what they already instrumented. Got: ${after.note}`,
     );
     assert.ok(
       /delet|retention|prun/i.test(after.note),
@@ -238,7 +238,7 @@ test('clearing an empty proposal table records nothing, because nothing was dele
  *
  *     Acceptance uninstrumented: no proposals captured (e.g. streaming-only).
  *
- * `fiscus usage` prints those notes verbatim. So the report told the operator
+ * `segreant usage` prints those notes verbatim. So the report told the operator
  * to close an instrumentation gap that capturing proposals cannot close, because
  * proposal-bearing sessions are excluded from this report ON PURPOSE. **An empty
  * list that also gives an instruction the reader cannot act on is the worst form

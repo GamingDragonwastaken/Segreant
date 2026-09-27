@@ -59,7 +59,7 @@ function decision(decisionId: string, selectedPlanKey = 'plan-a'): DecisionBody 
 }
 
 test('Decision Ledger is append-only/hash-chained and detects tampering or invalid selections', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-decisions-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-decisions-'));
   const path = join(dir, 'decisions.jsonl');
   try {
     const one = appendDecision(path, decision('d-1'));

@@ -5,7 +5,7 @@
  * READ during its last run changes; dependencies are tracked automatically, so
  * nothing has to declare them and nothing goes stale because someone forgot to.
  *
- * This exists because Fiscus ships zero runtime dependencies and the GUI page
+ * This exists because Segreant ships zero runtime dependencies and the GUI page
  * must stay readable in view-source. A financial tool that asks you to inspect
  * its numbers cannot ship a minified bundle you are asked to trust.
  */

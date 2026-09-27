@@ -1,13 +1,13 @@
 /**
- * Fiscus command-line interface.
+ * Segreant command-line interface.
  *
- *   fiscus start            start the proxy + local dashboard
- *   fiscus today|week|month show spend for a window  (--json for raw)
- *   fiscus init             write a default config and print setup steps
- *   fiscus budget ...       set soft/hard caps
- *   fiscus audit --repo .   correlate spend with git commits
- *   fiscus config           show config + paths
- *   fiscus prune            prune old rows and compact the database
+ *   segreant start            start the proxy + local dashboard
+ *   segreant today|week|month show spend for a window  (--json for raw)
+ *   segreant init             write a default config and print setup steps
+ *   segreant budget ...       set soft/hard caps
+ *   segreant audit --repo .   correlate spend with git commits
+ *   segreant config           show config + paths
+ *   segreant prune            prune old rows and compact the database
  */
 
 import './util/quiet.ts';
@@ -28,6 +28,7 @@ import { cmdCapital } from './cli/capitalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
+import { cmdLaunch } from './cli/launchCmd.ts';
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 import { cmdPack } from './cli/packCmd.ts';
@@ -37,15 +38,15 @@ import { cmdBudgetControl } from './cli/controlCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
-  Fiscus — meter and cap what your AI coding agents spend, locally.
+  Segreant — meter and cap what your AI coding agents spend, locally.
 
-  Usage: fiscus <command> [options]
+  Usage: segreant <command> [options]
 
   Commands
     guide                 Where you are + the single next step, read from your
-                          actual state — also what bare "fiscus" shows (--json)
+                          actual state — also what bare "segreant" shows (--json)
     start                 Start the proxy + local dashboard
-    egress                Inspect/verify Fiscus-process egress; plan exact cloud
+    egress                Inspect/verify Segreant-process egress; plan exact cloud
                           rules without mutation, then persist only with:
                           egress apply --apply --mode controlled_cloud
                           (--id, --purpose, --data-class, --method, --origin,
@@ -121,7 +122,7 @@ function cmdHelp(): void {
                           Opt-in, distribution-only, k-anonymous. --me <user> for
                           your own view (--days N, --json)
     team push --url <u>   Cross-machine: sign + push this window's per-project
-                          value/RoI to a team server YOU run (Fiscus hosts
+                          value/RoI to a team server YOU run (Segreant hosts
                           nothing). --dry-run to preview, --pubkey to publish
                           this machine's rollup identity, --watch to keep
                           pushing on an interval (--window D, --every N,
@@ -133,6 +134,9 @@ function cmdHelp(): void {
     evidence github       Signed, offline CI evidence. 'emit' runs in a protected
                           workflow; 'import' verifies a locally pinned key plus
                           exact repository, branch, workflow, and policy binding.
+    launch -- <command>   Start a tool metered through the proxy while it runs, and
+                          unmetered (with a warning) when it does not. With a budget
+                          cap set, a stopped proxy refuses unless --allow-unmetered
     exec -- <command>     AMBIENT outcome capture: run any command and report its
                           exit code as the outcome — wrap "npm test" once, every
                           run reports itself ([--kind tested|shipped|…] [--commit R|--session S])
@@ -198,7 +202,7 @@ function cmdHelp(): void {
                           Preview a backup, or create a new verified database
                           with --apply. The active ledger is never overwritten.
     pack export --out <file>
-                          Write the epistemic ledger as a .fiscuspack envelope:
+                          Write the epistemic ledger as a .segreantpack envelope:
                           every record bound by digest, omissions and redactions
                           stated in the manifest ([--sign <private-key.pem>])
     pack verify <file>    Check a pack's bytes: integrity, authenticity (only with
@@ -214,17 +218,17 @@ function cmdHelp(): void {
                           dashboard on it; --clear to remove). Add --demo to any read
                           command (today, alerts, usage, start) to view the demo data.
     help                  This message
-    --version             Print the Fiscus version
+    --version             Print the Segreant version
 
   Setup
     1) If routing a cloud provider, review its exact rule first:
-       fiscus egress plan --mode controlled_cloud --id openai-inference
+       segreant egress plan --mode controlled_cloud --id openai-inference
          --purpose provider_inference --data-class provider_request --method POST
          --origin https://api.openai.com --path-prefix /v1/
        Persist the reviewed plan only with the same command as:
-         fiscus egress apply --apply ...
+         segreant egress apply --apply ...
        (Skip this for a local loopback-only model.)
-    2) fiscus start
+    2) segreant start
     3) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"
     4) Run your AI tools as usual. Watch the dashboard.
@@ -237,26 +241,34 @@ function cmdHelp(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Bare `fiscus` opens the guide, not the reference: the tool's first job
+  // Bare `segreant` opens the guide, not the reference: the tool's first job
   // is to tell you where you are and the single next step. `help` is one word away.
   const cmd = argv[0] ?? 'guide';
   // `exec` wraps another command: everything after the bare `--` belongs to the
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
-  const flags = parseFlags(cmd === 'exec' && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
-  const wrapped = cmd === 'exec' && sep !== -1 ? argv.slice(sep + 1) : [];
+  const wraps = cmd === 'exec' || cmd === 'launch';
+  const flags = parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
+  const wrapped = wraps && sep !== -1 ? argv.slice(sep + 1) : [];
 
   // Demo mode: point every store-open at an isolated demo.db and flag surfaces
   // to render the DEMO label. One switch covers the CLI and the in-process
   // dashboard, since both resolve the path through dbPath() and read isDemo().
   //
-  // These set the PREFERRED spelling deliberately. Both `FISCUS_DB` and the
-  // legacy `FISCUS_DB` are read, with FISCUS winning; writing the legacy name
-  // here would leave an operator's own exported `FISCUS_DB` outranking this
+  // These set the PREFERRED spelling deliberately. Both `SEGREANT_DB` and the
+  // legacy `SEGREANT_DB` are read, with SEGREANT winning; writing the legacy name
+  // here would leave an operator's own exported `SEGREANT_DB` outranking this
   // switch, and demo traffic would land in their real ledger.
   if (cmd === 'demo' || flags.demo) {
     process.env[envOverrideKey('DB')] = demoDbPath();
     process.env[envOverrideKey('DEMO')] = '1';
+  }
+
+  // `segreant start --help` used to start the server: no command reads --help
+  // itself, so any command asked for help gets the usage text and does nothing.
+  if (flags.help === true && !wraps) {
+    cmdHelp();
+    return;
   }
 
   switch (cmd) {
@@ -366,6 +378,9 @@ async function main(): Promise<void> {
     case 'exec':
       await cmdExec(flags, wrapped);
       break;
+    case 'launch':
+      await cmdLaunch(flags, wrapped);
+      break;
     case 'import':
       await cmdImport(flags);
       break;
@@ -427,15 +442,15 @@ async function main(): Promise<void> {
     case 'version':
     case '--version':
     case '-v':
-      console.log(`fiscus ${packageVersion()}`);
+      console.log(`segreant ${packageVersion()}`);
       break;
     default:
-      console.error(`  Unknown command: ${cmd}\n  Run "fiscus help" for usage.`);
+      console.error(`  Unknown command: ${cmd}\n  Run "segreant help" for usage.`);
       process.exitCode = 1;
   }
 }
 
-// A reader closing early (e.g. `fiscus scan | head`) makes further console.log
+// A reader closing early (e.g. `segreant scan | head`) makes further console.log
 // writes throw EPIPE — expected, not a real failure. Exit clean instead of an
 // uncaught-exception stack trace; any OTHER stdout error still propagates.
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -452,7 +467,7 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 // longer create a missing-dependency window for this process.
 export const cliCompletion = new Promise<void>((resolve) => setImmediate(() => {
   main().catch((err) => {
-    console.error('  Fiscus error:', err);
+    console.error('  Segreant error:', err);
     process.exitCode = 1;
   }).finally(resolve);
 }));

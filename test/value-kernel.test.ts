@@ -32,7 +32,7 @@ const CLEAN_COMPLETENESS = {
       sourceId: 'incident-feed',
       state: 'supported',
       eventTypes: ['linked_incident'],
-      scope: { project: 'fiscus' },
+      scope: { project: 'segreant' },
       period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
     },
     {
@@ -40,7 +40,7 @@ const CLEAN_COMPLETENESS = {
       sourceId: 'git-history',
       state: 'supported',
       eventTypes: ['commit_reverted'],
-      scope: { project: 'fiscus' },
+      scope: { project: 'segreant' },
       period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
     },
   ],
@@ -68,7 +68,7 @@ function input(overrides: Partial<CodingRealizationKernelInput> = {}): CodingRea
   };
   return {
     commitHash: unit.hash,
-    project: 'fiscus',
+    project: 'segreant',
     tsEpochMs: unit.tsEpochMs,
     computedAtMs: 3_000,
     attributedCostUsd: 1.25,
@@ -186,7 +186,7 @@ test('Store canonical realization persistence issues the value Claim once and re
     const record = input();
     store.insertRequest({
       requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });
@@ -208,7 +208,7 @@ test('revised persisted realization claims form one typed latest chain without e
     const firstRecord = input();
     store.insertRequest({
       requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });
@@ -254,7 +254,7 @@ test('value realization persistence refuses a legacy ambiguous latest coordinate
     const secondRecord = { ...firstRecord, computedAtMs: 4_000 };
     store.insertRequest({
       requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });
@@ -291,7 +291,7 @@ test('Store re-derives exact attribution from its ledger and refuses fabricated 
     const record = input();
     store.insertRequest({
       requestId: 'value-kernel-real', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });
@@ -314,7 +314,7 @@ test('realization snapshot and kernel pair roll back together on an append confl
     const record = input();
     store.insertRequest({
       requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });
@@ -339,7 +339,7 @@ test('direct value-kernel issuance requires an already persisted, non-stale snap
     const record = input();
     store.insertRequest({
       requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
-      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      project: 'segreant', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
       reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
       statusCode: 200, durationMs: 1, via: 'import',
     });

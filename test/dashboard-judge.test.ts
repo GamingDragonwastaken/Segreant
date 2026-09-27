@@ -35,7 +35,7 @@ function boot(store: Store): Promise<{ base: string; close: () => Promise<void> 
   });
 }
 
-async function postJudge(base: string, body: unknown, headers: Record<string, string> = { 'x-fiscus-local': '1' }): Promise<{ status: number; body: Record<string, unknown> }> {
+async function postJudge(base: string, body: unknown, headers: Record<string, string> = { 'x-segreant-local': '1' }): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetch(`${base}/api/judge`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
@@ -75,7 +75,7 @@ test('POST /api/judge rejects an oversized body before reading or judging it', a
   try {
     const res = await fetch(`${srv.base}/api/judge`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-segreant-local': '1' },
       body: JSON.stringify({ project: 'test-project', padding: 'x'.repeat(20 * 1024) }),
     });
     assert.equal(res.status, 413);

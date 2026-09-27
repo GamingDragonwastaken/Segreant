@@ -50,7 +50,7 @@ export interface CodingRealizationKernelPersistenceResult {
 
 const REALIZATION_ASSUMPTIONS = Object.freeze([
   'Terminal realization means every gate in the declared legacy coding contract was observed pass; it is not a causal or business-value claim.',
-  'Git, signal and proposal gates are local Fiscus observations; provider authority, human approval and downstream business outcomes are not established.',
+  'Git, signal and proposal gates are local Segreant observations; provider authority, human approval and downstream business outcomes are not established.',
   'The retained effective amount is exact request-lineage spend on the work window, not realized economic value or settlement; a window-scoped amount is project-blind and is not commit-specific cost proof.',
   'A negative clean predicate is supported only by explicit supported completeness witnesses covering both commit-reverted and linked-incident channels for the unit scope and observation period; it is not a universal claim beyond those sources.',
 ]);
@@ -326,7 +326,7 @@ function validated(input: CodingRealizationKernelInput): { unit: ParsedUnit; eco
 }
 
 function digestPayload(value: unknown): string {
-  return `sha256:${createHash('sha256').update(`fiscus.value.realization\n1\n${canonicalJson(value)}`, 'utf8').digest('hex')}`;
+  return `sha256:${createHash('sha256').update(`segreant.value.realization\n1\n${canonicalJson(value)}`, 'utf8').digest('hex')}`;
 }
 
 /** Whether the canonical save path should issue a kernel pair for this record. */
@@ -390,8 +390,8 @@ export function buildCodingRealizationKernelIssuance(input: CodingRealizationKer
   const evidenceValue = evidence({
     id: `evidence:value:realization:${realizationDigest}`,
     evidenceType: 'value.realization',
-    sourceIdentity: 'fiscus:value-realization',
-    sourceClass: 'fiscus_local_coding_realization_projection',
+    sourceIdentity: 'segreant:value-realization',
+    sourceClass: 'segreant_local_coding_realization_projection',
     payload: payload as never,
     scope: scopeValue,
     grain: grain(['coding_commit']),

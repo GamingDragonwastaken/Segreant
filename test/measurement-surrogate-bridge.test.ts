@@ -28,7 +28,7 @@ function surrogateModel(overrides: Partial<MeasurementModel> = {}): MeasurementM
       measurand: 'share of AI-authored diffs accepted by a reviewer',
       observable: 'reviewer acceptance events',
       procedure: 'accepted diffs divided by submitted diffs in the study window',
-      scope: scope({ ledger: 'fiscus-causal' }),
+      scope: scope({ ledger: 'segreant-causal' }),
       population: 'decisions in the declared causal study',
       validation: 'validated',
       calibration: null,
@@ -48,7 +48,7 @@ function referenceModel(overrides: Partial<MeasurementModel> = {}): MeasurementM
       measurand: 'defects found by blind expert audit per thousand lines',
       observable: 'audit findings',
       procedure: 'two independent auditors, blind to authorship, adjudicated',
-      scope: scope({ ledger: 'fiscus-causal' }),
+      scope: scope({ ledger: 'segreant-causal' }),
       population: 'a sampled subset of the declared causal study',
       validation: 'validated',
       calibration: 'inter-rater agreement recorded per audit round',
@@ -354,7 +354,7 @@ test('a model declared validated does not stand on a surrogate bridge', () => {
   assert.ok(backing.reasons.some((reason) => /declared validated/.test(reason)));
 });
 
-// Fiscus's one real declared model, and the reading it must never be given.
+// Segreant's one real declared model, and the reading it must never be given.
 test('the line-retention proxy cannot be bridged into developer productivity', () => {
   const productivityBridge = bridge({
     id: 'lines-stand-for-productivity',

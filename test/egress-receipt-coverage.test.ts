@@ -2,7 +2,7 @@
  * What a valid receipt chain establishes, and what it was being read as.
  *
  * THE COUNTEREXAMPLE. On a machine that has never sent anything, and on a
- * machine whose receipts were never written at all, `fiscus egress verify`
+ * machine whose receipts were never written at all, `segreant egress verify`
  * printed, in green:
  *
  *   Receipt chain valid
@@ -20,7 +20,7 @@
  * AII-002 names — a negative claim inferred from missing observations with no
  * positive evidence that the source could have seen the thing.
  *
- * WHAT FISCUS CAN HONESTLY SAY HERE IS MORE THAN NOTHING, and that is why this
+ * WHAT SEGREANT CAN HONESTLY SAY HERE IS MORE THAN NOTHING, and that is why this
  * is a repair rather than a deletion. Every declared egress path in this
  * repository goes through one chokepoint — `egressFetch` in
  * `src/egress/transport.ts` — and that chokepoint appends a receipt before it
@@ -62,14 +62,14 @@ function input(at: string): ReceiptInput {
 }
 
 function withHome<T>(fn: (home: string) => T): T {
-  const previous = process.env.FISCUS_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-receipt-coverage-'));
-  process.env.FISCUS_HOME = home;
+  const previous = process.env.SEGREANT_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-receipt-coverage-'));
+  process.env.SEGREANT_HOME = home;
   try {
     return fn(home);
   } finally {
-    if (previous === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previous;
+    if (previous === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
   }
 }

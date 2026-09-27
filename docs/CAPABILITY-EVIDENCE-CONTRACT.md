@@ -11,7 +11,7 @@ that a hosted service, customer deployment, or provider invoice validation
 exists. Any later candidate must re-review this contract against its exact
 source revision; this marker is not inherited by a newer branch tip.
 
-Fiscus is a local-first AI Financial Operations tool. Its present evidence and
+Segreant is a local-first AI Financial Operations tool. Its present evidence and
 implementation are strongest for AI coding-agent work. Its broader direction is
 AI financial operations across AI usage, but direction is not a present-support
 claim.
@@ -29,11 +29,11 @@ claim.
 
 ## Financial truth chain
 
-Fiscus keeps four different claims separate:
+Segreant keeps four different claims separate:
 
     metered usage != provider-billed cost != allocated cost != realized business value
 
-Fiscus-owned JSON surfaces serialize numeric `*Usd` fields at six-decimal
+Segreant-owned JSON surfaces serialize numeric `*Usd` fields at six-decimal
 microdollar precision. This is a wire-format stabilization for binary floating
 point display tails; it does not change the underlying ledger, upgrade a price
 card into provider billing, or alter signed/canonical evidence bytes.
@@ -50,7 +50,7 @@ card into provider billing, or alter signed/canonical evidence bytes.
 - A local OpenAI- and Anthropic-compatible proxy meters intentionally routed
   traffic, applies local soft/hard/velocity controls, and serves a local CLI and
   dashboard.
-- A Fiscus-process egress boundary starts in `local_locked` mode: it permits
+- A Segreant-process egress boundary starts in `local_locked` mode: it permits
   literal loopback HTTP(S) targets only and refuses non-loopback targets before
   DNS. `controlled_cloud` mode permits a cloud request only when an enabled,
   exact rule matches its purpose, data class, method, HTTPS origin, and leading
@@ -138,19 +138,19 @@ local-first from being read as offline.
 
 | Path | Operator control | Recipient | Data category | Non-claim |
 | --- | --- | --- | --- | --- |
-| Normal proxy route | Exact `provider_inference` controlled-cloud rule, then tool base URL and configured upstream | Configured AI provider | Provider request, which can contain prompts, source snippets, tool payloads, and provider credential | Fiscus does not make provider retention/privacy promises. |
+| Normal proxy route | Exact `provider_inference` controlled-cloud rule, then tool base URL and configured upstream | Configured AI provider | Provider request, which can contain prompts, source snippets, tool payloads, and provider credential | Segreant does not make provider retention/privacy promises. |
 | OpenAI Costs pull | Explicit applied command, declared scope, environment-only key, and exact `provider_cost_observation` rule | Fixed OpenAI Costs endpoint | Narrow read-only provider cost request; normalized observations retained locally | Not a provider-account verification or a request-level reconciliation. |
 | Pricing/baseline refresh | Explicit command or configured refresh plus an exact rule | Operator-selected HTTPS manifest | Public manifest request; accepted normalized result/provenance stored locally | Not usage telemetry or provider invoice evidence. |
 | Alert webhook | Explicit webhook configuration plus an exact rule | Operator-selected webhook | Configured alert summary | Not prompt, source, or credential transfer. |
 | Hosted judge | Explicit judge choice plus an exact rule | Configured judge provider | Bounded session excerpt for the selected tier | Not local-only evaluation. |
 | Team rollup | Explicit team push plus an exact rule | Operator-run team endpoint | Signed numeric aggregate | Not default telemetry or approved internet deployment. |
 
-Fiscus has no Fiscus-hosted product telemetry by default. That does not change
+Segreant has no Segreant-hosted product telemetry by default. That does not change
 the provider or optional egress paths above.
 
 ### High-assurance egress modes
 
-- **Local locked** is the default and is enforceable for Fiscus's own HTTP(S)
+- **Local locked** is the default and is enforceable for Segreant's own HTTP(S)
   transport: no non-loopback target is resolved or dialled. It permits a local
   inference service at a literal loopback address such as `127.0.0.1` or
   `localhost`.
@@ -161,7 +161,7 @@ the provider or optional egress paths above.
   and hash-chain link; it never records a query, request body, API key, header,
   raw origin, or response body.
 - Both modes are **process-scoped**. They do not control a direct client that
-  bypasses Fiscus, another application, OS resolver/VPN/firewall policy, a
+  bypasses Segreant, another application, OS resolver/VPN/firewall policy, a
   machine administrator, or the provider after a deliberately permitted cloud
   request arrives. A cryptographically independent, machine-wide assurance
   needs separately deployed identity, firewall, and retention controls.
@@ -175,9 +175,9 @@ the provider or optional egress paths above.
   that AI definitively paid for itself. A causal net-benefit claim is allowed
   only from a qualified causal-study result with its protocol identifier and
   lower-bound evidence.
-- Say no Fiscus-hosted telemetry by default; do not generalize that default into
+- Say no Segreant-hosted telemetry by default; do not generalize that default into
   an egress guarantee or claim that proxy traffic remains on the device.
-- Say `local_locked Fiscus-process transport refused non-loopback HTTP(S)
+- Say `local_locked Segreant-process transport refused non-loopback HTTP(S)
   egress` only when that mode is active and receipts verify; say
   `controlled_cloud rule and receipt` for a permitted cloud request. Do not
   generalize either to the operating system, other applications, direct
@@ -185,8 +185,8 @@ the provider or optional egress paths above.
 - Say a present receipt-history integrity or persistence failure blocks before
   dial and needs operator repair/restore; do not describe it as transparent
   passthrough or as a fresh genesis.
-- Say a bounded stale-lock refusal requires confirming that no Fiscus writer is
-  active before removing only that lock; do not claim Fiscus auto-cleans locks.
+- Say a bounded stale-lock refusal requires confirming that no Segreant writer is
+  active before removing only that lock; do not claim Segreant auto-cleans locks.
 - Say review-only model trial, not forecast, recommendation, routing decision,
   or automatic action.
 - State current coding-agent strength separately from the broader AI Financial

@@ -12,8 +12,8 @@ test('CI uses immutable action revisions, least privilege, and bounded jobs', ()
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node|upload-artifact)@v\d+/);
   // D-237: the runtime SBOM is generated and checked in the package job, and the
   // check is the script, so a workflow edit cannot keep the upload and drop the rule.
-  assert.match(workflow, /npm run --silent sbom > fiscus-runtime\.cdx\.json/);
-  assert.match(workflow, /node scripts\/check-sbom\.mjs fiscus-runtime\.cdx\.json/);
+  assert.match(workflow, /npm run --silent sbom > segreant-runtime\.cdx\.json/);
+  assert.match(workflow, /node scripts\/check-sbom\.mjs segreant-runtime\.cdx\.json/);
   const jobsBlock = workflow.split(/^jobs:\s*$/m)[1] ?? '';
   const jobCount = (jobsBlock.match(/^  [a-z0-9-]+:\s*$/gm) ?? []).length;
   const timeoutCount = (jobsBlock.match(/^    timeout-minutes:\s+\d+\s*$/gm) ?? []).length;

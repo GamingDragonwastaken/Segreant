@@ -4,7 +4,7 @@
  *     metered usage != provider-billed cost != allocated cost != realized value
  *
  * Four claims, four evidence standards, and the one idea this product owns. Every
- * other spend tool collapses them into a single confident number; Fiscus refuses
+ * other spend tool collapses them into a single confident number; Segreant refuses
  * to, so the interface should not bury that refusal in a caption under a stat
  * card. It IS the layout.
  *

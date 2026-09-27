@@ -26,7 +26,7 @@ export interface AlertWire {
 }
 
 export interface WebhookPayload {
-  source: 'fiscus';
+  source: 'segreant';
   generatedAt: string;
   alerts: AlertWire[];
 }
@@ -39,7 +39,7 @@ export function buildWebhookPayload(
 ): WebhookPayload {
   const min = SEV_RANK[minSeverity];
   return {
-    source: 'fiscus',
+    source: 'segreant',
     generatedAt: new Date(now).toISOString(),
     alerts: alerts
       .filter((a) => SEV_RANK[a.severity] >= min)
@@ -60,7 +60,7 @@ export interface NotifyResult {
 
 function egressRepairAction(code: EgressErrorCode): string | undefined {
   if (code === 'receipt_integrity_failed' || code === 'receipt_persistence_failed') {
-    return 'restore or repair the local egress receipt history, then retry; if a lock is stale, confirm no Fiscus writer owns it and remove only that lock';
+    return 'restore or repair the local egress receipt history, then retry; if a lock is stale, confirm no Segreant writer owns it and remove only that lock';
   }
   return undefined;
 }

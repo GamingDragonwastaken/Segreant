@@ -26,13 +26,13 @@ import { judgeSession } from '../src/judge/orchestrate.ts';
 import { DEFAULT_CONFIG, type JudgeConfig } from '../src/config.ts';
 import type { RequestRow, ProposalRow } from '../src/store/db.ts';
 
-const originalFiscusHome = process.env.FISCUS_HOME;
-const judgeOrchestrateHome = mkdtempSync(join(tmpdir(), 'fiscus-judge-orchestrate-home-'));
-process.env.FISCUS_HOME = judgeOrchestrateHome;
+const originalSegreantHome = process.env.SEGREANT_HOME;
+const judgeOrchestrateHome = mkdtempSync(join(tmpdir(), 'segreant-judge-orchestrate-home-'));
+process.env.SEGREANT_HOME = judgeOrchestrateHome;
 
 test.after(() => {
-  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = originalFiscusHome;
+  if (originalSegreantHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = originalSegreantHome;
   rmSync(judgeOrchestrateHome, { recursive: true, force: true });
 });
 
@@ -130,7 +130,7 @@ test('judgeSession: local-structural, fully configured, calls the endpoint and r
   }
 });
 
-test('judgeSession: hosted tier requires BOTH hostedEnabled and FISCUS_JUDGE_API_KEY — neither alone calls out', async () => {
+test('judgeSession: hosted tier requires BOTH hostedEnabled and SEGREANT_JUDGE_API_KEY — neither alone calls out', async () => {
   const mock = await startMockJudge(() => chatCompletion(1.0, 'x'));
   try {
     // hostedEnabled true, no env var.
@@ -139,7 +139,7 @@ test('judgeSession: hosted tier requires BOTH hostedEnabled and FISCUS_JUDGE_API
     assert.equal(mock.hitCount(), 0);
 
     // env var set, hostedEnabled false.
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test', async () => {
       const j2 = await judgeSession('s1', REQUESTS, PROPOSALS, cfg({ hostedBaseUrl: mock.url, hostedModel: 'gpt-4o-mini' }));
       assert.equal(j2.confidence, 'algorithmic');
       assert.equal(mock.hitCount(), 0);
@@ -152,7 +152,7 @@ test('judgeSession: hosted tier requires BOTH hostedEnabled and FISCUS_JUDGE_API
 test('judgeSession: hosted-structural, all preconditions met, calls out with the key from the env var', async () => {
   const mock = await startMockJudge(() => chatCompletion(0.9, 'A bit meandering.'));
   try {
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test-abc', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test-abc', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -186,7 +186,7 @@ test('judgeSession: a full-content tier WITHOUT a transcript downgrades its REPO
 
   const mock2 = await startMockJudge(() => chatCompletion(1.0, 'ok'));
   try {
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -236,7 +236,7 @@ test('judgeSession: a full-content tier WITH a transcript sends it and earns the
     return chatCompletion(1.2, 'converged fast');
   });
   try {
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -268,7 +268,7 @@ test('judgeSession: a STRUCTURAL tier ignores a provided transcript — consent 
     return chatCompletion(1.0, 'ok');
   });
   try {
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -300,7 +300,7 @@ test('judgeSession: when both local and hosted are fully configured, local is ca
   const localMock = await startMockJudge(() => chatCompletion(1.1, 'local'));
   const hostedMock = await startMockJudge(() => chatCompletion(0.5, 'hosted'));
   try {
-    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('SEGREANT_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,

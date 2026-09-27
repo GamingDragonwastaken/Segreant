@@ -6,7 +6,7 @@
  *
  * Completeness witnesses for negative claims.
  *
- * Absence in an observation stream is not evidence of absence unless Fiscus has
+ * Absence in an observation stream is not evidence of absence unless Segreant has
  * positive evidence that the relevant source was complete for the event type,
  * scope, and time in question. Completeness is itself epistemic evidence and
  * therefore only the `supported` state qualifies an absence inference.

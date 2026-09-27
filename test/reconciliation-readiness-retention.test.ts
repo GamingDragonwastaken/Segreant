@@ -10,7 +10,7 @@
  * `if (total === 0) return null`.
  *
  * MEASURED. A ledger holding $180.00 of OpenAI spend on the declared route
- * reported that coverage. After `fiscus prune`, the same call returned **null**
+ * reported that coverage. After `segreant prune`, the same call returned **null**
  * — which both docblocks say means the machine has no OpenAI spend at all.
  *
  * **This is the class in its strongest form: the false reading is not merely
@@ -36,7 +36,7 @@
  * WHAT THIS DOES NOT ESTABLISH. That the reconciliation itself is affected
  * (D-173) or that capture coverage is (D-185); both are separate reports and
  * separately closed. That an operator who sees the new disclosure will act on
- * it. And nothing about OpenAI spend that never reached Fiscus, which no local
+ * it. And nothing about OpenAI spend that never reached Segreant, which no local
  * evidence can establish and which this report has always said it cannot.
  *
  * Recorded at D-186.
@@ -48,7 +48,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-readiness-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-readiness-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { reconciliationReadiness } from '../src/billing/readiness.ts';
@@ -162,7 +162,7 @@ test('a prune that removed nothing is still on record and still says so', () => 
   // comparison, because the query it qualifies sums the whole ledger with no
   // period bound. A prune that deleted nothing still applied a boundary, and
   // the store records it for that reason (D-170) -- so this ledger is one whose
-  // completeness Fiscus can no longer vouch for, even though nothing went.
+  // completeness Segreant can no longer vouch for, even though nothing went.
   const store = new Store(':memory:');
   try {
     const scopeId = scope(store);

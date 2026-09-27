@@ -150,7 +150,7 @@ function modelSwitchCoverageCard(frontier: ValuePayload['frontier']): Node | nul
   return h('section', { class: 'section' },
     h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Model-switch trials' : 'Cheaper model trials') }),
     h('p', { class: 'view-plain', text: () => (isPrecise()
-      ? 'Historical comparisons are review-only. Fiscus never changes provider routing from them, and neither separation nor savings is causal evidence.'
+      ? 'Historical comparisons are review-only. Segreant never changes provider routing from them, and neither separation nor savings is causal evidence.'
       : 'These are local historical comparisons to review, not automatic routing changes or proof that one model causes better outcomes.') }),
     ...switches.slice(0, 4).map((recommendation) => {
       const retentionExcluded = recommendation.unitsExcludedTruncatedSpend;
@@ -228,7 +228,7 @@ export function valueView(): Node {
               : 'Nothing has been observed all the way through to a shipped, surviving outcome yet. That is missing evidence, not an answer of nothing.') }),
             h('p', { class: 'basis', text: () => (isPrecise()
               ? 'Maturation requires observable outcomes: a repository whose history can be read, or imported units with recorded gate results.'
-              : 'Fiscus needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
+              : 'Segreant needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
           causalStudyCard(causal(), causalError()),
           usageCoverageCard(d.usage),
           actions());
@@ -284,7 +284,7 @@ export function valueView(): Node {
           // THE DENOMINATOR THE PARAGRAPH ABOVE IS ABOUT (D-176, D-178). A unit
           // whose attribution window retention emptied contributes $0.00 and
           // still counts, so the return above it is flattering by an unknown
-          // amount. `fiscus roi` has said this since D-176; until the fields
+          // amount. `segreant roi` has said this since D-176; until the fields
           // were declared the browser could not read what the server was
           // already sending.
           (matured?.spendWindowTruncatedUnits ?? 0) > 0
@@ -353,7 +353,7 @@ export function valueView(): Node {
               h('h2', { text: () => (isPrecise() ? 'Realized value is not priced' : 'We cannot put a figure on this') }),
               h('p', { text: () => (isPrecise()
                 ? 'Work matured, but no labour rate is configured, so the value it produced cannot be expressed in dollars. The rate below is still computable; the money figure is not.'
-                : 'Work did get finished, but Fiscus has no hourly rate to value it against — so it can tell you how much stuck, but not what it was worth.') })),
+                : 'Work did get finished, but Segreant has no hourly rate to value it against — so it can tell you how much stuck, but not what it was worth.') })),
 
         // The money face is an observed/manual-equivalent scenario. A separate
         // qualified randomized study is required for causal economics.
@@ -499,7 +499,7 @@ export function valueView(): Node {
                   : h('div', null,
                       h('p', { text: () => (isPrecise()
                         ? `Distribution over ${count(team.distribution?.cohortSize)} users; individuals are never identified.`
-                        : `Spread across ${count(team.distribution?.cohortSize)} people. Fiscus never shows who is who.`) }),
+                        : `Spread across ${count(team.distribution?.cohortSize)} people. Segreant never shows who is who.`) }),
                       h('div', { class: 'facts' },
                         h('div', { class: 'fact' },
                           h('span', { class: 'fact-key', text: () => (isPrecise() ? 'median extraction' : 'typical person gets back') }),

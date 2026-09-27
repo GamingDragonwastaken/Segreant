@@ -4,8 +4,8 @@
  * A small read-only HTTP server over the same Store the proxy writes to. It
  * exposes a JSON API and serves a single self-contained HTML page. Bound to
  * localhost only for the dashboard API. Local storage and UI reads stay in the
- * Fiscus process; provider forwarding and optional refresh, webhook, judge, cost,
- * or team paths use the declared Fiscus-process egress boundary elsewhere.
+ * Segreant process; provider forwarding and optional refresh, webhook, judge, cost,
+ * or team paths use the declared Segreant-process egress boundary elsewhere.
  *
  * This file is the ENTRY and the GUARD, and nothing else. It answers three
  * questions in order — is the caller local, which route is this, may this
@@ -19,7 +19,7 @@
 
 import http from 'node:http';
 import type { Store } from '../store/db.ts';
-import { loadConfig, mutateConfig, saveConfig, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, saveConfig, type SegreantConfig } from '../config.ts';
 import { ROUTES, type ConfigPersistence, type Route } from './routes.ts';
 import { serveStatic } from './static.ts';
 
@@ -40,13 +40,13 @@ function isLocalHost(host: string | undefined): boolean {
 
 export interface DashboardDeps {
   store: Store;
-  config: FiscusConfig;
+  config: SegreantConfig;
   /** This package's version — surfaced read-only in the Settings view. */
   version: string;
   /**
    * Config persistence is injectable so the dashboard can be exercised without
    * touching a developer's real local configuration. Production uses the
-   * normal on-disk Fiscus config functions by default.
+   * normal on-disk Segreant config functions by default.
    */
   configPersistence?: ConfigPersistence;
 }
@@ -78,8 +78,8 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
       }
       // The CSRF gate on every mutating route, enforced in ONE place. A custom
       // header cannot be set cross-origin without a preflight this server never
-      // answers, so a malicious page cannot drive the operator's local Fiscus.
-      if (route.localOnly?.includes(method) && req.headers['x-fiscus-local'] !== '1') {
+      // answers, so a malicious page cannot drive the operator's local Segreant.
+      if (route.localOnly?.includes(method) && req.headers['x-segreant-local'] !== '1') {
         res.writeHead(403, { 'content-type': 'text/plain' });
         res.end('forbidden');
         return;

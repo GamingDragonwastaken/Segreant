@@ -1,8 +1,8 @@
-# Fiscus documentation
+# Segreant documentation
 
 Four groups, by who they are for. If you are new, read the first group in order.
 
-## Using Fiscus
+## Using Segreant
 
 | Document | What it covers |
 |---|---|
@@ -11,7 +11,7 @@ Four groups, by who they are for. If you are new, read the first group in order.
 | [GUIDE.md](GUIDE.md) | The full reference: every command, budgets, attribution, RoI, billing, allocation, backup |
 | [FAQ.md](FAQ.md) | Common questions |
 | [PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md) | Comparing metered spend with what the provider reports |
-| [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) | The provider cost-export format Fiscus imports |
+| [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) | The provider cost-export format Segreant imports |
 | [ALLOCATION.md](ALLOCATION.md) | Cost centres and allocation rules |
 | [FOCUS-COMPATIBILITY.md](FOCUS-COMPATIBILITY.md) | Exporting provider billing evidence as FOCUS |
 | [SUPPORT.md](SUPPORT.md) | Where to ask for help |
@@ -33,14 +33,14 @@ Four groups, by who they are for. If you are new, read the first group in order.
 |---|---|
 | [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) | Everything that can leave your machine, and what triggers it |
 | [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md) | What is supported, what is intended, what is not offered |
-| [THREAT-MODEL.md](THREAT-MODEL.md) | What Fiscus defends against, and its integrity guarantees |
+| [THREAT-MODEL.md](THREAT-MODEL.md) | What Segreant defends against, and its integrity guarantees |
 | [NEUTRALITY.md](NEUTRALITY.md) | No hosted service, account or payment is needed; how sponsorship is kept separate |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | What stays stable across releases |
 | [RELIABILITY-PERFORMANCE.md](RELIABILITY-PERFORMANCE.md) | Measured performance and reliability observations |
 
 ## Project records (for contributors)
 
-These record how Fiscus was designed, verified and released. They are not
+These record how Segreant was designed, verified and released. They are not
 needed to use it.
 
 | Document | What it records |

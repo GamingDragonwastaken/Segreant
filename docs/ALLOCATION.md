@@ -35,10 +35,10 @@ re-derivable from immutable source rows.
 ## 2. Cost centres
 
 ```bash
-fiscus alloc centre eng --name "Engineering" --owner cto
-fiscus alloc centre platform --name "Platform"
-fiscus alloc centres
-fiscus alloc centre platform --archive
+segreant alloc centre eng --name "Engineering" --owner cto
+segreant alloc centre platform --name "Platform"
+segreant alloc centres
+segreant alloc centre platform --archive
 ```
 
 Archiving retains the centre so past runs stay explicable. Spend a rule still
@@ -51,21 +51,21 @@ than silently dropped or silently delivered.
 
 ```bash
 # Everything in one project goes to one centre.
-fiscus alloc rule backend --method direct --centre eng \
+segreant alloc rule backend --method direct --centre eng \
     --match-project backend-api --priority 10
 
 # A shared project splits by declared ratio.
-fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" \
+segreant alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" \
     --match-project web-frontend --priority 11
 
 # A shared pool follows whoever was directly allocated.
 # The centre here is a required placeholder at ratio 0, not a destination: this
 # method derives its split from the period, so it refuses a declared ratio.
-fiscus alloc rule infra --method proportional_to_direct --centre "shared:0" \
+segreant alloc rule infra --method proportional_to_direct --centre "shared:0" \
     --match-project shared-infra --priority 50
 
-fiscus alloc rules
-fiscus alloc revoke infra
+segreant alloc rules
+segreant alloc revoke infra
 ```
 
 Match on any of `--match-project`, `--match-provider`, `--match-model`,
@@ -130,9 +130,9 @@ revocation instant forward.
 ## 4. Running a period
 
 ```bash
-fiscus alloc run --from 2026-08-01 --to 2026-09-01
-fiscus alloc run --from 2026-08-01 --to 2026-09-01 --apply    # record it
-fiscus alloc run --from 2026-08-01 --to 2026-09-01 --json
+segreant alloc run --from 2026-08-01 --to 2026-09-01
+segreant alloc run --from 2026-08-01 --to 2026-09-01 --apply    # record it
+segreant alloc run --from 2026-08-01 --to 2026-09-01 --json
 ```
 
 ```text
@@ -229,7 +229,7 @@ report. Three consequences carry that:
 
 **It serves recorded runs and never computes one.** Cost centres and rules are
 served live, because they are configuration; money is not. A page that
-recomputed on load would disagree with `fiscus alloc run --apply` the moment a
+recomputed on load would disagree with `segreant alloc run --apply` the moment a
 rule changed or new spend landed in the period, and a budget owner would have no
 way to tell which of the two numbers was the statement. Re-running appends a
 second record, and the page shows both, so a restatement is visible rather than

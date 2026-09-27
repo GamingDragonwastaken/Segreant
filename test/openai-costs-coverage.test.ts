@@ -83,7 +83,7 @@ function seedCoverage(store: Store): string {
 function runCli(args: string[], dbPath: string, env: Record<string, string | undefined> = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, ...args], {
-      env: { ...process.env, FISCUS_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
+      env: { ...process.env, SEGREANT_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
     }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (err as unknown as { code: number }).code : err ? 1 : 0;
@@ -133,8 +133,8 @@ test('OpenAI Costs coverage is local-only and refuses a variance when no complet
     empty.close();
   }
 
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-openai-coverage-cli-'));
-  const dbPath = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-openai-coverage-cli-'));
+  const dbPath = join(dir, 'segreant.db');
   const store = new Store(dbPath);
   try {
     seedCoverage(store);

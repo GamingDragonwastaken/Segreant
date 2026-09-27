@@ -62,7 +62,7 @@ export const RENAME_RETRY_MS = 5_000;
 export const PATH_CONTENTION_MS = 10_000;
 export const OWNER_FILE = 'owner.json';
 export const OWNER_QUARANTINE_FILE = '.owner-quarantine.json';
-export const LOCK_QUARANTINE_PREFIX = '.fiscus-build.lock.quarantine-';
+export const LOCK_QUARANTINE_PREFIX = '.segreant-build.lock.quarantine-';
 
 const waitCell = new Int32Array(new SharedArrayBuffer(4));
 
@@ -327,7 +327,7 @@ function sameOwner(left, right) {
  * not remove this one, and macOS supplied the entry: renaming inside a
  * directory a contender has just unlinked answers `EINVAL`, which was not on
  * the list, so it was rethrown — out of `releasePublicationLock`, out of
- * `bin/fiscus.mjs`, killing a CLI that had merely lost a race.
+ * `bin/segreant.mjs`, killing a CLI that had merely lost a race.
  *
  * The position argument is the same one. This function answers ONE question —
  * did I manage to claim this by rename? — and every caller handles `false` by
@@ -469,7 +469,7 @@ function quarantineStaleLock(root, buildLock, snapshot) {
  * carrying OUR token — and `inspectLock` reads that record as an owner while
  * `lockIsStale` clears it as live, because the PID it names is this process and
  * this process is still running. No contender can ever recover such a lock:
- * they wait out `LOCK_WAIT_MS` and report `timed out waiting for another Fiscus
+ * they wait out `LOCK_WAIT_MS` and report `timed out waiting for another Segreant
  * build` about a build that moved on minutes earlier.
  *
  * D-077 fixed ONE of those four returns — the directory move — and did not ask
@@ -612,14 +612,14 @@ function releaseOwnedGeneration(root, buildLock, token, snapshot) {
 /**
  * Acquire the exclusive build/reader gate rooted beside the package.
  *
- * Both the publisher and bin/fiscus.mjs use this exact mkdir protocol. A
+ * Both the publisher and bin/segreant.mjs use this exact mkdir protocol. A
  * reader therefore cannot observe the check-vs-acquire window where a build
  * starts publication immediately after a reader sees an absent lock. Stale
  * recovery is token- and PID-aware and never falls back to path-based deletion.
  */
 export function acquirePublicationLock(root) {
   reapOrphanQuarantines(root);
-  const buildLock = join(root, '.fiscus-build.lock');
+  const buildLock = join(root, '.segreant-build.lock');
   const waitStarted = Date.now();
   const token = randomUUID();
   // First moment the canonical lock was seen carrying THIS process's PID under
@@ -740,7 +740,7 @@ export function acquirePublicationLock(root) {
       }
 
       if (Date.now() - waitStarted >= LOCK_WAIT_MS) {
-        throw new Error(`timed out waiting for another Fiscus build (${LOCK_WAIT_MS}ms)`);
+        throw new Error(`timed out waiting for another Segreant build (${LOCK_WAIT_MS}ms)`);
       }
       sleep(LOCK_POLL_MS);
     }

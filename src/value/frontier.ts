@@ -71,7 +71,7 @@ export interface FrontierCell {
 
 /**
  * A local historical comparison between a more expensive model and a cheaper
- * candidate on the same task type. It is review-only: Fiscus never changes
+ * candidate on the same task type. It is review-only: Segreant never changes
  * provider routing from this output.
  */
 export interface ModelSwitchRecommendation {
@@ -633,7 +633,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     const bases = [...new Set([...candidate.costBases, ...incumbent.costBases])];
     if (bases.length === 0) {
       confounders.push(
-        'the pricing basis behind these dollars was not recorded, so the two sides cannot be shown to be priced the same way — re-run `fiscus realize` to record it',
+        'the pricing basis behind these dollars was not recorded, so the two sides cannot be shown to be priced the same way — re-run `segreant realize` to record it',
       );
     } else if (bases.length > 1 || bases.includes('mixed')) {
       confounders.push(

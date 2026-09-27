@@ -160,7 +160,7 @@ export interface OpenAiCostsObservationRun {
   rawRetention: 'digest_only';
   observationsStored: number;
   /**
-   * How these figures reached Fiscus. `legacy_unknown` on rows recorded before
+   * How these figures reached Segreant. `legacy_unknown` on rows recorded before
    * the distinction existed — never backfilled to `provider_api_pull` merely
    * because that happened to be the only writer at the time.
    */
@@ -796,7 +796,7 @@ export function recordOpenAiCostsObservation(
  * than reading a bill. What changes is the EVIDENCE CLASS, not the
  * arithmetic: the resulting run is stamped `operator_supplied_export` and
  * carries a fifth permanent condition saying nothing in it was obtained from
- * the provider by Fiscus.
+ * the provider by Segreant.
  *
  * Read-only: this computes a plan and writes nothing. Everything it cannot
  * adopt is REPORTED with its amount rather than dropped — an adoption that

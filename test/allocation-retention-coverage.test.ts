@@ -4,8 +4,8 @@
  *
  * THE COUNTEREXAMPLE, MEASURED. A sixty-day period holding $42.00: $32.00 that
  * two rules route to a cost centre and $10.00 that nothing matches.
- * `fiscus alloc` reported `total=$42.00 allocated=$32.00 (76.2%)
- * unallocated=$10.00`. `fiscus prune` then deleted the rows older than thirty
+ * `segreant alloc` reported `total=$42.00 allocated=$32.00 (76.2%)
+ * unallocated=$10.00`. `segreant prune` then deleted the rows older than thirty
  * days — a boundary INSIDE the declared period — and the same call over the
  * same period reported:
  *
@@ -27,7 +27,7 @@
  * look trustworthy. That guard is unchanged here: it is doing its job, which
  * was never to detect a missing input.
  *
- * AND THE RECORD OUTLIVES THE RUN. `fiscus alloc --apply` persists the result
+ * AND THE RECORD OUTLIVES THE RUN. `segreant alloc --apply` persists the result
  * as `result_json` and the run is issued into the epistemic kernel. Before this
  * packet that record asserted a period total which was a post-deletion remnant,
  * immutably, with no way for a later reader to tell. The coverage now travels
@@ -55,7 +55,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-alloc-retention-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-alloc-retention-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 

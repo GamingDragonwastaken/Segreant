@@ -1,7 +1,7 @@
 /**
  * SQLite persistence for the Trusted Epistemic Kernel's immutable objects.
  *
- * This is intentionally a small kernel ledger, separate from Fiscus's existing
+ * This is intentionally a small kernel ledger, separate from Segreant's existing
  * operational Store tables. Every accepted object is retained as canonical JSON
  * plus a digest; nodes, dependency edges, and revocation events are append-only
  * and protected by database triggers. Exact replays are idempotent, while a

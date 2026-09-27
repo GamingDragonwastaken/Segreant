@@ -1,15 +1,15 @@
 /**
  * Window totals were printed over a range the ledger no longer covers.
  *
- * D-170 recorded the retention boundary and taught `fiscus guide` to read it,
+ * D-170 recorded the retention boundary and taught `segreant guide` to read it,
  * because that is the one surface that turns a count into a claim about whether
  * something ever happened. It left the window surfaces untouched and said so.
  * This is that remainder for the three that can reach behind the boundary.
  *
- * WHICH SURFACES, AND WHY THESE THREE. `fiscus sources --all` sets its window
- * start to 0 and prints the words "all time". `fiscus export --all` does the
- * same and emits every surviving row as CSV or JSON. `fiscus export --days N`
- * accepts up to 3650 days. `fiscus today/week/month` are bounded to a month, so
+ * WHICH SURFACES, AND WHY THESE THREE. `segreant sources --all` sets its window
+ * start to 0 and prints the words "all time". `segreant export --all` does the
+ * same and emits every surviving row as CSV or JSON. `segreant export --days N`
+ * accepts up to 3650 days. `segreant today/week/month` are bounded to a month, so
  * the default 180-day retention cannot reach them — but retention is operator
  * configurable and nothing stops a seven-day policy, so the disclosure is on
  * the shared window path rather than on the commands that happen to be long
@@ -31,7 +31,7 @@
  * says nothing extra in that state rather than asserting coverage it has not
  * got.
  *
- * THE EXPORT NOTICE GOES TO STDERR, AND THAT IS LOAD-BEARING. `fiscus export`
+ * THE EXPORT NOTICE GOES TO STDERR, AND THAT IS LOAD-BEARING. `segreant export`
  * writes CSV or JSON to stdout for a pipe or a redirect. A disclosure line on
  * stdout would corrupt every consumer of it — the fix would break the thing it
  * was protecting. It goes where `--out`'s own confirmation already goes, and
@@ -42,7 +42,7 @@
  * coverage field, which is a payload-contract change and is not made here. Nor
  * that a window INSIDE the retained period is complete for any other reason —
  * this is about deletion only, and says nothing about traffic that never
- * reached Fiscus, which is the separate and permanent limit of a local meter.
+ * reached Segreant, which is the separate and permanent limit of a local meter.
  *
  * Recorded at D-171.
  */
@@ -57,7 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { Store } from '../src/store/db.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CLI = join(ROOT, 'bin', 'fiscus.mjs');
+const CLI = join(ROOT, 'bin', 'segreant.mjs');
 const DAY = 24 * 60 * 60 * 1000;
 
 function runCli(args: string[], db: string, home: string): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -65,7 +65,7 @@ function runCli(args: string[], db: string, home: string): Promise<{ code: numbe
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_DB: db, FISCUS_HOME: home, NODE_OPTIONS: '' }, timeout: 180_000 },
+      { env: { ...process.env, SEGREANT_DB: db, SEGREANT_HOME: home, NODE_OPTIONS: '' }, timeout: 180_000 },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? (err as unknown as { code: number }).code
@@ -163,9 +163,9 @@ test('the coverage a truncated window reports names the boundary and what was re
   }
 });
 
-test('fiscus sources --all does not call a truncated window all time', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-window-sources-'));
-  const db = join(dir, 'fiscus.db');
+test('segreant sources --all does not call a truncated window all time', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-window-sources-'));
+  const db = join(dir, 'segreant.db');
   try {
     const { boundary } = prunedStore(db, Date.now());
     const result = await runCli(['sources', '--all', '--json'], db, dir);
@@ -180,11 +180,11 @@ test('fiscus sources --all does not call a truncated window all time', async () 
   }
 });
 
-test('fiscus export --all discloses truncation without putting it in the data stream', async () => {
+test('segreant export --all discloses truncation without putting it in the data stream', async () => {
   // The load-bearing half is the second assertion: a warning printed onto
   // stdout would corrupt every consumer of the export it was protecting.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-window-export-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-window-export-'));
+  const db = join(dir, 'segreant.db');
   try {
     prunedStore(db, Date.now());
     const result = await runCli(['export', '--all', '--json'], db, dir);
@@ -202,8 +202,8 @@ test('fiscus export --all discloses truncation without putting it in the data st
 test('an untruncated export says nothing extra on either stream', async () => {
   // A disclosure that appears on every run is noise and stops being read. This
   // is the case that keeps the edge honest rather than defaulting to a warning.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-window-clean-'));
-  const db = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-window-clean-'));
+  const db = join(dir, 'segreant.db');
   try {
     const store = new Store(db);
     store.insertRequest(requestAt('recent', Date.now() - DAY));

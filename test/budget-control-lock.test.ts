@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { acquireBudgetControlLock } from '../src/budget/controlLock.ts';
 
 test('budget control lock serializes autonomous writers and is reusable after release', () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-lock-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-budget-control-lock-'));
   try {
     const first = acquireBudgetControlLock(home);
     assert.throws(() => acquireBudgetControlLock(home), /already active|stale lock/i);
@@ -22,7 +22,7 @@ test('budget control lock serializes autonomous writers and is reusable after re
 });
 
 test('budget control lock never deletes a generation whose token changed under it', () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-lock-token-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-budget-control-lock-token-'));
   try {
     const lock = acquireBudgetControlLock(home);
     writeFileSync(lock.path, JSON.stringify({ pid: 999999, token: 'different-owner' }) + '\n');
@@ -34,7 +34,7 @@ test('budget control lock never deletes a generation whose token changed under i
 });
 
 test('a stale lock is fail-closed rather than time-stolen', () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-lock-stale-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-budget-control-lock-stale-'));
   try {
     const path = join(home, 'budget-control.lock');
     writeFileSync(path, JSON.stringify({ pid: 2147483647, token: 'dead-but-not-stolen', startedAt: '2000-01-01T00:00:00.000Z' }) + '\n');

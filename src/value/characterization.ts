@@ -1,5 +1,5 @@
 /**
- * Characterization — the canonical vocabulary for the axes Fiscus slices usage
+ * Characterization — the canonical vocabulary for the axes Segreant slices usage
  * by, defined ONCE so every surface agrees on what a slice means.
  *
  * Metering answers "how much"; characterization answers "of what" — per project,
@@ -98,18 +98,18 @@ export function projectKeyWithBasis(
  * **None of these values is an identity verification.** `client_declared` is a
  * self-assertion by whatever process set the header; anything on this machine
  * that can reach the proxy can set it. Chargeback-grade attribution would need a
- * verified collector identity, which Fiscus does not have. See the roadmap's
+ * verified collector identity, which Segreant does not have. See the roadmap's
  * Stage 2: client-supplied headers "are not trusted alone for chargeback".
  */
 export type AttributionBasis =
-  /** An explicit `x-fiscus-project` header on a proxied request. Self-asserted, unverified. */
+  /** An explicit `x-segreant-project` header on a proxied request. Self-asserted, unverified. */
   | 'client_declared'
   /**
    * The tool recorded a working directory, and that directory resolved to a git
    * repository on this machine — so the label is the repository's own root name,
    * not a guess from a path component. This is the strongest attribution an
    * importer can produce: it survives sessions started in a subdirectory, and it
-   * matches the label `fiscus realize` computes for the same repo.
+   * matches the label `segreant realize` computes for the same repo.
    *
    * The one thing it cannot check is time: the path is resolved against the
    * filesystem as it stands now, so a directory that has since been replaced by a

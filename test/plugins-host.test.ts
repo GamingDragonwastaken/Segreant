@@ -114,7 +114,7 @@ function successScript(): string {
           evidenceType: 'usage.observation',
           source: 'child-process',
           observedAtMs: 1700000000000,
-          payload: { pid: process.pid, ambientProbe: process.env.FISCUS_TEST_SECRET ?? 'absent' }
+          payload: { pid: process.pid, ambientProbe: process.env.SEGREANT_TEST_SECRET ?? 'absent' }
         }]
       }) + String.fromCharCode(10));
     });
@@ -250,8 +250,8 @@ test('process host times out a child that does not answer the request', async ()
 });
 
 test('process host does not inherit ambient credentials from the parent environment', async () => {
-  const previous = process.env.FISCUS_TEST_SECRET;
-  process.env.FISCUS_TEST_SECRET = '[REDACTED]';
+  const previous = process.env.SEGREANT_TEST_SECRET;
+  process.env.SEGREANT_TEST_SECRET = '[REDACTED]';
   try {
     const result = await runPluginProcess(input(successScript()));
     assert.equal(result.status, 'completed');
@@ -259,7 +259,7 @@ test('process host does not inherit ambient credentials from the parent environm
     assert.equal(payload.ambientProbe, 'absent');
     assert.doesNotMatch(JSON.stringify(result), /\[REDACTED\]/);
   } finally {
-    if (previous === undefined) delete process.env.FISCUS_TEST_SECRET;
-    else process.env.FISCUS_TEST_SECRET = previous;
+    if (previous === undefined) delete process.env.SEGREANT_TEST_SECRET;
+    else process.env.SEGREANT_TEST_SECRET = previous;
   }
 });

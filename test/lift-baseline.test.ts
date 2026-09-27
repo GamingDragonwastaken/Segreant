@@ -25,10 +25,10 @@ import {
   type CommitLike,
 } from '../src/value/liftBaseline.ts';
 
-const origHome = process.env.FISCUS_HOME;
+const origHome = process.env.SEGREANT_HOME;
 function freshHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-'));
-  process.env.FISCUS_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-liftbaseline-'));
+  process.env.SEGREANT_HOME = dir;
   return dir;
 }
 function manifest(featureMin: number, curated = '2099-01-01'): string {
@@ -100,8 +100,8 @@ test('baselineManifestStatus flags a stale table by its curated date', () => {
 });
 
 test.after(() => {
-  if (origHome === undefined) delete process.env.FISCUS_HOME;
-  else process.env.FISCUS_HOME = origHome;
+  if (origHome === undefined) delete process.env.SEGREANT_HOME;
+  else process.env.SEGREANT_HOME = origHome;
 });
 
 // ---- personal-history mining (pure) ----
@@ -255,7 +255,7 @@ function g(cwd: string, args: string[], env: Record<string, string> = {}): void 
   execFileSync('git', args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' });
 }
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-repo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-liftbaseline-repo-'));
   g(dir, ['init', '-q']);
   g(dir, ['config', 'user.email', 't@t.co']);
   g(dir, ['config', 'user.name', 'tester']);
@@ -298,7 +298,7 @@ test('resolveBaselineMinutesForRepo: mines real git history, caches it, and reus
 test('resolveBaselineMinutesForRepo: a non-git directory degrades to the population prior, honestly, without throwing', async () => {
   freshHome();
   applyBaselineManifest(manifest(240)); // pin the population prior so this test isn't at the mercy of another test's cached manifest
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-notgit-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-liftbaseline-notgit-'));
   try {
     const store = new Store(':memory:');
     const defaultBaseline = { feature: 240 };
@@ -328,6 +328,6 @@ test('resolveBaselineMinutesForRepo: a non-git directory degrades to the populat
 test('package.json ships the bundled baselines directory (npm `files` allowlist)', () => {
   const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { files: string[] };
-  assert.ok(pkg.files.includes('baselines'), '"baselines" must be in package.json "files", or a fresh `npx fiscus roi` throws ENOENT on install');
+  assert.ok(pkg.files.includes('baselines'), '"baselines" must be in package.json "files", or a fresh `npx segreant roi` throws ENOENT on install');
   assert.ok(pkg.files.includes('pricing'), '"pricing" must be in package.json "files" (same class of bug, existing feature)');
 });

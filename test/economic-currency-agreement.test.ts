@@ -30,7 +30,7 @@
  * named `costUsd`, so one shared helper now performs that reconciliation and the
  * three call sites use it.
  *
- * WHAT THIS DOES NOT ESTABLISH. It does not give Fiscus multi-currency receipts
+ * WHAT THIS DOES NOT ESTABLISH. It does not give Segreant multi-currency receipts
  * or rollups; it refuses to misrepresent one, which is a different thing. The
  * compatibility field remains a float named for a currency, and the real repair
  * for that is carrying the unit on the wire rather than in a field name.
@@ -67,7 +67,7 @@ function attribution(currency: string) {
 function project(currency: string): EconomicProjectValue {
   const exact = attribution(currency);
   return {
-    project: 'fiscus', units: 1, costUsd: 100, realizationRate: 1,
+    project: 'segreant', units: 1, costUsd: 100, realizationRate: 1,
     spendOnRealizedUnitsUsd: 100, acceptanceWeightedSpendUsd: 100, roiIndex: 2,
     sources: ['codex'],
     economic: { coverage: 'exact', total: exact, realized: exact },
@@ -78,7 +78,7 @@ test('a team rollup refuses an exact non-USD amount as agreement with costUsd', 
   // THE REFUSAL. The magnitudes match exactly — 100 and 100 — so the existing
   // comparison is satisfied. Only the unit disagrees, and the unit is the whole
   // question.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-currency-rollup-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-currency-rollup-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     assert.throws(
@@ -93,7 +93,7 @@ test('a team rollup refuses an exact non-USD amount as agreement with costUsd', 
 test('a team rollup still accepts the USD amount it is named for', () => {
   // THE PERMITTED PATH. A rule that refused every exact amount would satisfy the
   // test above while destroying v2 rollups entirely.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-currency-rollup-ok-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-currency-rollup-ok-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildEconomicRollupBody(keys, [project('USD')], period);
@@ -111,13 +111,13 @@ test('a signed receipt refuses an exact non-USD amount as agreement with costUsd
   // The second protocol, which shares the validator and repeated the same
   // magnitude-only reconciliation.
   assert.throws(
-    () => buildEconomicReceiptBody('unit-1', 'fiscus', 100, 1, funnel, attribution('EUR')),
+    () => buildEconomicReceiptBody('unit-1', 'segreant', 100, 1, funnel, attribution('EUR')),
     /currency|USD/i,
   );
 });
 
 test('a signed receipt still accepts the USD amount it is named for', () => {
-  const body = buildEconomicReceiptBody('unit-1', 'fiscus', 100, 1, funnel, attribution('USD'));
+  const body = buildEconomicReceiptBody('unit-1', 'segreant', 100, 1, funnel, attribution('USD'));
   assert.equal(body.v, 2);
   assert.equal(body.costUsd, 100);
   assert.equal(body.economic.amount.currency, 'USD');
@@ -128,7 +128,7 @@ test('the reconciliation still catches a magnitude disagreement, in either curre
   // change that only compared units would pass the refusals above while letting
   // a USD 100.00 exact amount sit beside costUsd 5.
   assert.throws(
-    () => buildEconomicReceiptBody('unit-1', 'fiscus', 5, 1, funnel, attribution('USD')),
+    () => buildEconomicReceiptBody('unit-1', 'segreant', 5, 1, funnel, attribution('USD')),
     /disagrees with exact amount/,
   );
 });
@@ -138,7 +138,7 @@ test('a team rollup reconciles the realized exact amount against spendOnRealized
   // and let `economic.realized` travel unreconciled beside
   // `spendOnRealizedUnitsUsd` — the second compatibility float in the same row,
   // and the one a receiver reads as "value". Same rule, same helper.
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-currency-rollup-realized-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-currency-rollup-realized-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const total = attribution('USD');

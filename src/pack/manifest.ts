@@ -1,24 +1,24 @@
 import { createHash } from 'node:crypto';
 import { canonicalPackJson } from './canonical.ts';
 import {
-  DEFAULT_FISCUS_PACK_LIMITS,
-  FISCUS_PACK_MANIFEST_SCHEMA,
-  FISCUS_PACK_MANIFEST_VERSION,
-  FISCUS_PACK_SCHEMA,
-  FISCUS_PACK_VERSION,
+  DEFAULT_SEGREANT_PACK_LIMITS,
+  SEGREANT_PACK_MANIFEST_SCHEMA,
+  SEGREANT_PACK_MANIFEST_VERSION,
+  SEGREANT_PACK_SCHEMA,
+  SEGREANT_PACK_VERSION,
   manifestDigestMaterial,
-  resolveFiscusPackLimits,
-  validateFiscusPackEnvelope,
-  validateFiscusPackLimits,
-  validateFiscusPackManifest,
-  type FiscusPackEnvelope,
-  type FiscusPackAttachmentData,
-  type FiscusPackLimitsOverride,
-  type FiscusPackManifest,
-  type FiscusPackManifestInput,
+  resolveSegreantPackLimits,
+  validateSegreantPackEnvelope,
+  validateSegreantPackLimits,
+  validateSegreantPackManifest,
+  type SegreantPackEnvelope,
+  type SegreantPackAttachmentData,
+  type SegreantPackLimitsOverride,
+  type SegreantPackManifest,
+  type SegreantPackManifestInput,
 } from './types.ts';
 
-export type { FiscusPackManifestInput } from './types.ts';
+export type { SegreantPackManifestInput } from './types.ts';
 export { isSafeRelativeAttachmentPath } from './types.ts';
 
 function clone<T>(value: T): T {
@@ -37,23 +37,23 @@ function freezeDeep<T>(value: T): T {
   return value;
 }
 
-function assertManifest(value: FiscusPackManifest, limits = DEFAULT_FISCUS_PACK_LIMITS): void {
-  const errors = validateFiscusPackManifest(value, limits);
+function assertManifest(value: SegreantPackManifest, limits = DEFAULT_SEGREANT_PACK_LIMITS): void {
+  const errors = validateSegreantPackManifest(value, limits);
   if (errors.length > 0) throw new Error(errors.join('; '));
 }
 
-export function manifestDigest(manifest: FiscusPackManifest, overrides: FiscusPackLimitsOverride = {}): string {
-  const limits = resolveFiscusPackLimits(overrides);
-  const limitErrors = validateFiscusPackLimits(limits);
+export function manifestDigest(manifest: SegreantPackManifest, overrides: SegreantPackLimitsOverride = {}): string {
+  const limits = resolveSegreantPackLimits(overrides);
+  const limitErrors = validateSegreantPackLimits(limits);
   if (limitErrors.length > 0) throw new Error(limitErrors.join('; '));
   assertManifest(manifest, limits);
   return sha256(canonicalPackJson(manifestDigestMaterial(manifest), limits, limits.maxManifestBytes));
 }
 
-export function createFiscusPackManifest(input: FiscusPackManifestInput): FiscusPackManifest {
-  const manifest: FiscusPackManifest = {
-    schema: FISCUS_PACK_MANIFEST_SCHEMA,
-    version: FISCUS_PACK_MANIFEST_VERSION,
+export function createSegreantPackManifest(input: SegreantPackManifestInput): SegreantPackManifest {
+  const manifest: SegreantPackManifest = {
+    schema: SEGREANT_PACK_MANIFEST_SCHEMA,
+    version: SEGREANT_PACK_MANIFEST_VERSION,
     packId: input.packId,
     createdAt: input.createdAt,
     includedRecords: clone(input.includedRecords),
@@ -67,35 +67,35 @@ export function createFiscusPackManifest(input: FiscusPackManifestInput): Fiscus
   return freezeDeep(manifest);
 }
 
-export function createFiscusPackEnvelope(
-  manifest: FiscusPackManifest,
-  attachments: readonly FiscusPackAttachmentData[] = [],
-): FiscusPackEnvelope {
+export function createSegreantPackEnvelope(
+  manifest: SegreantPackManifest,
+  attachments: readonly SegreantPackAttachmentData[] = [],
+): SegreantPackEnvelope {
   assertManifest(manifest);
-  const pack: FiscusPackEnvelope = {
-    schema: FISCUS_PACK_SCHEMA,
-    version: FISCUS_PACK_VERSION,
+  const pack: SegreantPackEnvelope = {
+    schema: SEGREANT_PACK_SCHEMA,
+    version: SEGREANT_PACK_VERSION,
     manifest,
     manifestDigest: manifestDigest(manifest),
     ...(attachments.length > 0 ? { attachments: clone(attachments) } : {}),
   };
-  const errors = validateFiscusPackEnvelope(pack);
+  const errors = validateSegreantPackEnvelope(pack);
   if (errors.length > 0) throw new Error(errors.join('; '));
   return freezeDeep(pack);
 }
 
 /** Serialize only after validating the complete envelope; no pretty-printing is allowed. */
-export function serializeFiscusPack(pack: FiscusPackEnvelope): string {
-  const limits = resolveFiscusPackLimits();
-  const errors = validateFiscusPackEnvelope(pack, limits);
+export function serializeSegreantPack(pack: SegreantPackEnvelope): string {
+  const limits = resolveSegreantPackLimits();
+  const errors = validateSegreantPackEnvelope(pack, limits);
   if (errors.length > 0) throw new Error(errors.join('; '));
   const encoded = canonicalPackJson(pack, limits, limits.maxEnvelopeBytes);
   if (Buffer.byteLength(encoded, 'utf8') > limits.maxEnvelopeBytes) throw new Error('pack envelope exceeds resource limit');
   return encoded;
 }
 
-export function canonicalFiscusPackManifest(manifest: FiscusPackManifest): string {
-  const limits = resolveFiscusPackLimits();
+export function canonicalSegreantPackManifest(manifest: SegreantPackManifest): string {
+  const limits = resolveSegreantPackLimits();
   assertManifest(manifest, limits);
   return canonicalPackJson(manifestDigestMaterial(manifest), limits, limits.maxManifestBytes);
 }

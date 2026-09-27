@@ -2,20 +2,20 @@
  * A reconciliation must know when its own ledger was truncated by retention.
  *
  * THE COUNTEREXAMPLE, MEASURED BEFORE IT WAS WRITTEN DOWN. A provider reported
- * $10.00 over two days. Fiscus had metered $6.00 on each of them, so the
+ * $10.00 over two days. Segreant had metered $6.00 on each of them, so the
  * residual was -$2.00 and the run said `none_local_estimate_exceeds_provider`:
  * the local rate-card estimate exceeds everything the provider billed on this
  * scope, so no upper bound on off-path spend survives. That is the alarming,
  * honest state, and D-068 exists to make it visible.
  *
- * Then `fiscus prune` deleted the first day's request on the operator's own
+ * Then `segreant prune` deleted the first day's request on the operator's own
  * retention policy. The same reconciliation, over the same period, against the
  * same provider report, now said: residual +$4.00, `upper_bound_conditional`.
  * A deletion RESTORED a bound the evidence refutes, and re-labelled $6.00 of
- * Fiscus's own metered traffic as spend the provider charged for and Fiscus
+ * Segreant's own metered traffic as spend the provider charged for and Segreant
  * never saw. Nothing anywhere in the run mentioned retention.
  *
- * WHY THE ARITHMETIC DOES THIS. With P the provider total, L what Fiscus
+ * WHY THE ARITHMETIC DOES THIS. With P the provider total, L what Segreant
  * metered on the scope, T the true billed cost of on-path traffic and O of
  * off-path traffic: `P = T + O`, `R = P - L = O + (T - L)`, so `O <= R` holds
  * exactly when `L <= T`. Retention does not change P, T or O. It changes what
@@ -68,7 +68,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-retention-reconcile-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-retention-reconcile-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { readBillingImportFile } from '../src/billing/importer.ts';
@@ -133,8 +133,8 @@ function fixture(dayZeroUsd: number, dayOneUsd: number): Store {
     activatedAtMs: 1,
   }).declarationId;
 
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-retention-export-'));
-  const file = join(dir, 'costs.fiscus.json');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-retention-export-'));
+  const file = join(dir, 'costs.segreant.json');
   const records = [
     record({ sourceRecordId: 'd0', amount: '6.000000' }),
     record({ sourceRecordId: 'd1', chargePeriodStart: day(1), chargePeriodEnd: day(2), amount: '4.000000' }),
@@ -274,7 +274,7 @@ test('a truncated run carries the limit in the conditions that travel with it', 
 
 test('the truncation countermodel is realized by the record, not merely live', () => {
   // Every other world on a reconciliation is `live` -- an unexcluded
-  // possibility. This one is a fact Fiscus performed and recorded itself, so
+  // possibility. This one is a fact Segreant performed and recorded itself, so
   // reporting it as a possibility would understate what is known.
   const store = fixture(6, 6);
   try {
@@ -294,7 +294,7 @@ test('the sentence for a truncated run names retention and claims no upper bound
   assert.match(words, /retention|deleted|prun/i, 'the reader must be told why the residual cannot be classified');
   assert.doesNotMatch(
     words,
-    /\bUpper bound on spend that never passed through Fiscus\b/,
+    /\bUpper bound on spend that never passed through Segreant\b/,
     'it must not repeat the claim the truncation withdraws',
   );
 });

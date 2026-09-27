@@ -126,7 +126,7 @@ function auditLockEntries(violations, label, lock, { requireDevOnly }) {
     }
 
     if (requireDevOnly && entry.dev !== true) {
-      violations.push(`${label}: ${path} is not marked dev, so it installs at runtime for anyone who installs fiscus`);
+      violations.push(`${label}: ${path} is not marked dev, so it installs at runtime for anyone who installs segreant`);
     }
   }
 }

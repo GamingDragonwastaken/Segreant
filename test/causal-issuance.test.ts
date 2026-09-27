@@ -290,7 +290,7 @@ test('causal transport requires a separate obligation even when a coordinate wit
   const data = supportedStudy();
   const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
   const source = issuance.effect!;
-  const targetScope = scope({ ledger: 'fiscus-causal', studyId: 'other-population', protocolHash: 'other-treatment' });
+  const targetScope = scope({ ledger: 'segreant-causal', studyId: 'other-population', protocolHash: 'other-treatment' });
   const output = claim({ ...source, id: 'claim:transported', scope: targetScope });
   const from = { grain: source.grain, scope: source.scope };
   const to = { grain: output.grain, scope: output.scope };

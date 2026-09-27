@@ -30,10 +30,10 @@ export interface FocusBillingCompatibilityRow {
   readonly EffectiveCost: null;
   readonly AllocatedCost: null;
   readonly InvoiceIssuerName: null;
-  readonly FiscusCostBasis: 'billed';
-  readonly FiscusEffectiveCostStatus: 'unmapped';
-  readonly FiscusAllocatedCostStatus: 'unmapped';
-  readonly FiscusSourceLineage: Readonly<{
+  readonly SegreantCostBasis: 'billed';
+  readonly SegreantEffectiveCostStatus: 'unmapped';
+  readonly SegreantAllocatedCostStatus: 'unmapped';
+  readonly SegreantSourceLineage: Readonly<{
     recordId: string;
     sourceRecordId: string;
     sourceRecordSha256: string;
@@ -42,7 +42,7 @@ export interface FocusBillingCompatibilityRow {
     sourceSystem: 'operator-export';
     trust: 'operator_supplied_unverified';
   }>;
-  readonly FiscusAllocationSource: null;
+  readonly SegreantAllocationSource: null;
 }
 
 function category(record: BillingEvidenceRecord): FocusBillingCompatibilityRow['ChargeCategory'] {
@@ -84,10 +84,10 @@ function project(record: BillingEvidenceRecord): FocusBillingCompatibilityRow {
     EffectiveCost: null,
     AllocatedCost: null,
     InvoiceIssuerName: null,
-    FiscusCostBasis: 'billed',
-    FiscusEffectiveCostStatus: 'unmapped',
-    FiscusAllocatedCostStatus: 'unmapped',
-    FiscusSourceLineage: Object.freeze({
+    SegreantCostBasis: 'billed',
+    SegreantEffectiveCostStatus: 'unmapped',
+    SegreantAllocatedCostStatus: 'unmapped',
+    SegreantSourceLineage: Object.freeze({
       recordId: record.recordId,
       sourceRecordId: record.sourceRecordId,
       sourceRecordSha256: record.sourceRecordSha256,
@@ -96,7 +96,7 @@ function project(record: BillingEvidenceRecord): FocusBillingCompatibilityRow {
       sourceSystem: record.sourceSystem,
       trust: record.trust,
     }),
-    FiscusAllocationSource: null,
+    SegreantAllocationSource: null,
   };
   return Object.freeze(row);
 }

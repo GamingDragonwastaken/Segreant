@@ -44,7 +44,7 @@ export function pct(n: number): string {
   return `${(n * 100).toFixed(0)}%`;
 }
 
-/** Emit a Fiscus-owned JSON response with stable six-decimal USD fields. */
+/** Emit a Segreant-owned JSON response with stable six-decimal USD fields. */
 export function printJson(value: unknown, space: number | string = 2): void {
   process.stdout.write(stringifyJson(value, space) + '\n');
 }
@@ -52,7 +52,7 @@ export function printJson(value: unknown, space: number | string = 2): void {
 /** Actionable not-a-git-repo message: tell the user what to do, not just what's wrong. */
 export function printNotAGitRepo(repo: string): void {
   console.error(`  Not a git repository: ${repo}`);
-  console.error('  Run this from inside your repo, or pass --repo <path>. Session-scored usage needs no git: fiscus usage');
+  console.error('  Run this from inside your repo, or pass --repo <path>. Session-scored usage needs no git: segreant usage');
 }
 
 /**
@@ -86,15 +86,15 @@ export function noteSource(
     // before the coverage was recorded cannot say, and reading that as
     // intact is the inference this line exists to refuse.
     console.log(color(tty, C.gray,
-      `  ● ${spendWindowUnknownUnits} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown. Recompute with: fiscus realize`));
+      `  ● ${spendWindowUnknownUnits} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown. Recompute with: segreant realize`));
   }
   if (costStaleUnits > 0) {
     // A reprice re-costed the request ledger. These units predate the recorded
     // cost basis, so they could not be re-attributed without guessing which basis
     // produced them — they still carry the old dollars, and this view and
-    // `fiscus spend` will not agree until they are recomputed.
+    // `segreant spend` will not agree until they are recomputed.
     console.log(
-      color(tty, C.yellow, `  ● ${costStaleUnits} unit(s) carry pre-reprice costs — excluded from model comparison. Recompute with: fiscus realize`),
+      color(tty, C.yellow, `  ● ${costStaleUnits} unit(s) carry pre-reprice costs — excluded from model comparison. Recompute with: segreant realize`),
     );
   }
   if (source === 'store') {

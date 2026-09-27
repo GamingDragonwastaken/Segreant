@@ -14,7 +14,7 @@ const HASH = 'a'.repeat(64);
 
 function plan(overrides: Partial<CausalDesignPlan> = {}): CausalDesignPlan {
   return {
-    type: 'fiscus.causal-design',
+    type: 'segreant.causal-design',
     version: 1,
     designId: 'design-1',
     protocolHash: `sha256:${HASH}`,
@@ -91,11 +91,11 @@ test('a no-interference declaration is still labelled an assumption, not a measu
 });
 
 test('causal design CLI is a bounded review-only consumer', () => {
-  const root = mkdtempSync(join(tmpdir(), 'fiscus-causal-design-'));
+  const root = mkdtempSync(join(tmpdir(), 'segreant-causal-design-'));
   const options = join(root, 'design.json');
   try {
     writeFileSync(options, JSON.stringify(plan({ interference: { assumption: 'none_declared', clusterIdSource: null, exposureMapping: null } })));
-    const stdout = execFileSync(process.execPath, ['bin/fiscus.mjs', 'causal', 'design', '--options', options, '--json'], {
+    const stdout = execFileSync(process.execPath, ['bin/segreant.mjs', 'causal', 'design', '--options', options, '--json'], {
       cwd: process.cwd(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

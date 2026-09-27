@@ -1,7 +1,7 @@
--- Fiscus team server — Postgres schema.
+-- Segreant team server — Postgres schema.
 --
 -- This database belongs entirely to the operator (the enterprise running this
--- server). Fiscus never connects to it. Applied automatically and
+-- server). Segreant never connects to it. Applied automatically and
 -- idempotently on server startup (src/index.ts) via IF NOT EXISTS everywhere,
 -- so re-running it against an already-initialized database is always safe.
 
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS developers (
   registered_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One row per accepted `fiscus team push`. The full signed envelope is kept
+-- One row per accepted `segreant team push`. The full signed envelope is kept
 -- in `body` (JSONB) as the tamper-evident source of truth; body_hash is the
 -- same sha256 the signature covers, kept alongside for cheap integrity spot
 -- checks without recomputing canonical() server-side.

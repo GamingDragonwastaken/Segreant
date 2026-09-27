@@ -75,7 +75,7 @@ test('ordinary-ledger verifier accepts a coherent observed proxy set and emits a
 
   const verifier = verifiedOrdinaryLedgerVerifier({ requests, expected: expected(requests), checkedAtMs: 1_700_000_000_400 });
   const executionMaterial = {
-    type: 'fiscus.causal-execution' as const,
+    type: 'segreant.causal-execution' as const,
     version: 2 as const,
     executionId: 'execution:ledger1',
     decisionId: 'decision:ledger1',

@@ -71,14 +71,14 @@ export const USE_REQUIREMENTS: Readonly<Record<ClaimUse, UseRequirement>> = Obje
     // dollar sign.
     requires: [{ axis: 'monetaryBasis', oneOf: ['list', 'mixed'] }],
     because:
-      'The metered spend figure is the local rate-card read of requests Fiscus routed. A provider-billed, '
+      'The metered spend figure is the local rate-card read of requests Segreant routed. A provider-billed, '
       + 'allocated or provider-observed total is a different quantity, and substituting one silently '
       + 'redefines the number rather than improving it.',
   }),
   budget_enforcement: useRequirement({
     id: 'budget_enforcement',
     // Two parts, both already stated elsewhere. The basis is the same
-    // definitional point as above — enforcement gates the traffic Fiscus routes,
+    // definitional point as above — enforcement gates the traffic Segreant routes,
     // which is exactly the metered population. The epistemic membership is the
     // fail-closed rule in CLAUDE.md: `conflicted` is what `billedClaimSupport`
     // returns when snapshots disagree, and a figure whose own sources contradict
@@ -88,7 +88,7 @@ export const USE_REQUIREMENTS: Readonly<Record<ClaimUse, UseRequirement>> = Obje
       { axis: 'epistemic', oneOf: ['supported'] },
     ],
     because:
-      'Enforcement gates the traffic Fiscus can see and stop, which is the metered population, and it '
+      'Enforcement gates the traffic Segreant can see and stop, which is the metered population, and it '
       + 'fails closed: a figure that is unknown, refuted or self-contradictory must not be the one '
       + 'deciding whether a request proceeds.',
   }),

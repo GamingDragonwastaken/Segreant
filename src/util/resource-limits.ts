@@ -74,7 +74,7 @@ export class ResourceLimitError extends Error {
     kind: ResourceLimitKind,
     limitBytes: number,
   ) {
-    super(`Fiscus resource limit exceeded: ${kind}`);
+    super(`Segreant resource limit exceeded: ${kind}`);
     this.name = 'ResourceLimitError';
     this.kind = kind;
     this.limitBytes = limitBytes;

@@ -20,7 +20,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-adopt-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-adopt-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { readBillingImportFile } from '../src/billing/importer.ts';
@@ -61,8 +61,8 @@ function record(over: Partial<ExportRecord> & { sourceRecordId: string }): Expor
 
 /** Write an operator export to disk and import it, returning its import id. */
 function importExport(store: Store, records: ExportRecord[], coverage = 'complete'): string {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-export-'));
-  const file = join(dir, 'costs.fiscus.json');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-export-'));
+  const file = join(dir, 'costs.segreant.json');
   writeFileSync(file, JSON.stringify({
     schemaVersion: 1,
     source: {

@@ -1,9 +1,9 @@
 /**
  * Connectors — turning an AI tool into a SOURCE.
  *
- * The product meters by SOURCE: a tool deliberately routed through Fiscus so
+ * The product meters by SOURCE: a tool deliberately routed through Segreant so
  * its spend is attributed. "Connecting" a tool is two things — point it at the
- * local proxy, and tag its traffic with an `x-fiscus-source` header. The tag is
+ * local proxy, and tag its traffic with an `x-segreant-source` header. The tag is
  * stripped before the request leaves the machine (connect, don't intercept), so
  * the provider never sees it.
  *
@@ -15,7 +15,7 @@
 
 import { join } from 'node:path';
 
-export const SOURCE_HEADER = 'x-fiscus-source';
+export const SOURCE_HEADER = 'x-segreant-source';
 
 /**
  * The project-attribution header. Connecting a tool only tagged its SOURCE, so a
@@ -28,7 +28,7 @@ export const SOURCE_HEADER = 'x-fiscus-source';
  * request, in any repo, would carry one project name and be recorded as
  * `client_declared` — a confident wrong answer instead of an honest blank.
  */
-export const PROJECT_HEADER = 'x-fiscus-project';
+export const PROJECT_HEADER = 'x-segreant-project';
 
 /**
  * Whether an opencode config is scoped to one project, and if so which.
@@ -120,13 +120,13 @@ export const GEMINI_OPENAI_COMPAT_BASE = 'https://generativelanguage.googleapis.
 /**
  * The opencode provider block that routes traffic through the proxy and tags it
  * as the `opencode` source. apiKey/model default to the Gemini free tier (the
- * upstream `fiscus start` fronts by default); a user can change them — the
+ * upstream `segreant start` fronts by default); a user can change them — the
  * merge below preserves whatever they already set.
  */
 export function opencodeProviderBlock(port: number, project?: string | null): Record<string, unknown> {
   return {
     npm: '@ai-sdk/openai-compatible',
-    name: 'Fiscus (metered)',
+    name: 'Segreant (metered)',
     options: {
       baseURL: proxyBaseUrl(port),
       apiKey: '{env:GEMINI_API_KEY}',
@@ -134,7 +134,7 @@ export function opencodeProviderBlock(port: number, project?: string | null): Re
       // PROJECT_HEADER for why a global config must not carry one.
       headers: project ? { [SOURCE_HEADER]: 'opencode', [PROJECT_HEADER]: project } : { [SOURCE_HEADER]: 'opencode' },
     },
-    models: { 'gemini-2.5-flash': { name: 'Gemini 2.5 Flash (via Fiscus)' } },
+    models: { 'gemini-2.5-flash': { name: 'Gemini 2.5 Flash (via Segreant)' } },
   };
 }
 
@@ -202,7 +202,7 @@ export interface MergeResult {
 }
 
 /**
- * Add (or update) the Fiscus source provider in an opencode config. PRESERVES
+ * Add (or update) the Segreant source provider in an opencode config. PRESERVES
  * the user's existing provider settings (apiKey, models, baseURL) — it only
  * ensures the source header (and fills baseURL/npm if absent). Idempotent:
  * re-running on an already-tagged config reports `alreadyConnected` and changes
@@ -222,7 +222,7 @@ export function mergeOpencodeConfig(raw: string, port: number, project?: string 
 
   const provider = (obj.provider ??= {}) as Record<string, unknown>;
   const block = opencodeProviderBlock(port, project);
-  const existing = provider.fiscus as Record<string, unknown> | undefined;
+  const existing = provider.segreant as Record<string, unknown> | undefined;
   let alreadyConnected = false;
 
   if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
@@ -237,7 +237,7 @@ export function mergeOpencodeConfig(raw: string, port: number, project?: string 
     options.baseURL ??= (block.options as Record<string, unknown>).baseURL;
     existing.npm ??= block.npm;
   } else {
-    provider.fiscus = block;
+    provider.segreant = block;
   }
 
   return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', alreadyConnected };
@@ -277,16 +277,16 @@ export function listOpencodeProviders(raw: string): OpencodeProvider[] {
 export interface WrapResult {
   ok: boolean;
   merged?: string;
-  originalBaseUrl?: string; // the base to point Fiscus's upstream at; undefined if already wrapped
+  originalBaseUrl?: string; // the base to point Segreant's upstream at; undefined if already wrapped
   alreadyWrapped?: boolean;
   error?: string;
 }
 
 /**
- * Wrap an EXISTING opencode provider so its traffic routes through Fiscus — the
+ * Wrap an EXISTING opencode provider so its traffic routes through Segreant — the
  * honest native connection. It rewrites that provider's `options.baseURL` to the
- * local proxy and tags it `x-fiscus-source: opencode`, returning the provider's
- * ORIGINAL baseURL so the caller can set Fiscus's upstream to it (the proxy then
+ * local proxy and tags it `x-segreant-source: opencode`, returning the provider's
+ * ORIGINAL baseURL so the caller can set Segreant's upstream to it (the proxy then
  * forwards there, with the user's own key, unchanged). The provider's apiKey/models
  * are untouched. Idempotent: re-wrapping a provider already pointed at the proxy is
  * a no-op that just ensures the source tag. Fails safe on unparseable input or a

@@ -11,7 +11,7 @@ test('the budget action explains that a saved cap is enforced immediately', () =
 
   assert.match(source, /label: 'Takes effect'[\s\S]{0,180}value: 'immediately'/);
   assert.match(source, /running proxy uses the saved cap/);
-  assert.doesNotMatch(source, /on proxy restart|until it is restarted|Restart Fiscus for the proxy/);
+  assert.doesNotMatch(source, /on proxy restart|until it is restarted|Restart Segreant for the proxy/);
 });
 
 test('the first-run choice is a keyboard-managed modal with a non-dismissal Escape policy', () => {

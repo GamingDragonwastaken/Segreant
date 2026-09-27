@@ -12,12 +12,12 @@ function sha256(path: string): string {
 }
 
 test('diagnostics are redacted, versioned, and do not mutate the active ledger', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const previousDb = process.env.FISCUS_DB;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-diagnostics-'));
-  const db = join(home, 'fiscus.db');
-  process.env.FISCUS_HOME = home;
-  delete process.env.FISCUS_DB;
+  const previousHome = process.env.SEGREANT_HOME;
+  const previousDb = process.env.SEGREANT_DB;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-diagnostics-'));
+  const db = join(home, 'segreant.db');
+  process.env.SEGREANT_HOME = home;
+  delete process.env.SEGREANT_DB;
   const store = new Store(db);
   store.close();
   const before = sha256(db);
@@ -30,14 +30,14 @@ test('diagnostics are redacted, versioned, and do not mutate the active ledger',
     assert.equal(bundle.boundaries.externalNetworkAttempted, false);
     assert.equal(bundle.boundaries.credentialRead, false);
     assert.equal(bundle.boundaries.rawPromptSourceOrLedgerRowsExported, false);
-    assert.match(bundle.config.path, /^<FISCUS_HOME>/);
-    assert.match(bundle.database.path, /^<FISCUS_HOME>/);
+    assert.match(bundle.config.path, /^<SEGREANT_HOME>/);
+    assert.match(bundle.database.path, /^<SEGREANT_HOME>/);
     assert.equal(bundle.database.migrationState, 'read_only_schema_inspected');
     assert.equal(typeof bundle.database.schemaVersion, 'number');
     assert.equal(typeof bundle.database.tableCount, 'number');
-    assert.match(bundle.egress.path, /^<FISCUS_HOME>/);
+    assert.match(bundle.egress.path, /^<SEGREANT_HOME>/);
     const serialized = JSON.stringify(bundle);
-    assert.equal(serialized.includes(home), false, 'absolute Fiscus home must not enter the bundle');
+    assert.equal(serialized.includes(home), false, 'absolute Segreant home must not enter the bundle');
     assert.equal(serialized.includes('backup-request-1'), false, 'ledger request identities must not enter the bundle');
     assert.equal(serialized.includes('benchmark-fixture'), false, 'ledger project labels must not enter the bundle');
     assert.equal(serialized.includes('"sourceUrl":'), false, 'pricing endpoint identity must not enter the bundle');
@@ -49,21 +49,21 @@ test('diagnostics are redacted, versioned, and do not mutate the active ledger',
       assert.ok(observation.name);
     }
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
-    if (previousDb === undefined) delete process.env.FISCUS_DB;
-    else process.env.FISCUS_DB = previousDb;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
+    if (previousDb === undefined) delete process.env.SEGREANT_DB;
+    else process.env.SEGREANT_DB = previousDb;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('diagnostic export is atomic and refuses an existing destination', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const previousDb = process.env.FISCUS_DB;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-diagnostics-export-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  const previousDb = process.env.SEGREANT_DB;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-diagnostics-export-'));
   const output = join(home, 'out', 'diagnostics.json');
-  process.env.FISCUS_HOME = home;
-  delete process.env.FISCUS_DB;
+  process.env.SEGREANT_HOME = home;
+  delete process.env.SEGREANT_DB;
   try {
     const bundle = buildDiagnostics();
     const written = writeDiagnosticsBundle(bundle, output);
@@ -74,21 +74,21 @@ test('diagnostic export is atomic and refuses an existing destination', () => {
     assert.throws(() => writeDiagnosticsBundle(bundle, written), /already exists|overwrite/i);
     assert.deepEqual(readFileSync(written), sentinel);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
-    if (previousDb === undefined) delete process.env.FISCUS_DB;
-    else process.env.FISCUS_DB = previousDb;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
+    if (previousDb === undefined) delete process.env.SEGREANT_DB;
+    else process.env.SEGREANT_DB = previousDb;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('diagnostics omit private pricing URL host and path details', () => {
-  const previousHome = process.env.FISCUS_HOME;
-  const previousDb = process.env.FISCUS_DB;
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-diagnostics-pricing-'));
+  const previousHome = process.env.SEGREANT_HOME;
+  const previousDb = process.env.SEGREANT_DB;
+  const home = mkdtempSync(join(tmpdir(), 'segreant-diagnostics-pricing-'));
   const pricingDir = join(home, 'pricing');
-  process.env.FISCUS_HOME = home;
-  delete process.env.FISCUS_DB;
+  process.env.SEGREANT_HOME = home;
+  delete process.env.SEGREANT_DB;
   try {
     mkdirSync(pricingDir, { recursive: true });
     const cardText = readFileSync(new URL('../pricing/models.json', import.meta.url), 'utf8');
@@ -114,10 +114,10 @@ test('diagnostics omit private pricing URL host and path details', () => {
     assert.equal(serialized.includes('private.example'), false);
     assert.equal(serialized.includes('SECRET_PATH_TOKEN'), false);
   } finally {
-    if (previousHome === undefined) delete process.env.FISCUS_HOME;
-    else process.env.FISCUS_HOME = previousHome;
-    if (previousDb === undefined) delete process.env.FISCUS_DB;
-    else process.env.FISCUS_DB = previousDb;
+    if (previousHome === undefined) delete process.env.SEGREANT_HOME;
+    else process.env.SEGREANT_HOME = previousHome;
+    if (previousDb === undefined) delete process.env.SEGREANT_DB;
+    else process.env.SEGREANT_DB = previousDb;
     rmSync(home, { recursive: true, force: true });
   }
 });

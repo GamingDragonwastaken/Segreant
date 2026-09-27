@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 // Do not inherit a developer's live price-card cache while asserting local lineage.
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-pricing-lineage-home-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-pricing-lineage-home-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { computeCost, legacyPricingEvidence, toolReportedPricingEvidence, unpricedPricingEvidence } from '../src/cost/pricing.ts';
@@ -40,8 +40,8 @@ test('missing lineage stays permanently marked legacy rather than inferred from 
 });
 
 test('a pre-lineage on-disk ledger migrates without rewriting its historical price meaning', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-legacy-ledger-'));
-  const path = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-legacy-ledger-'));
+  const path = join(dir, 'segreant.db');
   const old = new DatabaseSync(path);
   old.prepare(`CREATE TABLE requests (
     request_id TEXT PRIMARY KEY NOT NULL, session_id TEXT, ts_iso TEXT NOT NULL, ts_epoch_ms INTEGER NOT NULL,

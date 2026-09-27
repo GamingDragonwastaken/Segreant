@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 2b35c8d6259aaeb7639187b3993ea2472a6f3e09d8da1a5f6062adc496c9aed2 */
+/** Source SHA-256: 43f86fd75cdf6a6f74f14d9976b0ffdd194ac3d9620c16b8e1cf601ee408a359 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -883,7 +883,7 @@ export interface BudgetAdvice {
   windowDays?: number;
 }
 
-/** Read-only summary of Fiscus's separate causal-study evidence lane. */
+/** Read-only summary of Segreant's separate causal-study evidence lane. */
 export interface CausalPayload {
   demo: boolean;
   generatedAt: string;
@@ -1031,7 +1031,7 @@ export interface SettingsSnapshot {
  *
  * The four members are four different enforcement CLAIMS, and the screen must
  * not collapse them: what the local proxy can stop before it happens, spend that
- * was only ever observed after the fact, provider-side limits Fiscus does not
+ * was only ever observed after the fact, provider-side limits Segreant does not
  * inspect at all, and advice that is a proposal until applied.
  */
 export interface BudgetEnforcement {

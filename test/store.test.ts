@@ -95,7 +95,7 @@ test('store.sourceModelBreakdown: groups model spend within each source (Source�
 });
 
 test('store migration: a DB created before the user column gains it (ALTER path)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-mig-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-mig-'));
   const path = join(dir, 'old.db');
   try {
     // Simulate a pre-`user` database: the original requests schema, no user column.
@@ -134,35 +134,35 @@ test('store migration: a DB created before the user column gains it (ALTER path)
 
 test('project aliases: byProject rolls aliased labels into the canonical; raw rows untouched', () => {
   const store = new Store(':memory:');
-  store.insertRequest(req({ project: 'fiscus', costUsd: 3 }));
-  store.insertRequest(req({ project: 'fiscus-ts', costUsd: 2 }));
+  store.insertRequest(req({ project: 'segreant', costUsd: 3 }));
+  store.insertRequest(req({ project: 'segreant-ts', costUsd: 2 }));
   store.insertRequest(req({ project: 'other', costUsd: 1 }));
 
-  store.setProjectAlias('fiscus-ts', 'fiscus');
+  store.setProjectAlias('segreant-ts', 'segreant');
   const rows = store.byProject(0, 5000);
   const map = Object.fromEntries(rows.map((r) => [r.label, r.costUsd]));
-  assert.equal(map['fiscus'], 5); // merged
+  assert.equal(map['segreant'], 5); // merged
   assert.equal(map['other'], 1);
-  assert.equal(map['fiscus-ts'], undefined);
+  assert.equal(map['segreant-ts'], undefined);
 
   // Reversible: unalias restores the original split (raw rows were never rewritten).
-  store.removeProjectAlias('fiscus-ts');
+  store.removeProjectAlias('segreant-ts');
   const split = Object.fromEntries(store.byProject(0, 5000).map((r) => [r.label, r.costUsd]));
-  assert.equal(split['fiscus'], 3);
-  assert.equal(split['fiscus-ts'], 2);
+  assert.equal(split['segreant'], 3);
+  assert.equal(split['segreant-ts'], 2);
   store.close();
 });
 
 test('project aliases: summary/hasProjectSpend match the whole family under either name', () => {
   const store = new Store(':memory:');
-  store.insertRequest(req({ project: 'fiscus', costUsd: 3 }));
-  store.insertRequest(req({ project: 'fiscus-ts', costUsd: 2 }));
-  store.setProjectAlias('fiscus-ts', 'fiscus');
+  store.insertRequest(req({ project: 'segreant', costUsd: 3 }));
+  store.insertRequest(req({ project: 'segreant-ts', costUsd: 2 }));
+  store.setProjectAlias('segreant-ts', 'segreant');
 
-  assert.equal(store.summary(0, 5000, 'fiscus').costUsd, 5);
-  assert.equal(store.summary(0, 5000, 'fiscus-ts').costUsd, 5); // alias resolves to same family
-  assert.equal(store.hasProjectSpend('fiscus-ts'), true);
-  assert.deepEqual(store.projectFamily('fiscus-ts').sort(), ['fiscus', 'fiscus-ts']);
+  assert.equal(store.summary(0, 5000, 'segreant').costUsd, 5);
+  assert.equal(store.summary(0, 5000, 'segreant-ts').costUsd, 5); // alias resolves to same family
+  assert.equal(store.hasProjectSpend('segreant-ts'), true);
+  assert.deepEqual(store.projectFamily('segreant-ts').sort(), ['segreant', 'segreant-ts']);
   store.close();
 });
 
@@ -186,31 +186,31 @@ test('project aliases: mapping stays flat — chaining re-points, self-alias thr
 test('project aliases: realization units and projects list follow the canonical label', () => {
   const store = new Store(':memory:');
   store.saveRealizationUnits([
-    { commitHash: 'c1', project: 'fiscus', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
-    { commitHash: 'c2', project: 'fiscus-ts', tsEpochMs: 2000, computedAtMs: 2000, attributedCostUsd: 2, maturing: false, realized: false, unitJson: '{}', costScope: 'project' },
+    { commitHash: 'c1', project: 'segreant', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
+    { commitHash: 'c2', project: 'segreant-ts', tsEpochMs: 2000, computedAtMs: 2000, attributedCostUsd: 2, maturing: false, realized: false, unitJson: '{}', costScope: 'project' },
   ]);
-  store.setProjectAlias('fiscus-ts', 'fiscus');
-  assert.equal(store.countRealizationUnits('fiscus'), 2);
-  assert.equal(store.realizationUnitRows('fiscus-ts').length, 2);
-  assert.deepEqual(store.realizationProjects(), ['fiscus']);
+  store.setProjectAlias('segreant-ts', 'segreant');
+  assert.equal(store.countRealizationUnits('segreant'), 2);
+  assert.equal(store.realizationUnitRows('segreant-ts').length, 2);
+  assert.deepEqual(store.realizationProjects(), ['segreant']);
   store.close();
 });
 
 test('store.sessionsInWindow: real sessions only, newest activity first, tool from the sessions table, aliases folded', () => {
   const store = new Store(':memory:');
-  // Session s1 (claude-code, project fiscus): two requests.
-  store.upsertSession('s1', 'fiscus', 'claude-code', 1000);
-  store.insertRequest(req({ sessionId: 's1', project: 'fiscus', tsEpochMs: 1000, costUsd: 1 }));
-  store.insertRequest(req({ sessionId: 's1', project: 'fiscus', tsEpochMs: 2000, costUsd: 2 }));
+  // Session s1 (claude-code, project segreant): two requests.
+  store.upsertSession('s1', 'segreant', 'claude-code', 1000);
+  store.insertRequest(req({ sessionId: 's1', project: 'segreant', tsEpochMs: 1000, costUsd: 1 }));
+  store.insertRequest(req({ sessionId: 's1', project: 'segreant', tsEpochMs: 2000, costUsd: 2 }));
   // Session s2 under the ALIASED name, never upserted into sessions → tool 'unknown'.
-  store.insertRequest(req({ sessionId: 's2', project: 'fiscus-ts', tsEpochMs: 3000, costUsd: 4 }));
+  store.insertRequest(req({ sessionId: 's2', project: 'segreant-ts', tsEpochMs: 3000, costUsd: 4 }));
   // Sessionless request: must not appear at all.
-  store.insertRequest(req({ sessionId: null, project: 'fiscus', tsEpochMs: 2500, costUsd: 8 }));
+  store.insertRequest(req({ sessionId: null, project: 'segreant', tsEpochMs: 2500, costUsd: 8 }));
   // Out-of-window activity: excluded.
-  store.insertRequest(req({ sessionId: 's3', project: 'fiscus', tsEpochMs: 99_000, costUsd: 16 }));
-  store.setProjectAlias('fiscus-ts', 'fiscus');
+  store.insertRequest(req({ sessionId: 's3', project: 'segreant', tsEpochMs: 99_000, costUsd: 16 }));
+  store.setProjectAlias('segreant-ts', 'segreant');
 
-  const rows = store.sessionsInWindow('fiscus', 0, 5000);
+  const rows = store.sessionsInWindow('segreant', 0, 5000);
   assert.equal(rows.length, 2);
   assert.equal(rows[0]!.sessionId, 's2'); // newest activity first
   assert.equal(rows[0]!.tool, 'unknown');
@@ -220,7 +220,7 @@ test('store.sessionsInWindow: real sessions only, newest activity first, tool fr
   assert.equal(rows[1]!.requestCount, 2);
   assert.equal(rows[1]!.costUsd, 3);
 
-  assert.deepEqual(store.getSessionMeta('s1'), { project: 'fiscus', tool: 'claude-code', startMs: 1000 });
+  assert.deepEqual(store.getSessionMeta('s1'), { project: 'segreant', tool: 'claude-code', startMs: 1000 });
   assert.equal(store.getSessionMeta('nope'), null);
   store.close();
 });

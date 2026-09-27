@@ -42,8 +42,8 @@ const options: OpeEvaluationOptions = {
 };
 
 test('Store-owned OPE observations are append-only, idempotent, and replayable', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-ope-'));
-  const dbPath = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-ope-'));
+  const dbPath = join(dir, 'segreant.db');
   try {
     const first = new Store(dbPath);
     assert.equal(first.recordOpeObservation(row('obs-1', 0.8)), 'created');
@@ -74,8 +74,8 @@ test('Store OPE replay fails closed when the retained observation digest is tamp
 });
 
 test('the causal OPE CLI is a bounded Store-backed product consumer', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-ope-cli-'));
-  const dbPath = join(dir, 'fiscus.db');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-ope-cli-'));
+  const dbPath = join(dir, 'segreant.db');
   const optionsPath = join(dir, 'ope-options.json');
   const root = fileURLToPath(new URL('..', import.meta.url));
   try {
@@ -84,9 +84,9 @@ test('the causal OPE CLI is a bounded Store-backed product consumer', () => {
     store.recordOpeObservation(row('obs-2', 0.2));
     store.close();
     writeFileSync(optionsPath, JSON.stringify(options));
-    const output = execFileSync(process.execPath, ['bin/fiscus.mjs', 'causal', 'ope', '--options', optionsPath, '--json'], {
+    const output = execFileSync(process.execPath, ['bin/segreant.mjs', 'causal', 'ope', '--options', optionsPath, '--json'], {
       cwd: root,
-      env: { ...process.env, FISCUS_HOME: dir },
+      env: { ...process.env, SEGREANT_HOME: dir },
       encoding: 'utf8',
     });
     const payload = JSON.parse(output) as { operation: string; evaluation: { estimate: number; sampleSize: number; nonClaims: string[] } };

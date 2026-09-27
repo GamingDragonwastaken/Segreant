@@ -1,5 +1,5 @@
 /**
- * `fiscus plugin run` — the operator face of the plugin host (D-234).
+ * `segreant plugin run` — the operator face of the plugin host (D-234).
  *
  * Runs one bounded exchange with a plugin process and previews the kernel
  * Evidence it would append; `--apply` appends it. The manifest and the
@@ -19,7 +19,7 @@ import type { Flags } from './flags.ts';
 import { C, color, printJson } from './ui.ts';
 
 function printUsage(): void {
-  console.log('  fiscus plugin run --manifest <file> --request <file> --exec <path> [--args "a b c"] [--cwd <dir>]');
+  console.log('  segreant plugin run --manifest <file> --request <file> --exec <path> [--args "a b c"] [--cwd <dir>]');
   console.log('                    --scope key=value[,key=value] [--grain dim,dim] [--sensitivity internal|confidential] [--apply] [--json]');
   console.log('  Preview is the default: nothing is written without --apply.');
 }

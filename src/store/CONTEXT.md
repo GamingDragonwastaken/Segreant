@@ -36,7 +36,7 @@ two domain callers goes in `rows.ts`.
 ## Consumes
 
 - `node:sqlite` `DatabaseSync` only. No ORM, no query builder, no runtime dependency.
-- `src/config.ts` for the home directory (`FISCUS_HOME` overrides it — every
+- `src/config.ts` for the home directory (`SEGREANT_HOME` overrides it — every
   test and every gate run uses an isolated home).
 
 ## Guarantees
@@ -134,7 +134,7 @@ two domain callers goes in `rows.ts`.
   source/effective bases remain in the result and provider settlement is never
   implied.
 - **Exact economic export is explicit.** `economicRequestsInRange()` and the
-  `fiscus export --economic` mode expose original/effective Money, bases,
+  `segreant export --economic` mode expose original/effective Money, bases,
   correction IDs and legacy coverage; `compatibilityCostUsd` is labelled as a
   presentation projection rather than accounting authority.
 - **Value attribution has an exact read seam.**

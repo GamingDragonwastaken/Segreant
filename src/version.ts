@@ -1,6 +1,6 @@
 /**
  * This package's version, read from package.json — the single source of truth.
- * Its own module so it can be shared by the CLI (`fiscus --version`) and the
+ * Its own module so it can be shared by the CLI (`segreant --version`) and the
  * dashboard (Settings view "version" field) without a circular import between
  * cli.ts and src/cli/runCmd.ts.
  */

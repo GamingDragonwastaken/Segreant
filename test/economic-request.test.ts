@@ -11,7 +11,7 @@ function request(overrides: Partial<RequestRow> = {}): RequestRow {
     tsEpochMs: Date.parse('2026-08-01T00:00:00.000Z'),
     provider: 'anthropic',
     model: 'claude-opus-4-8',
-    project: 'fiscus',
+    project: 'segreant',
     taskWeight: 1,
     inputTokens: 100,
     outputTokens: 20,

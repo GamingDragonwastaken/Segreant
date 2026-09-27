@@ -4,10 +4,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Isolate from any user-level rate-card override (~/.fiscus/pricing/models.json):
+// Isolate from any user-level rate-card override (~/.segreant/pricing/models.json):
 // these tests assert bundled-table pricing, and a developer's own `pricing --refresh`
 // must not change what they see. Each test file runs in its own process, so this is airtight.
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
 import { computeCost, rateFor } from '../src/cost/pricing.ts';
 import { formatMoneyAmount } from '../src/economics/money.ts';

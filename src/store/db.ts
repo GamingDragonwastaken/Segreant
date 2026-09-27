@@ -3,8 +3,8 @@
  *
  * The store has no native module or external database service dependency. A
  * packaged distribution still has a build step; this module persists the local
- * ledger under ~/.fiscus. Provider forwarding and optional outbound paths are
- * governed by the declared Fiscus-process egress boundary elsewhere.
+ * ledger under ~/.segreant. Provider forwarding and optional outbound paths are
+ * governed by the declared Segreant-process egress boundary elsewhere.
  *
  * Timestamps are stored twice: an ISO string for humans and an epoch-ms integer
  * for fast range/window queries. Day boundaries are computed in JS (local time)
@@ -28,7 +28,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
-import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
+import { addMoney, formatMoneyAmount, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
 import { serializeEconomicEvent } from '../economics/serialization.ts';
 import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
@@ -221,10 +221,10 @@ export interface RequestRow {
   streamed: boolean;
   statusCode: number | null;
   durationMs: number | null;
-  user?: string | null; // developer/team attribution (x-fiscus-user header); null = unassigned
-  source?: string | null; // connected tool/feed attribution (x-fiscus-source header); null = direct
+  user?: string | null; // developer/team attribution (x-segreant-user header); null = unassigned
+  source?: string | null; // connected tool/feed attribution (x-segreant-source header); null = direct
   cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
-  // link that lets Fiscus find the git repo behind a project and auto-correlate
+  // link that lets Segreant find the git repo behind a project and auto-correlate
   // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
   via?: 'proxy' | 'import'; // how the row entered the ledger: live proxy traffic
   // (blockable, marginal API cost) vs a native importer reading a tool's own logs
@@ -252,6 +252,22 @@ export interface ExactSpendProjection {
   requestCount: number;
   unresolvedRequests: number;
 }
+
+interface ExactSpendCacheEntry {
+  eventMark: { rowid: number; count: number };
+  requestMark: { rowid: number; count: number };
+  projection: ExactSpendProjection;
+  /** When the projection was last rebuilt from the whole window. */
+  fullAtMs: number;
+}
+
+/** Windows shorter than this are sliding (the runaway guard) and never cached. */
+const EXACT_SPEND_CACHE_MIN_WINDOW_MS = 60 * 60 * 1000;
+/** Rebuild from the whole window at least this often, so a cached figure is never older evidence than this. */
+const FULL_REPROJECT_MS = 10 * 60 * 1000;
+const EXACT_SPEND_CACHE_KEYS = 8;
+/** The only event kinds a request write appends (economics/request.ts requestKind). */
+const REQUEST_CHARGE_KINDS: ReadonlySet<string> = new Set(['charge_estimated', 'provider_charge_observed', 'bill_observed']);
 
 /**
  * One immutable pricing-evidence cohort in the local request ledger. A cohort
@@ -535,11 +551,38 @@ function presentKernelClaim(item: Claim, revokedIds: ReadonlySet<string>): Kerne
   });
 }
 
+/** An imported row whose request id is already recorded with a different charge. */
+export class RequestObservationConflictError extends Error {
+  readonly requestId: string;
+  constructor(requestId: string) {
+    super(`request ${requestId} is already recorded with a different charge`);
+    this.name = 'RequestObservationConflictError';
+    this.requestId = requestId;
+  }
+}
+
+function eventField(event: EconomicEvent, key: string): unknown {
+  const meta = event.metadata;
+  return meta !== null && typeof meta === 'object' && !Array.isArray(meta) ? (meta as Record<string, unknown>)[key] : undefined;
+}
+
+/** Same provider, model, instant and exact amount: one request observed twice. */
+function sameImportedCharge(a: EconomicEvent, b: EconomicEvent): boolean {
+  return (
+    a.kind === b.kind &&
+    a.occurredAt === b.occurredAt &&
+    JSON.stringify(a.amount && moneyToJson(a.amount)) === JSON.stringify(b.amount && moneyToJson(b.amount)) &&
+    eventField(a, 'provider') === eventField(b, 'provider') &&
+    eventField(a, 'model') === eventField(b, 'model')
+  );
+}
+
 export class Store {
   private db: DatabaseSync;
   private readonly databasePath: string;
   private epistemicLedger!: EpistemicLedger;
   private economicLedger!: EconomicLedger;
+  private readonly exactSpendCache = new Map<string, ExactSpendCacheEntry>();
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
@@ -782,6 +825,14 @@ export class Store {
             recordedAt: existing.recordedAt,
           });
           if (serializeEconomicEvent(existing).body !== serializeEconomicEvent(expected).body) {
+            // An imported feed can observe one provider request twice: resuming a
+            // Claude Code session copies earlier requests into the new transcript
+            // under the new session id. Same charge, model and instant is the same
+            // request seen again, so the first record stands. Anything else is a real
+            // conflict, raised as its own type so an importer can count and disclose
+            // it instead of aborting the whole import.
+            if (row.via === 'import' && sameImportedCharge(existing, expected)) return false;
+            if (row.via === 'import') throw new RequestObservationConflictError(row.requestId);
             throw new Error(`different economic event already exists for request ${row.requestId}`);
           }
         }
@@ -984,7 +1035,7 @@ export class Store {
 
   /**
    * Real sessions with request activity in a window, newest-activity first —
-   * what `fiscus judge` enumerates so it judges sessions that actually happened
+   * what `segreant judge` enumerates so it judges sessions that actually happened
    * (aliases folded into the project family, same as every other project read).
    * `tool` comes from the sessions table when the session was upserted by an
    * importer/proxy, else 'unknown' — never guessed from the request rows.
@@ -1075,6 +1126,7 @@ export class Store {
     startMs: number,
     endMs: number,
     liveOnly: boolean,
+    candidateEvents?: readonly EconomicEvent[],
   ): ExactSpendProjection {
     let amount = money('0', 'USD', 'effective');
     const eventIds: string[] = [];
@@ -1082,7 +1134,7 @@ export class Store {
     const requestIds = new Set(rows.map((row) => row.requestId));
     const rowById = new Map(rows.map((row) => [row.requestId, row]));
     const byRequest = new Map<string, EconomicEvent>();
-    for (const event of this.economicLedger.eventsInOccurrenceRange(startMs, endMs)) {
+    for (const event of candidateEvents ?? this.economicLedger.eventsInOccurrenceRange(startMs, endMs)) {
       if (economicEventRole(event.kind) !== 'charge' || event.amount === null) continue;
       const metadata = event.metadata;
       if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
@@ -1131,6 +1183,85 @@ export class Store {
 
   /** Exact charge projection for requests in [startMs, endMs). */
   exactSpendBetween(startMs: number, endMs: number, liveOnly = false): ExactSpendProjection {
+    // Long windows (the budget day) are asked for on every proxied request.
+    // Re-projecting the whole window each time made request N cost O(N); extend
+    // the last projection with what was appended since instead. Short sliding
+    // windows (the runaway guard) never repeat a key and stay on the full path.
+    if (endMs - startMs < EXACT_SPEND_CACHE_MIN_WINDOW_MS) return this.exactSpendBetweenFull(startMs, endMs, liveOnly);
+    const key = `${startMs}:${endMs}:${liveOnly ? 'live' : 'all'}`;
+    const now = Date.now();
+    const eventMark = this.economicLedger.appendMark();
+    const requestMark = this.requestAppendMark();
+    const cached = this.exactSpendCache.get(key);
+    if (cached !== undefined && now - cached.fullAtMs < FULL_REPROJECT_MS) {
+      if (cached.eventMark.rowid === eventMark.rowid && cached.eventMark.count === eventMark.count
+          && cached.requestMark.rowid === requestMark.rowid && cached.requestMark.count === requestMark.count) {
+        return cached.projection;
+      }
+      const extended = this.extendExactSpend(cached, startMs, endMs, liveOnly, eventMark, requestMark);
+      if (extended !== null) {
+        this.exactSpendCache.set(key, { ...cached, eventMark, requestMark, projection: extended });
+        return extended;
+      }
+    }
+    const projection = this.exactSpendBetweenFull(startMs, endMs, liveOnly);
+    if (this.exactSpendCache.size >= EXACT_SPEND_CACHE_KEYS) this.exactSpendCache.delete(this.exactSpendCache.keys().next().value!);
+    this.exactSpendCache.set(key, { eventMark, requestMark, projection, fullAtMs: now });
+    return projection;
+  }
+
+  private requestAppendMark(): { rowid: number; count: number } {
+    const row = this.db.prepare('SELECT COALESCE(MAX(rowid), 0) AS rowid, COUNT(*) AS count FROM requests').get() as { rowid: number; count: number };
+    return { rowid: Number(row.rowid), count: Number(row.count) };
+  }
+
+  /**
+   * Add the rows and charge events appended since `cached` to its projection,
+   * or return null when that would not equal a full re-projection: rows removed
+   * or renumbered, any appended event that is not a plain request charge (a
+   * price correction changes an earlier charge's effective amount), or a new
+   * charge that belongs to a request the cache already counted.
+   */
+  private extendExactSpend(
+    cached: ExactSpendCacheEntry,
+    startMs: number,
+    endMs: number,
+    liveOnly: boolean,
+    eventMark: { rowid: number; count: number },
+    requestMark: { rowid: number; count: number },
+  ): ExactSpendProjection | null {
+    const appendedEvents = this.economicLedger.appendedAfter(cached.eventMark.rowid);
+    if (eventMark.count - cached.eventMark.count !== appendedEvents.count) return null;
+    if (!appendedEvents.kinds.every((kind) => REQUEST_CHARGE_KINDS.has(kind))) return null;
+    const appendedIds = this.db.prepare('SELECT request_id AS requestId FROM requests WHERE rowid > ?')
+      .all(cached.requestMark.rowid) as Array<{ requestId: string }>;
+    if (requestMark.count - cached.requestMark.count !== appendedIds.length) return null;
+    const newRequestIds = new Set(appendedIds.map((row) => row.requestId));
+    const events = this.economicLedger.eventsAppendedAfterInOccurrenceRange(cached.eventMark.rowid, startMs, endMs);
+    for (const event of events) {
+      const metadata = event.metadata;
+      const requestId = metadata !== null && typeof metadata === 'object' && !Array.isArray(metadata)
+        ? (metadata as Record<string, unknown>).requestId
+        : undefined;
+      if (typeof requestId !== 'string' || !newRequestIds.has(requestId)) return null;
+    }
+    const rows = this.db.prepare(
+      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+         FROM requests WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+         ORDER BY ts_epoch_ms ASC, request_id ASC`,
+    ).all(cached.requestMark.rowid, startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    const delta = this.exactSpendFromRows(rows, startMs, endMs, liveOnly, events);
+    const sourceBases = new Set<EconomicBasis>([...cached.projection.sourceBases, ...delta.sourceBases]);
+    return Object.freeze({
+      amount: addMoney(cached.projection.amount, delta.amount),
+      eventIds: Object.freeze([...cached.projection.eventIds, ...delta.eventIds].sort()),
+      sourceBases: Object.freeze([...sourceBases].sort()),
+      requestCount: cached.projection.requestCount + delta.requestCount,
+      unresolvedRequests: cached.projection.unresolvedRequests + delta.unresolvedRequests,
+    });
+  }
+
+  private exactSpendBetweenFull(startMs: number, endMs: number, liveOnly: boolean): ExactSpendProjection {
     const rows = this.db.prepare(
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
@@ -1271,7 +1402,7 @@ export class Store {
   /**
    * Does the ledger hold ANY spend tagged with this exact project key? It separates
    * data that IS characterized by project (native imports, or proxy traffic tagged
-   * with x-fiscus-project) from untagged 'default' proxy traffic. Attribution uses it
+   * with x-segreant-project) from untagged 'default' proxy traffic. Attribution uses it
    * to decide whether scoping a commit's window to its project is meaningful — so a
    * project-blind store keeps its original window-wide behavior, no regression.
    */
@@ -1284,8 +1415,8 @@ export class Store {
   }
 
   // ---- Project aliasing ------------------------------------------------------
-  // Tool launch cwds fragment one real project across labels ("fiscus" vs
-  // "fiscus-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
+  // Tool launch cwds fragment one real project across labels ("segreant" vs
+  // "segreant-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
   // time; raw ledger rows are never rewritten, so the underlying record stays
   // honest and an alias can be removed without loss. The mapping is kept FLAT
   // (an alias always points at a real canonical, never at another alias).
@@ -1352,7 +1483,7 @@ export class Store {
    * The interconnectedness map: for each project the ledger has a working directory
    * for, its REPRESENTATIVE cwd (the path most requests came from — a project's dir
    * is stable, so the mode is robust to the odd one-off subdir), the TOOLS (sources)
-   * that produced its spend, and its cost/requests. This is what lets Fiscus find
+   * that produced its spend, and its cost/requests. This is what lets Segreant find
    * the git repo behind a project AND say which AI tool coded it — repo↔project↔tool,
    * the thing that makes native per-project RoI possible with no --repo and no wiring.
    * Only rows carrying a cwd participate (imports set it; untagged proxy traffic is
@@ -1500,7 +1631,7 @@ export class Store {
       .all(startMs, endMs) as unknown as SpendBucket[];
   }
 
-  /** Spend grouped by developer/team (x-fiscus-user); null is reported as 'unassigned'. */
+  /** Spend grouped by developer/team (x-segreant-user); null is reported as 'unassigned'. */
   byUser(startMs: number, endMs: number): SpendBucket[] {
     return this.db
       .prepare(
@@ -1514,9 +1645,9 @@ export class Store {
   }
 
   /**
-   * Spend grouped by connected source/feed (x-fiscus-source); null reads as
-   * 'direct'. A source is one AI tool deliberately routed through Fiscus — the
-   * unit the product meters. The tag is set by `fiscus connect <tool>` and
+   * Spend grouped by connected source/feed (x-segreant-source); null reads as
+   * 'direct'. A source is one AI tool deliberately routed through Segreant — the
+   * unit the product meters. The tag is set by `segreant connect <tool>` and
    * stripped before the request leaves the machine, so the provider never sees it.
    */
   bySource(startMs: number, endMs: number): SpendBucket[] {
@@ -1951,7 +2082,7 @@ export class Store {
   }
 
   /**
-   * NON-CODING sessions with their attributed user (the x-fiscus-user tag) and
+   * NON-CODING sessions with their attributed user (the x-segreant-user tag) and
    * cost, for per-user value. Scoped to sessions WITHOUT code proposals, because
    * only those have outcomes we can honestly attribute to a user: their outcome
    * is reported against the session (which carries the user tag). Coding value is
@@ -3052,10 +3183,10 @@ export class Store {
    * Privacy control: delete every stored proposal immediately, regardless of age.
    *
    * RECORDED, like every other deletion (D-179). This is the most total erasure
-   * Fiscus offers, and until it was recorded it was the one erasure no consumer
+   * Segreant offers, and until it was recorded it was the one erasure no consumer
    * could see: `retentionFloor()` reported "no prune on record" for a ledger
    * whose proposals had all been deleted, so the Acceptance lens told operators
-   * their proposals were never captured after Fiscus captured and deleted them.
+   * their proposals were never captured after Segreant captured and deleted them.
    *
    * The boundary written is NOW, because that is what was deleted -- everything
    * up to this moment. It is written ONLY when a row actually went: the boundary
@@ -3080,7 +3211,7 @@ export class Store {
 
   /**
    * Which provider(s)/model(s) have routed traffic through the proxy recently — the
-   * dashboard Settings page's "connection status". Never a literal API key; Fiscus
+   * dashboard Settings page's "connection status". Never a literal API key; Segreant
    * never sees one (src/proxy/server.ts only forwards per-request headers).
    */
   recentProviderConnections(sinceMs: number): ProviderConnection[] {

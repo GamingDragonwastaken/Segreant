@@ -11,14 +11,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = resolve(ROOT, 'scripts', 'benchmark.mjs');
 
 test('benchmark harness emits a finite, isolated observation contract', () => {
-  const sentinelHome = mkdtempSync(resolve(tmpdir(), 'fiscus-benchmark-sentinel-'));
+  const sentinelHome = mkdtempSync(resolve(tmpdir(), 'segreant-benchmark-sentinel-'));
   const sentinel = resolve(sentinelHome, 'pricing', 'models.json');
-  const env: NodeJS.ProcessEnv = { ...process.env, FISCUS_HOME: sentinelHome };
+  const env: NodeJS.ProcessEnv = { ...process.env, SEGREANT_HOME: sentinelHome };
   mkdirSync(resolve(sentinelHome, 'pricing'), { recursive: true });
   writeFileSync(sentinel, 'sentinel pricing cache that the benchmark must not consult', 'utf8');
   const before = createHash('sha256').update(readFileSync(sentinel)).digest('hex');
-  delete env.FISCUS_DB;
-  delete env.FISCUS_DEMO;
+  delete env.SEGREANT_DB;
+  delete env.SEGREANT_DEMO;
   let output = '';
   try {
     output = execFileSync(
@@ -28,10 +28,10 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
     );
   } finally {
     const after = createHash('sha256').update(readFileSync(sentinel)).digest('hex');
-    assert.equal(after, before, 'caller Fiscus home sentinel must remain untouched');
+    assert.equal(after, before, 'caller Segreant home sentinel must remain untouched');
     const source = readFileSync(SCRIPT, 'utf8');
     assert.match(source, /mkdtempSync/);
-    assert.match(source, /process\.env\.FISCUS_HOME\s*=/);
+    assert.match(source, /process\.env\.SEGREANT_HOME\s*=/);
     rmSync(sentinelHome, { recursive: true, force: true });
   }
   const report = JSON.parse(output) as {
@@ -70,7 +70,7 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
           missingDependencyRefused: number;
         };
         revocationClosure?: { requestedPairs: number; nodesRevoked: number; claimsRevoked: number; traceEntries: number };
-        fiscuspackRoundTrip?: { included: number; omitted: number; redacted: number; envelopeBytes: number };
+        segreantpackRoundTrip?: { included: number; omitted: number; redacted: number; envelopeBytes: number };
         exactProjection?: { rows: number; requestCount: number; unresolvedRequests: number; complete: boolean; amountText: string };
         allocationRun?: { rows: number; costCentres: number; lines: number; totalMicros: number; allocatedMicros: number; unallocatedMicros: number; conserves: boolean };
         dashboardContractWalk?: { typeName: string; fields: number; problems: number; firstProblem: string | null };
@@ -117,10 +117,10 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(persistenceQuality.idempotentDuplicatesIgnored, 1);
   assert.equal(persistenceQuality.divergentRefused, 1);
   assert.equal(persistenceQuality.missingDependencyRefused, 1);
-  // D-238: revocation closure and .fiscuspack round-trip are observed, and each
+  // D-238: revocation closure and .segreantpack round-trip are observed, and each
   // observation is backed by a quality block the script computed from the same
   // ledger, so a timing over an empty or half-built graph cannot pass.
-  for (const key of ['revocationClosure', 'fiscuspackRoundTrip'] as const) {
+  for (const key of ['revocationClosure', 'segreantpackRoundTrip'] as const) {
     assert.ok(Object.hasOwn(report.cases[0]?.observations ?? {}, key), `the benchmark must observe ${key}`);
   }
   const revocation = report.cases[0]?.quality?.revocationClosure;
@@ -128,8 +128,8 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(revocation.requestedPairs, 25);
   assert.equal(revocation.claimsRevoked, 25, 'revoking the shared root must reach every claim');
   assert.equal(revocation.nodesRevoked, 27, 'root, one leaf, every claim — and no other leaf');
-  const pack = report.cases[0]?.quality?.fiscuspackRoundTrip;
-  assert.ok(pack, 'the benchmark must publish .fiscuspack round-trip quality checks');
+  const pack = report.cases[0]?.quality?.segreantpackRoundTrip;
+  assert.ok(pack, 'the benchmark must publish .segreantpack round-trip quality checks');
   assert.equal(pack.included, 51, 'the whole revocation graph is packed');
   assert.equal(pack.omitted, 0);
   assert.ok(pack.envelopeBytes > 0);

@@ -38,7 +38,7 @@ adapts from that answer. The CLI does not need to adapt.
 
 ## Product Purpose
 
-Fiscus is a local-first financial control, cost-accounting, and evidence-of-value
+Segreant is a local-first financial control, cost-accounting, and evidence-of-value
 layer for AI usage — an **AI Financial Operations** layer. It meters configured
 proxy traffic and selected local tool logs, applies local budget controls,
 allocates cost to cost centres, reconciles against provider billing where the
@@ -55,13 +55,13 @@ in a way that hard-codes the coding-agent case as the only one.
 
 ## Positioning
 
-The central accounting distinction, which competitors collapse and Fiscus keeps
+The central accounting distinction, which competitors collapse and Segreant keeps
 separate at every layer:
 
 > `metered usage != provider-billed cost != allocated cost != realized business value`
 
 Each of those is a different truth with a different evidence standard, and
-Fiscus refuses to present one as another. Anything derived carries the basis it
+Segreant refuses to present one as another. Anything derived carries the basis it
 was derived from. Where evidence does not support a claim, the product withholds
 the claim and says why — including when that makes it look weaker.
 
@@ -75,7 +75,7 @@ inspectable through evidence.
 The ledger, proxy, GUI, and API run on the operator's machine by default. A
 local proxy (`:8090`) meters traffic; a SQLite ledger stores it; and the GUI/API
 serve on `:8091`. Provider forwarding and other outbound paths remain explicit
-Fiscus-process egress decisions under `docs/DATA-BOUNDARIES.md`; direct clients,
+Segreant-process egress decisions under `docs/DATA-BOUNDARIES.md`; direct clients,
 other processes, operating-system policy, and provider retention are outside
 that boundary. An optional team server exists and is separately gated — it is
 **not** approved for internet-facing deployment.
@@ -88,9 +88,9 @@ carrying the declared scope — a real ledger on the owner's machine holds $832 
 imported OpenAI spend that therefore cannot reconcile, and the product says so
 before the operator goes and mints a credential.
 
-Fiscus itself has no hosted telemetry by default. Proxy requests still travel to
+Segreant itself has no hosted telemetry by default. Proxy requests still travel to
 whichever AI provider the operator configured when that provider route is
-enabled, and the declared egress mode/rule records the Fiscus-process decision.
+enabled, and the declared egress mode/rule records the Segreant-process decision.
 
 ## Capabilities and Constraints
 
@@ -119,7 +119,7 @@ enabled, and the declared egress mode/rule records the Fiscus-process decision.
 
 ## Brand Commitments
 
-Name: **Fiscus**. Voice is precise, plain, and unhedged; it states limits in the
+Name: **Segreant**. Voice is precise, plain, and unhedged; it states limits in the
 same breath as results. It never inflates a claim the evidence does not carry,
 and it does not apologize for withholding one. Existing brand assets ("Minted
 Seal" set) are in the repository.
@@ -128,7 +128,7 @@ Seal" set) are in the repository.
 
 - A real local ledger: 18,422 requests / $1,574.42, of which $832.33 across
   9,499 requests is OpenAI arriving by native import.
-- A labelled demo seed (`fiscus demo`) depicting five acquisition routes, which
+- A labelled demo seed (`segreant demo`) depicting five acquisition routes, which
   self-identifies as demo in every payload.
 - `docs/RELEASE-GATE.md` — commit-bound gate records with real artifact digests
   and observed CI runs.
@@ -145,7 +145,7 @@ Seal" set) are in the repository.
    from, it does not ship.
 3. **Withhold rather than inflate.** Say what is missing, in the same place the
    result appears — before the user spends effort or permission on it.
-4. **The Fiscus process has a declared egress boundary.** Local-first storage
+4. **The Segreant process has a declared egress boundary.** Local-first storage
    and UI are the default; provider forwarding and other outbound paths require
    an explicit configured route and remain distinct from machine-wide firewall,
    direct-client, and provider-retention guarantees.

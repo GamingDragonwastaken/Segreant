@@ -79,7 +79,7 @@ test('database integrity inspection rejects a direct-write foreign-key violation
 });
 
 test('Store reload fails closed when an epistemic append-only trigger is deleted', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-integrity-epistemic-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-integrity-epistemic-'));
   const dbPath = join(dir, 'ledger.sqlite');
   let seeded: Store | null = null;
   try {
@@ -96,7 +96,7 @@ test('Store reload fails closed when an epistemic append-only trigger is deleted
 });
 
 test('backup refuses to publish a snapshot after an append-only trigger is deleted', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-integrity-backup-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-integrity-backup-'));
   const dbPath = join(dir, 'ledger.sqlite');
   const backupPath = join(dir, 'backup.sqlite');
   let seeded: Store | null = null;
@@ -114,7 +114,7 @@ test('backup refuses to publish a snapshot after an append-only trigger is delet
 });
 
 test('Store reload fails closed when an economic append-only trigger is deleted', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-integrity-economic-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-integrity-economic-'));
   const dbPath = join(dir, 'ledger.sqlite');
   let seeded: Store | null = null;
   try {
@@ -131,7 +131,7 @@ test('Store reload fails closed when an economic append-only trigger is deleted'
 });
 
 test('Store reload fails closed before repairing a deleted economic source-link trigger', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-integrity-source-links-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-integrity-source-links-'));
   const dbPath = join(dir, 'ledger.sqlite');
   let seeded: Store | null = null;
   try {
@@ -148,7 +148,7 @@ test('Store reload fails closed before repairing a deleted economic source-link 
 });
 
 test('Store reload fails closed before operating with a tampered economic source-link trigger', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fiscus-integrity-source-links-tampered-'));
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-integrity-source-links-tampered-'));
   const dbPath = join(dir, 'ledger.sqlite');
   let seeded: Store | null = null;
   try {

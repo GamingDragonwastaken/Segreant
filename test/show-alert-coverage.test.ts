@@ -1,5 +1,5 @@
 /**
- * `fiscus today` printed nothing about alerts on a fresh install (WP-D06).
+ * `segreant today` printed nothing about alerts on a fresh install (WP-D06).
  *
  * THE DEFECT. `cmdShow` called `computeAlerts` and printed a line only when
  * the array was non-empty. On the default install every one of the six
@@ -7,16 +7,16 @@
  * uninstrumented, there is no spend to price — so the array is empty and the
  * surface said nothing. Silence next to a spend figure reads as "nothing
  * fired", which is a negative claim made on the strength of no evidence: the
- * same collapse D-141 removed from `fiscus ops` (`alerts-coverage.test.ts`),
+ * same collapse D-141 removed from `segreant ops` (`alerts-coverage.test.ts`),
  * left in place on the surface an operator actually types first.
  *
  * THE REPAIR IS WIRING, NOT A NEW DETECTOR. `computeAlertCoverage` already
- * exists, is already what `fiscus ops` and the dashboard read, and already
+ * exists, is already what `segreant ops` and the dashboard read, and already
  * carries a `darkBecause` sentence per channel naming the setting that would
  * light it. `show` now reads the same producer and prints the same reasons, so
  * the three surfaces cannot disagree about what was watching.
  *
- * WHAT THE FIXTURE IS. An empty `FISCUS_HOME`: no config, no ledger rows. That
+ * WHAT THE FIXTURE IS. An empty `SEGREANT_HOME`: no config, no ledger rows. That
  * is the counterexample, not a contrived one — it is the install every new
  * operator has for the first hour.
  */
@@ -40,7 +40,7 @@ function runCli(args: string[], home: string): Promise<{ code: number; stdout: s
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, FISCUS_HOME: home, FISCUS_DB: join(home, 'fiscus.db'), NODE_OPTIONS: '' } },
+      { env: { ...process.env, SEGREANT_HOME: home, SEGREANT_DB: join(home, 'segreant.db'), NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? ((err as unknown as { code: number }).code)
@@ -51,8 +51,8 @@ function runCli(args: string[], home: string): Promise<{ code: number; stdout: s
   });
 }
 
-test('fiscus today states alert coverage and names why each dark channel cannot fire', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-show-coverage-'));
+test('segreant today states alert coverage and names why each dark channel cannot fire', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-show-coverage-'));
   try {
     const { code, stdout, stderr } = await runCli(['today'], home);
     assert.equal(code, 0, stderr);
@@ -76,7 +76,7 @@ test('fiscus today states alert coverage and names why each dark channel cannot 
 });
 
 test('--json carries the same coverage object the text surface renders', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-show-coverage-json-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-show-coverage-json-'));
   try {
     const { code, stdout, stderr } = await runCli(['today', '--json'], home);
     assert.equal(code, 0, stderr);
@@ -101,7 +101,7 @@ test('--json carries the same coverage object the text surface renders', async (
 test('week and month do not print coverage they did not compute', async () => {
   // Coverage is read for `today` only, matching where alerts were read. A
   // window that did not evaluate the channels must not claim to have.
-  const home = mkdtempSync(join(tmpdir(), 'fiscus-show-coverage-week-'));
+  const home = mkdtempSync(join(tmpdir(), 'segreant-show-coverage-week-'));
   try {
     const { code, stdout } = await runCli(['week'], home);
     assert.equal(code, 0);
@@ -111,7 +111,7 @@ test('week and month do not print coverage they did not compute', async () => {
   }
 });
 
-test('fiscus show reads coverage from the producer, not a private verdict', async () => {
+test('segreant show reads coverage from the producer, not a private verdict', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(join(import.meta.dirname, '..', 'src', 'cli', 'showCmd.ts'), 'utf8');
   assert.match(source, /computeAlertCoverage/, 'the surface states coverage rather than composing its own verdict');

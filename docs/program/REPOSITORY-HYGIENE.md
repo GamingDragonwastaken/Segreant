@@ -27,7 +27,7 @@ SHA.
 | `gpt56/final-reconciliation` | `0ef5670` | ancestor | 0 | 0 | safe to delete |
 | `gpt56/post-merge-cleanup` | `924ed5a` | ancestor | 0 | 0 | safe to delete |
 | `luna-next/wp-d04` | `c3b8f19` | divergent | 1 | 0 | safe to delete (content already on `main`) |
-| `codex/fiscus-local-working-tree-snapshot-2026-08-29` | `bceaedb` | divergent | 1 | 0 | safe to delete (content already on `main`) |
+| `codex/segreant-local-working-tree-snapshot-2026-08-29` | `bceaedb` | divergent | 1 | 0 | safe to delete (content already on `main`) |
 | `luna-next/wp-h03` | `2941e04` | divergent | 3 | 3 | archive, then delete |
 | `luna-next/wp-f06` | `d08df8f` | divergent | 1 | 1 | archive, then delete |
 | `gpt56/sol-magnum-opus-integration` | `111556a` | divergent | 6 | 4 | archive, then delete |
@@ -75,7 +75,7 @@ Run from a full clone. This pushes eleven tags, then deletes eleven branches:
 git fetch --unshallow origin 2>/dev/null; git fetch origin --prune
 BRANCHES="codex/high-assurance-foundation gpt56/magnum-opus-reconstruction
 gpt56/final-reconciliation gpt56/post-merge-cleanup luna-next/wp-d04
-codex/fiscus-local-working-tree-snapshot-2026-08-29 luna-next/wp-h03
+codex/segreant-local-working-tree-snapshot-2026-08-29 luna-next/wp-h03
 luna-next/wp-f06 gpt56/sol-magnum-opus-integration
 research/economic-control-foundation agent/truth-closure"
 for b in $BRANCHES; do git tag "archive/$b" "origin/$b"; done
