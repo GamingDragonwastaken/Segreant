@@ -2047,6 +2047,17 @@ export class Store {
     return rows;
   }
 
+  /** Append-only, operator-reported non-code evidence. The detail is validated by
+   * the value module before insertion and again when it is read. */
+  selfReportedOutcomeSignals(startMs: number, endMs: number): GateSignalRow[] {
+    return this.db.prepare(
+      `SELECT signal_id AS signalId, kind, commit_hash AS commitHash, project,
+              ts_epoch_ms AS tsEpochMs, verdict, detail, evidence_source AS evidenceSource
+       FROM gate_signals WHERE kind = 'self_reported_outcome'
+         AND ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms, signal_id`,
+    ).all(startMs, endMs) as unknown as GateSignalRow[];
+  }
+
   /** Project-wide signals not tied to a specific commit, within a window. */
   signalsInWindow(project: string, startMs: number, endMs: number): GateSignalRow[] {
     const fam = this.familyFilter('project', project);

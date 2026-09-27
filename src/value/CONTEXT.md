@@ -24,6 +24,11 @@
   not value of information. `localDataWeight` is the empirical-Bayes mixing
   weight on a cell's own data, not a confidence level, and shrinkage here carries
   no dominance theorem.
+- Self-reported outcomes for chat, image and other work (`selfReported.ts`)
+  carry the self-reported basis on every unit and cell, keep inferred spend
+  links labelled inferred, withhold cost per accepted/used result when any
+  result in a cell lacks matched spend, and never combine with git-verified
+  coding outcomes into one number. The ladder is `docs/THE-STANDARD.md` §9.
 - Named `confounders` (unit-size gap, non-overlapping periods, session
   clustering, mixed pricing bases, spanned card revision) **cap** the result
   regardless of the statistics, and are surfaced in the CLI and the GUI.

@@ -25,6 +25,7 @@ import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
 import { timeWithAiMinutes } from './lift.ts';
 import type { Gate } from './gates.ts';
 import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
+import type { ReportedSignal, WorkKind } from './selfReported.ts';
 
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
@@ -59,6 +60,75 @@ export const NON_CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
   contract: NON_CODING_OUTCOME_CONTRACT,
   resolve: (_predicate: string, unit: WorkUnit) => sessionState(sessionSignalsFromUnit(unit)),
 });
+
+const REPORTED_LADDER = ['produced', 'reviewed', 'accepted', 'used', 'still_in_use'] as const;
+export type ReportedStage = (typeof REPORTED_LADDER)[number];
+export type ReportedVerdict = 'pass' | 'fail' | 'unknown';
+
+/** The new self-reporting path remains an adapter of the existing WorkUnit,
+ * with one predicate per stage. A missing assertion stays unknown. */
+export const SELF_REPORTED_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
+  id: 'non-coding-self-reported-v1',
+  contract: Object.freeze({ id: 'non_coding_self_reported_ladder', requiredPredicates: REPORTED_LADDER }),
+  resolve: (predicate: string, unit: WorkUnit): EpistemicState => {
+    const signals = unit.context.signals as readonly ReportedSignal[] | undefined;
+    const latest = (type: ReportedSignal['type']): ReportedSignal | undefined =>
+      [...(signals ?? [])].reverse().find((signal) => signal.type === type);
+    if (predicate === 'produced') return 'supported';
+    if (predicate === 'reviewed') return latest('rating') || latest('decision') ? 'supported' : 'unknown';
+    if (predicate === 'accepted') {
+      const signal = latest('decision');
+      if (!signal || signal.type !== 'decision') return 'unknown';
+      return signal.value === 'rejected' ? 'refuted' : 'supported';
+    }
+    if (predicate === 'used') {
+      const signal = latest('use');
+      if (!signal || signal.type !== 'use') return 'unknown';
+      return signal.value === 'not_used' ? 'refuted' : 'supported';
+    }
+    if (predicate === 'still_in_use') {
+      const signal = latest('still_in_use');
+      if (!signal || signal.type !== 'still_in_use') return 'unknown';
+      return signal.value ? 'supported' : 'refuted';
+    }
+    return 'unknown';
+  },
+});
+
+export interface ReportedLadder {
+  readonly produced: ReportedVerdict;
+  readonly reviewed: ReportedVerdict;
+  readonly accepted: ReportedVerdict;
+  readonly used: ReportedVerdict;
+  readonly stillInUse: ReportedVerdict;
+  readonly adapterId: string;
+  readonly basis: 'self-reported';
+}
+
+export function evaluateReportedLadder(outcomeId: string, kind: WorkKind, signals: readonly ReportedSignal[]): ReportedLadder {
+  const firstAt = signals[0]?.observedAtMs ?? 0;
+  const lastAt = signals.at(-1)?.observedAtMs ?? firstAt;
+  const unit = createWorkUnit({
+    id: outcomeId,
+    kind,
+    startedAtMs: firstAt,
+    endedAtMs: lastAt,
+    context: { signals },
+  });
+  const adapted = adaptOutcome(unit, SELF_REPORTED_OUTCOME_ADAPTER);
+  const verdict = (stage: ReportedStage): ReportedVerdict =>
+    adapted.evaluation.supportedPredicates.includes(stage) ? 'pass'
+      : adapted.evaluation.refutedPredicates.includes(stage) ? 'fail' : 'unknown';
+  return {
+    produced: verdict('produced'),
+    reviewed: verdict('reviewed'),
+    accepted: verdict('accepted'),
+    used: verdict('used'),
+    stillInUse: verdict('still_in_use'),
+    adapterId: adapted.adapterId,
+    basis: 'self-reported',
+  };
+}
 
 /** How far a reported non-coding outcome reached — the Impact ladder, non-coding side. */
 export type Reach = 'shipped' | 'merged' | 'kept';

@@ -69,6 +69,7 @@ import { recommendBudget, type BudgetRecommendation } from '../budget/recommend.
 import { economicAttributionFromRows, type EconomicAttribution } from '../economics/attribution.ts';
 import { claimProfile } from '../epistemic/profile.ts';
 import type { DecisionAssuranceInput } from '../decision/assurance.ts';
+import { selfReportedValueReport, type ReportedValueReport } from './selfReported.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -420,6 +421,8 @@ export interface ValueReportOptions extends ValueSpineOptions {
   nowMs?: number;
   /** The spend/usage/cohort window, in days. */
   spendWindowDays?: number;
+  /** Integration point for the future features config section. */
+  selfReportedOutcomesEnabled?: boolean;
 }
 
 /**
@@ -441,6 +444,7 @@ export interface ValueReport {
   /** Per-project value, scored against the SAME Lift options as the headline. */
   projects: ProjectValue[] | null;
   usage: UsageReport;
+  selfReported: ReportedValueReport;
   team: CohortReport;
   budget: BudgetAdvice;
 }
@@ -459,6 +463,7 @@ export async function valueReport(
   const spendWindowDays = opts.spendWindowDays ?? DEFAULT_SPEND_WINDOW_DAYS;
 
   const usage = usageValue(store, config, { windowDays: spendWindowDays, nowMs: now });
+  const selfReported = selfReportedValueReport(store, now - spendWindowDays * DAY_MS, now + 1000, opts.selfReportedOutcomesEnabled ?? true);
 
   // Per-user VALUE — distribution only, gated by opt-in + k-anonymity. When
   // disabled/suppressed this carries no per-user data (suppressed:true), so a
@@ -485,5 +490,5 @@ export async function valueReport(
     frontier: spine?.frontier.byModelAndTask ?? [],
   });
 
-  return { generatedAtMs: now, demo: isDemo(), repo: opts.repo, spine, projects, usage, team, budget };
+  return { generatedAtMs: now, demo: isDemo(), repo: opts.repo, spine, projects, usage, selfReported, team, budget };
 }

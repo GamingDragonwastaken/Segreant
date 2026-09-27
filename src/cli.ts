@@ -34,6 +34,7 @@ import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 import { cmdPack } from './cli/packCmd.ts';
 import { cmdPlugin } from './cli/pluginCmd.ts';
 import { cmdEconomic } from './cli/economicCmd.ts';
+import { cmdOutcome } from './cli/outcomeCmd.ts';
 import { cmdBudgetControl } from './cli/controlCmd.ts';
 
 function cmdHelp(): void {
@@ -113,6 +114,11 @@ function cmdHelp(): void {
     usage                 RoI for usage WITHOUT code signals — chat, research,
                           drafting, plus coding tools that don't report diffs.
                           Sessions scored from reported outcomes (--days N, --json)
+    outcome record        Preview a self-reported chat, image or other result;
+                          --apply records it. Link with --request ID, --session ID,
+                          or --from ISO --to ISO --tool NAME (inferred).
+    outcome report        Cost per accepted and used self-reported result by kind
+                          and model (--days N, --json).
     judge                 Score a real session's AI-assisted efficiency —
                           algorithmic by default; opt into a local/hosted LLM
                           judge via config.judge.*. Full-content tiers read a
@@ -353,6 +359,9 @@ async function main(): Promise<void> {
       break;
     case 'usage':
       await cmdUsage(flags);
+      break;
+    case 'outcome':
+      cmdOutcome(flags);
       break;
     case 'judge':
       await cmdJudge(flags);

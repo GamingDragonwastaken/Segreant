@@ -167,6 +167,11 @@ export const CAPABILITIES: readonly Capability[] = [
   // ---- Value --------------------------------------------------------------
   { id: 'roi', label: 'Return on Intelligence', plain: 'What the spend produced, with the limits stated.', territory: 'value', consequence: 'read', coverage: 'full', command: 'segreant roi' },
   {
+    id: 'outcome', label: 'Report a result', plain: 'Rate a chat, image or other result and record what happened to it.',
+    territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant outcome record --apply',
+    guiEvidence: { file: 'views/value.ts', token: 'selfReportedCard(d.selfReported, refresh)', note: 'the Value view previews and applies self-reported results; the CLI also prints model and kind breakdowns' },
+  },
+  {
     id: 'causal', label: 'Causal studies', plain: 'Registered randomized evidence and its qualification gates.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant causal status',
     guiEvidence: { file: 'views/value.ts', token: 'api.causal()', note: 'the Value view reads causal status; registration and gates stay on the CLI' },
   },
@@ -300,7 +305,7 @@ const API_BINDINGS: Readonly<Record<string, readonly string[]>> = Object.freeze(
   budget: ['/api/settings/update'], 'budget-recommend': ['/api/value'], alerts: ['/api/overview'], project: ['/api/overview'], 'project-alias': ['/api/settings/update'],
   'alloc-centres': ['/api/allocation'], 'alloc-rules': ['/api/allocation'], 'alloc-run': ['/api/allocation'], 'billing-scope': ['/api/billing'],
   'billing-readiness': ['/api/billing'], 'billing-adopt': ['/api/billing'], 'billing-pull': ['/api/billing'], 'billing-reconcile': ['/api/billing'], receipt: ['/api/value'], evidence: ['/api/billing'], audit: ['/api/billing'],
-  roi: ['/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
+  roi: ['/api/value'], outcome: ['/api/outcome/record', '/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
   sources: ['/api/overview'], discover: ['/api/importers'], connect: ['/api/importers'], import: ['/api/import'], scan: ['/api/scan'], baseline: ['/api/value'], demo: ['/api/overview'],
   economic: ['/api/economic'],
   egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],

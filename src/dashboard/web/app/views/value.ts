@@ -22,7 +22,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
-import { api, type CausalPayload, type ValuePayload } from '../core/api.ts';
+import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -52,6 +52,99 @@ const STOPPED_AFTER: Record<string, string> = {
 };
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
+
+/** Operator reports have their own basis and never feed the git realization card. */
+function selfReportedCard(report: ValuePayload['selfReported'], refresh: () => void): Node {
+  const outcomeId = signal('');
+  const kind = signal('chat');
+  const linkType = signal('session');
+  const linkId = signal('');
+  const from = signal('');
+  const to = signal('');
+  const tool = signal('');
+  const rating = signal('');
+  const note = signal('');
+  const decision = signal('');
+  const use = signal('');
+  const attempts = signal('');
+  const regenerated = signal('');
+  const stillInUse = signal('');
+  const preview = signal<OutcomeRecordPayload | null>(null);
+  const error = signal<string | null>(null);
+  const busy = signal(false);
+  const field = (label: string, value: typeof outcomeId, placeholder = ''): Node =>
+    h('label', { class: 'drawer-field' },
+      h('span', { text: label }),
+      h('input', { class: 'drawer-input', type: 'text', value: () => value(), placeholder,
+        oninput: (event: Event) => { value.set((event.target as HTMLInputElement).value); preview.set(null); } }));
+  const choice = (label: string, value: typeof kind, options: Array<[string, string]>): Node =>
+    h('label', { class: 'drawer-field' }, h('span', { text: label }),
+      h('select', { class: 'drawer-input', value: () => value(),
+        onchange: (event: Event) => { value.set((event.target as HTMLSelectElement).value); preview.set(null); } },
+        ...options.map(([key, text]) => h('option', { value: key, text }))));
+  const submit = async (apply: boolean): Promise<void> => {
+    busy.set(true);
+    error.set(null);
+    try {
+      const link = linkType() === 'window'
+        ? { type: 'window', basis: 'inferred', fromMs: Date.parse(from()), toMs: Date.parse(to()), tool: tool().trim() }
+        : linkType() === 'request'
+          ? { type: 'request', basis: 'recorded', requestId: linkId().trim() }
+          : { type: 'session', basis: 'recorded', sessionId: linkId().trim() };
+      const input: Record<string, unknown> = { outcomeId: outcomeId().trim(), kind: kind(), link };
+      if (rating()) input.rating = Number(rating());
+      if (note()) input.note = note();
+      if (decision()) input.decision = decision();
+      if (use()) input.use = use();
+      if (attempts()) input.attempts = Number(attempts());
+      if (regenerated()) input.regenerated = regenerated() === 'true';
+      if (stillInUse()) input.stillInUse = stillInUse() === 'true';
+      const result = await api.write.outcome(input, apply);
+      preview.set(result);
+      if (apply) refresh();
+    } catch (failure) {
+      error.set(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      busy.set(false);
+    }
+  };
+  const rows = report.byKind;
+  if (report.status === 'disabled') {
+    return h('section', { class: 'section' },
+      h('h2', { class: 'section-title', text: 'Chat, image and other work' }),
+      h('p', { class: 'basis', text: 'Self-reported value is disabled; nothing was computed.' }));
+  }
+  return h('section', { class: 'section' },
+    h('h2', { class: 'section-title', text: 'Chat, image and other work' }),
+    h('p', { class: 'basis', text: report.basis }),
+    h('p', { class: 'basis', text: `${report.units.length} reported results · ${report.unlinkedOutcomes} without matched spend · ${report.inferredLinks} inferred links. Coding git outcomes have a separate basis.` }),
+    ...rows.map((row) => h('p', { class: 'basis', text:
+      `${row.key}: ${row.accepted}/${row.outcomes} accepted, ${row.used} used; cost/accepted ${row.costPerAcceptedUsd === null ? 'unknown' : usd(row.costPerAcceptedUsd)}; cost/used ${row.costPerUsedUsd === null ? 'unknown' : usd(row.costPerUsedUsd)} (self-reported, ${row.linked}/${row.outcomes} linked)` })),
+    h('details', { class: 'card', style: 'margin-top: var(--s4)' },
+      h('summary', { text: 'Record a result' }),
+      h('p', { class: 'basis', text: 'Preview first. The result and your verdict stay on this machine.' }),
+      field('Result ID', outcomeId, 'my-result-1'),
+      choice('Kind', kind, [['chat', 'Chat'], ['image', 'Image'], ['other', 'Other']]),
+      choice('Spend link', linkType, [['session', 'Session ID'], ['request', 'Request ID'], ['window', 'Time window + tool (inferred)']]),
+      () => linkType() === 'window'
+        ? h('div', null, field('From (ISO time)', from), field('To (ISO time)', to), field('Tool/source', tool))
+        : field(linkType() === 'request' ? 'Request ID' : 'Session ID', linkId),
+      field('Rating 1–5 (optional)', rating),
+      field('Short note (optional)', note),
+      choice('Decision', decision, [['', 'Unknown'], ['accepted_as_is', 'Accepted as-is'], ['edited_before_use', 'Edited before use'], ['rejected', 'Rejected']]),
+      choice('Used afterward', use, [['', 'Unknown'], ['exported', 'Exported'], ['copied', 'Copied'], ['shipped', 'Shipped'], ['published', 'Published'], ['not_used', 'Not used']]),
+      field('Attempts until accepted (optional)', attempts),
+      choice('Regenerated', regenerated, [['', 'Unknown'], ['true', 'Yes'], ['false', 'No']]),
+      choice('Still in use', stillInUse, [['', 'Unknown'], ['true', 'Yes'], ['false', 'No']]),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn-ghost', type: 'button', disabled: () => busy(), onclick: () => { void submit(false); }, text: 'Preview' }),
+        () => preview() && !preview()!.apply
+          ? h('button', { class: 'btn-primary', type: 'button', disabled: () => busy(), onclick: () => { void submit(true); }, text: 'Apply record' })
+          : null),
+      () => error() ? h('p', { class: 'drawer-error', role: 'alert', text: error()! }) : null,
+      () => preview() ? h('p', { class: 'basis', role: 'status', text:
+        `${preview()!.apply ? 'Recorded' : 'Preview'}: ${preview()!.matchedRequests} request(s) matched; ${preview()!.linkStatus}; ${preview()!.event.link.basis} link; ${preview()!.basis}` }) : null));
+}
 
 function causalStudyCard(payload: CausalPayload | null, failure: string | null): Node {
   if (failure) {
@@ -193,11 +286,12 @@ export function valueView(): Node {
   const error = signal<string | null>(null);
   const causal = signal<CausalPayload | null>(null);
   const causalError = signal<string | null>(null);
+  const refresh = (): void => {
+    void api.value().then((payload) => data.set(payload)).catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
+  };
 
   scopedEffect(() => {
-    void api.value()
-      .then((payload) => data.set(payload))
-      .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
+    refresh();
     void api.causal()
       .then((payload) => causal.set(payload))
       .catch((e: unknown) => causalError.set(e instanceof Error ? e.message : String(e)));
@@ -231,6 +325,7 @@ export function valueView(): Node {
               : 'Segreant needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
           causalStudyCard(causal(), causalError()),
           usageCoverageCard(d.usage),
+          selfReportedCard(d.selfReported, refresh),
           actions());
       }
 
@@ -478,6 +573,7 @@ export function valueView(): Node {
 
         modelSwitchCoverageCard(d.frontier),
         usageCoverageCard(d.usage),
+        selfReportedCard(d.selfReported, refresh),
 
         // Per-user. The guardrail state is the content when the cohort is suppressed.
         team
