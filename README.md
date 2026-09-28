@@ -13,7 +13,7 @@ it produced. And every number tells you exactly how much it can be trusted.
 
 `local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free for personal use`
 
-[![CI](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml)
+[![CI](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml)
 
 </div>
 
@@ -226,8 +226,8 @@ yet been validated against real provider accounts or with outside users. That
 is what the first users will prove.
 
 If you try it, what confused you or what broke is the most useful thing you
-can send: [open an issue](https://github.com/GamingDragonwastaken/Fiscus/issues)
-or [start a discussion](https://github.com/GamingDragonwastaken/Fiscus/discussions).
+can send: [open an issue](https://github.com/GamingDragonwastaken/Segreant/issues)
+or [start a discussion](https://github.com/GamingDragonwastaken/Segreant/discussions).
 
 ## Documentation
 
