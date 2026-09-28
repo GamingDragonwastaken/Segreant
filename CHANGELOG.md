@@ -29,6 +29,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   and staleness, never forms a per-dollar ratio from ratings, and keeps your
   own realized value (`--repo`) beside the public figures, never inside them.
   Also in the Value view.
+- **A consensus quality score in the market.** Many public benchmarks (Epoch
+  AI's hub under CC BY 4.0, plus LMArena) combined per kind of work by a
+  reliability-weighted, difficulty-adjusted fit, not a raw mean. Each score
+  carries its range, the benchmarks behind it and the published weights; a
+  model on one benchmark gets no score. Its ranking agrees with Epoch AI's
+  Capabilities Index at Spearman 0.88 (coding) and 0.92 (chat).
 - **`segreant outcome`: value for chat, image and other AI work.** Record a
   result's rating, decision, attempts, use and later durability; see cost per
   accepted and per used result by kind and model, always labelled

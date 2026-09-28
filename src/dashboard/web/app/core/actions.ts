@@ -244,6 +244,7 @@ const BUILDERS: Record<string, Builder> = {
       marketLiteLLM: 'Market: LiteLLM list prices',
       marketAider: 'Market: Aider coding benchmark',
       marketArena: 'Market: LMArena ratings',
+      marketEpoch: 'Market: Epoch AI benchmarks',
     };
     const key = signal('market');
     const turnOn = signal('off');

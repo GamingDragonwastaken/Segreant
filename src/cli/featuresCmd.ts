@@ -8,6 +8,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   marketLiteLLM: 'Market: LiteLLM list prices',
   marketAider: 'Market: Aider coding benchmark',
   marketArena: 'Market: LMArena ratings (text, webdev, image)',
+  marketEpoch: 'Market: Epoch AI benchmark results (consensus score)',
 };
 
 export function cmdFeatures(flags: Flags): void {

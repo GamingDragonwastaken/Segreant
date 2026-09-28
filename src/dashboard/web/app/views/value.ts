@@ -22,7 +22,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
-import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, type MarketPayload, type MarketBoardPayload, type MarketBenchmarkRowPayload, type MarketRatingRowPayload } from '../core/api.ts';
+import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, type MarketPayload, type MarketBoardPayload, type MarketBenchmarkRowPayload, type MarketRatingRowPayload, type MarketConsensusPayload } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -196,6 +196,29 @@ function marketBoard(b: MarketBoardPayload): Node {
     ...b.notes.map((n) => h('p', { class: 'basis', text: n })));
 }
 
+function consensusTable(c: MarketConsensusPayload): Node {
+  const title = h('div', { class: 'card-head' },
+    h('span', { class: 'card-title', text: 'Consensus quality score' }),
+    h('span', { class: 'basis', text: `${c.inputs.join(' + ')} · reliability-weighted, difficulty-adjusted` }));
+  if (c.status !== 'available') return h('div', { class: 'card', style: 'margin-top: var(--s3)' }, title, ...c.notes.map((n) => h('p', { class: 'basis', text: n })));
+  const rows = c.rows.slice(0, 10);
+  return h('div', { class: 'card', style: 'margin-top: var(--s3)' }, title,
+    h('p', { class: 'basis', text: 'Expected score on a typical benchmark of this kind, 0–100. The range is how far it moves if any one benchmark is dropped.' }),
+    h('div', { class: 'table-wrap' },
+      h('table', { 'aria-label': 'Consensus quality score, top models' },
+        h('thead', null, h('tr', null, ...['Model', 'Score', 'Range', 'Benchmarks', 'List price', 'Frontier'].map((t) => h('th', { scope: 'col', text: t })))),
+        h('tbody', null, ...rows.map((r) => h('tr', null,
+          h('td', { text: r.label }),
+          h('td', { text: r.score.toFixed(0) }),
+          h('td', { text: `${r.low.toFixed(0)}–${r.high.toFixed(0)}` }),
+          h('td', { text: String(r.benchmarks.length), title: r.benchmarks.map((b) => `${b.benchmark}: ${(b.score * 100).toFixed(0)}`).join('\n') }),
+          h('td', { text: r.price === null ? 'no public price' : `${usd(r.price.blendedUsdPerMillion ?? 0)}/M tokens${r.price.match === 'normalized' ? ` (as ${r.price.pricedAs})` : ''}` }),
+          h('td', { text: r.frontier === null ? '—' : r.frontier ? 'yes' : `beaten by ${r.beatenBy?.label ?? '—'}${r.beatenBy && !r.beatenBy.clear ? ' (within range)' : ''}` })))))),
+    h('details', null, h('summary', { text: 'How each benchmark is weighted' }),
+      ...c.weights.map((w) => h('p', { class: 'basis', text: `${w.benchmark}: weight ${w.weight.toFixed(2)} = independence ${w.independence} × contamination resistance ${w.contamination} × currency ${w.currency} (newest ${w.newest ?? 'undated'}, ${w.models} models). ${w.why}` }))),
+    ...c.notes.map((n) => h('p', { class: 'basis', text: n })));
+}
+
 /** Public evidence only. It never reads the ledger and never enters a figure above it. */
 function marketCard(payload: MarketPayload | null, failure: string | null): Node {
   const title = h('h2', { class: 'section-title', text: 'Public model market — public evidence, not your results' });
@@ -204,7 +227,7 @@ function marketCard(payload: MarketPayload | null, failure: string | null): Node
   if (payload.status === 'disabled') return h('section', { class: 'section' }, title, h('p', { class: 'basis', text: 'Switched off in Features — nothing was computed.' }));
   return h('section', { class: 'section' }, title,
     h('p', { class: 'basis', text: 'What published benchmarks and list prices say about quality per dollar, before you have results of your own. Nothing here is fetched from this screen.' }),
-    ...payload.categories.map((c) => h('div', null, h('h3', { class: 'drawer-h3', text: c.label }), ...c.boards.map(marketBoard))),
+    ...payload.categories.map((c) => h('div', null, h('h3', { class: 'drawer-h3', text: c.label }), c.consensus ? consensusTable(c.consensus) : null, ...c.boards.map(marketBoard))),
     h('details', { class: 'card', style: 'margin-top: var(--s3)' }, h('summary', { text: 'What these numbers are and are not' }),
       ...payload.boundary.map((line) => h('p', { class: 'basis', text: line }))));
 }

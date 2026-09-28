@@ -7,7 +7,7 @@ import { Store } from '../store/db.ts';
 import { dbPath, loadConfig } from '../config.ts';
 import { loadRealization } from '../value/realization.ts';
 import { computeFrontier } from '../value/frontier.ts';
-import { buildMarketReport, loadMarket, type BenchmarkRow, type MarketBoard, type MarketReport, type PersonalMarketValue, type RatingRow } from '../market/market.ts';
+import { buildMarketReport, loadMarket, type BenchmarkRow, type ConsensusBoard, type MarketBoard, type MarketReport, type PersonalMarketValue, type RatingRow } from '../market/market.ts';
 import { refreshMarketSource } from '../market/refresh.ts';
 import { MARKET_SOURCES, MARKET_SOURCE_IDS, type MarketSourceId } from '../market/sources.ts';
 import type { Flags } from './flags.ts';
@@ -69,6 +69,22 @@ async function refresh(target: string, json: boolean): Promise<void> {
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 }
 
+function printConsensus(c: ConsensusBoard, tty: boolean, limit: number): void {
+  console.log(color(tty, C.bold, '  Consensus quality score') + color(tty, C.gray, `  · ${c.inputs.join(' + ') || 'no inputs'} · reliability-weighted, difficulty-adjusted`));
+  if (c.status !== 'available') { for (const n of c.notes) console.log(`    ${n}`); return; }
+  console.log(color(tty, C.gray, `    Weights: ${c.weights.map((w) => `${w.benchmark} ${w.weight.toFixed(2)}`).join(' · ')}`));
+  console.log(color(tty, C.gray, '    model                                   score  range        benchmarks  list price (3:1 blend)        frontier'));
+  for (const r of c.rows.slice(0, limit)) {
+    const price = r.price ? `${usd(r.price.blendedUsdPerMillion!)}/M${r.price.match === 'exact' ? '' : ` as ${r.price.pricedAs}`}` : 'no public price';
+    const personal = r.personal ? `  | yours: ${(r.personal.realizationRate * 100).toFixed(0)}% realized` : '';
+    const front = r.frontier === null ? '—' : r.frontier ? 'yes' : `beaten by ${r.beatenBy!.label}${r.beatenBy!.clear ? '' : ' (within range)'}`;
+    console.log(`    ${r.label.slice(0, 38).padEnd(38)}  ${r.score.toFixed(0).padStart(5)}  ${`${r.low.toFixed(0)}-${r.high.toFixed(0)}`.padEnd(11)}  ${String(r.benchmarks.length).padStart(10)}  ${price.slice(0, 28).padEnd(28)}  ${front}${personal}`);
+  }
+  if (c.rows.length > limit) console.log(color(tty, C.gray, `    … ${c.rows.length - limit} more (--all or --json)`));
+  if (c.frontier.length) console.log(`    Frontier (nothing scores higher for the same or less): ${c.frontier.join(', ')}`);
+  for (const n of c.notes) console.log(color(tty, C.gray, `    ${n}`));
+}
+
 function fmtPrice(r: RatingRow): string {
   if (!r.price) return 'no public price';
   const p = r.price.blendedUsdPerMillion !== undefined ? `${usd(r.price.blendedUsdPerMillion)}/M` : `${usd(r.price.usdPerImage!)}/img`;
@@ -123,6 +139,7 @@ export function printMarket(report: MarketReport, flags: Flags): void {
     if (only && cat.id !== only) continue;
     console.log('');
     console.log(color(tty, C.bold, `  ${cat.label}`));
+    if (cat.consensus) printConsensus(cat.consensus, tty, limit);
     for (const b of cat.boards) printBoard(b, tty, limit, now);
   }
   console.log('');
