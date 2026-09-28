@@ -19,7 +19,7 @@
     "prestart": "npm run build",
     "presegreant": "npm run build",
     "pretest": "node scripts/build.mjs",
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "test": "node --disable-warning=ExperimentalWarning scripts/run-tests.mjs",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "typecheck:web": "node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json",
     "typecheck:team-server": "npm --prefix team-server run typecheck",

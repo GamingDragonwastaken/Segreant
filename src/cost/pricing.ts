@@ -708,6 +708,7 @@ async function refreshPricingWithTransport(
       purpose: 'pricing_refresh',
       dataClass: 'pricing_manifest',
       signal: AbortSignal.timeout(timeoutMs),
+      stallTimeoutMs: 20_000,
       headers,
     });
     if (res.status === 304) {

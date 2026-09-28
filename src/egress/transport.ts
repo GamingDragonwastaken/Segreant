@@ -34,11 +34,21 @@ export interface EgressFetchInit {
   headers?: EgressHeaders;
   body?: string | Uint8Array | ArrayBuffer | null;
   signal?: AbortSignal;
+  /**
+   * Abort the response if its body delivers nothing for this long. For
+   * bounded file downloads only; leave unset for streamed inference.
+   */
+  stallTimeoutMs?: number;
 }
 
 export interface ResolvedTarget {
   address: string;
   family: 4 | 6;
+  /**
+   * Every address DNS returned, each one checked against the target class.
+   * The dial may use any of them (Happy Eyeballs), never an unchecked one.
+   */
+  addresses: ReadonlyArray<{ address: string; family: 4 | 6 }>;
   targetClass: EgressTargetClass;
 }
 
@@ -211,8 +221,8 @@ async function resolveTarget(target: URL, targetClass: EgressTargetClass): Promi
   if (targetClass === 'controlled_cloud' && !addresses.every((entry) => isPublic(entry.address))) {
     throw new EgressError('dns_denied', 'controlled-cloud target resolved to a non-public address; Segreant refused the request');
   }
-  const first = addresses[0]!;
-  return { address: normalAddress(first.address), family: first.family as 4 | 6, targetClass };
+  const checked = addresses.map((entry) => ({ address: normalAddress(entry.address), family: entry.family as 4 | 6 }));
+  return { address: checked[0]!.address, family: checked[0]!.family, addresses: checked, targetClass };
 }
 
 function receipt(input: Parameters<typeof appendEgressReceipt>[0]): void {
@@ -299,11 +309,15 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
       method,
       headers: outboundHeaders(init.headers),
       servername: decision.target!.hostname.replace(/(^\[|\]$)/g, ''),
-      // Pin the socket to the one address that was checked above. Node 20+
-      // calls lookup with `{ all: true }` and then requires the array form;
-      // answering in the single-address form made every hostname dial fail.
+      // Pin the socket to the addresses that were checked above, and let Node
+      // race them (Happy Eyeballs) so one slow or dead address cannot hold the
+      // request: dialing only the first one made a bad route look like a slow
+      // product. Node 20+ calls lookup with `{ all: true }` and then requires
+      // the array form; answering in the single-address form made every
+      // hostname dial fail.
+      autoSelectFamily: true,
       lookup: (_host: string, options: { all?: boolean } | undefined, callback: (...args: unknown[]) => void) => {
-        if (options?.all) callback(null, [{ address: resolved.address, family: resolved.family }]);
+        if (options?.all) callback(null, resolved.addresses.map((entry) => ({ ...entry })));
         else callback(null, resolved.address, resolved.family);
       },
     } as https.RequestOptions, (incoming) => {
@@ -317,6 +331,21 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
       }
       if (settled) return;
       settled = true;
+      // Opt-in: a file download that stops arriving is aborted rather than
+      // holding the caller to its overall timeout. Never set for inference
+      // streams, where a reasoning model may be silent for minutes.
+      const stallMs = init.stallTimeoutMs;
+      if (stallMs !== undefined && stallMs > 0) {
+        let stall: NodeJS.Timeout | undefined;
+        const armStall = (): void => {
+          clearTimeout(stall);
+          stall = setTimeout(() => incoming.destroy(new Error(`egress response stalled: no data for ${stallMs / 1000}s`)), stallMs);
+          stall.unref();
+        };
+        armStall();
+        incoming.on('data', armStall);
+        incoming.once('close', () => clearTimeout(stall));
+      }
       const body = method === 'HEAD' || incoming.statusCode === 204 || incoming.statusCode === 304
         ? null : Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
       resolve(new Response(body, { status: incoming.statusCode ?? 502, statusText: incoming.statusMessage ?? '', headers: inboundHeaders(incoming.headers) }));
