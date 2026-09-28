@@ -22,6 +22,13 @@ from `src/value/frontier.ts`.
 - Every board carries its source, licence, link, fetch time, and newest result
   date; a normalized price join names the price-list entry it used.
 - A switched-off market or source reports `disabled` and computes nothing.
+- The consensus score (`consensus.ts`) is a reliability-weighted item-response
+  fit over chance-corrected scores, never a raw mean across scales. A model
+  needs two benchmarks; its range is leave-one-benchmark-out. Weights come
+  only from the published rubric (`RELIABILITY`), mirrored in
+  `docs/MARKET-SOURCES.md`. Stored fits are reused only when their key (method
+  version and exact input hashes) matches; bump `CONSENSUS_VERSION` when the
+  method changes.
 
 ## Invariants
 

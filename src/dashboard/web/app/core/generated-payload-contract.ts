@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "83f757f5bc4a11638b0563b5e524ab0aade924b933a2b406efede056b86efcef";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "79da38b4255cb4f55cf0241e65b4877070a10c2a052f442260c3ee2c893f97e8";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1454,6 +1454,110 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string[]"
     }
   ],
+  "MarketConsensusRowPayload": [
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "score",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "low",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "high",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "benchmarks",
+      "optional": false,
+      "type": "Array<{ benchmark: string; score: number; date: string | null }>"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "'public_benchmark_consensus'"
+    },
+    {
+      "name": "price",
+      "optional": false,
+      "type": "MarketPriceBasisPayload | null"
+    },
+    {
+      "name": "frontier",
+      "optional": false,
+      "type": "boolean | null"
+    },
+    {
+      "name": "beatenBy",
+      "optional": false,
+      "type": "{ model: string; label: string; clear: boolean } | null"
+    },
+    {
+      "name": "personal",
+      "optional": false,
+      "type": "MarketBenchmarkRowPayload['personal']"
+    }
+  ],
+  "MarketConsensusPayload": [
+    {
+      "name": "status",
+      "optional": false,
+      "type": "'available' | 'disabled' | 'missing'"
+    },
+    {
+      "name": "inputs",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "rows",
+      "optional": false,
+      "type": "MarketConsensusRowPayload[]"
+    },
+    {
+      "name": "frontier",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "weights",
+      "optional": false,
+      "type": "Array<{ benchmark: string; weight: number; independence: number; contamination: number; currency: number; newest: string | null; models: number; why: string }>"
+    },
+    {
+      "name": "singleSource",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "priceSource",
+      "optional": false,
+      "type": "{ status: 'available' | 'disabled' | 'missing'; asOf: string | null }"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "'public_benchmark_consensus'"
+    },
+    {
+      "name": "notes",
+      "optional": false,
+      "type": "string[]"
+    }
+  ],
   "MarketPayload": [
     {
       "name": "status",
@@ -1463,7 +1567,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "categories",
       "optional": false,
-      "type": "Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; boards: MarketBoardPayload[] }>"
+      "type": "Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; consensus: MarketConsensusPayload | null; boards: MarketBoardPayload[] }>"
     },
     {
       "name": "boundary",

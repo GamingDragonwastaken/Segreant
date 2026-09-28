@@ -7,8 +7,8 @@
  * fetches through the egress transport and hands the text to these parsers.
  */
 
-export type MarketSourceId = 'litellm' | 'aider' | 'arena-text' | 'arena-webdev' | 'arena-image';
-export type MarketFeatureKey = 'marketLiteLLM' | 'marketAider' | 'marketArena';
+export type MarketSourceId = 'litellm' | 'aider' | 'arena-text' | 'arena-webdev' | 'arena-image' | 'epoch';
+export type MarketFeatureKey = 'marketLiteLLM' | 'marketAider' | 'marketArena' | 'marketEpoch';
 
 export interface MarketSourceDef {
   id: MarketSourceId;
@@ -50,6 +50,12 @@ export const MARKET_SOURCES: Readonly<Record<MarketSourceId, MarketSourceDef>> =
     licence: 'CC BY 4.0 (LMArena leaderboard dataset)', feature: 'marketArena',
     origin: ARENA_ORIGIN, pathPrefix: '/rows',
   },
+  epoch: {
+    id: 'epoch', label: 'Epoch AI Benchmarking Hub',
+    homepage: 'https://epoch.ai/benchmarks',
+    licence: 'CC BY 4.0 (Epoch AI)', feature: 'marketEpoch',
+    origin: 'https://epoch.ai', pathPrefix: '/data/benchmark_data.zip',
+  },
   'arena-image': {
     id: 'arena-image', label: 'LMArena text-to-image leaderboard',
     homepage: 'https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset',
@@ -59,6 +65,7 @@ export const MARKET_SOURCES: Readonly<Record<MarketSourceId, MarketSourceDef>> =
 });
 
 export const MARKET_SOURCE_IDS = Object.keys(MARKET_SOURCES) as MarketSourceId[];
+import { parseCsv, readZipEntries } from './zip.ts';
 
 const ARENA_CONFIG: Record<'arena-text' | 'arena-webdev' | 'arena-image', string> = {
   'arena-text': 'text_style_control',
@@ -112,7 +119,47 @@ export interface AiderData { entries: AiderEntry[] }
 export interface ArenaEntry { model: string; rating: number; ratingLower: number; ratingUpper: number; votes: number }
 export interface ArenaData { publishedAt: string; entries: ArenaEntry[] }
 
-export type SourceData = LiteLLMData | AiderData | ArenaData;
+export interface EpochResult {
+  /** Epoch's model group name, e.g. "Claude Opus 4.6"; effort variants are grouped under it. */
+  model: string;
+  benchmark: string;
+  /** Chance-corrected onto [0, 1] with the benchmark's published baseline and ceiling. */
+  score: number;
+  date: string | null;
+  /** True when Epoch AI ran the evaluation itself; false for a curated external leaderboard. */
+  epochRun: boolean;
+}
+export interface EpochData { results: EpochResult[] }
+
+export type SourceData = LiteLLMData | AiderData | ArenaData | EpochData;
+
+/**
+ * Epoch AI's benchmark bundle: the cleaned long table Epoch builds its own
+ * Capabilities Index from, plus the benchmark metadata (chance baseline and
+ * ceiling). Only the benchmarks in the consensus reliability table are kept.
+ */
+export function parseEpoch(zip: Buffer, keep: ReadonlySet<string>): EpochData {
+  const files = readZipEntries(zip, new Set(['benchmark_metadata.csv', 'epoch_capabilities_index/processed_data_for_eci.csv']));
+  const metaText = files.get('benchmark_metadata.csv');
+  const dataText = files.get('epoch_capabilities_index/processed_data_for_eci.csv');
+  if (!metaText || !dataText) throw new Error('Epoch bundle is missing its metadata or processed data file');
+  const meta = new Map(parseCsv(metaText.toString('utf8')).map((r) => [r.benchmark ?? '', r]));
+  const results: EpochResult[] = [];
+  for (const r of parseCsv(dataText.toString('utf8'))) {
+    const benchmark = r.benchmark ?? '';
+    if (!keep.has(benchmark)) continue;
+    const m = meta.get(benchmark);
+    const base = Number(m?.random_baseline ?? 0);
+    const ceil = Number(m?.score_ceiling ?? 1);
+    const perf = Number(r.performance);
+    const model = (r.Model ?? '').trim();
+    if (!model || !Number.isFinite(perf) || !(ceil > base)) continue;
+    const date = DAY.test(r.date ?? '') ? r.date! : null;
+    results.push({ model, benchmark, score: Math.round(Math.min(1, Math.max(0, (perf - base) / (ceil - base))) * 1e4) / 1e4, date, epochRun: (r.source ?? '') === '' });
+  }
+  if (results.length < 50) throw new Error('Epoch bundle has too few usable results to trust');
+  return { results };
+}
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

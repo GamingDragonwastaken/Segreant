@@ -396,6 +396,7 @@ export const FEATURE_DEFAULTS = Object.freeze({
   marketLiteLLM: true,
   marketAider: true,
   marketArena: true,
+  marketEpoch: true,
 } as const);
 export type FeatureKey = keyof typeof FEATURE_DEFAULTS;
 export type FeaturesConfig = { [K in FeatureKey]: boolean };

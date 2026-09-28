@@ -18,7 +18,7 @@ if (!home) {
   process.exit(2);
 }
 const dir = join(home, 'market');
-const ids = ['litellm', 'aider', 'arena-text', 'arena-webdev', 'arena-image'];
+const ids = ['litellm', 'aider', 'arena-text', 'arena-webdev', 'arena-image', 'epoch'];
 const found = new Set(readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)));
 const missing = ids.filter((id) => !found.has(id));
 if (missing.length) {
@@ -31,3 +31,21 @@ const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'market', 'snaps
 writeFileSync(out, JSON.stringify({ schemaVersion: 2, sources }) + '\n');
 console.log(`wrote ${out}`);
 for (const id of ids) console.log(`  ${id}: fetched ${sources[id].fetchedAt}, published ${sources[id].publishedAt ?? 'undated'}`);
+
+// Ship the consensus fits the bundle implies, so a fresh install reads them
+// instead of refitting (the fit takes seconds). Computed over the bundle alone.
+const { mkdtempSync, rmSync } = await import('node:fs');
+const { tmpdir } = await import('node:os');
+const { pathToFileURL } = await import('node:url');
+const scratch = mkdtempSync(join(tmpdir(), 'segreant-fits-'));
+process.env.SEGREANT_HOME = scratch;
+try {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const market = await import(pathToFileURL(join(root, 'dist', 'market', 'market.js')).href);
+  const { FEATURE_DEFAULTS } = await import(pathToFileURL(join(root, 'dist', 'config.js')).href);
+  const fits = market.bundledConsensusFits(market.loadMarket(), { ...FEATURE_DEFAULTS });
+  writeFileSync(join(root, 'market', 'consensus-fits.json'), JSON.stringify(fits) + '\n');
+  console.log(`wrote market/consensus-fits.json (${Object.keys(fits).length} fits; run npm run build first)`);
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 83f757f5bc4a11638b0563b5e524ab0aade924b933a2b406efede056b86efcef */
+/** Source SHA-256: 79da38b4255cb4f55cf0241e65b4877070a10c2a052f442260c3ee2c893f97e8 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -648,9 +648,33 @@ export interface MarketBoardPayload {
   priceSource: { status: 'available' | 'disabled' | 'missing'; asOf: string | null } | null;
   notes: string[];
 }
+export interface MarketConsensusRowPayload {
+  model: string;
+  label: string;
+  score: number;
+  low: number;
+  high: number;
+  benchmarks: Array<{ benchmark: string; score: number; date: string | null }>;
+  basis: 'public_benchmark_consensus';
+  price: MarketPriceBasisPayload | null;
+  frontier: boolean | null;
+  beatenBy: { model: string; label: string; clear: boolean } | null;
+  personal: MarketBenchmarkRowPayload['personal'];
+}
+export interface MarketConsensusPayload {
+  status: 'available' | 'disabled' | 'missing';
+  inputs: string[];
+  rows: MarketConsensusRowPayload[];
+  frontier: string[];
+  weights: Array<{ benchmark: string; weight: number; independence: number; contamination: number; currency: number; newest: string | null; models: number; why: string }>;
+  singleSource: number;
+  priceSource: { status: 'available' | 'disabled' | 'missing'; asOf: string | null };
+  basis: 'public_benchmark_consensus';
+  notes: string[];
+}
 export interface MarketPayload {
   status: 'available' | 'disabled';
-  categories: Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; boards: MarketBoardPayload[] }>;
+  categories: Array<{ id: 'coding' | 'general-chat' | 'image'; label: string; consensus: MarketConsensusPayload | null; boards: MarketBoardPayload[] }>;
   boundary: string[];
   cacheErrors: string[];
 }

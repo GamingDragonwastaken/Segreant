@@ -8,9 +8,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
+import { RELIABILITY } from './consensus.ts';
 import { marketCacheDir, marketCachePath, validateSourceSnapshot, type SourceSnapshot } from './market.ts';
 import {
-  ARENA_MAX_PAGES, grantCommand, parseAider, parseArenaPage, parseLiteLLM, sourceUrl,
+  ARENA_MAX_PAGES, grantCommand, parseAider, parseArenaPage, parseEpoch, parseLiteLLM, sourceUrl,
   type ArenaEntry, type MarketSourceId, type SourceData,
 } from './sources.ts';
 
@@ -22,8 +23,8 @@ export type MarketRefreshResult =
 
 type Transport = typeof egressFetch;
 
-async function readBounded(res: Response): Promise<string> {
-  if (!res.body) return '';
+async function readBounded(res: Response): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -34,13 +35,13 @@ async function readBounded(res: Response): Promise<string> {
     if (total > MAX_BODY_BYTES) { await reader.cancel(); throw new Error(`response exceeds ${MAX_BODY_BYTES} bytes`); }
     chunks.push(value);
   }
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
 /** The LiteLLM list is ~3 MB; the others are small pages. */
-const TIMEOUT_MS: Record<MarketSourceId, number> = { litellm: 120_000, aider: 60_000, 'arena-text': 60_000, 'arena-webdev': 60_000, 'arena-image': 60_000 };
+const TIMEOUT_MS: Record<MarketSourceId, number> = { epoch: 120_000, litellm: 120_000, aider: 60_000, 'arena-text': 60_000, 'arena-webdev': 60_000, 'arena-image': 60_000 };
 
-async function get(id: MarketSourceId, url: string, transport: Transport): Promise<string> {
+async function get(id: MarketSourceId, url: string, transport: Transport): Promise<Buffer> {
   const res = await transport(url, {
     purpose: 'market_refresh', dataClass: 'market_manifest', method: 'GET',
     headers: { accept: 'application/json, text/yaml, text/plain' },
@@ -63,15 +64,20 @@ async function refreshWith(id: MarketSourceId, transport: Transport): Promise<Ma
   let publishedAt: string | null = null;
   let requests = 0;
   try {
-    if (id === 'litellm' || id === 'aider') {
-      const text = await get(id, sourceUrl(id), transport);
+    if (id === 'epoch') {
+      const zip = await get(id, sourceUrl(id), transport);
+      requests++;
+      hash.update(zip);
+      data = parseEpoch(zip, new Set(RELIABILITY.map((r) => r.benchmark)));
+    } else if (id === 'litellm' || id === 'aider') {
+      const text = (await get(id, sourceUrl(id), transport)).toString('utf8');
       requests++;
       hash.update(text);
       data = id === 'litellm' ? parseLiteLLM(text) : parseAider(text);
     } else {
       const entries: ArenaEntry[] = [];
       for (let page = 0; page < ARENA_MAX_PAGES; page++) {
-        const text = await get(id, sourceUrl(id, page), transport);
+        const text = (await get(id, sourceUrl(id, page), transport)).toString('utf8');
         requests++;
         hash.update(text);
         const parsed = parseArenaPage(text);
@@ -96,7 +102,7 @@ async function refreshWith(id: MarketSourceId, transport: Transport): Promise<Ma
   const section: SourceSnapshot = { id, fetchedAt: new Date().toISOString(), publishedAt, sha256: hash.digest('hex'), data };
   validateSourceSnapshot(id, section);
   writeAtomically(marketCachePath(id), JSON.stringify(section) + '\n');
-  const rows = 'entries' in data ? data.entries.length : Object.keys(data.tokenPrices).length;
+  const rows = 'entries' in data ? data.entries.length : 'results' in data ? data.results.length : Object.keys(data.tokenPrices).length;
   return { ok: true, sourceId: id, fetchedAt: section.fetchedAt, publishedAt, rows, requests };
 }
 
