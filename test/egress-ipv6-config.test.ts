@@ -105,7 +105,7 @@ test('a legitimate global-unicast IPv6 address is selected and reaches the injec
       dataClass: 'provider_request',
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(observed, { address: selected, family: 6, targetClass: 'controlled_cloud' });
+    assert.deepEqual(observed, { address: selected, family: 6, addresses: [{ address: selected, family: 6 }], targetClass: 'controlled_cloud' });
   } finally {
     restoreDial();
     restoreDns();

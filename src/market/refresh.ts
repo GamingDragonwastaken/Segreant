@@ -38,13 +38,14 @@ async function readBounded(res: Response): Promise<string> {
 }
 
 /** The LiteLLM list is ~3 MB; the others are small pages. */
-const TIMEOUT_MS: Record<MarketSourceId, number> = { litellm: 300_000, aider: 60_000, 'arena-text': 60_000, 'arena-webdev': 60_000, 'arena-image': 60_000 };
+const TIMEOUT_MS: Record<MarketSourceId, number> = { litellm: 120_000, aider: 60_000, 'arena-text': 60_000, 'arena-webdev': 60_000, 'arena-image': 60_000 };
 
 async function get(id: MarketSourceId, url: string, transport: Transport): Promise<string> {
   const res = await transport(url, {
     purpose: 'market_refresh', dataClass: 'market_manifest', method: 'GET',
     headers: { accept: 'application/json, text/yaml, text/plain' },
     signal: AbortSignal.timeout(TIMEOUT_MS[id]),
+    stallTimeoutMs: 20_000,
   });
   if (!res.ok) { await res.body?.cancel(); throw Object.assign(new Error(`HTTP ${res.status}`), { http: true }); }
   return readBounded(res);
