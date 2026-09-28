@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Not sure it is a feature yet? Start in [Ideas](https://github.com/GamingDragonwastaken/Fiscus/discussions/categories/ideas) and it can become an issue once it has shape.
+        Not sure it is a feature yet? Start in [Ideas](https://github.com/GamingDragonwastaken/Segreant/discussions/categories/ideas) and it can become an issue once it has shape.
   - type: textarea
     id: problem
     attributes:

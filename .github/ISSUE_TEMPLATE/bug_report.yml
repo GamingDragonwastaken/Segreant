@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time. A good report gets fixed fast.
         **Never paste API keys, provider bills, private source code, or personal file paths.**
-        Security problems go through [private vulnerability reporting](https://github.com/GamingDragonwastaken/Fiscus/security/advisories/new), not here.
+        Security problems go through [private vulnerability reporting](https://github.com/GamingDragonwastaken/Segreant/security/advisories/new), not here.
   - type: dropdown
     id: area
     attributes:

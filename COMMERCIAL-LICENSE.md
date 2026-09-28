@@ -31,7 +31,7 @@ sustainable, not to put a toll booth in front of it.
 | Anything else (invoice, annual term, redistribution, a question about whether your use counts) | by agreement | |
 
 To get either, open a
-[discussion](https://github.com/GamingDragonwastaken/Fiscus/discussions); it
+[discussion](https://github.com/GamingDragonwastaken/Segreant/discussions); it
 moves to private contact to arrange payment. A self-serve checkout is planned;
 until it exists, every license is arranged this way.
 
