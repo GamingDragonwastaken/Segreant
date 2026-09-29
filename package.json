@@ -49,7 +49,7 @@
     "market",
     "baselines",
     "docs/*.md",
-    "web/assets/seal-256.png",
+    "web/assets/brand/mark-256.png",
     "COMMERCIAL-LICENSE.md"
   ],
   "keywords": [

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="web/assets/seal-256.png" alt="The Segreant Minted Seal — a heraldic griffin engraved on a gold coin" width="112" />
+<img src="web/assets/brand/mark-256.png" alt="The Segreant mark: a gold griffin rearing, on black" width="112" />
 
 # Segreant
 

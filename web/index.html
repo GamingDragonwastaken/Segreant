@@ -10,7 +10,7 @@
 <meta property="og:title" content="Segreant — govern the spend, not the developer" />
 <meta property="og:description" content="A local-first proxy that meters and caps what your AI coding agents spend — and measures whether it produced work worth keeping." />
 <meta property="og:type" content="website" />
-<meta property="og:image" content="assets/og-banner-1600.jpg" />
+<meta property="og:image" content="assets/brand/social-card-1600.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
 <!-- No web fonts or third-party assets. The landing page is a bundled local
      surface; product provider traffic follows the declared Segreant-process egress
@@ -60,7 +60,7 @@
   }
   .nav-in { max-width: var(--maxw); margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
   .logo { display: flex; align-items: center; gap: 10px; }
-  .logo .seal { width: 26px; height: 26px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line), 0 2px 10px rgba(232,179,60,0.3); }
+  .logo .seal { width: 26px; height: 26px; border-radius: 0; box-shadow: none; }
   .logo b { font-family: var(--serif); font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
   .nav-links { display: flex; gap: 28px; align-items: center; }
   .nav-links a { font-size: 13.5px; color: var(--muted); transition: color 0.2s; }
@@ -76,14 +76,13 @@
     width: 900px; height: 600px; pointer-events: none; z-index: 0;
     background: radial-gradient(closest-side, rgba(232,179,60,0.13), transparent 70%);
   }
-  /* Generated vault plate behind the hero — masked to darkness so text stays readable.
-     The wrapper takes the scroll parallax; the img takes the slow drift. */
+  /* Flat identity mark behind the hero — masked to darkness so text stays readable. */
   .hero-plate { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
   .hero-plate img {
-    width: 100%; height: 112%; object-fit: cover; object-position: center bottom; opacity: 0.55;
+    width: 100%; height: 112%; object-fit: cover; object-position: right bottom; opacity: 0.9;
     -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.95), rgba(0,0,0,0.5) 60%, transparent 97%);
     mask-image: linear-gradient(180deg, rgba(0,0,0,0.95), rgba(0,0,0,0.5) 60%, transparent 97%);
-    animation: plate-drift 40s ease-in-out infinite alternate; will-change: transform;
+    animation: none;
   }
   @keyframes plate-drift { from { transform: scale(1.02); } to { transform: scale(1.08) translateY(-12px); } }
   /* Cursor spotlight — one fixed div, moved by JS on fine pointers only. */
@@ -213,7 +212,7 @@
   .trust { background: linear-gradient(180deg, var(--ink-2), var(--ink)); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
   .trust-grid { display: grid; grid-template-columns: 1fr 280px; gap: 48px; align-items: center; }
   .trust .guardian { justify-self: center; }
-  .trust .guardian img { width: 100%; max-width: 280px; opacity: 0.9; filter: drop-shadow(0 24px 60px rgba(0,0,0,0.65)); }
+  .trust .guardian img { width: 100%; max-width: 128px; opacity: 0.9; image-rendering: pixelated; }
   @media (max-width: 860px) { .trust-grid { grid-template-columns: 1fr; } .trust .guardian { display: none; } }
   .trust .pill { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mint); border: 1px solid rgba(99,197,147,0.3); border-radius: 30px; padding: 5px 14px; margin-bottom: 22px; }
   .priority { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
@@ -266,7 +265,7 @@
 <nav>
   <div class="nav-in">
     <a class="logo" href="#top">
-      <img class="seal" src="assets/seal-64.png" alt="" width="26" height="26" />
+      <img class="seal" src="assets/brand/mark-64.png" alt="" width="26" height="26" />
       <b>Segreant</b>
     </a>
     <div class="nav-links">
@@ -284,7 +283,7 @@
 <a id="top"></a>
 <div id="spot" aria-hidden="true"></div>
 <header class="hero">
-  <div class="hero-plate" id="heroPlate" aria-hidden="true"><img src="assets/vault-hero-1920.jpg" alt="" /></div>
+  <div class="hero-plate" id="heroPlate" aria-hidden="true"><img src="assets/brand/hero-1920.jpg" alt="" /></div>
   <div class="container">
     <div class="eyebrow reveal">Return on Intelligence · measured locally</div>
     <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
@@ -570,7 +569,7 @@ signed    ed25519:9c3a…</pre>
         </div>
         <p class="sec-lede reveal" style="margin-top:28px">If two requirements ever conflict, the higher tier wins. Analytics never compromise the first two. That rule is in the architecture, not the marketing.</p>
       </div>
-      <div class="guardian reveal" aria-hidden="true"><img src="assets/guardian-640.png" alt="" loading="lazy" /></div>
+      <div class="guardian reveal" aria-hidden="true"><img src="assets/brand/mark-plain-512.png" alt="" loading="lazy" /></div>
     </div>
   </div>
 </section>
@@ -627,7 +626,7 @@ signed    ed25519:9c3a…</pre>
 <footer>
   <div class="container foot-in">
     <a class="logo" href="#top">
-      <img class="seal" src="assets/seal-64.png" alt="" width="26" height="26" />
+      <img class="seal" src="assets/brand/mark-64.png" alt="" width="26" height="26" />
       <b>Segreant</b>
     </a>
     <div class="foot-links">
