@@ -44,15 +44,15 @@ function launcherLocalImports(): string[] {
   return [...source.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)].map((match) => match[1]!);
 }
 
-test('npm package surface keeps public docs and the README seal while excluding internal plans', () => {
+test('npm package surface keeps public docs and the README mark while excluding internal plans', () => {
   const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { files?: string[] };
   const allowlist = packageJson.files ?? [];
 
   assert.ok(allowlist.includes('docs/*.md'), 'public top-level Markdown docs must remain packageable');
   assert.equal(allowlist.includes('docs'), false, 'the broad docs directory allowlist would ship internal plans');
   assert.ok(
-    allowlist.includes('web/assets/seal-256.png'),
-    'the README seal must be explicitly included without shipping the whole web asset tree',
+    allowlist.includes('web/assets/brand/mark-256.png'),
+    'the README mark must be explicitly included without shipping the whole web asset tree',
   );
 
   const entries = packageEntries();
@@ -75,7 +75,7 @@ test('npm package surface keeps public docs and the README seal while excluding 
   assert.ok(packagePath(entries, 'dist/cli/diagnosticsCmd.js'), 'the packaged CLI must include the diagnostics command');
   assert.ok(packagePath(entries, 'pricing/models.json'), 'the bundled pricing data must remain present');
   assert.ok(packagePath(entries, 'baselines/lift-baselines.json'), 'the bundled baseline data must remain present');
-  assert.ok(packagePath(entries, 'web/assets/seal-256.png'), 'the README seal must be present in the packed artifact');
+  assert.ok(packagePath(entries, 'web/assets/brand/mark-256.png'), 'the README mark must be present in the packed artifact');
   assert.ok(packagePath(entries, 'docs/GETTING-STARTED.md'), 'the public getting-started guide must remain packaged');
   assert.ok(packagePath(entries, 'docs/RELEASE-GATE.md'), 'the public release gate must remain packaged');
   assert.ok(packagePath(entries, 'docs/RELIABILITY-PERFORMANCE.md'), 'the performance evidence guide must remain packaged');
