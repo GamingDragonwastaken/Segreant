@@ -32,6 +32,7 @@
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "benchmark:contribution": "node --disable-warning=ExperimentalWarning scripts/contribution-benchmark.mjs",
+    "proxy-load": "node --disable-warning=ExperimentalWarning scripts/proxy-load.mjs",
     "test:browser": "npm run build && node --test test/dashboard-runtime-accessibility.browser.mjs",
     "prepare": "npm run build",
     "predemo": "npm run build",
