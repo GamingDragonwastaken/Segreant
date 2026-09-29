@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBuildWorkspace } from './support/buildWorkspace.ts';
@@ -288,7 +288,10 @@ setTimeout(() => {
     assert.equal(again.code, 0, again.stderr);
     assert.equal(again.stdout.split('\n')[0], snapshotRoot, 'an unchanged build must reuse its snapshot');
 
-    // A new build never shares the old tree, and the unleased old tree is reaped.
+    // A new build never shares the old tree, and the unleased old tree is
+    // reaped once it has been idle. Backdate its last lease past the window.
+    const longAgo = new Date(Date.now() - 60 * 60_000);
+    utimesSync(join(snapshotRoot, 'complete.json'), longAgo, longAgo);
     writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-rebuilt\n', 'utf8');
     const rebuilt = await runNode(join(fixtureBin, 'segreant.mjs'), []);
     assert.equal(rebuilt.code, 0, rebuilt.stderr);
@@ -308,7 +311,13 @@ test('a shared build snapshot with a live lease is never reaped', async () => {
   const leased = join(parent, 'segreant-runtime-build-old-leased');
   const idle = join(parent, 'segreant-runtime-build-old-idle');
   const current = join(parent, 'segreant-runtime-build-current');
-  for (const path of [leased, idle, current]) mkdirSync(join(path, 'leases'), { recursive: true });
+  const recent = join(parent, 'segreant-runtime-build-old-recent');
+  const longAgo = new Date(Date.now() - 60 * 60_000);
+  for (const path of [leased, idle, current, recent]) {
+    mkdirSync(join(path, 'leases'), { recursive: true });
+    writeFileSync(join(path, 'complete.json'), '{}', 'utf8');
+    if (path !== recent) utimesSync(join(path, 'complete.json'), longAgo, longAgo);
+  }
   writeFileSync(join(leased, 'leases', `${process.pid}.json`), '{}', 'utf8');
   writeFileSync(join(idle, 'leases', '2147483647.json'), '{}', 'utf8');
   try {
@@ -321,6 +330,7 @@ test('a shared build snapshot with a live lease is never reaped', async () => {
     assert.equal(existsSync(leased), true, 'a snapshot a live process leases must survive');
     assert.equal(existsSync(idle), false, 'a snapshot leased only by dead processes must be reaped');
     assert.equal(existsSync(current), true, 'the current build\'s snapshot is kept for reuse');
+    assert.equal(existsSync(recent), true, 'a snapshot leased within the idle window survives, so alternating checkouts do not re-copy');
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }
