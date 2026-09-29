@@ -19,10 +19,13 @@
 // new build hashes differently and gets its own directory.
 //
 // Each process holds a lease file inside the snapshot while it runs. Shared
-// snapshots are created, leased and reaped only while the publication lock is
-// held, so a reaper can never remove a snapshot between a launcher's lease and
-// its import. A snapshot with no live lease is reaped once it is no longer the
-// current build's. A process killed mid-copy leaves an owner-stamped private
+// snapshots are created, leased and reaped only under one machine-wide
+// snapshot lock. The package's own publication lock is not enough: two package
+// roots with identical builds (a checkout and a copy of it) hash to the same
+// snapshot but hold different publication locks, and a reaper in one could
+// remove the snapshot another had just created and not yet leased. A snapshot
+// is reaped when no live process leases it, it is not the current build's, and
+// nothing has leased it for SHARED_IDLE_MS. A process killed mid-copy leaves an owner-stamped private
 // directory that a later launcher reaps once its owner is demonstrably dead —
 // never by pathname, which could delete a running server's module tree.
 import { createHash } from 'node:crypto';
@@ -36,17 +39,23 @@ import {
   renameSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LOCK_STALE_MS, processIsAlive } from './publication-lock.mjs';
+import { acquirePublicationLock, LOCK_STALE_MS, processIsAlive } from './publication-lock.mjs';
 
 export const SNAPSHOT_PREFIX = 'segreant-runtime-';
 export const SHARED_SNAPSHOT_PREFIX = `${SNAPSHOT_PREFIX}build-`;
 export const SNAPSHOT_OWNER_FILE = 'owner.json';
 export const SNAPSHOT_COMPLETE_FILE = 'complete.json';
 export const SNAPSHOT_LEASE_DIR = 'leases';
+// Deliberately outside SNAPSHOT_PREFIX, so the orphan reaper never touches it.
+export const SNAPSHOT_LOCK_DIR = 'segreant-snapshot-lock';
+// An unleased snapshot of another build survives this long after its last
+// lease, so two checkouts used alternately do not re-copy on every command.
+export const SHARED_IDLE_MS = 10 * 60_000;
 
 // The compiled runtime resolves these relative to the PACKAGE root rather than
 // to its own module: the bundled pricing card, the Lift baselines, the public
@@ -125,6 +134,18 @@ function liveLeases(path) {
   return live;
 }
 
+/** Time since the snapshot was last leased (its completion marker is touched on every lease). */
+function idleFor(path) {
+  for (const candidate of [join(path, SNAPSHOT_COMPLETE_FILE), path]) {
+    try {
+      return Date.now() - statSync(candidate).mtimeMs;
+    } catch {
+      // Try the directory itself.
+    }
+  }
+  return Infinity;
+}
+
 /**
  * Remove snapshots left behind by processes that are gone.
  *
@@ -133,9 +154,10 @@ function liveLeases(path) {
  * runtime. Age only decides for a directory with no readable owner record,
  * which can exist solely in the sliver between `mkdtemp` and the owner write.
  *
- * Shared build snapshots are reaped only when `currentKey` is given, which the
- * launcher does while holding the publication lock: then no launcher can be
- * between leasing a snapshot and importing from it.
+ * Shared build snapshots are reaped only when `currentKey` is given, which
+ * createRuntimeSnapshot does while holding the machine-wide snapshot lock: then
+ * no launcher, from any package root, can be between creating or leasing a
+ * snapshot and recording its lease.
  */
 export function reapOrphanRuntimeSnapshots(parent = tmpdir(), currentKey = null) {
   let entries;
@@ -149,7 +171,7 @@ export function reapOrphanRuntimeSnapshots(parent = tmpdir(), currentKey = null)
     const path = join(parent, entry.name);
     if (entry.name.startsWith(SHARED_SNAPSHOT_PREFIX)) {
       if (currentKey === null || entry.name === `${SHARED_SNAPSHOT_PREFIX}${currentKey}`) continue;
-      if (liveLeases(path) === 0) removeTree(path);
+      if (liveLeases(path) === 0 && idleFor(path) > SHARED_IDLE_MS) removeTree(path);
       continue;
     }
     const owner = readSnapshotOwner(path);
@@ -178,13 +200,25 @@ function copyRuntime(packageRoot, root) {
 /**
  * Lease the shared snapshot of the current build, creating it if needed.
  *
- * Call this while the publication lock is held: that is what makes the copy
- * independent of a concurrent build, and what keeps the reaper from removing a
- * snapshot between this lease and the caller's import. The returned `dispose`
+ * Call this while the package's publication lock is held: that makes the copy
+ * independent of a concurrent build. It takes the machine-wide snapshot lock
+ * itself, which keeps every reaper, from any package root, from removing a
+ * snapshot between its creation or lease and the recorded lease. The returned `dispose`
  * releases the lease; it is idempotent and safe to register on process exit.
  */
 export function createRuntimeSnapshot(packageRoot, parent = tmpdir()) {
   const key = runtimeKey(packageRoot);
+  const lockRoot = join(parent, SNAPSHOT_LOCK_DIR);
+  mkdirSync(lockRoot, { recursive: true });
+  const release = acquirePublicationLock(lockRoot);
+  try {
+    return leaseSharedSnapshot(packageRoot, parent, key);
+  } finally {
+    release?.();
+  }
+}
+
+function leaseSharedSnapshot(packageRoot, parent, key) {
   const root = join(parent, `${SHARED_SNAPSHOT_PREFIX}${key}`);
   if (!existsSync(join(root, SNAPSHOT_COMPLETE_FILE))) {
     // An incomplete shared directory can only be residue of a failed rename.
@@ -206,6 +240,12 @@ export function createRuntimeSnapshot(packageRoot, parent = tmpdir()) {
   const lease = join(root, SNAPSHOT_LEASE_DIR, `${process.pid}.json`);
   mkdirSync(join(root, SNAPSHOT_LEASE_DIR), { recursive: true });
   writeFileSync(lease, JSON.stringify({ pid: process.pid }), 'utf8');
+  const now = new Date();
+  try {
+    utimesSync(join(root, SNAPSHOT_COMPLETE_FILE), now, now);
+  } catch {
+    // The idle clock is advisory; a live lease is what protects the tree.
+  }
   reapOrphanRuntimeSnapshots(parent, key);
 
   let disposed = false;
