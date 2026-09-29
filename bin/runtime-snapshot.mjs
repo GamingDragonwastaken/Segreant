@@ -1,4 +1,4 @@
-// Private per-process copy of the compiled runtime, used by the CLI launcher.
+// Immutable copy of the compiled runtime, used by the CLI launcher.
 //
 // The launcher has to release the publication gate as soon as the copy exists —
 // holding it for the length of a command would starve every queued build — but
@@ -9,17 +9,31 @@
 // reads the bundled pricing card per REQUEST rather than at import.
 //
 // So the snapshot's correctness condition is a lifetime, not a completion. It
-// must outlive the process that imported it; cleanup belongs to process exit.
-// A process killed before that (SIGKILL, a closed terminal) leaves an
-// owner-stamped directory that a later launcher reaps once its owner is
-// demonstrably dead — never by pathname, which would delete a running server's
-// module tree out from under it.
+// must outlive every process that imported it.
+//
+// The copy is keyed by a hash of its contents and shared by every launch of the
+// same build. A fresh copy per process was correct but slow: on Windows the
+// first open of each newly written module file costs about a second across the
+// module graph, on every command. A content-keyed copy is never modified after
+// it is complete, so sharing it cannot hand a process a half-published build: a
+// new build hashes differently and gets its own directory.
+//
+// Each process holds a lease file inside the snapshot while it runs. Shared
+// snapshots are created, leased and reaped only while the publication lock is
+// held, so a reaper can never remove a snapshot between a launcher's lease and
+// its import. A snapshot with no live lease is reaped once it is no longer the
+// current build's. A process killed mid-copy leaves an owner-stamped private
+// directory that a later launcher reaps once its owner is demonstrably dead —
+// never by pathname, which could delete a running server's module tree.
+import { createHash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -29,7 +43,10 @@ import { join } from 'node:path';
 import { LOCK_STALE_MS, processIsAlive } from './publication-lock.mjs';
 
 export const SNAPSHOT_PREFIX = 'segreant-runtime-';
+export const SHARED_SNAPSHOT_PREFIX = `${SNAPSHOT_PREFIX}build-`;
 export const SNAPSHOT_OWNER_FILE = 'owner.json';
+export const SNAPSHOT_COMPLETE_FILE = 'complete.json';
+export const SNAPSHOT_LEASE_DIR = 'leases';
 
 // The compiled runtime resolves these relative to the PACKAGE root rather than
 // to its own module: the bundled pricing card, the Lift baselines, the public
@@ -63,6 +80,51 @@ function readSnapshotOwner(path) {
   }
 }
 
+/** Content hash of everything a snapshot copies, in a stable order. */
+export function runtimeKey(packageRoot) {
+  const hash = createHash('sha256');
+  const walk = (dir, rel) => {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      const name = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(path, name);
+      else {
+        hash.update(`${name}\0`);
+        hash.update(readFileSync(path));
+        hash.update('\0');
+      }
+    }
+  };
+  for (const resource of ['dist', ...ROOT_RESOURCES]) {
+    const path = join(packageRoot, resource);
+    if (!existsSync(path)) continue;
+    if (statSync(path).isDirectory()) walk(path, resource);
+    else {
+      hash.update(`${resource}\0`);
+      hash.update(readFileSync(path));
+      hash.update('\0');
+    }
+  }
+  return hash.digest('hex').slice(0, 32);
+}
+
+function liveLeases(path) {
+  let names;
+  try {
+    names = readdirSync(join(path, SNAPSHOT_LEASE_DIR));
+  } catch {
+    return 0;
+  }
+  let live = 0;
+  for (const name of names) {
+    const pid = Number(name.replace(/\.json$/, ''));
+    if (processIsAlive(pid)) live++;
+    else rmSync(join(path, SNAPSHOT_LEASE_DIR, name), { force: true });
+  }
+  return live;
+}
+
 /**
  * Remove snapshots left behind by processes that are gone.
  *
@@ -70,8 +132,12 @@ function readSnapshotOwner(path) {
  * its snapshot for days, so an age-only reaper would delete a live server's
  * runtime. Age only decides for a directory with no readable owner record,
  * which can exist solely in the sliver between `mkdtemp` and the owner write.
+ *
+ * Shared build snapshots are reaped only when `currentKey` is given, which the
+ * launcher does while holding the publication lock: then no launcher can be
+ * between leasing a snapshot and importing from it.
  */
-export function reapOrphanRuntimeSnapshots(parent = tmpdir()) {
+export function reapOrphanRuntimeSnapshots(parent = tmpdir(), currentKey = null) {
   let entries;
   try {
     entries = readdirSync(parent, { withFileTypes: true });
@@ -81,6 +147,11 @@ export function reapOrphanRuntimeSnapshots(parent = tmpdir()) {
   for (const entry of entries) {
     if (!entry.isDirectory() || !entry.name.startsWith(SNAPSHOT_PREFIX)) continue;
     const path = join(parent, entry.name);
+    if (entry.name.startsWith(SHARED_SNAPSHOT_PREFIX)) {
+      if (currentKey === null || entry.name === `${SHARED_SNAPSHOT_PREFIX}${currentKey}`) continue;
+      if (liveLeases(path) === 0) removeTree(path);
+      continue;
+    }
     const owner = readSnapshotOwner(path);
     if (owner) {
       if (!processIsAlive(owner.pid)) removeTree(path);
@@ -94,39 +165,62 @@ export function reapOrphanRuntimeSnapshots(parent = tmpdir()) {
   }
 }
 
+function copyRuntime(packageRoot, root) {
+  cpSync(join(packageRoot, 'dist'), join(root, 'dist'), { recursive: true, force: true, errorOnExist: false });
+  for (const resource of ROOT_RESOURCES) {
+    const source = join(packageRoot, resource);
+    if (existsSync(source)) {
+      cpSync(source, join(root, resource), { recursive: true, force: true, errorOnExist: false });
+    }
+  }
+}
+
 /**
- * Copy the compiled runtime and its package-root resources into a private tree.
+ * Lease the shared snapshot of the current build, creating it if needed.
  *
- * Call this while the publication lock is held: the copy is what makes every
- * later module resolution and resource read independent of a concurrent build.
- * The returned `dispose` is idempotent and safe to register on process exit.
+ * Call this while the publication lock is held: that is what makes the copy
+ * independent of a concurrent build, and what keeps the reaper from removing a
+ * snapshot between this lease and the caller's import. The returned `dispose`
+ * releases the lease; it is idempotent and safe to register on process exit.
  */
 export function createRuntimeSnapshot(packageRoot, parent = tmpdir()) {
-  const root = mkdtempSync(join(parent, SNAPSHOT_PREFIX));
-  try {
-    // Stamp ownership before the expensive copy, so an interrupted creation is
-    // still reapable by liveness rather than having to age out.
-    writeFileSync(join(root, SNAPSHOT_OWNER_FILE), JSON.stringify({ pid: process.pid }), 'utf8');
-    cpSync(join(packageRoot, 'dist'), join(root, 'dist'), { recursive: true, force: true, errorOnExist: false });
-    for (const resource of ROOT_RESOURCES) {
-      const source = join(packageRoot, resource);
-      if (existsSync(source)) {
-        cpSync(source, join(root, resource), { recursive: true, force: true, errorOnExist: false });
-      }
+  const key = runtimeKey(packageRoot);
+  const root = join(parent, `${SHARED_SNAPSHOT_PREFIX}${key}`);
+  if (!existsSync(join(root, SNAPSHOT_COMPLETE_FILE))) {
+    // An incomplete shared directory can only be residue of a failed rename.
+    if (existsSync(root)) removeTree(root);
+    const staging = mkdtempSync(join(parent, SNAPSHOT_PREFIX));
+    try {
+      // Stamp ownership before the expensive copy, so an interrupted creation is
+      // still reapable by liveness rather than having to age out.
+      writeFileSync(join(staging, SNAPSHOT_OWNER_FILE), JSON.stringify({ pid: process.pid }), 'utf8');
+      copyRuntime(packageRoot, staging);
+      writeFileSync(join(staging, SNAPSHOT_COMPLETE_FILE), JSON.stringify({ key }), 'utf8');
+      rmSync(join(staging, SNAPSHOT_OWNER_FILE), { force: true });
+      renameSync(staging, root);
+    } catch (error) {
+      removeTree(staging);
+      throw error;
     }
-  } catch (error) {
-    removeTree(root);
-    throw error;
   }
+  const lease = join(root, SNAPSHOT_LEASE_DIR, `${process.pid}.json`);
+  mkdirSync(join(root, SNAPSHOT_LEASE_DIR), { recursive: true });
+  writeFileSync(lease, JSON.stringify({ pid: process.pid }), 'utf8');
+  reapOrphanRuntimeSnapshots(parent, key);
 
   let disposed = false;
   return {
     root,
+    key,
     entry: join(root, 'dist', 'cli.js'),
     dispose() {
       if (disposed) return;
       disposed = true;
-      removeTree(root);
+      try {
+        rmSync(lease, { force: true });
+      } catch {
+        // A lease left behind names a dead pid; the next reaper discards it.
+      }
     },
   };
 }

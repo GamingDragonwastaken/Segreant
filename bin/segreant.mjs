@@ -53,8 +53,9 @@ if (!process.env.__SEGREANT_CHILD) {
   const release = acquirePublicationLock(join(here, '..'));
   let snapshot;
   try {
-    // Copy while the publisher is excluded. Once the lock is released all
-    // module resolution and resource reading happens inside this private tree,
+    // Lease (and, for a new build, copy) while the publisher is excluded. Once
+    // the lock is released all module resolution and resource reading happens
+    // inside this immutable, content-keyed tree,
     // so no later build can replace a dependency half-way through the import
     // graph — or half-way through a request served hours later.
     snapshot = createRuntimeSnapshot(join(here, '..'));
@@ -62,8 +63,8 @@ if (!process.env.__SEGREANT_CHILD) {
     release?.();
   }
 
-  // Registered before the import so a failed import still cleans up. The
-  // snapshot has to outlive the imported runtime, not merely the promise that
+  // Registered before the import so a failed import still releases the lease.
+  // The lease has to outlive the imported runtime, not merely the promise that
   // runtime resolves when its deferred command work settles: `segreant start`
   // settles that promise as soon as its sockets are listening and then serves
   // for hours. Process exit is the only point at which no copied module or

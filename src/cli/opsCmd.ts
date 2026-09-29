@@ -261,7 +261,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
 
   console.log('');
   if (report.hint) console.log(color(tty, C.gray, `  ${report.hint}`));
-  console.log(color(tty, C.gray, '  segreant help — every command · segreant doctor — health check'));
+  console.log(color(tty, C.gray, '  segreant help — the main commands · segreant help all — every command · segreant doctor — health check'));
   console.log('');
 }
 

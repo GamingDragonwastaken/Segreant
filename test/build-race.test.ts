@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBuildWorkspace } from './support/buildWorkspace.ts';
@@ -272,15 +272,57 @@ setTimeout(() => {
 }, 150);
 `, 'utf8');
 
+  const roots: string[] = [];
   try {
     const result = await runNode(join(fixtureBin, 'segreant.mjs'), []);
     assert.equal(result.code, 0, result.stderr || 'a command outliving its completion promise lost its runtime snapshot');
     const [snapshotRoot = '', resource] = result.stdout.split('\n');
+    roots.push(snapshotRoot);
     assert.equal(`${resource}\n`, 'fixture-resource-ready\n', 'the post-completion resource read must still resolve inside the snapshot');
     assert.notEqual(snapshotRoot, '', 'the fixture runtime must report the snapshot it was imported from');
-    assert.equal(existsSync(snapshotRoot), false, 'the snapshot must be removed when the process that owns it exits');
+    assert.deepEqual(readdirSync(join(snapshotRoot, 'leases')), [], 'the process must release its lease on the snapshot when it exits');
+
+    // The same build reuses its snapshot: re-copying per process cost about a
+    // second per command on Windows, where each new module file is scanned.
+    const again = await runNode(join(fixtureBin, 'segreant.mjs'), []);
+    assert.equal(again.code, 0, again.stderr);
+    assert.equal(again.stdout.split('\n')[0], snapshotRoot, 'an unchanged build must reuse its snapshot');
+
+    // A new build never shares the old tree, and the unleased old tree is reaped.
+    writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-rebuilt\n', 'utf8');
+    const rebuilt = await runNode(join(fixtureBin, 'segreant.mjs'), []);
+    assert.equal(rebuilt.code, 0, rebuilt.stderr);
+    const [newRoot = '', newResource] = rebuilt.stdout.split('\n');
+    roots.push(newRoot);
+    assert.notEqual(newRoot, snapshotRoot, 'a changed build must get its own snapshot');
+    assert.equal(`${newResource}\n`, 'fixture-resource-rebuilt\n');
+    assert.equal(existsSync(snapshotRoot), false, 'the previous build\'s snapshot, with no live lease, must be reaped');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
+    for (const root of roots) if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a shared build snapshot with a live lease is never reaped', async () => {
+  const parent = mkdtempSync(join(ROOT, '.segreant-runtime-lease-'));
+  const leased = join(parent, 'segreant-runtime-build-old-leased');
+  const idle = join(parent, 'segreant-runtime-build-old-idle');
+  const current = join(parent, 'segreant-runtime-build-current');
+  for (const path of [leased, idle, current]) mkdirSync(join(path, 'leases'), { recursive: true });
+  writeFileSync(join(leased, 'leases', `${process.pid}.json`), '{}', 'utf8');
+  writeFileSync(join(idle, 'leases', '2147483647.json'), '{}', 'utf8');
+  try {
+    const snapshotModule = await import(pathToFileURL(RUNTIME_SNAPSHOT).href) as unknown as {
+      reapOrphanRuntimeSnapshots: (parent: string, currentKey?: string | null) => void;
+    };
+    snapshotModule.reapOrphanRuntimeSnapshots(parent);
+    assert.equal(existsSync(idle), true, 'without the lock-holder\'s current key, shared snapshots are left alone');
+    snapshotModule.reapOrphanRuntimeSnapshots(parent, 'current');
+    assert.equal(existsSync(leased), true, 'a snapshot a live process leases must survive');
+    assert.equal(existsSync(idle), false, 'a snapshot leased only by dead processes must be reaped');
+    assert.equal(existsSync(current), true, 'the current build\'s snapshot is kept for reuse');
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
   }
 });
 
