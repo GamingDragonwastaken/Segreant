@@ -24,7 +24,7 @@ function makeRollout(root: string, sessionId: string, totals: Array<{ ts: string
     JSON.stringify({
       timestamp: '2026-06-08T11:00:00.000Z',
       type: 'session_meta',
-      payload: { id: sessionId, cwd: 'C:\\Users\\dev\\projects\\game', model_provider: 'openai', model: 'gpt-5.5' },
+      payload: { id: sessionId, cwd: 'C:\\Users\\dev\\projects\\game', model_provider: 'openai', model: 'gpt-unreleased-test-model' },
     }),
   ];
   for (const t of totals) {
@@ -65,7 +65,7 @@ test('codex parse: each turn is the delta of the cumulative total, telescoping e
   // Telescoping: summed uncached+cached input = final cumulative input (1800).
   const totalInput = rows.reduce((n, r) => n + r.inputTokens + r.cacheReadTokens, 0);
   assert.equal(totalInput, 1800, 'deltas sum to Codex own cumulative total — no double count');
-  assert.equal(rows[0]!.model, 'gpt-5.5');
+  assert.equal(rows[0]!.model, 'gpt-unreleased-test-model');
   assert.equal(rows[0]!.project, 'game');
   assert.equal(rows[0]!.cwd, 'C:\\Users\\dev\\projects\\game', 'full cwd captured for repo auto-correlation');
 });
@@ -80,7 +80,7 @@ test('codex import: idempotent by stable per-turn id; unknown model priced as ho
 
   const first = await importCodex(store, { root });
   assert.equal(first.inserted, 2);
-  assert.ok(first.estimatedCostUsd > 0, 'gpt-5.5 is not in the rate card -> honestly flagged estimated');
+  assert.ok(first.estimatedCostUsd > 0, 'a model the rate card has never listed -> honestly flagged estimated');
   assert.equal(first.estimatedCostUsd, first.costUsd, 'the whole cost is an estimate here');
 
   const again = await importCodex(store, { root });
