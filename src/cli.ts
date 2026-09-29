@@ -44,6 +44,36 @@ const controlCmd = () => import('./cli/controlCmd.ts');
 const featuresCmd = () => import('./cli/featuresCmd.ts');
 const marketCmd = () => import('./cli/marketCmd.ts');
 
+/**
+ * The first screen a new user reads. It lists only the commands a first week
+ * needs; `segreant help all` keeps the complete reference one word away.
+ */
+function cmdHelpShort(): void {
+  console.log(`
+  Segreant — meter and cap what your AI coding agents spend, locally.
+
+  Usage: segreant <command> [options]
+
+  Get started
+    guide                 Where you are and the single next step (bare "segreant")
+    scan                  Find the AI tools and git repos on this machine and preview
+                          a setup plan; --setup imports and correlates them
+    demo --serve          Every screen on clearly-labeled synthetic data, no API key
+
+  Every day
+    today | week | month  Spend for a window                        (--json)
+    start                 Start the proxy and the local dashboard
+    launch -- <command>   Run a tool metered through the proxy while it runs
+    budget                Set caps: --daily N --soft N --session N --runaway N
+    realize --repo <path> How much of the AI spend became verified, durable work
+
+  More
+    doctor                Health check: config, database, proxy, caps, data quality
+    help all              Every command and flag
+    --version             Print the Segreant version
+`);
+}
+
 function cmdHelp(): void {
   console.log(`
   Segreant — meter and cap what your AI coding agents spend, locally.
@@ -237,7 +267,7 @@ function cmdHelp(): void {
                           surface populates without an API key (--serve to launch the
                           dashboard on it; --clear to remove). Add --demo to any read
                           command (today, alerts, usage, start) to view the demo data.
-    help                  This message
+    help                  The short list; "help all" prints this reference
     --version             Print the Segreant version
 
   Setup
@@ -287,7 +317,7 @@ async function main(): Promise<void> {
   // `segreant start --help` used to start the server: no command reads --help
   // itself, so any command asked for help gets the usage text and does nothing.
   if (flags.help === true && !wraps) {
-    cmdHelp();
+    cmdHelpShort();
     return;
   }
 
@@ -466,7 +496,8 @@ async function main(): Promise<void> {
     case 'help':
     case '--help':
     case '-h':
-      cmdHelp();
+      if (argv[1] === 'all' || flags.all === true) cmdHelp();
+      else cmdHelpShort();
       break;
     case 'version':
     case '--version':
