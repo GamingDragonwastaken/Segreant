@@ -15,29 +15,34 @@ import { demoDbPath, envOverrideKey } from './config.ts';
 import { packageVersion } from './version.ts';
 
 import { parseFlags } from './cli/flags.ts';
-import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
-import { cmdBilling } from './cli/billingCmd.ts';
-import { cmdAlloc } from './cli/allocCmd.ts';
-import { cmdEvidence } from './cli/evidenceCmd.ts';
-import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
-import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
-import { cmdConnect } from './cli/connectCmd.ts';
-import { cmdEgress } from './cli/egressCmd.ts';
-import { cmdCausal } from './cli/causalCmd.ts';
-import { cmdCapital } from './cli/capitalCmd.ts';
-import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
-import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
-import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
-import { cmdLaunch } from './cli/launchCmd.ts';
-import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
-import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
-import { cmdPack } from './cli/packCmd.ts';
-import { cmdPlugin } from './cli/pluginCmd.ts';
-import { cmdEconomic } from './cli/economicCmd.ts';
-import { cmdOutcome } from './cli/outcomeCmd.ts';
-import { cmdBudgetControl } from './cli/controlCmd.ts';
-import { cmdFeatures } from './cli/featuresCmd.ts';
-import { cmdMarket } from './cli/marketCmd.ts';
+
+// Command modules load on demand. Importing every command up front cost about
+// two seconds on every invocation, `--help` included; a command now pays only
+// for its own module graph. All specifiers are literal, so the import-closure
+// walk in test/support/importGraph.ts still sees every edge.
+const importCmd = () => import('./cli/importCmd.ts');
+const billingCmd = () => import('./cli/billingCmd.ts');
+const allocCmd = () => import('./cli/allocCmd.ts');
+const evidenceCmd = () => import('./cli/evidenceCmd.ts');
+const valueCmd = () => import('./cli/valueCmd.ts');
+const teamCmd = () => import('./cli/teamCmd.ts');
+const connectCmd = () => import('./cli/connectCmd.ts');
+const egressCmd = () => import('./cli/egressCmd.ts');
+const causalCmd = () => import('./cli/causalCmd.ts');
+const capitalCmd = () => import('./cli/capitalCmd.ts');
+const opsCmd = () => import('./cli/opsCmd.ts');
+const showCmd = () => import('./cli/showCmd.ts');
+const runCmd = () => import('./cli/runCmd.ts');
+const launchCmd = () => import('./cli/launchCmd.ts');
+const backupCmd = () => import('./cli/backupCmd.ts');
+const diagnosticsCmd = () => import('./cli/diagnosticsCmd.ts');
+const packCmd = () => import('./cli/packCmd.ts');
+const pluginCmd = () => import('./cli/pluginCmd.ts');
+const economicCmd = () => import('./cli/economicCmd.ts');
+const outcomeCmd = () => import('./cli/outcomeCmd.ts');
+const controlCmd = () => import('./cli/controlCmd.ts');
+const featuresCmd = () => import('./cli/featuresCmd.ts');
+const marketCmd = () => import('./cli/marketCmd.ts');
 
 function cmdHelp(): void {
   console.log(`
@@ -288,98 +293,98 @@ async function main(): Promise<void> {
 
   switch (cmd) {
     case 'demo':
-      await cmdDemo(flags);
+      await (await runCmd()).cmdDemo(flags);
       break;
     case 'start':
-      await cmdStart(flags);
+      await (await runCmd()).cmdStart(flags);
       break;
     case 'today':
     case 'status':
-      cmdShow('today', flags);
+      (await showCmd()).cmdShow('today', flags);
       break;
     case 'week':
-      cmdShow('week', flags);
+      (await showCmd()).cmdShow('week', flags);
       break;
     case 'month':
-      cmdShow('month', flags);
+      (await showCmd()).cmdShow('month', flags);
       break;
     case 'economic':
     case 'economics':
-      cmdEconomic(flags);
+      (await economicCmd()).cmdEconomic(flags);
       break;
     case 'sources':
-      cmdSources(flags);
+      (await showCmd()).cmdSources(flags);
       break;
     case 'connect':
-      cmdConnect(flags);
+      (await connectCmd()).cmdConnect(flags);
       break;
     case 'egress':
-      cmdEgress(flags);
+      (await egressCmd()).cmdEgress(flags);
       break;
     case 'causal':
     case 'study':
-      cmdCausal(flags);
+      (await causalCmd()).cmdCausal(flags);
       break;
     case 'capital':
-      cmdCapital(flags);
+      (await capitalCmd()).cmdCapital(flags);
       break;
     case 'init':
-      cmdInit();
+      (await opsCmd()).cmdInit();
       break;
     case 'config':
-      cmdConfig(flags);
+      (await showCmd()).cmdConfig(flags);
       break;
     case 'features':
-      cmdFeatures(flags);
+      (await featuresCmd()).cmdFeatures(flags);
       break;
     case 'market':
-      await cmdMarket(flags);
+      await (await marketCmd()).cmdMarket(flags);
       break;
     case 'budget':
-      if (flags.control) await cmdBudgetControl(flags);
-      else if (flags.recommend) await cmdBudgetAdvisor(flags);
-      else cmdBudget(flags);
+      if (flags.control) await (await controlCmd()).cmdBudgetControl(flags);
+      else if (flags.recommend) await (await valueCmd()).cmdBudgetAdvisor(flags);
+      else (await showCmd()).cmdBudget(flags);
       break;
     case 'alerts':
-      await cmdAlerts(flags);
+      await (await opsCmd()).cmdAlerts(flags);
       break;
     case 'export':
-      cmdExport(flags);
+      (await showCmd()).cmdExport(flags);
       break;
     case 'guide':
     case 'next':
-      await cmdGuide(flags);
+      await (await opsCmd()).cmdGuide(flags);
       break;
     case 'doctor':
-      await cmdDoctor();
+      await (await opsCmd()).cmdDoctor();
       break;
     case 'audit':
-      await cmdAudit(flags);
+      await (await opsCmd()).cmdAudit(flags);
       break;
     case 'yield':
-      await cmdYield(flags);
+      await (await valueCmd()).cmdYield(flags);
       break;
     case 'realize':
     case 'realization':
-      await cmdRealize(flags);
+      await (await valueCmd()).cmdRealize(flags);
       break;
     case 'roi':
-      await cmdRoi(flags);
+      await (await valueCmd()).cmdRoi(flags);
       break;
     case 'saved':
-      await cmdSaved(flags);
+      await (await valueCmd()).cmdSaved(flags);
       break;
     case 'frontier':
-      await cmdFrontier(flags);
+      await (await valueCmd()).cmdFrontier(flags);
       break;
     case 'usage':
-      await cmdUsage(flags);
+      await (await valueCmd()).cmdUsage(flags);
       break;
     case 'outcome':
-      cmdOutcome(flags);
+      (await outcomeCmd()).cmdOutcome(flags);
       break;
     case 'judge':
-      await cmdJudge(flags);
+      await (await teamCmd()).cmdJudge(flags);
       break;
     case 'team':
       // Bare `team` / `team --me <user>` = the existing local, k-anonymous
@@ -388,75 +393,75 @@ async function main(): Promise<void> {
       // Same top-level verb, two scopes — not a naming collision: `push`
       // lands in flags._[0] because `main()` already consumed argv[0] as `cmd`.
       if (flags._[0] === 'push') {
-        await cmdTeamPush(flags);
+        await (await teamCmd()).cmdTeamPush(flags);
       } else {
-        await cmdTeam(flags);
+        await (await teamCmd()).cmdTeam(flags);
       }
       break;
     case 'report':
-      await cmdReport(flags);
+      await (await valueCmd()).cmdReport(flags);
       break;
     case 'evidence':
-      await cmdEvidence(flags);
+      await (await evidenceCmd()).cmdEvidence(flags);
       break;
     case 'exec':
-      await cmdExec(flags, wrapped);
+      await (await valueCmd()).cmdExec(flags, wrapped);
       break;
     case 'launch':
-      await cmdLaunch(flags, wrapped);
+      await (await launchCmd()).cmdLaunch(flags, wrapped);
       break;
     case 'import':
-      await cmdImport(flags);
+      await (await importCmd()).cmdImport(flags);
       break;
     case 'billing':
-      await cmdBilling(flags);
+      await (await billingCmd()).cmdBilling(flags);
       break;
     case 'alloc':
     case 'allocation':
-      cmdAlloc(flags);
+      (await allocCmd()).cmdAlloc(flags);
       break;
     case 'discover':
-      await cmdDiscover(flags);
+      await (await importCmd()).cmdDiscover(flags);
       break;
     case 'scan':
-      await cmdScan(flags);
+      await (await importCmd()).cmdScan(flags);
       break;
     case 'receipt':
     case 'receipts':
-      await cmdReceipt(flags);
+      await (await teamCmd()).cmdReceipt(flags);
       break;
     case 'project':
     case 'projects':
-      cmdProject(flags);
+      (await showCmd()).cmdProject(flags);
       break;
     case 'prune':
-      cmdPrune();
+      (await showCmd()).cmdPrune();
       break;
     case 'backup':
-      cmdBackup(flags);
+      (await backupCmd()).cmdBackup(flags);
       break;
     case 'restore':
-      cmdRestore(flags);
+      (await backupCmd()).cmdRestore(flags);
       break;
     case 'pack':
-      cmdPack(flags);
+      (await packCmd()).cmdPack(flags);
       break;
     case 'plugin':
-      await cmdPlugin(flags);
+      await (await pluginCmd()).cmdPlugin(flags);
       break;
     case 'diagnostics':
     case 'diagnostic':
-      cmdDiagnostics(flags);
+      (await diagnosticsCmd()).cmdDiagnostics(flags);
       break;
     case 'pricing':
-      await cmdPricing(flags);
+      await (await runCmd()).cmdPricing(flags);
       break;
     case 'reprice':
-      cmdReprice(flags);
+      (await runCmd()).cmdReprice(flags);
       break;
     case 'baseline':
     case 'baselines':
-      await cmdBaseline(flags);
+      await (await runCmd()).cmdBaseline(flags);
       break;
     case 'help':
     case '--help':
@@ -486,9 +491,10 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 // module and released its publication lock. Some commands (notably `demo`)
 // perform substantial synchronous work before their first `await`; invoking
 // them directly here would make every concurrent CLI reader hold the build gate
-// for the whole command and can starve a legitimate publication queue. The
-// modules are fully loaded before this callback runs, so publication can no
-// longer create a missing-dependency window for this process.
+// for the whole command and can starve a legitimate publication queue. Command
+// modules imported later resolve inside the launcher's private runtime snapshot,
+// which lives until process exit, so publication still cannot create a
+// missing-dependency window for this process.
 export const cliCompletion = new Promise<void>((resolve) => setImmediate(() => {
   main().catch((err) => {
     console.error('  Segreant error:', err);

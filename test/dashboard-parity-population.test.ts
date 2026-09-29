@@ -206,6 +206,12 @@ function dispatchTable(): Map<string, DispatchEntry> {
       imports.set(name, join(ROOT, 'src/cli', match[2]!));
     }
   }
+  // Command modules load on demand: `const showCmd = () => import('./cli/showCmd.ts');`
+  // and each case calls `(await showCmd()).cmdShow(...)`.
+  const loaders = new Map<string, string>();
+  for (const match of cli.matchAll(/^const (\w+) = \(\) => import\('\.\/cli\/([^']+)'\);/gm)) {
+    loaders.set(match[1]!, join(ROOT, 'src/cli', match[2]!));
+  }
   const switchAt = cli.indexOf('  switch (cmd) {');
   assert.notEqual(switchAt, -1, 'src/cli.ts must dispatch through a switch, or this test reads the wrong thing');
   const table = new Map<string, DispatchEntry>();
@@ -214,8 +220,9 @@ function dispatchTable(): Map<string, DispatchEntry> {
   const flush = (): void => {
     if (names.length === 0) return;
     const text = body.join('\n');
-    const handler = /\b(cmd[A-Z]\w*)\(/.exec(text)?.[1] ?? null;
-    const modulePath = handler === null ? null : imports.get(handler) ?? null;
+    const lazy = /\(await (\w+)\(\)\)\.(cmd[A-Z]\w*)\(/.exec(text);
+    const handler = lazy?.[2] ?? /\b(cmd[A-Z]\w*)\(/.exec(text)?.[1] ?? null;
+    const modulePath = lazy ? loaders.get(lazy[1]!) ?? null : handler === null ? null : imports.get(handler) ?? null;
     const entry: DispatchEntry = {
       names,
       body: text,
