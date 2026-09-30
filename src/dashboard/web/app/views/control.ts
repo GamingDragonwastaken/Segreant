@@ -68,9 +68,19 @@ export function controlView(): Node {
       const budget = s.budget;
       const enforcement = s.enforcement;
       const cap = budget?.dailyUsd ?? null;
-      const spentToday = today()?.summary.costUsd ?? null;
       const rec = advice();
       const includesImported = budget?.capIncludesImported === true;
+      // The meter must measure what the cap measures. By default the cap counts
+      // only traffic routed through Segreant, so imported usage sits beside the
+      // meter rather than inside it: dividing all observed spend by a proxy-only
+      // cap showed "140% of your limit" while nothing was being blocked.
+      const overviewBudget = today()?.budget ?? null;
+      const spentToday = overviewBudget === null
+        ? null
+        : includesImported
+          ? overviewBudget.todaySpendUsd + overviewBudget.todayImportedUsd
+          : overviewBudget.todaySpendUsd;
+      const importedOutsideCap = overviewBudget !== null && !includesImported ? overviewBudget.todayImportedUsd : 0;
 
       const alerts = today()?.alerts ?? [];
       const coverage = today()?.alertCoverage ?? null;
@@ -106,8 +116,13 @@ export function controlView(): Node {
                           style: `--fill: ${Math.min(100, cap > 0 ? (spentToday / cap) * 100 : 0)}%`,
                         })),
                       h('span', { class: 'basis', text: () => (isPrecise()
-                        ? `${usd(spentToday)} observed today — ${pct(cap > 0 ? spentToday / cap : 0, 0)} of the cap`
-                        : `${usd(spentToday)} spent today, which is ${pct(cap > 0 ? spentToday / cap : 0, 0)} of your limit`) }))
+                        ? `${usd(spentToday)} counted toward the cap today — ${pct(cap > 0 ? spentToday / cap : 0, 0)} of the cap`
+                        : `${usd(spentToday)} spent today, which is ${pct(cap > 0 ? spentToday / cap : 0, 0)} of your limit`) }),
+                      importedOutsideCap > 0
+                        ? h('span', { class: 'basis', text: () => (isPrecise()
+                          ? `${usd(importedOutsideCap)} imported today is excluded from the cap (it cannot be blocked).`
+                          : `Plus ${usd(importedOutsideCap)} imported from your tools' logs today, which the limit doesn't count because it can't be stopped.`) })
+                        : null)
                   : null),
 
           // Which money the cap can actually reach. See the module note.
