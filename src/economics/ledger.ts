@@ -15,6 +15,7 @@ import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEven
 import { deserializeEconomicEvent, deserializeHistoricalRateObservation, serializeEconomicEvent, serializeHistoricalRateObservation, type SerializedHistoricalRateObservation } from './serialization.ts';
 import { applyExactRate, historicalRateBook as buildHistoricalRateBook, historicalRateObservation, rateFromJson, type HistoricalRateBook, type HistoricalRateObservation, type HistoricalRateObservationInput } from './rate.ts';
 import { translateEffectiveChargeFromRateBook, type EffectiveFxChargeProjection } from './fx.ts';
+import { AppendMark, prepared } from '../util/statements.ts';
 import { canonicalPeriod, closeFinalizationMetadata, closeInvalidationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseInvalidationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
@@ -259,17 +260,17 @@ export class EconomicLedger {
    * aborts the upgrade so an old database cannot open with a partial graph.
    */
   private backfillSourceLinks(): void {
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY event_id ASC',
     ).all() as unknown as StoredEconomicRow[];
     if (rows.length === 0) return;
-    const has = this.db.prepare(
+    const has = prepared(this.db, 
       'SELECT 1 AS present FROM economic_event_sources WHERE event_id = ? AND source_event_id = ?',
     );
-    const add = this.db.prepare(
+    const add = prepared(this.db, 
       'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
     );
-    this.db.prepare('BEGIN IMMEDIATE').run();
+    prepared(this.db, 'BEGIN IMMEDIATE').run();
     try {
       for (const rowValue of rows) {
         const value = storedRecord(rowValue);
@@ -277,9 +278,9 @@ export class EconomicLedger {
           if (has.get(value.id, sourceId) === undefined) add.run(value.id, sourceId);
         }
       }
-      this.db.prepare('COMMIT').run();
+      prepared(this.db, 'COMMIT').run();
     } catch (error) {
-      try { this.db.prepare('ROLLBACK').run(); } catch { /* preserve original failure */ }
+      try { prepared(this.db, 'ROLLBACK').run(); } catch { /* preserve original failure */ }
       throw error;
     }
   }
@@ -297,12 +298,12 @@ export class EconomicLedger {
   }
 
   private readStored(id: string): EconomicEvent | null {
-    const stored = row<StoredEconomicRow>(this.db.prepare(
+    const stored = row<StoredEconomicRow>(prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
     ).get(id));
     if (stored === null) return null;
     const value = storedRecord(stored);
-    const links = this.db.prepare(
+    const links = prepared(this.db, 
       'SELECT source_event_id AS sourceEventId FROM economic_event_sources WHERE event_id = ? ORDER BY source_event_id ASC',
     ).all(id) as Array<{ sourceEventId: string }>;
     const expected = [...value.sourceEventIds].sort();
@@ -319,13 +320,13 @@ export class EconomicLedger {
       ? 'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations ORDER BY recorded_at ASC, observation_id ASC'
       : 'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations WHERE recorded_at <= ? ORDER BY recorded_at ASC, observation_id ASC';
     const rows = (boundary === null
-      ? this.db.prepare(query).all()
-      : this.db.prepare(query).all(boundary)) as unknown as StoredHistoricalRateRow[];
+      ? prepared(this.db, query).all()
+      : prepared(this.db, query).all(boundary)) as unknown as StoredHistoricalRateRow[];
     return Object.freeze(rows.map(storedHistoricalRateObservation));
   }
 
   private hasCloseInvalidation(closeEventId: string): boolean {
-    const rowValue = this.db.prepare(
+    const rowValue = prepared(this.db, 
       `SELECT 1 AS present
          FROM economic_event_sources AS s
          JOIN economic_events AS e ON e.event_id = s.event_id
@@ -450,7 +451,7 @@ export class EconomicLedger {
     const seen = new Set<string>([charge.id]);
     let current = charge.id;
     for (;;) {
-      const successors = this.db.prepare(
+      const successors = prepared(this.db, 
         `SELECT s.event_id AS eventId
          FROM economic_event_sources AS s
          JOIN economic_events AS e ON e.event_id = s.event_id
@@ -481,7 +482,7 @@ export class EconomicLedger {
    */
   private recordedNegativeAdjustments(target: EconomicEvent, excludeId: string): { readonly total: Money; readonly ids: readonly string[] } {
     if (target.amount === null) throw new Error(`economic event ${target.id} has no monetary amount to adjust`);
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       `SELECT s.event_id AS eventId
        FROM economic_event_sources AS s
        JOIN economic_events AS e ON e.event_id = s.event_id
@@ -630,7 +631,7 @@ export class EconomicLedger {
         // must not constrain another. And placed after the single-event check
         // so a lone oversized reversal still fails for its own, more precise
         // reason.
-        const priorReversals = this.db.prepare(
+        const priorReversals = prepared(this.db, 
           `SELECT s.event_id AS eventId
            FROM economic_event_sources AS s
            JOIN economic_events AS e ON e.event_id = s.event_id
@@ -734,7 +735,7 @@ export class EconomicLedger {
       if (compareMoney(subtractMoney(next, previous), value.amount) !== 0) {
         throw new Error(`economic event ${value.id} price correction amount must equal nextAmount minus previousAmount`);
       }
-      const priorCorrections = this.db.prepare(
+      const priorCorrections = prepared(this.db, 
         `SELECT s.event_id AS eventId
          FROM economic_event_sources AS s
          JOIN economic_events AS e ON e.event_id = s.event_id
@@ -895,7 +896,7 @@ export class EconomicLedger {
       // The rule is one live translation per root and target currency, not a
       // ban on translations of translations.
       const root = this.translationRoot(source.id);
-      const priorTranslations = this.db.prepare(
+      const priorTranslations = prepared(this.db, 
         "SELECT event_id AS eventId FROM economic_events WHERE event_kind = 'fx_translated' AND event_id <> ? ORDER BY event_id ASC",
       ).all(value.id) as unknown as { eventId?: unknown }[];
       for (const prior of priorTranslations) {
@@ -916,7 +917,7 @@ export class EconomicLedger {
   }
 
   private appendCanonical(item: EconomicEvent, encoded: ReturnType<typeof serializeEconomicEvent>): EconomicAppendResult {
-    const existing = row<StoredEconomicRow>(this.db.prepare(
+    const existing = row<StoredEconomicRow>(prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
     ).get(item.id));
     if (existing !== null) {
@@ -933,10 +934,10 @@ export class EconomicLedger {
       if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
     }
     this.validateReferenceClosure(item);
-    this.db.prepare(
+    prepared(this.db, 
       'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
-    const link = this.db.prepare(
+    const link = prepared(this.db, 
       'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
     );
     for (const sourceId of item.sourceEventIds) link.run(item.id, sourceId);
@@ -1102,7 +1103,7 @@ export class EconomicLedger {
       const sourceEventIds = events.map((event) => event.id).sort();
       const balances = closeBalances(events);
       const projectionDigest = closeProjectionDigest(period, sourceEventIds, balances);
-      const countRow = this.db.prepare(
+      const countRow = prepared(this.db, 
         'SELECT COUNT(*) AS count FROM economic_events WHERE event_kind = ? AND subject = ?',
       ).get('close_finalized', period.subject) as { count: number };
       const id = input.id ?? 'economic:close:' + period.startMs + ':' + period.endMs + ':' + (Number(countRow.count) + 1);
@@ -1149,7 +1150,7 @@ export class EconomicLedger {
       if (state.status !== 'finalized' || state.activeFinalizationId === null) {
         throw new Error('economic period is not actively finalized; nothing to reopen');
       }
-      const countRow = this.db.prepare(
+      const countRow = prepared(this.db, 
         'SELECT COUNT(*) AS count FROM economic_events WHERE event_kind = ? AND subject = ?',
       ).get('close_reopened', period.subject) as { count: number };
       const id = input.id ?? 'economic:reopen:' + period.startMs + ':' + period.endMs + ':' + (Number(countRow.count) + 1);
@@ -1210,7 +1211,7 @@ export class EconomicLedger {
         throw new Error('economic period recovery recordedAt cannot precede its finalized close');
       }
 
-      const existingRow = row<StoredEconomicRow>(this.db.prepare(
+      const existingRow = row<StoredEconomicRow>(prepared(this.db, 
         `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
            FROM economic_event_sources AS s
            JOIN economic_events AS e ON e.event_id = s.event_id
@@ -1268,7 +1269,7 @@ export class EconomicLedger {
         schemaVersion: 1,
       });
       const encoded = serializeEconomicEvent(invalidated);
-      const sameId = row<StoredEconomicRow>(this.db.prepare(
+      const sameId = row<StoredEconomicRow>(prepared(this.db, 
         'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
       ).get(invalidated.id));
       if (sameId !== null) {
@@ -1278,10 +1279,10 @@ export class EconomicLedger {
           throw new Error(`different economic event already exists for ${invalidated.id}`);
         }
       } else {
-        this.db.prepare(
+        prepared(this.db, 
           'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ).run(invalidated.id, invalidated.kind, invalidated.subject, invalidated.occurredAt, invalidated.recordedAt, encoded.body, encoded.digest);
-        this.db.prepare(
+        prepared(this.db, 
           'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
         ).run(invalidated.id, input.closeEventId);
       }
@@ -1306,7 +1307,7 @@ export class EconomicLedger {
     if (item.kind === 'close_invalidated') throw new Error('close_invalidated may only be issued by recoverBrickedPeriod');
     const encoded = serializeEconomicEvent(item);
     return this.transaction(() => {
-      const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
+      const existing = prepared(this.db, 'SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
       if (existing !== undefined) return this.appendCanonical(item, encoded);
       this.assertPeriodOpenForEvent(item);
       return this.appendCanonical(item, encoded);
@@ -1322,7 +1323,7 @@ export class EconomicLedger {
   appendWithinTransaction(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
     if (item.kind === 'close_invalidated') throw new Error('close_invalidated may only be issued by recoverBrickedPeriod');
-    const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
+    const existing = prepared(this.db, 'SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
     if (existing !== undefined) return this.appendCanonical(item, serializeEconomicEvent(item));
     this.assertPeriodOpenForEvent(item);
     return this.appendCanonical(item, serializeEconomicEvent(item));
@@ -1339,7 +1340,7 @@ export class EconomicLedger {
     const candidate = historicalRateObservation(value);
     const encoded = serializeHistoricalRateObservation(candidate);
     return this.transaction(() => {
-      const existing = row<StoredHistoricalRateRow>(this.db.prepare(
+      const existing = row<StoredHistoricalRateRow>(prepared(this.db, 
         'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations WHERE observation_id = ?',
       ).get(candidate.id));
       if (existing !== null) {
@@ -1354,7 +1355,7 @@ export class EconomicLedger {
       }
       const existingObservations = this.readHistoricalRateRows();
       buildHistoricalRateBook([...existingObservations, candidate]);
-      this.db.prepare(
+      prepared(this.db, 
         `INSERT INTO economic_fx_rate_observations
           (observation_id, recorded_at, supersedes_id, observation_json, observation_digest)
          VALUES (?, ?, ?, ?, ?)`,
@@ -1378,7 +1379,7 @@ export class EconomicLedger {
 
   /** Validated close_finalized / close_reopened events, in recorded order. */
   private closeControlEvents(): readonly EconomicEvent[] {
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       "SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_kind IN ('close_finalized', 'close_reopened') ORDER BY recorded_at ASC, event_id ASC",
     ).all() as unknown as StoredEconomicRow[];
     const values = rows.map(storedRecord);
@@ -1394,19 +1395,21 @@ export class EconomicLedger {
    * or whether rows were removed or renumbered (VACUUM), which voids the cache.
    */
   appendMark(): { rowid: number; count: number } {
-    const row = this.db.prepare('SELECT COALESCE(MAX(rowid), 0) AS rowid, COUNT(*) AS count FROM economic_events').get() as { rowid: number; count: number };
-    return { rowid: Number(row.rowid), count: Number(row.count) };
+    this.appendMarks ??= new AppendMark(this.db, 'economic_events');
+    return this.appendMarks.read();
   }
+
+  private appendMarks: AppendMark | null = null;
 
   /** Rows appended after `rowid`: how many, and which event kinds. */
   appendedAfter(rowid: number): { count: number; kinds: readonly string[] } {
-    const rows = this.db.prepare('SELECT event_kind AS kind, COUNT(*) AS n FROM economic_events WHERE rowid > ? GROUP BY event_kind').all(rowid) as Array<{ kind: string; n: number }>;
+    const rows = prepared(this.db, 'SELECT event_kind AS kind, COUNT(*) AS n FROM economic_events WHERE rowid > ? GROUP BY event_kind').all(rowid) as Array<{ kind: string; n: number }>;
     return { count: rows.reduce((sum, row) => sum + Number(row.n), 0), kinds: rows.map((row) => row.kind) };
   }
 
   /** Validated events appended after `rowid` whose occurrence lies in [startMs, endMs). */
   eventsAppendedAfterInOccurrenceRange(rowid: number, startMs: number, endMs: number): readonly EconomicEvent[] {
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE rowid > ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
     ).all(rowid, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as unknown as StoredEconomicRow[];
     const values = rows.map(storedRecord);
@@ -1420,7 +1423,7 @@ export class EconomicLedger {
     const query = boundary === null
       ? 'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY recorded_at ASC, event_id ASC'
       : 'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE recorded_at <= ? ORDER BY recorded_at ASC, event_id ASC';
-    const rows = (boundary === null ? this.db.prepare(query).all() : this.db.prepare(query).all(boundary)) as unknown as StoredEconomicRow[];
+    const rows = (boundary === null ? prepared(this.db, query).all() : prepared(this.db, query).all(boundary)) as unknown as StoredEconomicRow[];
     const values = rows.map(storedRecord);
     const validated = new Set<string>();
     for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
@@ -1429,7 +1432,7 @@ export class EconomicLedger {
 
   /** Load authenticated event rows without reference-closure validation. */
   private rawEventsInOccurrenceRange(startMs: number, endMs: number): readonly EconomicEvent[] {
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
     ).all(new Date(startMs).toISOString(), new Date(endMs).toISOString()) as unknown as StoredEconomicRow[];
     return Object.freeze(rows.map(storedRecord));
@@ -1443,7 +1446,7 @@ export class EconomicLedger {
     const from = new Date(startMs);
     const to = new Date(endMs);
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) throw new Error('economic occurrence range is outside the supported date range');
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
     ).all(from.toISOString(), to.toISOString()) as unknown as StoredEconomicRow[];
     const values = rows.map(storedRecord);
@@ -1475,7 +1478,7 @@ export class EconomicLedger {
     }
     if (sources.size > 0) {
       const recordedClause = boundary === undefined ? '' : ' AND e.recorded_at <= ?';
-      const correctionRows = this.db.prepare(
+      const correctionRows = prepared(this.db, 
         `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
            FROM economic_events AS e
           WHERE e.event_kind = 'price_corrected'${recordedClause}

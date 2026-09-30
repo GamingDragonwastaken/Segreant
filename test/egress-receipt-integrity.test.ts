@@ -24,6 +24,7 @@ import type { EgressConfig } from '../src/config.ts';
 import {
   appendEgressReceipt,
   EgressReceiptError,
+  queueEgressReceipt,
   egressReceiptPath,
   setReceiptContentionLockLstatForTests,
   setReceiptLockReleaseHookForTests,
@@ -601,6 +602,72 @@ test('multiple valid writer processes serialize without forking or resetting the
       assert.equal(lines[index]!.previousHash, lines[index - 1]!.hash);
     }
   } finally {
+    state.restore();
+  }
+});
+
+test('receipts queued in the same turn share one lock and still chain', async () => {
+  const state = withHome('group-commit');
+  let releases = 0;
+  const restoreHook = setReceiptLockReleaseHookForTests(() => { releases++; });
+  try {
+    appendEgressReceipt(INPUT); // an existing history the batch must extend
+    releases = 0;
+    const receipts = await Promise.all(Array.from({ length: 50 }, (_, i) => queueEgressReceipt({ ...INPUT, bodyBytes: i })));
+    assert.equal(releases, 1, 'fifty queued receipts are written under one lock');
+    const lines = receiptLines(state.home);
+    assert.equal(lines.length, 51);
+    assert.deepEqual(lines.slice(1).map((line) => line.bodyBytes), receipts.map((receipt) => receipt.bodyBytes), 'written in queue order');
+    for (let i = 1; i < lines.length; i++) assert.equal(lines[i]!.previousHash, lines[i - 1]!.hash, `line ${i} chains from its predecessor`);
+    const verification = verifyEgressReceipts();
+    assert.equal(verification.ok, true, verification.errors.join('; '));
+    assert.equal(verification.receiptCount, 51);
+    const checkpoint = JSON.parse(readFileSync(join(state.home, 'egress-receipts.checkpoint.json'), 'utf8')) as { receiptCount: number };
+    assert.equal(checkpoint.receiptCount, 51, 'the checkpoint is current after the batch');
+  } finally {
+    restoreHook();
+    state.restore();
+  }
+});
+
+test('a batch that cannot be written refuses every receipt in it and writes none', async () => {
+  const state = withHome('group-commit-fail');
+  try {
+    appendEgressReceipt(INPUT);
+    const before = readFileSync(egressReceiptPath(), 'utf8');
+    const restoreHook = setReceiptWriteHookForTests(() => { throw new Error('disk full'); });
+    let results: PromiseSettledResult<EgressReceipt>[];
+    try {
+      results = await Promise.allSettled(Array.from({ length: 5 }, () => queueEgressReceipt(INPUT)));
+    } finally {
+      restoreHook();
+    }
+    assert.equal(results.every((result) => result.status === 'rejected'), true, 'no caller is told its receipt was written');
+    assert.equal(readFileSync(egressReceiptPath(), 'utf8'), before, 'the history is unchanged');
+  } finally {
+    state.restore();
+  }
+});
+
+test('concurrent outbound requests each write their three receipts before completing', async () => {
+  const state = withHome('group-commit-fetch');
+  const server = http.createServer((_req, res) => { res.writeHead(200); res.end('ok'); });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as { port: number }).port;
+  try {
+    const responses = await Promise.all(Array.from({ length: 20 }, () => egressFetchWithConfig(LOCKED, `http://127.0.0.1:${port}/`, {
+      purpose: 'local_healthcheck', dataClass: 'healthcheck', method: 'GET',
+    }).then(async (response) => { await response.text(); return response.status; })));
+    assert.deepEqual(responses, Array(20).fill(200));
+    const events = receiptLines(state.home).map((line) => line.event);
+    assert.equal(events.length, 60);
+    for (const event of ['preflight_allowed', 'dial_started', 'response_received'] as const) {
+      assert.equal(events.filter((e) => e === event).length, 20, `${event} once per request`);
+    }
+    const verification = verifyEgressReceipts();
+    assert.equal(verification.ok, true, verification.errors.join('; '));
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     state.restore();
   }
 });

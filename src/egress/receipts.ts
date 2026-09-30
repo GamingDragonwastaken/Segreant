@@ -793,7 +793,34 @@ function persistReceiptLine(path: string, history: ReceiptHistoryInspection, lin
 }
 
 /** Persistence faults are fail-closed before a request is allowed to dial. */
-export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
+function chainedReceipt(input: ReceiptInput, prior: string | null): EgressReceipt {
+  const base: Omit<EgressReceipt, 'hash'> = {
+    version: 1,
+    id: randomUUID(),
+    at: (input.at ?? new Date()).toISOString(),
+    event: input.event,
+    purpose: input.purpose,
+    dataClass: input.dataClass,
+    method: input.method,
+    targetClass: input.targetClass,
+    ruleId: input.ruleId ?? null,
+    originSha256: input.target ? sha256(input.target.origin) : null,
+    pathSha256: input.target ? sha256(input.target.pathname) : null,
+    bodyBytes: input.bodyBytes ?? 0,
+    status: input.status ?? null,
+    previousHash: prior,
+  };
+  return { ...base, hash: receiptHash(prior, base) };
+}
+
+/**
+ * Append receipts in order as one locked write: one validation of the history,
+ * one append of every line, one checkpoint. Each receipt still chains from the
+ * one before it, so the file is identical to appending them one at a time; it
+ * is either all written or, on any fault, refused as a whole.
+ */
+export function appendEgressReceipts(inputs: readonly ReceiptInput[]): EgressReceipt[] {
+  if (inputs.length === 0) return [];
   return withReceiptLock(() => {
     const path = egressReceiptPath();
     const history = inspectReceiptHistoryForAppend(path);
@@ -804,35 +831,72 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
         history.errors,
       );
     }
-    const prior = history.validThroughHash;
-    const base: Omit<EgressReceipt, 'hash'> = {
-      version: 1,
-      id: randomUUID(),
-      at: (input.at ?? new Date()).toISOString(),
-      event: input.event,
-      purpose: input.purpose,
-      dataClass: input.dataClass,
-      method: input.method,
-      targetClass: input.targetClass,
-      ruleId: input.ruleId ?? null,
-      originSha256: input.target ? sha256(input.target.origin) : null,
-      pathSha256: input.target ? sha256(input.target.pathname) : null,
-      bodyBytes: input.bodyBytes ?? 0,
-      status: input.status ?? null,
-      previousHash: prior,
-    };
-    const receipt: EgressReceipt = { ...base, hash: receiptHash(prior, base) };
-    persistReceiptLine(path, history, JSON.stringify(receipt) + '\n');
+    let prior = history.validThroughHash;
+    const receipts = inputs.map((input) => {
+      const receipt = chainedReceipt(input, prior);
+      prior = receipt.hash;
+      return receipt;
+    });
+    persistReceiptLine(path, history, receipts.map((receipt) => JSON.stringify(receipt) + '\n').join(''));
     const after = receiptHistoryStat(path);
     if (after === null) throw new EgressReceiptError('persistence', 'egress receipt history disappeared after append; restore it before retrying');
+    const last = receipts[receipts.length - 1]!;
     trustedReceiptState = {
       path,
       identity: receiptFileIdentity(after),
-      receiptCount: history.receiptCount + 1,
-      validThroughHash: receipt.hash,
+      receiptCount: history.receiptCount + receipts.length,
+      validThroughHash: last.hash,
     };
-    writeReceiptCheckpoint(path, history.receiptCount + 1, receipt.hash);
-    return receipt;
+    writeReceiptCheckpoint(path, history.receiptCount + receipts.length, last.hash);
+    return receipts;
+  });
+}
+
+export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
+  return appendEgressReceipts([input])[0]!;
+}
+
+interface QueuedReceipt {
+  input: ReceiptInput;
+  resolve: (receipt: EgressReceipt) => void;
+  reject: (error: unknown) => void;
+}
+
+let queuedReceipts: QueuedReceipt[] = [];
+let receiptFlushScheduled = false;
+
+function flushQueuedReceipts(): void {
+  receiptFlushScheduled = false;
+  const batch = queuedReceipts;
+  queuedReceipts = [];
+  let receipts: EgressReceipt[];
+  try {
+    receipts = appendEgressReceipts(batch.map((entry) => entry.input));
+  } catch (error) {
+    for (const entry of batch) entry.reject(error);
+    return;
+  }
+  batch.forEach((entry, i) => entry.resolve(receipts[i]!));
+}
+
+/**
+ * Group commit. Every receipt still reaches the history before its promise
+ * settles, and a caller dials only after awaiting it, so "no dial without a
+ * persisted receipt" holds exactly as with appendEgressReceipt. What changes is
+ * the cost under concurrency: receipts queued in the same turn of the event
+ * loop share one lock, one append and one checkpoint, where each used to pay
+ * for its own. Alone, a receipt is flushed on the next turn at the same cost as
+ * before. The timestamp is taken when the receipt is queued, not when the batch
+ * is written.
+ */
+export function queueEgressReceipt(input: ReceiptInput): Promise<EgressReceipt> {
+  const stamped: ReceiptInput = { ...input, at: input.at ?? new Date() };
+  return new Promise<EgressReceipt>((resolve, reject) => {
+    queuedReceipts.push({ input: stamped, resolve, reject });
+    if (!receiptFlushScheduled) {
+      receiptFlushScheduled = true;
+      setImmediate(flushQueuedReceipts);
+    }
   });
 }
 

@@ -1145,6 +1145,12 @@ function migrate(db: DatabaseSync): void {
       )
       .run();
   }
+  // Covering indexes for the budget guard's per-request float totals: the day
+  // and session sums read only these columns, so they never touch the table.
+  // Created here, not in the base schema, because an older ledger only has
+  // `via` once the step above has run.
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_requests_ts_spend ON requests(ts_epoch_ms, via, cost_usd)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_requests_session_spend ON requests(session_id, via, cost_usd)').run();
   if (!cols.some((c) => c.name === 'cost_basis')) {
     db.prepare("ALTER TABLE requests ADD COLUMN cost_basis TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
   }

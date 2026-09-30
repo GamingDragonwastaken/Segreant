@@ -17,7 +17,7 @@
  * messages (server-sent events). Nothing leaves loopback; no credential or
  * Segreant home of the user is read.
  *
- *   node scripts/proxy-load.mjs [--requests 2000] [--concurrency 50] [--json]
+ *   node scripts/proxy-load.mjs [--requests 2000] [--concurrency 50] [--sessions 8] [--json]
  */
 import http from 'node:http';
 import { once } from 'node:events';
@@ -35,6 +35,10 @@ const opt = (name, fallback) => {
 const REQUESTS = opt('requests', 2000);
 const CONCURRENCY = opt('concurrency', 50);
 const JSON_OUT = args.includes('--json');
+// Requests are spread over this many sessions (x-segreant-session-id), as a
+// team proxy sees them; 0 sends no session header. The per-session budget check
+// only runs for requests that name a session.
+const SESSIONS = opt('sessions', 8);
 
 const home = mkdtempSync(join(tmpdir(), 'segreant-proxy-load-'));
 process.env.SEGREANT_HOME = home;
@@ -92,6 +96,7 @@ function request(base, i) {
   const headers = anthropic
     ? { 'content-type': 'application/json', 'x-api-key': 'load-test', 'anthropic-version': '2023-06-01' }
     : { 'content-type': 'application/json', authorization: 'Bearer load-test' };
+  if (SESSIONS > 0 && base === proxyBase) headers['x-segreant-session-id'] = `load-session-${i % SESSIONS}`;
   const t0 = performance.now();
   return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
     .then(async (r) => { await r.text(); return { ok: r.status === 200, status: r.status, ms: performance.now() - t0, i }; })
@@ -142,7 +147,7 @@ if (ledger.output !== expected.output) failures.push(`ledger output tokens ${led
 if (proxied.failed > 0) failures.push(`${proxied.failed} proxied requests failed: ${[...new Set(proxiedRun.results.filter((r) => !r.ok).map((r) => r.status))].join(', ')}`);
 
 const report = {
-  requests: REQUESTS, concurrency: CONCURRENCY, node: process.version, platform: `${process.platform}-${process.arch}`,
+  requests: REQUESTS, concurrency: CONCURRENCY, sessions: SESSIONS, node: process.version, platform: `${process.platform}-${process.arch}`,
   direct, proxied,
   addedLatencyMs: { p50: +(proxied.p50 - direct.p50).toFixed(2), p95: +(proxied.p95 - direct.p95).toFixed(2), p99: +(proxied.p99 - direct.p99).toFixed(2) },
   integrity: { rows, successful: okIds.length, inputTokens: ledger.input, outputTokens: ledger.output, ok: failures.length === 0, failures },
@@ -153,7 +158,7 @@ rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 
 if (JSON_OUT) console.log(JSON.stringify(report, null, 2));
 else {
-  console.log(`\n  Proxy load — ${REQUESTS} requests, ${CONCURRENCY} concurrent, half OpenAI JSON, half Anthropic SSE (${report.platform}, Node ${report.node})`);
+  console.log(`\n  Proxy load — ${REQUESTS} requests, ${CONCURRENCY} concurrent, half OpenAI JSON, half Anthropic SSE, ${SESSIONS} sessions (${report.platform}, Node ${report.node})`);
   console.log(`    direct   ${String(direct.rps).padStart(6)} req/s   p50 ${direct.p50} ms   p95 ${direct.p95} ms   p99 ${direct.p99} ms`);
   console.log(`    proxied  ${String(proxied.rps).padStart(6)} req/s   p50 ${proxied.p50} ms   p95 ${proxied.p95} ms   p99 ${proxied.p99} ms`);
   console.log(`    added    p50 ${report.addedLatencyMs.p50} ms   p95 ${report.addedLatencyMs.p95} ms   p99 ${report.addedLatencyMs.p99} ms`);
