@@ -589,6 +589,14 @@ export function demoDbPath(): string {
 }
 
 /** True when the process is running against demo data (set by the `demo` command / `--demo`). */
+/** Raised when a settings change is attempted while viewing demo data. */
+export class DemoReadOnlyError extends Error {
+  constructor() {
+    super('Demo mode only shows sample data, so settings were not changed. Run the same command without --demo to change them.');
+    this.name = 'DemoReadOnlyError';
+  }
+}
+
 export function isDemo(): boolean {
   return envOverride('DEMO') === '1';
 }
@@ -841,6 +849,9 @@ export function saveConfigWithLock(config: SegreantConfig, lock: ConfigMutationL
 export function mutateConfig(
   mutator: (current: SegreantConfig) => SegreantConfig | void,
 ): SegreantConfig {
+  // Demo data shares the real config file, so demo mode must never write it:
+  // a cap chosen while exploring sample data would otherwise govern real spend.
+  if (isDemo()) throw new DemoReadOnlyError();
   const lock = acquireConfigMutationLock();
   try {
     const current = loadConfig();

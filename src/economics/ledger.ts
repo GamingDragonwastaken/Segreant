@@ -1403,14 +1403,14 @@ export class EconomicLedger {
 
   /** Rows appended after `rowid`: how many, and which event kinds. */
   appendedAfter(rowid: number): { count: number; kinds: readonly string[] } {
-    const rows = prepared(this.db, 'SELECT event_kind AS kind, COUNT(*) AS n FROM economic_events WHERE rowid > ? GROUP BY event_kind').all(rowid) as Array<{ kind: string; n: number }>;
+    const rows = prepared(this.db, 'SELECT event_kind AS kind, COUNT(*) AS n FROM economic_events NOT INDEXED WHERE rowid > ? GROUP BY event_kind').all(rowid) as Array<{ kind: string; n: number }>;
     return { count: rows.reduce((sum, row) => sum + Number(row.n), 0), kinds: rows.map((row) => row.kind) };
   }
 
   /** Validated events appended after `rowid` whose occurrence lies in [startMs, endMs). */
   eventsAppendedAfterInOccurrenceRange(rowid: number, startMs: number, endMs: number): readonly EconomicEvent[] {
     const rows = prepared(this.db, 
-      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE rowid > ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events NOT INDEXED WHERE rowid > ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
     ).all(rowid, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as unknown as StoredEconomicRow[];
     const values = rows.map(storedRecord);
     const validated = new Set<string>();

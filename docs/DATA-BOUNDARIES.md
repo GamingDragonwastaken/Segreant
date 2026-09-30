@@ -168,7 +168,7 @@ First-Pass Acceptance measurement.
 
 Proposal rows are pruned when `segreant start` begins if they exceed
 `proposalRetentionDays` (30 days by default). They can be deleted immediately
-with the Settings action or `segreant prune`. If Segreant is not running, no
+with the Settings action or `segreant prune --apply` (plain `segreant prune` only previews). If Segreant is not running, no
 background process is active to delete data; run one of those controls when an
 immediate deletion deadline matters.
 
