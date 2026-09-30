@@ -14,7 +14,7 @@ import './util/quiet.ts';
 import { demoDbPath, envOverrideKey } from './config.ts';
 import { packageVersion } from './version.ts';
 
-import { parseFlags } from './cli/flags.ts';
+import { parseFlags, UserInputError } from './cli/flags.ts';
 
 // Command modules load on demand. Importing every command up front cost about
 // two seconds on every invocation, `--help` included; a command now pays only
@@ -465,7 +465,7 @@ async function main(): Promise<void> {
       (await showCmd()).cmdProject(flags);
       break;
     case 'prune':
-      (await showCmd()).cmdPrune();
+      (await showCmd()).cmdPrune(flags);
       break;
     case 'backup':
       (await backupCmd()).cmdBackup(flags);
@@ -527,8 +527,21 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 // which lives until process exit, so publication still cannot create a
 // missing-dependency window for this process.
 export const cliCompletion = new Promise<void>((resolve) => setImmediate(() => {
-  main().catch((err) => {
-    console.error('  Segreant error:', err);
+  main().catch((err: unknown) => {
+    // A mistake in the command is one plain line. Anything else is a fault in
+    // Segreant: one line by default, the full trace with --debug.
+    const message = err instanceof Error ? err.message : String(err);
+    // Usage messages and demo refusals are also about the command typed.
+    const userFacing = err instanceof UserInputError
+      || (err instanceof Error && (err.name === 'DemoReadOnlyError' || /^usage: /.test(err.message)));
+    if (userFacing) {
+      console.error(`  ${message}`);
+    } else if (process.argv.includes('--debug')) {
+      console.error('  Segreant error:', err);
+    } else {
+      console.error(`  Segreant error: ${message}`);
+      console.error('  Run the same command with --debug to see where it failed.');
+    }
     process.exitCode = 1;
   }).finally(resolve);
 }));

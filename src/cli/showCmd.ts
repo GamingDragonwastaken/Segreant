@@ -15,7 +15,7 @@ import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
 import { C, color, usd, num, pct, printJson } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
-import { rangeFor, type Flags } from './flags.ts';
+import { rangeFor, UserInputError, usdFlag, type Flags } from './flags.ts';
 import { retentionNotice } from './retention.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 
@@ -292,19 +292,24 @@ export function cmdConfig(flags: Flags): void {
 }
 
 export function cmdBudget(flags: Flags): void {
-  const next = mutateConfig((cfg) => {
+  const amountFlags = [['dailyUsd', 'daily'], ['dailySoftUsd', 'soft'], ['sessionUsd', 'session'], ['runawayMaxUsd', 'runaway']] as const;
+  // Everything the user typed is checked before anything is saved.
+  const amounts = amountFlags
+    .filter(([, flag]) => flags[flag] !== undefined)
+    .map(([key, flag]) => [key, usdFlag(flag, flags[flag]!)] as const);
+  let windowSec: number | undefined;
+  if (flags.window !== undefined) {
+    windowSec = Number(flags.window);
+    if (!Number.isInteger(windowSec) || windowSec <= 0) {
+      throw new UserInputError('--window needs a whole number of seconds, for example --window 300.');
+    }
+  }
+  const changing = amounts.length > 0 || windowSec !== undefined || flags['include-imported'] !== undefined;
+
+  const next = !changing ? loadConfig() : mutateConfig((cfg) => {
     const updated: SegreantConfig = { ...cfg, budget: { ...cfg.budget } };
-    const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
-      if (flags[flag] !== undefined) {
-        const v = String(flags[flag]);
-        updated.budget[key] = v === 'off' || v === 'none' ? null : Number(v);
-      }
-    };
-    setNum('dailyUsd', 'daily');
-    setNum('dailySoftUsd', 'soft');
-    setNum('sessionUsd', 'session');
-    setNum('runawayMaxUsd', 'runaway');
-    if (flags.window !== undefined) updated.budget.runawayWindowSec = Number(flags.window);
+    for (const [key, amount] of amounts) updated.budget[key] = amount;
+    if (windowSec !== undefined) updated.budget.runawayWindowSec = windowSec;
     if (flags['include-imported'] !== undefined) {
       const v = String(flags['include-imported']);
       updated.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
@@ -313,7 +318,7 @@ export function cmdBudget(flags: Flags): void {
   });
 
   console.log('');
-  console.log('  Budget updated:');
+  console.log(changing ? '  Budget updated:' : '  Current caps (change one with, for example, segreant budget --daily 20):');
   console.log(`    Daily hard cap:   ${next.budget.dailyUsd === null ? 'off' : usd(next.budget.dailyUsd)}`);
   console.log(`    Daily soft warn:  ${next.budget.dailySoftUsd === null ? 'off' : usd(next.budget.dailySoftUsd)}`);
   console.log(`    Per-session cap:  ${next.budget.sessionUsd === null ? 'off' : usd(next.budget.sessionUsd)}`);
@@ -322,11 +327,21 @@ export function cmdBudget(flags: Flags): void {
   console.log('');
 }
 
-export function cmdPrune(): void {
+export function cmdPrune(flags: Flags): void {
   const cfg = loadConfig();
   const store = new Store(dbPath());
   const requestsBefore = Date.now() - cfg.retentionDays * 24 * 60 * 60 * 1000;
   const proposalsBefore = Date.now() - cfg.proposalRetentionDays * 24 * 60 * 60 * 1000;
+  if (flags.apply !== true) {
+    // Deleting is permanent, so like every other change it is previewed first.
+    const counts = store.prunableCounts(requestsBefore, proposalsBefore);
+    console.log(`  Would delete ${counts.requests} request rows older than ${cfg.retentionDays} days and ${counts.proposals} stored proposal rows older than ${cfg.proposalRetentionDays} days.`);
+    console.log(counts.requests + counts.proposals > 0
+      ? '  Nothing has been deleted. Run segreant prune --apply to delete them permanently.'
+      : '  Nothing to delete.');
+    store.close();
+    return;
+  }
   const requestsRemoved = store.prune(requestsBefore);
   const proposalsRemoved = store.pruneProposals(proposalsBefore);
   console.log(`  Pruned ${requestsRemoved} request rows older than ${cfg.retentionDays} days.`);

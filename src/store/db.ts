@@ -275,6 +275,24 @@ const EXACT_SPEND_CACHE_KEYS = 64;
  */
 const MAX_DATE_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 
+/**
+ * Merge a few new ids into an already sorted list, in the same order
+ * `Array.prototype.sort()` gives strings. Re-sorting the whole list on every
+ * extension made each proxied request cost O(n log n) in the day's events.
+ */
+function mergeSortedIds(sorted: readonly string[], added: readonly string[]): string[] {
+  if (added.length === 0) return [...sorted];
+  const extra = [...added].sort();
+  const out: string[] = new Array(sorted.length + extra.length);
+  let i = 0;
+  let j = 0;
+  let k = 0;
+  while (i < sorted.length && j < extra.length) out[k++] = sorted[i]! <= extra[j]! ? sorted[i++]! : extra[j++]!;
+  while (i < sorted.length) out[k++] = sorted[i++]!;
+  while (j < extra.length) out[k++] = extra[j++]!;
+  return out;
+}
+
 /** What a cached exact projection covers: a time window, or every row of one session. */
 type ExactSpendScope =
   | { kind: 'window'; startMs: number; endMs: number }
@@ -1280,8 +1298,10 @@ export class Store {
     }
     const rows = (scope.kind === 'window'
       ? prepared(this.db, 
+        // NOT INDEXED keeps this a rowid range over the rows appended since the
+        // mark; left to itself the planner walks the whole window's index.
         `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-           FROM requests WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+           FROM requests NOT INDEXED WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
            ORDER BY ts_epoch_ms ASC, request_id ASC`,
       ).all(cached.requestMark.rowid, startMs, endMs)
       : prepared(this.db, 
@@ -1293,7 +1313,7 @@ export class Store {
     const sourceBases = new Set<EconomicBasis>([...cached.projection.sourceBases, ...delta.sourceBases]);
     return Object.freeze({
       amount: addMoney(cached.projection.amount, delta.amount),
-      eventIds: Object.freeze([...cached.projection.eventIds, ...delta.eventIds].sort()),
+      eventIds: Object.freeze(mergeSortedIds(cached.projection.eventIds, delta.eventIds)),
       sourceBases: Object.freeze([...sourceBases].sort()),
       requestCount: cached.projection.requestCount + delta.requestCount,
       unresolvedRequests: cached.projection.unresolvedRequests + delta.unresolvedRequests,
@@ -3232,6 +3252,13 @@ export class Store {
    * than beforeMs. Kept separate from prune() — proposals have a much shorter honest
    * retention need (the git-correlation window) than request/cost history.
    */
+  /** How many rows `prune` and `pruneProposals` would delete, without deleting. */
+  prunableCounts(requestsBeforeMs: number, proposalsBeforeMs: number): { requests: number; proposals: number } {
+    const requests = prepared(this.db, 'SELECT COUNT(*) AS n FROM requests WHERE ts_epoch_ms < ?').get(requestsBeforeMs) as { n: number };
+    const proposals = prepared(this.db, 'SELECT COUNT(*) AS n FROM proposals WHERE ts_epoch_ms < ?').get(proposalsBeforeMs) as { n: number };
+    return { requests: Number(requests.n), proposals: Number(proposals.n) };
+  }
+
   pruneProposals(beforeMs: number): number {
     // Atomic with its record, for the reason stated on `prune` (D-189).
     const removed = this.transaction(() => {
