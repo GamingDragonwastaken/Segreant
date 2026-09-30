@@ -82,7 +82,17 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Segreant — governance alerts'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   if (alerts.length === 0) {
-    console.log(color(tty, C.green, '  ✓ All clear — no active alerts.'));
+    // "All clear" only when every alert could have fired. On a default install
+    // most cannot (no cap, no baseline yet), and doctor and today already say
+    // so; this command printed a green tick over detectors that were not
+    // looking.
+    const coverage = computeAlertCoverage(store, cfg);
+    console.log(coverage.complete
+      ? color(tty, C.green, '  ✓ No active alerts. Every alert is switched on.')
+      : color(tty, C.yellow, `  No active alerts, but ${coverage.summary}`));
+    for (const channel of coverage.channels) {
+      if (!channel.live) console.log(color(tty, C.gray, `    ${channel.channel}: ${channel.darkBecause}`));
+    }
     if (!repo) console.log(color(tty, C.gray, '  (pass --repo <path> to include realized-value alerts)'));
     console.log('');
     store.close();

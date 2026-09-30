@@ -96,3 +96,18 @@ test('prune previews by default and deletes only with --apply', async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('alerts never claims "all clear" while detectors cannot fire', async () => {
+  // A fresh install has no cap and no baseline, so none of the alert channels can
+  // fire. An empty alert list then means nothing was looked at, not that all is well.
+  const dir = home();
+  try {
+    const r = await runCli(['alerts'], dir);
+    assert.equal(r.code, 0);
+    assert.doesNotMatch(r.out, /all clear/i);
+    assert.match(r.out, /No active alerts, but 0 of 6 alert channels are watching/);
+    assert.match(r.out, /budget-cap: no daily cap/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
