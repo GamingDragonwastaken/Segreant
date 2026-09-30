@@ -127,6 +127,7 @@ import type { Evidence, JsonValue } from '../epistemic/evidence.ts';
 import type { Witness } from '../epistemic/witness.ts';
 import type { Instant } from '../epistemic/time.ts';
 import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
+import { AppendMark, prepared } from '../util/statements.ts';
 import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
 
 /**
@@ -265,7 +266,19 @@ interface ExactSpendCacheEntry {
 const EXACT_SPEND_CACHE_MIN_WINDOW_MS = 60 * 60 * 1000;
 /** Rebuild from the whole window at least this often, so a cached figure is never older evidence than this. */
 const FULL_REPROJECT_MS = 10 * 60 * 1000;
-const EXACT_SPEND_CACHE_KEYS = 8;
+/** Days plus concurrent sessions: a team proxy serves many sessions at once. */
+const EXACT_SPEND_CACHE_KEYS = 64;
+/**
+ * Upper occurrence-range bound for "any time". Occurrences are compared as ISO
+ * strings, so this must stay a four-digit year: the Date maximum serializes as
+ * "+275760-...", which sorts BEFORE every ordinary timestamp.
+ */
+const MAX_DATE_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
+/** What a cached exact projection covers: a time window, or every row of one session. */
+type ExactSpendScope =
+  | { kind: 'window'; startMs: number; endMs: number }
+  | { kind: 'session'; sessionId: string };
 /** The only event kinds a request write appends (economics/request.ts requestKind). */
 const REQUEST_CHARGE_KINDS: ReadonlySet<string> = new Set(['charge_estimated', 'provider_charge_observed', 'bill_observed']);
 
@@ -583,6 +596,7 @@ export class Store {
   private epistemicLedger!: EpistemicLedger;
   private economicLedger!: EconomicLedger;
   private readonly exactSpendCache = new Map<string, ExactSpendCacheEntry>();
+  private requestMarks: AppendMark | null = null;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
@@ -598,7 +612,7 @@ export class Store {
     let backupVerified = false;
     try {
       configureDatabaseConnection(this.db);
-      this.db.prepare('PRAGMA busy_timeout = 5000').run();
+      prepared(this.db, 'PRAGMA busy_timeout = 5000').run();
       // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
       // runner; we run DDL/PRAGMA as individual prepared statements so the schema
       // setup stays uniform and side-effect-free. Preflight belongs inside this
@@ -608,7 +622,7 @@ export class Store {
         if (causalV2Preflight.state !== 'exact') {
           backupPath = databasePath + '.pre-causal-v2-' + randomUUID() + '.sqlite';
           if (existsSync(backupPath)) throw new Error('exclusive causal migration backup path already exists');
-          this.db.prepare('VACUUM INTO ?').run(backupPath);
+          prepared(this.db, 'VACUUM INTO ?').run(backupPath);
           backupPath = realpathSync.native(backupPath);
           const pathBefore = lstatSync(backupPath);
           if (!pathBefore.isFile() || pathBefore.isSymbolicLink()) {
@@ -706,13 +720,13 @@ export class Store {
   }
 
   private transaction<T>(work: () => T): T {
-    this.db.prepare('BEGIN IMMEDIATE').run();
+    prepared(this.db, 'BEGIN IMMEDIATE').run();
     try {
       const result = work();
-      this.db.prepare('COMMIT').run();
+      prepared(this.db, 'COMMIT').run();
       return result;
     } catch (error) {
-      try { this.db.prepare('ROLLBACK').run(); } catch { /* preserve original failure */ }
+      try { prepared(this.db, 'ROLLBACK').run(); } catch { /* preserve original failure */ }
       throw error;
     }
   }
@@ -759,7 +773,7 @@ export class Store {
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
             scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage
          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
-      const info = this.db.prepare(sql).run(
+      const info = prepared(this.db, sql).run(
         row.requestId,
         row.sessionId,
         new Date(row.tsEpochMs).toISOString(),
@@ -980,7 +994,7 @@ export class Store {
    * one MIN() over an indexed column, never a project-scoped ledger read.
    */
   earliestRequestMs(): number | null {
-    const row = this.db.prepare(`SELECT MIN(ts_epoch_ms) AS m FROM requests`).get() as { m: number | null };
+    const row = prepared(this.db, `SELECT MIN(ts_epoch_ms) AS m FROM requests`).get() as { m: number | null };
     return row.m ?? null;
   }
 
@@ -1188,31 +1202,47 @@ export class Store {
     // the last projection with what was appended since instead. Short sliding
     // windows (the runaway guard) never repeat a key and stay on the full path.
     if (endMs - startMs < EXACT_SPEND_CACHE_MIN_WINDOW_MS) return this.exactSpendBetweenFull(startMs, endMs, liveOnly);
-    const key = `${startMs}:${endMs}:${liveOnly ? 'live' : 'all'}`;
+    return this.cachedExactSpend(
+      `${startMs}:${endMs}:${liveOnly ? 'live' : 'all'}`,
+      { kind: 'window', startMs, endMs },
+      liveOnly,
+      () => this.exactSpendBetweenFull(startMs, endMs, liveOnly),
+    );
+  }
+
+  /**
+   * Serve a projection from the cache, extended by what was appended since, or
+   * rebuild it with `full` whenever extension could differ from a rebuild or the
+   * cached figure is older than FULL_REPROJECT_MS. Most recently used keys stay.
+   */
+  private cachedExactSpend(key: string, scope: ExactSpendScope, liveOnly: boolean, full: () => ExactSpendProjection): ExactSpendProjection {
     const now = Date.now();
     const eventMark = this.economicLedger.appendMark();
     const requestMark = this.requestAppendMark();
     const cached = this.exactSpendCache.get(key);
     if (cached !== undefined && now - cached.fullAtMs < FULL_REPROJECT_MS) {
+      this.exactSpendCache.delete(key);
       if (cached.eventMark.rowid === eventMark.rowid && cached.eventMark.count === eventMark.count
           && cached.requestMark.rowid === requestMark.rowid && cached.requestMark.count === requestMark.count) {
+        this.exactSpendCache.set(key, cached);
         return cached.projection;
       }
-      const extended = this.extendExactSpend(cached, startMs, endMs, liveOnly, eventMark, requestMark);
+      const extended = this.extendExactSpend(cached, scope, liveOnly, eventMark, requestMark);
       if (extended !== null) {
         this.exactSpendCache.set(key, { ...cached, eventMark, requestMark, projection: extended });
         return extended;
       }
     }
-    const projection = this.exactSpendBetweenFull(startMs, endMs, liveOnly);
+    const projection = full();
+    this.exactSpendCache.delete(key);
     if (this.exactSpendCache.size >= EXACT_SPEND_CACHE_KEYS) this.exactSpendCache.delete(this.exactSpendCache.keys().next().value!);
     this.exactSpendCache.set(key, { eventMark, requestMark, projection, fullAtMs: now });
     return projection;
   }
 
   private requestAppendMark(): { rowid: number; count: number } {
-    const row = this.db.prepare('SELECT COALESCE(MAX(rowid), 0) AS rowid, COUNT(*) AS count FROM requests').get() as { rowid: number; count: number };
-    return { rowid: Number(row.rowid), count: Number(row.count) };
+    this.requestMarks ??= new AppendMark(this.db, 'requests');
+    return this.requestMarks.read();
   }
 
   /**
@@ -1224,8 +1254,7 @@ export class Store {
    */
   private extendExactSpend(
     cached: ExactSpendCacheEntry,
-    startMs: number,
-    endMs: number,
+    scope: ExactSpendScope,
     liveOnly: boolean,
     eventMark: { rowid: number; count: number },
     requestMark: { rowid: number; count: number },
@@ -1233,10 +1262,14 @@ export class Store {
     const appendedEvents = this.economicLedger.appendedAfter(cached.eventMark.rowid);
     if (eventMark.count - cached.eventMark.count !== appendedEvents.count) return null;
     if (!appendedEvents.kinds.every((kind) => REQUEST_CHARGE_KINDS.has(kind))) return null;
-    const appendedIds = this.db.prepare('SELECT request_id AS requestId FROM requests WHERE rowid > ?')
+    const appendedIds = prepared(this.db, 'SELECT request_id AS requestId FROM requests WHERE rowid > ?')
       .all(cached.requestMark.rowid) as Array<{ requestId: string }>;
     if (requestMark.count - cached.requestMark.count !== appendedIds.length) return null;
     const newRequestIds = new Set(appendedIds.map((row) => row.requestId));
+    // A window projection reads events occurring inside the window; a session
+    // has no fixed window, so every appended event is read. That is at least
+    // as inclusive as the full session projection, and only new events are read.
+    const [startMs, endMs] = scope.kind === 'window' ? [scope.startMs, scope.endMs] : [0, MAX_DATE_MS];
     const events = this.economicLedger.eventsAppendedAfterInOccurrenceRange(cached.eventMark.rowid, startMs, endMs);
     for (const event of events) {
       const metadata = event.metadata;
@@ -1245,11 +1278,17 @@ export class Store {
         : undefined;
       if (typeof requestId !== 'string' || !newRequestIds.has(requestId)) return null;
     }
-    const rows = this.db.prepare(
-      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-         FROM requests WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
-         ORDER BY ts_epoch_ms ASC, request_id ASC`,
-    ).all(cached.requestMark.rowid, startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    const rows = (scope.kind === 'window'
+      ? prepared(this.db, 
+        `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+           FROM requests WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+           ORDER BY ts_epoch_ms ASC, request_id ASC`,
+      ).all(cached.requestMark.rowid, startMs, endMs)
+      : prepared(this.db, 
+        `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+           FROM requests WHERE rowid > ? AND session_id = ?` + this.viaClause(liveOnly) + `
+           ORDER BY ts_epoch_ms ASC, request_id ASC`,
+      ).all(cached.requestMark.rowid, scope.sessionId)) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     const delta = this.exactSpendFromRows(rows, startMs, endMs, liveOnly, events);
     const sourceBases = new Set<EconomicBasis>([...cached.projection.sourceBases, ...delta.sourceBases]);
     return Object.freeze({
@@ -1262,7 +1301,7 @@ export class Store {
   }
 
   private exactSpendBetweenFull(startMs: number, endMs: number, liveOnly: boolean): ExactSpendProjection {
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
@@ -1278,7 +1317,7 @@ export class Store {
    */
   exactSpendBetweenScoped(startMs: number, endMs: number, project: string, liveOnly = false): ExactSpendProjection {
     const fam = this.familyFilter('r.project', project);
-    const rows = this.db.prepare(
+    const rows = prepared(this.db, 
       `SELECT r.request_id AS requestId, r.ts_epoch_ms AS tsEpochMs, r.via
          FROM requests r
         WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
@@ -1288,9 +1327,23 @@ export class Store {
     return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
   }
 
-  /** Exact charge projection for all requests belonging to one session. */
+  /**
+   * Exact charge projection for all requests belonging to one session. Asked
+   * for on every proxied request that names a session, so it is cached and
+   * extended like the budget day: re-projecting the session each time made
+   * request N of a session cost O(N) (about 1 s per request at 20,000).
+   */
   exactSpendForSession(sessionId: string, liveOnly = false): ExactSpendProjection {
-    const rows = this.db.prepare(
+    return this.cachedExactSpend(
+      `session:${liveOnly ? 'live' : 'all'}:${sessionId}`,
+      { kind: 'session', sessionId },
+      liveOnly,
+      () => this.exactSpendForSessionFull(sessionId, liveOnly),
+    );
+  }
+
+  private exactSpendForSessionFull(sessionId: string, liveOnly: boolean): ExactSpendProjection {
+    const rows = prepared(this.db, 
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
          FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
@@ -1408,7 +1461,7 @@ export class Store {
    */
   hasProjectSpend(project: string): boolean {
     const fam = this.familyFilter('project', project);
-    const row = this.db.prepare(`SELECT 1 AS present FROM requests WHERE ${fam.sql} LIMIT 1`).get(...fam.args) as
+    const row = prepared(this.db, `SELECT 1 AS present FROM requests WHERE ${fam.sql} LIMIT 1`).get(...fam.args) as
       | { present: number }
       | undefined;
     return row !== undefined;
@@ -1432,11 +1485,11 @@ export class Store {
       )
       .run(alias, target, Date.now());
     // Anything previously merged INTO `alias` follows it to the new canonical.
-    this.db.prepare(`UPDATE project_aliases SET canonical = ? WHERE canonical = ?`).run(target, alias);
+    prepared(this.db, `UPDATE project_aliases SET canonical = ? WHERE canonical = ?`).run(target, alias);
   }
 
   removeProjectAlias(alias: string): boolean {
-    const info = this.db.prepare(`DELETE FROM project_aliases WHERE alias = ?`).run(alias);
+    const info = prepared(this.db, `DELETE FROM project_aliases WHERE alias = ?`).run(alias);
     return Number(info.changes) > 0;
   }
 
@@ -1448,7 +1501,7 @@ export class Store {
 
   /** The canonical label for a project name (itself when unaliased). */
   canonicalProject(name: string): string {
-    const row = this.db.prepare(`SELECT canonical FROM project_aliases WHERE alias = ?`).get(name) as
+    const row = prepared(this.db, `SELECT canonical FROM project_aliases WHERE alias = ?`).get(name) as
       | { canonical: string }
       | undefined;
     return row ? row.canonical : name;
@@ -1457,7 +1510,7 @@ export class Store {
   /** Every raw label that resolves to this project: [canonical, ...its aliases]. */
   projectFamily(name: string): string[] {
     const canonical = this.canonicalProject(name);
-    const rows = this.db.prepare(`SELECT alias FROM project_aliases WHERE canonical = ?`).all(canonical) as Array<{
+    const rows = prepared(this.db, `SELECT alias FROM project_aliases WHERE canonical = ?`).all(canonical) as Array<{
       alias: string;
     }>;
     return [canonical, ...rows.map((r) => r.alias)];
@@ -1998,21 +2051,21 @@ export class Store {
    * written.
    */
   insertVerifiedGateEvidence(input: VerifiedGateEvidenceInput): VerifiedGateEvidenceWrite {
-    this.db.prepare('BEGIN IMMEDIATE').run();
+    prepared(this.db, 'BEGIN IMMEDIATE').run();
     try {
-      const existingEvent = this.db.prepare('SELECT body_hash AS bodyHash FROM gate_evidence WHERE event_id = ?').get(input.eventId) as { bodyHash: string } | undefined;
+      const existingEvent = prepared(this.db, 'SELECT body_hash AS bodyHash FROM gate_evidence WHERE event_id = ?').get(input.eventId) as { bodyHash: string } | undefined;
       if (existingEvent) {
-        this.db.prepare('COMMIT').run();
+        prepared(this.db, 'COMMIT').run();
         return existingEvent.bodyHash === input.bodyHash ? 'duplicate' : 'conflict';
       }
-      const existingBody = this.db.prepare('SELECT event_id AS eventId FROM gate_evidence WHERE source = ? AND body_hash = ?').get(input.source, input.bodyHash) as { eventId: string } | undefined;
+      const existingBody = prepared(this.db, 'SELECT event_id AS eventId FROM gate_evidence WHERE source = ? AND body_hash = ?').get(input.source, input.bodyHash) as { eventId: string } | undefined;
       if (existingBody) {
-        this.db.prepare('COMMIT').run();
+        prepared(this.db, 'COMMIT').run();
         return 'duplicate';
       }
-      const conflictingSignal = this.db.prepare('SELECT signal_id AS signalId FROM gate_signals WHERE signal_id = ?').get(input.eventId) as { signalId: string } | undefined;
+      const conflictingSignal = prepared(this.db, 'SELECT signal_id AS signalId FROM gate_signals WHERE signal_id = ?').get(input.eventId) as { signalId: string } | undefined;
       if (conflictingSignal) {
-        this.db.prepare('COMMIT').run();
+        prepared(this.db, 'COMMIT').run();
         return 'conflict';
       }
       this.db
@@ -2027,10 +2080,10 @@ export class Store {
            VALUES (?,?,?,?,?,?,?,?)`,
         )
         .run(input.eventId, input.signal.kind, input.commitHash, input.signal.project, input.signal.tsEpochMs, input.signal.verdict, input.signal.detail, 'signed-ci');
-      this.db.prepare('COMMIT').run();
+      prepared(this.db, 'COMMIT').run();
       return 'inserted';
     } catch (error) {
-      try { this.db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
+      try { prepared(this.db, 'ROLLBACK').run(); } catch { /* no active transaction */ }
       throw error;
     }
   }
@@ -2050,7 +2103,7 @@ export class Store {
   /** Append-only, operator-reported non-code evidence. The detail is validated by
    * the value module before insertion and again when it is read. */
   selfReportedOutcomeSignals(startMs: number, endMs: number): GateSignalRow[] {
-    return this.db.prepare(
+    return prepared(this.db, 
       `SELECT signal_id AS signalId, kind, commit_hash AS commitHash, project,
               ts_epoch_ms AS tsEpochMs, verdict, detail, evidence_source AS evidenceSource
        FROM gate_signals WHERE kind = 'self_reported_outcome'
@@ -2212,7 +2265,7 @@ export class Store {
   }
 
   private assertPersistedRealizationRow(record: RealizationUnitRecord): void {
-    const row = this.db.prepare(
+    const row = prepared(this.db, 
       `SELECT project, ts_epoch_ms AS tsEpochMs, computed_at_ms AS computedAtMs,
               unit_json AS unitJson, cost_scope AS costScope, cost_stale AS costStale
          FROM realization_units WHERE commit_hash = ?`,
@@ -2267,7 +2320,7 @@ export class Store {
 
   /** Total outcome signals ever recorded (`report`/`exec` wiring), across projects. */
   countSignals(): number {
-    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM gate_signals`).get() as { n: number };
+    const row = prepared(this.db, `SELECT COUNT(*) AS n FROM gate_signals`).get() as { n: number };
     return row.n;
   }
 
@@ -3074,12 +3127,16 @@ export class Store {
    */
   prune(beforeMs: number): number {
     const removed = this.transaction(() => {
-      const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const info = prepared(this.db, `DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
       const rowsRemoved = Number(info.changes ?? 0);
       this.recordPrune('requests', beforeMs, rowsRemoved);
       return rowsRemoved;
     });
-    this.db.prepare('VACUUM').run();
+    prepared(this.db, 'VACUUM').run();
+    // Rows were removed and VACUUM may renumber the rest: nothing cached from
+    // before the prune can be extended.
+    this.exactSpendCache.clear();
+    this.requestMarks?.reset();
     return removed;
   }
 
@@ -3148,7 +3205,7 @@ export class Store {
     if (typeof source !== 'string' || source.trim() === '' || source.length > 128) {
       throw new Error('retention policy source must be a bounded non-empty string');
     }
-    const info = this.db.prepare(
+    const info = prepared(this.db, 
       `INSERT INTO retention_policy_changes (stream, previous_days, next_days, changed_at_ms, source)
        VALUES (?, ?, ?, ?, ?) ON CONFLICT(stream, previous_days, next_days, changed_at_ms, source) DO NOTHING`,
     ).run(stream, previousDays, nextDays, changedAtMs, source);
@@ -3158,8 +3215,8 @@ export class Store {
   /** Read policy changes in chronological order; absence is meaningful. */
   retentionPolicyChanges(stream?: RetentionPolicyChange['stream']): RetentionPolicyChange[] {
     const rows = (stream === undefined
-      ? this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes ORDER BY changed_at_ms ASC, id ASC').all()
-      : this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes WHERE stream = ? ORDER BY changed_at_ms ASC, id ASC').all(stream)) as Array<Record<string, unknown>>;
+      ? prepared(this.db, 'SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes ORDER BY changed_at_ms ASC, id ASC').all()
+      : prepared(this.db, 'SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes WHERE stream = ? ORDER BY changed_at_ms ASC, id ASC').all(stream)) as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       id: Number(row.id),
       stream: row.stream as RetentionPolicyChange['stream'],
@@ -3178,7 +3235,7 @@ export class Store {
   pruneProposals(beforeMs: number): number {
     // Atomic with its record, for the reason stated on `prune` (D-189).
     const removed = this.transaction(() => {
-      const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const info = prepared(this.db, `DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
       const rowsRemoved = Number(info.changes ?? 0);
       // Recorded under its own kind. Proposal retention is a much shorter policy
       // and says nothing about request coverage; folding the two together would
@@ -3186,7 +3243,7 @@ export class Store {
       this.recordPrune('proposals', beforeMs, rowsRemoved);
       return rowsRemoved;
     });
-    this.db.prepare('VACUUM').run();
+    prepared(this.db, 'VACUUM').run();
     return removed;
   }
 
@@ -3211,12 +3268,12 @@ export class Store {
    */
   clearProposals(): number {
     const removed = this.transaction(() => {
-      const info = this.db.prepare(`DELETE FROM proposals`).run();
+      const info = prepared(this.db, `DELETE FROM proposals`).run();
       const rowsRemoved = Number(info.changes ?? 0);
       if (rowsRemoved > 0) this.recordPrune('proposals', Date.now(), rowsRemoved);
       return rowsRemoved;
     });
-    this.db.prepare('VACUUM').run();
+    prepared(this.db, 'VACUUM').run();
     return removed;
   }
 

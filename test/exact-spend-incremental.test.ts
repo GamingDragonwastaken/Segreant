@@ -2,13 +2,15 @@
  * The budget guard asks for the day's exact spend on every proxied request.
  * Re-projecting the whole day each time made request N cost O(N) (548 ms of
  * added delay after 2,100 requests in a load test). The day projection is now
- * extended incrementally; these tests hold it equal to a full re-projection.
+ * extended incrementally, and so is each session's; these tests hold both
+ * equal to a full re-projection.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 import { Store, type ExactSpendProjection, type RequestRow } from '../src/store/db.ts';
@@ -31,6 +33,11 @@ function shape(p: ExactSpendProjection): unknown {
   return { amount: moneyToJson(p.amount), eventIds: [...p.eventIds], sourceBases: [...p.sourceBases], requestCount: p.requestCount, unresolved: p.unresolvedRequests };
 }
 
+function fullSession(store: Store, session: string, liveOnly: boolean): ExactSpendProjection {
+  return (store as unknown as { exactSpendForSessionFull(s: string, l: boolean): ExactSpendProjection })
+    .exactSpendForSessionFull(session, liveOnly);
+}
+
 function full(store: Store, liveOnly: boolean): ExactSpendProjection {
   return (store as unknown as { exactSpendBetweenFull(a: number, b: number, c: boolean): ExactSpendProjection })
     .exactSpendBetweenFull(DAY_START, DAY_END, liveOnly);
@@ -50,12 +57,16 @@ test('the incrementally extended day projection equals a full re-projection', ()
   store.close();
 });
 
-test('removing rows voids the cache instead of serving a stale total', () => {
-  const store = new Store(join(mkdtempSync(join(tmpdir(), 'exact-del-')), 'test.db'));
+test('rows removed by another connection void the cache at once', () => {
+  // A prune from the CLI while the proxy runs: the deleting connection is not
+  // the proxy's, and PRAGMA data_version tells the proxy's connection so.
+  const path = join(mkdtempSync(join(tmpdir(), 'exact-del-')), 'test.db');
+  const store = new Store(path);
   for (let i = 0; i < 20; i++) store.insertRequest(row(i));
   const before = store.exactSpendBetween(DAY_START, DAY_END, true);
-  const db = (store as unknown as { db: { prepare(sql: string): { run(...a: unknown[]): unknown } } }).db;
-  db.prepare("DELETE FROM requests WHERE request_id = 'req_proxy_3'").run();
+  const other = new DatabaseSync(path);
+  other.prepare("DELETE FROM requests WHERE request_id = 'req_proxy_3'").run();
+  other.close();
   store.insertRequest(row(20)); // one append after the removal: counts no longer line up
   const after = store.exactSpendBetween(DAY_START, DAY_END, true);
   assert.deepEqual(shape(after), shape(full(store, true)));
@@ -63,22 +74,61 @@ test('removing rows voids the cache instead of serving a stale total', () => {
   store.close();
 });
 
-test('recording spend no longer slows down as the day fills up', () => {
+test('prune voids the cache at once', () => {
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'exact-prune-')), 'test.db'));
+  for (let i = 0; i < 30; i++) store.insertRequest(row(i));
+  const before = store.exactSpendBetween(DAY_START, DAY_END, true);
+  store.prune(DAY_START + 1000 * 10); // removes req 0..9
+  store.insertRequest(row(30));
+  const after = store.exactSpendBetween(DAY_START, DAY_END, true);
+  assert.deepEqual(shape(after), shape(full(store, true)));
+  assert.equal(after.requestCount, before.requestCount - 10 + 1);
+  store.close();
+});
+
+test('the incrementally extended session projection equals a full re-projection', () => {
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'exact-sess-')), 'test.db'));
+  const inSession = (i: number, session: string, via: 'proxy' | 'import' = 'proxy') => ({ ...row(i, via), sessionId: session });
+  for (let i = 0; i < 30; i++) store.insertRequest(inSession(i, i % 3 === 0 ? 'other' : 'mine'));
+  for (const liveOnly of [true, false]) store.exactSpendForSession('mine', liveOnly); // prime
+  for (let i = 30; i < 70; i++) store.insertRequest(inSession(i, i % 3 === 0 ? 'other' : 'mine'));
+  for (let i = 0; i < 12; i++) store.insertRequestIfNew(inSession(i, 'mine', 'import'));
+  for (const session of ['mine', 'other']) {
+    for (const liveOnly of [true, false]) {
+      assert.deepEqual(shape(store.exactSpendForSession(session, liveOnly)), shape(fullSession(store, session, liveOnly)), `${session} liveOnly=${liveOnly}`);
+    }
+  }
+  assert.equal(store.exactSpendForSession('mine', true).requestCount, 46, 'live-only excludes the imported rows');
+  assert.equal(store.exactSpendForSession('mine', false).requestCount, 58);
+  store.close();
+});
+
+test('recording spend no longer slows down as the day or session fills up', () => {
+  // Wall-clock on a shared CI runner is noisy, so each figure is the median of
+  // several batches, and the ledger grows by 5,000 rows between the early and
+  // late measurements: the O(n) bug this guards made the late figure tens of
+  // times the early one at that size, far outside any noise band allowed here.
   const store = new Store(join(mkdtempSync(join(tmpdir(), 'exact-perf-')), 'test.db'));
-  const timeBatch = (from: number, n: number): number => {
+  let next = 0;
+  const batch = (n: number): number => {
     const t0 = performance.now();
-    for (let i = from; i < from + n; i++) {
-      store.insertRequest(row(i));
+    for (let k = 0; k < n; k++) {
+      store.insertRequest({ ...row(next++), sessionId: 'perf' });
       store.exactSpendBetween(DAY_START, DAY_END, true);
+      store.exactSpendForSession('perf', true);
     }
     return (performance.now() - t0) / n;
   };
-  timeBatch(0, 50); // warm-up
-  const early = timeBatch(50, 100);
-  for (let i = 150; i < 1500; i++) store.insertRequest(row(i));
+  const median = (): number => {
+    const runs = Array.from({ length: 7 }, () => batch(20)).sort((a, b) => a - b);
+    return runs[3]!;
+  };
+  batch(50); // warm-up
+  const early = median();
+  for (let k = 0; k < 5000; k++) store.insertRequest({ ...row(next++), sessionId: 'perf' });
   store.exactSpendBetween(DAY_START, DAY_END, true);
-  const late = timeBatch(1500, 100);
-  // Before the fix, late/early grew with the ledger (~10x at this size). Allow noise.
-  assert.ok(late < early * 3 + 2, `per-request cost grew from ${early.toFixed(2)} ms to ${late.toFixed(2)} ms`);
+  store.exactSpendForSession('perf', true);
+  const late = median();
+  assert.ok(late < early * 4 + 3, `per-request cost grew from ${early.toFixed(2)} ms to ${late.toFixed(2)} ms`);
   store.close();
 });

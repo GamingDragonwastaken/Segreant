@@ -132,6 +132,9 @@ test('via migration: pre-existing rows are backfilled by importer source tag, on
     s1.insertRequest(req({ requestId: 'live', source: null, costUsd: 3 }));
     s1.close();
     const raw = new DatabaseSync(path);
+    // A ledger from before `via` had no index over it either.
+    raw.prepare('DROP INDEX IF EXISTS idx_requests_ts_spend').run();
+    raw.prepare('DROP INDEX IF EXISTS idx_requests_session_spend').run();
     raw.prepare('ALTER TABLE requests DROP COLUMN via').run();
     raw.close();
 

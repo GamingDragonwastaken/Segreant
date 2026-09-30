@@ -10,7 +10,7 @@ import * as https from 'node:https';
 import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import { loadConfig, type EgressConfig, type EgressDataClass, type EgressPurpose } from '../config.ts';
-import { appendEgressReceipt, EgressReceiptError } from './receipts.ts';
+import { EgressReceiptError, queueEgressReceipt } from './receipts.ts';
 import { evaluateEgressPolicy, type EgressTargetClass } from './policy.ts';
 
 export type EgressErrorCode = 'policy_denied' | 'dns_denied' | 'receipt_integrity_failed' | 'receipt_persistence_failed' | 'transport_failed';
@@ -225,9 +225,9 @@ async function resolveTarget(target: URL, targetClass: EgressTargetClass): Promi
   return { address: checked[0]!.address, family: checked[0]!.family, addresses: checked, targetClass };
 }
 
-function receipt(input: Parameters<typeof appendEgressReceipt>[0]): void {
+async function receipt(input: Parameters<typeof queueEgressReceipt>[0]): Promise<void> {
   try {
-    appendEgressReceipt(input);
+    await queueEgressReceipt(input);
   } catch (error) {
     if (error instanceof EgressReceiptError && error.code === 'integrity') {
       throw new EgressError('receipt_integrity_failed', error.message);
@@ -259,29 +259,29 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
   const decision = evaluateEgressPolicy(config, { url, purpose: init.purpose, dataClass: init.dataClass, method });
   const bytes = bodyByteLength(init.body);
   if (!decision.allowed || !decision.target || !decision.targetClass) {
-    receipt({ event: 'preflight_denied', purpose: init.purpose, dataClass: init.dataClass, method, targetClass: 'denied', target: decision.target, bodyBytes: bytes });
+    await receipt({ event: 'preflight_denied', purpose: init.purpose, dataClass: init.dataClass, method, targetClass: 'denied', target: decision.target, bodyBytes: bytes });
     throw new EgressError('policy_denied', 'egress policy denied this request: ' + decision.reason);
   }
   const common = { purpose: init.purpose, dataClass: init.dataClass, method, targetClass: decision.targetClass, ruleId: decision.ruleId, target: decision.target, bodyBytes: bytes } as const;
-  receipt({ ...common, event: 'preflight_allowed' });
+  await receipt({ ...common, event: 'preflight_allowed' });
   let resolved: ResolvedTarget;
   try {
     resolved = await resolveTarget(decision.target, decision.targetClass);
   } catch (error) {
-    receipt({ ...common, event: 'transport_failed' });
+    await receipt({ ...common, event: 'transport_failed' });
     if (error instanceof EgressError) throw error;
     throw new EgressError('dns_denied', 'Segreant could not resolve an allowed egress target');
   }
-  receipt({ ...common, event: 'dial_started' });
+  await receipt({ ...common, event: 'dial_started' });
 
   if (egressDialHookForTests) {
     try {
       const response = await egressDialHookForTests({ target: decision.target, resolved, method, bodyBytes: bytes });
-      receipt({ ...common, event: 'response_received', status: response.status });
+      await receipt({ ...common, event: 'response_received', status: response.status });
       return response;
     } catch (error) {
       try {
-        receipt({ ...common, event: 'transport_failed' });
+        await receipt({ ...common, event: 'transport_failed' });
       } catch (receiptError) {
         throw receiptError instanceof EgressError
           ? receiptError
@@ -321,15 +321,24 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
         else callback(null, resolved.address, resolved.family);
       },
     } as https.RequestOptions, (incoming) => {
-      try {
-        receipt({ ...common, event: 'response_received', status: incoming.statusCode ?? 0 });
-      } catch (error) {
+      // The response is handed to the caller only once its receipt is on disk.
+      // Until then the body stays paused in the socket.
+      receipt({ ...common, event: 'response_received', status: incoming.statusCode ?? 0 }).then(
+        () => deliver(incoming),
+        (error: unknown) => {
+          incoming.resume();
+          req.destroy();
+          fail(error instanceof EgressError ? error : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed'));
+        },
+      );
+    });
+    const deliver = (incoming: http.IncomingMessage): void => {
+      if (settled) {
+        // The request already failed (aborted or errored) while the receipt
+        // was being written; release the socket instead of leaving it held.
         incoming.resume();
-        req.destroy();
-        fail(error instanceof EgressError ? error : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed'));
         return;
       }
-      if (settled) return;
       settled = true;
       // Opt-in: a file download that stops arriving is aborted rather than
       // holding the caller to its overall timeout. Never set for inference
@@ -349,15 +358,12 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
       const body = method === 'HEAD' || incoming.statusCode === 204 || incoming.statusCode === 304
         ? null : Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
       resolve(new Response(body, { status: incoming.statusCode ?? 502, statusText: incoming.statusMessage ?? '', headers: inboundHeaders(incoming.headers) }));
-    });
+    };
     req.once('error', () => {
-      try {
-        receipt({ ...common, event: 'transport_failed' });
-      } catch (error) {
-        fail(error instanceof EgressError ? error : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed'));
-        return;
-      }
-      fail(new EgressError('transport_failed', 'Segreant could not complete the permitted outbound request'));
+      receipt({ ...common, event: 'transport_failed' }).then(
+        () => fail(new EgressError('transport_failed', 'Segreant could not complete the permitted outbound request')),
+        (error: unknown) => fail(error instanceof EgressError ? error : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed')),
+      );
     });
     const abort = (): void => {
       req.destroy(new Error('aborted'));
