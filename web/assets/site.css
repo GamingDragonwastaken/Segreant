@@ -1,0 +1,577 @@
+/*
+ * Segreant site: security print.
+ *
+ * The world is a banknote. The dark theme (the main one) is the note under UV
+ * light: sable paper, gold engraving, fluorescent teal and violet guilloche. The
+ * light theme is the same note in daylight: cotton paper and green-grey cheque
+ * stock, bottle green engraving. Ornament lives at the edges of a frame; the
+ * reading area inside stays quiet. Every engraved image is an alpha mask painted
+ * in a theme token, so no picture carries its own colour.
+ *
+ * Motion is "the print run": text is ink already on the page, and only the
+ * press moves. Every animated element's resting state is its finished, printed
+ * state; the pre-print states below apply only under html.motion (set before
+ * first paint when the visitor has not asked for reduced motion), and
+ * html.settled forces everything printed if the script never runs.
+ *
+ * No third-party files: the four typefaces are OFL fonts subset into
+ * assets/fonts (licence in assets/fonts/OFL.txt).
+ */
+
+@font-face { font-family: "Castoro"; src: url("fonts/castoro-var.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Castoro"; src: url("fonts/castoro-italic-var.woff2") format("woff2"); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Castoro Titling"; src: url("fonts/castoro-titling.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Schibsted Grotesk"; src: url("fonts/schibsted-grotesk-var.woff2") format("woff2"); font-weight: 400 900; font-display: swap; }
+@font-face { font-family: "Spline Sans Mono"; src: url("fonts/spline-sans-mono-var.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+
+/* The engraver's burin: how far along the plate the cut has travelled, 0 to 1. */
+@property --burin { syntax: "<number>"; inherits: false; initial-value: 1; }
+
+:root {
+  --paper: #0b0d14;
+  --paper-2: #10131c;
+  --paper-3: #161a25;
+  --paper-tex: url("print/paper-uv.webp");
+  --tex-opacity: 0.55;
+  --sheet: #0d1017;
+  --sheet-blend: soft-light;
+  --core: #2b3141;
+  --shadow: rgba(0, 0, 0, 0.7);
+  --cert: #10131c;
+  --ink: #ebe7dc;
+  --ink-soft: #aeb0b8;
+  --rule: #2a2f3d;
+  --rule-strong: #4a5063;
+  --or: #e8b33c;
+  --on-or: #0b0d14;
+  --engrave: #d9aa45;
+  --vignette: #c7b68c;
+  --vignette-opacity: 0.72;
+  --kept: #82d4ab;
+  --notkept: #f08a74;
+  --stamp: #b8a2f2;
+  --guil-a: rgba(94, 214, 196, 0.22);
+  --guil-b: rgba(179, 156, 240, 0.2);
+  --trace-a: rgba(94, 214, 196, 0.24);
+  --trace-b: rgba(179, 156, 240, 0.24);
+  --emb-hi: rgba(255, 255, 255, 0.07);
+  --emb-lo: rgba(0, 0, 0, 0.55);
+  --plate-in: inset 3px 3px 7px rgba(0, 0, 0, 0.65), inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+  --uv-blend: screen;
+  --uv-print: #8fffe0;
+  --uv-ink: #7dffd9;
+  --uv-wash: rgba(110, 70, 255, 0.14);
+  --display: "Castoro", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --caps: "Castoro Titling", "Castoro", Georgia, serif;
+  --body: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --figs: "Spline Sans Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.25rem;
+  --step-2: clamp(1.6rem, 1.1rem + 1.8vw, 2.4rem);
+  --step-3: clamp(2.6rem, 1.4rem + 4.2vw, 4.6rem);
+  --step-4: clamp(3rem, 1.2rem + 5.6vw, 6.4rem);
+  --wrap: 1180px;
+  --ease-press: cubic-bezier(0.2, 0.75, 0.15, 1);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --paper: #e7ece3; --paper-2: #f3f5ef; --paper-3: #dde4da; --paper-tex: url("print/paper-light.webp"); --tex-opacity: 0.6;
+    --sheet: #fdfcf6; --sheet-blend: multiply; --core: #fdfcf7; --shadow: rgba(48, 40, 22, 0.28); --cert: #e9eee5;
+    --ink: #16211d; --ink-soft: #3d4943; --rule: #c2cbc1; --rule-strong: #8f9a92;
+    --or: #8a5d0f; --on-or: #f7f8f4; --engrave: #1f4d3f; --vignette: #1f4d3f; --vignette-opacity: 0.85; --kept: #17603f; --notkept: #a8321f; --stamp: #5b3db3;
+    --guil-a: rgba(31, 110, 96, 0.32); --guil-b: rgba(106, 75, 194, 0.24); --trace-a: rgba(31, 110, 96, 0.42); --trace-b: rgba(106, 75, 194, 0.3);
+    --foil-1: #8a6420; --foil-2: #e9cf8a;
+    --emb-hi: rgba(255, 255, 255, 0.85); --emb-lo: rgba(88, 66, 30, 0.3);
+    --plate-in: inset 3px 3px 6px rgba(90, 70, 35, 0.26), inset -2px -2px 3px rgba(255, 255, 255, 0.9);
+    --uv-blend: multiply; --uv-print: #2a5e52; --uv-ink: #1d6b58; --uv-wash: rgba(110, 80, 220, 0.12);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --paper: #e7ece3; --paper-2: #f3f5ef; --paper-3: #dde4da; --paper-tex: url("print/paper-light.webp"); --tex-opacity: 0.6;
+  --sheet: #fdfcf6; --sheet-blend: multiply; --core: #fdfcf7; --shadow: rgba(48, 40, 22, 0.28); --cert: #e9eee5;
+  --ink: #16211d; --ink-soft: #3d4943; --rule: #c2cbc1; --rule-strong: #8f9a92;
+  --or: #8a5d0f; --on-or: #f7f8f4; --engrave: #1f4d3f; --vignette: #1f4d3f; --vignette-opacity: 0.85; --kept: #17603f; --notkept: #a8321f; --stamp: #5b3db3;
+  --guil-a: rgba(31, 110, 96, 0.32); --guil-b: rgba(106, 75, 194, 0.24); --trace-a: rgba(31, 110, 96, 0.42); --trace-b: rgba(106, 75, 194, 0.3);
+  --foil-1: #8a6420; --foil-2: #e9cf8a;
+  --emb-hi: rgba(255, 255, 255, 0.85); --emb-lo: rgba(88, 66, 30, 0.3);
+  --plate-in: inset 3px 3px 6px rgba(90, 70, 35, 0.26), inset -2px -2px 3px rgba(255, 255, 255, 0.9);
+  --uv-blend: multiply; --uv-print: #2a5e52; --uv-ink: #1d6b58; --uv-wash: rgba(110, 80, 220, 0.12);
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 400 var(--step-0)/1.62 var(--body); font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+}
+/* The paper: a scanned, tiled stock under everything, never over text. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--paper-tex) 0 0 / 640px repeat; opacity: var(--tex-opacity);
+}
+img, svg { max-width: 100%; }
+a { color: inherit; text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:not(.btn):not(.skip):hover { color: var(--or); }
+:focus-visible { outline: 2px solid var(--or); outline-offset: 3px; }
+code, kbd, .figs { font-family: var(--figs); font-variant-numeric: tabular-nums slashed-zero; }
+code { font-size: 0.9em; }
+p { margin: 0; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: var(--step-3); line-height: 1; }
+h2 { font-size: var(--step-2); line-height: 1.1; }
+h3 { font-size: var(--step-1); line-height: 1.25; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--or); color: var(--on-or); padding: 8px 14px; z-index: 10; }
+.skip:focus { left: 16px; }
+.wrap { max-width: var(--wrap); margin-inline: auto; padding-inline: 20px; position: relative; z-index: 1; }
+.lede { font-size: var(--step-1); line-height: 1.5; color: var(--ink-soft); max-width: 31em; }
+.prose { max-width: 58ch; display: grid; gap: 14px; }
+.prose p { color: var(--ink-soft); }
+.prose b, .prose strong { color: var(--ink); font-weight: 600; }
+.soft { color: var(--ink-soft); }
+.kept { color: var(--kept); } .notkept { color: var(--notkept); }
+.sample {
+  display: inline-block; border: 1px solid var(--rule-strong); border-radius: 3px; padding: 1px 8px;
+  font: 500 13px/1.5 var(--figs); letter-spacing: 0.04em; color: var(--ink-soft); white-space: nowrap;
+}
+
+/* Header bar */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding-block: 18px; border-bottom: 1px solid var(--rule); }
+.brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
+.brand .mark { width: 34px; height: 34px; flex: none; background: var(--or); -webkit-mask: url("print/mark-ink.svg") center / contain no-repeat; mask: url("print/mark-ink.svg") center / contain no-repeat; }
+.brand .word { font-family: var(--caps); font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+.top nav { display: flex; align-items: center; gap: 6px 22px; flex-wrap: wrap; font-size: 15.5px; }
+.top nav a { text-decoration: none; color: var(--ink-soft); padding-block: 6px; }
+.top nav a:hover, .top nav a[aria-current="page"] { color: var(--ink); }
+.theme {
+  font: 500 14px var(--body); color: var(--ink); background: transparent; cursor: pointer;
+  border: 1px solid var(--rule-strong); border-radius: 999px; padding: 6px 14px; min-height: 36px;
+}
+.theme:hover { border-color: var(--or); }
+
+/* Buttons */
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 12px 22px;
+  font: 600 15.5px var(--body); text-decoration: none; border-radius: 3px; border: 1px solid var(--or);
+}
+.btn.primary { background: var(--or); color: var(--on-or); }
+.btn.primary:hover { color: var(--on-or); filter: brightness(1.08); }
+.btn.ghost { color: var(--ink); border-color: var(--rule-strong); background: transparent; cursor: pointer; }
+.btn.ghost:hover { border-color: var(--or); color: var(--ink); }
+
+/* ---------- The sheet: the hero is one torn sheet of paper ---------- */
+.sheet {
+  position: relative; z-index: 3; isolation: isolate; padding-bottom: 96px;
+  transform: translateY(calc(var(--lift, 0) * -36px)) rotate(calc(var(--lift, 0) * -0.5deg));
+  transform-origin: 30% 0;
+}
+/* The paper itself, cut to the tear, on its own layer: the drop shadow follows the
+   torn edge and never falls under the text printed on the sheet. */
+.sheet-paper { position: absolute; inset: 0; z-index: -1; filter: drop-shadow(0 14px 18px var(--shadow)); }
+.sheet-paper::before {
+  content: ""; position: absolute; inset: 0;
+  background: var(--paper-tex) 0 0 / 640px repeat, var(--sheet);
+  background-blend-mode: var(--sheet-blend);
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 90px) no-repeat, url("print/tear.svg") bottom / 100% 90px no-repeat;
+  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 90px) no-repeat, url("print/tear.svg") bottom / 100% 90px no-repeat;
+}
+/* Where the paper tore, its lighter core shows in a thin fibrous band. */
+.sheet-paper .tear-core {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 90px; z-index: -1; background: var(--core);
+  -webkit-mask: url("print/tear-core.svg") center / 100% 100% no-repeat; mask: url("print/tear-core.svg") center / 100% 100% no-repeat;
+}
+.sheet .top { border-bottom-color: color-mix(in srgb, var(--rule) 70%, transparent); }
+.hero { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); gap: 48px; align-items: center; padding-block: 56px 40px; min-height: min(calc(100svh - 160px), 760px); }
+.hero h1 { font-size: var(--step-4); line-height: 0.96; letter-spacing: -0.02em; }
+.hero h1 .w { display: inline-block; }
+.hero h1 em { font-style: italic; font-weight: 540; color: var(--or); }
+.hero .lede { margin-top: 28px; }
+.hero .cta { margin-top: 34px; }
+.hero .note { margin-top: 22px; font-size: 15.5px; color: var(--ink-soft); max-width: 34em; }
+
+/* The press: a plate pulled into the paper, its platemark debossed around it. */
+.press { position: relative; width: 100%; max-width: 520px; justify-self: end; transform: translateY(calc(var(--lift, 0) * 40px)); }
+.platemark { position: relative; aspect-ratio: 4 / 5; border-radius: 2px; box-shadow: var(--plate-in); overflow: hidden; }
+.platemark .trace { position: absolute; inset: -12%; display: grid; place-items: center; }
+.platemark .trace svg { width: 100%; height: 100%; overflow: visible; }
+.platemark .trace path { stroke-width: 1; vector-effect: non-scaling-stroke; }
+.platemark .trace .ga { stroke: var(--trace-a); }
+.platemark .trace .gb { stroke: var(--trace-b); }
+.platemark .emb, .platemark .burin { position: absolute; inset: 11% 6% 14%; }
+.platemark .emb { -webkit-mask: url("print/griffin-emboss-hi.webp") center / contain no-repeat; mask: url("print/griffin-emboss-hi.webp") center / contain no-repeat; }
+.platemark .emb.hi { background: var(--emb-hi); translate: -1px -1px; }
+.platemark .emb.lo { background: var(--emb-lo); translate: 2px 2px; -webkit-mask-image: url("print/griffin-emboss-lo.webp"); mask-image: url("print/griffin-emboss-lo.webp"); }
+/* The engraving is cut along its hatching: the burin's front travels at 62deg,
+   the direction the lines run, so each line lengthens rather than fading in. */
+.platemark .burin {
+  background: var(--engrave);
+  -webkit-mask: linear-gradient(62deg, #000 calc(var(--burin) * 140% - 40%), transparent calc(var(--burin) * 140% - 22%)), url("print/griffin-engraved.webp") center / contain no-repeat;
+  -webkit-mask-composite: source-in;
+  mask: linear-gradient(62deg, #000 calc(var(--burin) * 140% - 40%), transparent calc(var(--burin) * 140% - 22%)), url("print/griffin-engraved.webp") center / contain no-repeat;
+  mask-composite: intersect;
+}
+.platemark .edge-text { position: absolute; left: 6%; width: 88%; height: 12px; fill: var(--ink-soft); font: 8px var(--caps); letter-spacing: 0.04em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.platemark .edge-text.t { top: 3.2%; } .platemark .edge-text.b { bottom: 3.2%; }
+.platemark .plate-no { position: absolute; right: 6%; bottom: 7%; font: 500 13px var(--figs); color: var(--or); letter-spacing: 0.06em; }
+
+/* ---------- The note: an engraved certificate ---------- */
+.note-cert {
+  position: relative; margin: 0; aspect-ratio: 1.5; max-width: 100%; overflow: hidden; isolation: isolate;
+  background: var(--cert); border: 1px solid var(--rule-strong);
+}
+.note-cert .mask { position: absolute; pointer-events: none; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-position: center; mask-position: center; }
+.note-cert .rosette { width: 88%; aspect-ratio: 1; left: -30%; top: 50%; translate: 0 -50%; background: var(--guil-a); -webkit-mask-image: url("print/guilloche-rosette.svg"); mask-image: url("print/guilloche-rosette.svg"); }
+.note-cert .rosette.b { width: 70%; left: auto; right: -30%; top: 100%; background: var(--guil-b); }
+.note-cert .rope { left: 18px; right: 34px; height: 16px; background: var(--guil-a); -webkit-mask-image: url("print/guilloche-border.svg"); mask-image: url("print/guilloche-border.svg"); -webkit-mask-size: 600px 100%; mask-size: 600px 100%; -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x; }
+.note-cert .rope.t { top: 6px; } .note-cert .rope.b { bottom: 6px; background: var(--guil-b); }
+.note-cert .corner { width: 54px; aspect-ratio: 1; background: var(--engrave); opacity: 0.55; -webkit-mask-image: url("print/guilloche-corner.svg"); mask-image: url("print/guilloche-corner.svg"); }
+.note-cert .corner.tl { left: 10px; top: 26px; } .note-cert .corner.bl { left: 10px; bottom: 26px; }
+/* The foil: struck metal with a hairline diffraction ruling (an asset, not CSS stripes). */
+.note-cert .foil { position: absolute; top: 0; bottom: 0; right: 0; width: 22px; z-index: 1; background: url("print/foil.svg") center / 100% 100%; overflow: hidden; }
+.note-cert .foil::after { content: ""; position: absolute; inset: -30% 0; background: linear-gradient(180deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%); translate: 0 var(--sheen, 100%); }
+.note-cert .panel {
+  position: absolute; inset: 30px 46px 30px 22px; z-index: 1; border: 1px solid var(--rule);
+  display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: center; gap: 12px; padding: 18px 20px;
+}
+.note-cert .griffin { width: 100%; max-width: 220px; aspect-ratio: 1; justify-self: center; background: var(--engrave); -webkit-mask: url("print/griffin-engraved.webp") center / contain no-repeat; mask: url("print/griffin-engraved.webp") center / contain no-repeat; }
+.denom { display: grid; gap: 6px; justify-items: end; text-align: right; min-width: 0; }
+.denom .what { font-family: var(--caps); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+.denom .amount { font-family: var(--caps); font-size: clamp(2.2rem, 1rem + 3vw, 3.6rem); line-height: 1.05; font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+.denom .of { font-size: 15.5px; color: var(--ink-soft); }
+.note-cert .serial { position: absolute; z-index: 2; top: 34px; right: 58px; font: 500 13px var(--figs); letter-spacing: 0.06em; color: var(--or); }
+.note-cert .micro { position: absolute; z-index: 1; left: 22px; right: 46px; width: calc(100% - 68px); height: 12px; fill: var(--ink-soft); opacity: 0.8;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent); mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent); }
+.note-cert .micro.t { top: 21px; } .note-cert .micro.b { bottom: 18px; }
+
+/* ---------- Sections ---------- */
+section.band { padding-block: 88px; border-top: 1px solid var(--rule); }
+section.band.first { border-top: 0; padding-top: 72px; }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); gap: 32px 56px; align-items: end; margin-bottom: 40px; }
+.head.note-head { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: center; }
+.head .prose { margin-top: 18px; }
+.vignette { width: 100%; aspect-ratio: 3 / 2; background: var(--vignette); opacity: var(--vignette-opacity);
+  -webkit-mask: linear-gradient(62deg, #000 calc(var(--burin) * 140% - 40%), transparent calc(var(--burin) * 140% - 22%)), var(--src) center / contain no-repeat;
+  -webkit-mask-composite: source-in;
+  mask: linear-gradient(62deg, #000 calc(var(--burin) * 140% - 40%), transparent calc(var(--burin) * 140% - 22%)), var(--src) center / contain no-repeat;
+  mask-composite: intersect; }
+.vignette.ledger { --src: url("print/vignette-ledger.webp"); }
+.vignette.gate { --src: url("print/vignette-gate.webp"); }
+.vignette.workshop { --src: url("print/vignette-workshop.webp"); }
+figure.plate { margin: 0; display: grid; gap: 10px; justify-items: center; }
+.why-side { display: grid; gap: 32px; align-content: start; }
+.why-side .plate { max-width: 420px; justify-self: start; }
+
+/* A rope border printed between movements of the page. */
+.rope-rule { height: 18px; background: var(--guil-a); -webkit-mask: url("print/guilloche-border.svg") 0 0 / 600px 100% repeat-x; mask: url("print/guilloche-border.svg") 0 0 / 600px 100% repeat-x; clip-path: inset(0 0 0 0); }
+
+/* ---------- The statement ---------- */
+.frame { border: 1px solid var(--rule-strong); padding: 7px; position: relative; background: var(--paper-2); }
+.frame::before { content: ""; position: absolute; inset: 3px; border: 1px solid var(--rule); pointer-events: none; }
+.statement { position: relative; padding: 30px clamp(18px, 3vw, 40px) 34px; }
+.st-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px 20px; padding-bottom: 14px; }
+.st-top h3 { font-size: clamp(1.8rem, 1.3rem + 1.6vw, 2.4rem); }
+.st-top .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; color: var(--ink-soft); }
+.lines { border-top: 2px solid var(--ink); }
+.line { position: relative; display: grid; grid-template-columns: 4.2rem minmax(0, 1fr) auto; gap: 0 16px; align-items: baseline; padding: 13px 0 4px; border-bottom: 1px solid var(--rule); }
+.line .no { font: 500 13px var(--figs); color: var(--ink-soft); }
+.line .label { font-size: 17px; }
+.line .val { font: 500 19px var(--figs); font-variant-numeric: tabular-nums; text-align: right; }
+.line .val.none { font: 400 15.5px var(--body); color: var(--ink-soft); text-align: right; }
+.line details { grid-column: 2 / -1; }
+.line summary { cursor: pointer; display: inline-flex; align-items: center; min-height: 40px; font-size: 14px; color: var(--ink-soft); text-decoration: underline dotted; text-underline-offset: 0.2em; list-style: none; }
+.line summary::-webkit-details-marker { display: none; }
+.line details[open] summary { color: var(--ink); }
+.line details p { font-size: 15.5px; color: var(--ink-soft); padding-bottom: 10px; max-width: 64ch; }
+.line.total { border-bottom: 3px double var(--ink); padding-bottom: 13px; }
+.line.total .label { font-weight: 600; }
+.line.group { padding-block: 16px 6px; border-bottom: 0; }
+.line.group .label { font-family: var(--caps); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+/* The stamp belongs to Line 6, struck across it at an angle. */
+.stamp {
+  position: absolute; right: 8.5rem; top: 10px; transform: rotate(-5deg); pointer-events: none;
+  border: 2px solid var(--stamp); color: var(--stamp); border-radius: 4px; padding: 5px 11px;
+  font: 600 14px var(--figs); letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.88;
+}
+.tablewrap { margin-top: 28px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+caption { text-align: left; font-family: var(--caps); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); padding-bottom: 8px; }
+th { text-align: left; font: 600 13px var(--body); color: var(--ink-soft); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--ink); }
+td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.n, th.n { text-align: right; font-family: var(--figs); font-variant-numeric: tabular-nums; padding-right: 0; }
+.st-foot { margin-top: 22px; font-size: 14px; color: var(--ink-soft); display: grid; gap: 6px; max-width: 60ch; }
+
+/* Rolling figures: each digit is a numbering wheel. */
+.dg { display: inline-block; height: 1.2em; line-height: 1.2em; overflow: hidden; vertical-align: bottom; }
+.dg > span { display: block; transform: translateY(calc(var(--n) * -1.2em)); }
+.dg > span > span { display: block; height: 1.2em; }
+
+/* Four kinds of number */
+.kinds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); margin-top: 48px; }
+.kinds > div { padding: 20px 20px 4px 0; display: grid; gap: 8px; align-content: start; }
+.kinds > div + div { padding-left: 20px; border-left: 1px solid var(--rule); }
+.kinds h3 { font-size: 1.15rem; }
+.kinds p { font-size: 15.5px; color: var(--ink-soft); }
+.kinds .src { font: 500 13px var(--figs); color: var(--or); }
+
+/* Two-column feature bands */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px 64px; align-items: start; }
+.facts { display: grid; gap: 0; border-top: 1px solid var(--rule); margin-top: 28px; }
+.facts > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 4px 18px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.facts dt, .facts .k { font: 600 14px var(--body); color: var(--ink); }
+.facts dd, .facts .v { margin: 0; font-size: 15.5px; color: var(--ink-soft); max-width: 58ch; }
+/* A limit reads like a clause in a statement: ruled above, lead phrase in full ink. */
+.limit { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 15.5px; color: var(--ink-soft); }
+.limit b { font-weight: 600; color: var(--ink); }
+.limit:first-child { margin-top: 0; }
+
+/* Terminal: set as printed matter, not a glowing window. */
+.term { margin: 0; background: var(--paper-3); border: 1px solid var(--rule); padding: 18px 20px; overflow-x: auto; font: 14px/1.7 var(--figs); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.term .c { color: var(--ink-soft); }
+.term .p { color: var(--or); user-select: none; }
+.steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 36px; }
+.step { display: grid; gap: 12px; align-content: start; }
+.step h3 { display: flex; gap: 12px; align-items: baseline; }
+.step h3 .n { font: 500 14px var(--figs); color: var(--or); }
+.step p { color: var(--ink-soft); font-size: 15.5px; }
+
+/* Receipt */
+.receipt { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 32px 56px; align-items: start; }
+.slip { position: relative; background: var(--paper-2); border: 1px solid var(--rule-strong); padding: 22px 22px 18px; font: 14px/1.75 var(--figs); }
+.slip::after { content: ""; position: absolute; left: 0; right: 0; bottom: -9px; height: 9px; background: radial-gradient(circle at 6px 0, transparent 5px, var(--paper-2) 5.5px) 0 0 / 12px 9px repeat-x; }
+.slip .row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 12px; }
+.slip .row span:first-child { color: var(--ink-soft); }
+.slip .hdr { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-family: var(--caps); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--rule-strong); }
+/* The signing mark, struck in foil at the foot of the slip. */
+.slip .seal { position: absolute; right: 18px; bottom: 16px; width: 64px; height: 64px; background: var(--or); opacity: 0.9;
+  -webkit-mask: url("print/mark-ink.svg") center / contain no-repeat; mask: url("print/mark-ink.svg") center / contain no-repeat; }
+
+/* Source notes */
+.sources { font-size: 14px; color: var(--ink-soft); margin-top: 18px; display: grid; gap: 4px; }
+.sources a { color: var(--ink-soft); }
+
+/* Priority order */
+.order { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); counter-reset: o; }
+.order li { counter-increment: o; padding: 16px 18px 0 0; font-size: 15.5px; display: grid; gap: 4px; }
+.order li + li { padding-left: 18px; border-left: 1px solid var(--rule); }
+.order li::before { content: counter(o); font: 500 14px var(--figs); color: var(--or); }
+.note-line { margin-top: 36px; max-width: 58ch; color: var(--ink-soft); }
+
+/* Start */
+.start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 40px 64px; align-items: start; }
+
+/* Footer */
+footer.site { border-top: 1px solid var(--rule); padding-block: 36px 56px; font-size: 14px; color: var(--ink-soft); display: grid; gap: 18px; }
+footer.site > p { max-width: 60ch; }
+footer.site .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 28px; align-items: center; }
+footer.site nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+footer.site a { color: var(--ink-soft); }
+
+/* ---------- The UV lamp ---------- */
+.uv { display: contents; }
+.uv-fibres, .uv-print { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s;
+  -webkit-mask: radial-gradient(circle 180px at var(--mx, -400px) var(--my, -400px), #000 0 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%);
+  mask: radial-gradient(circle 180px at var(--mx, -400px) var(--my, -400px), #000 0 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%); }
+html.uv-on .uv-fibres, html.uv-on .uv-print { opacity: 1; }
+.uv-fibres { z-index: 6; mix-blend-mode: var(--uv-blend); background: url("print/uv-fibres.webp") 0 0 / 980px repeat; }
+.uv-print { z-index: 0; background: var(--uv-print);
+  -webkit-mask: radial-gradient(circle 180px at var(--mx, -400px) var(--my, -400px), #000 0 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%), url("print/uv-print.svg") 0 0 / 1200px repeat;
+  -webkit-mask-composite: source-in;
+  mask: radial-gradient(circle 180px at var(--mx, -400px) var(--my, -400px), #000 0 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%), url("print/uv-print.svg") 0 0 / 1200px repeat;
+  mask-composite: intersect; }
+
+.lamp-hint { display: none; margin: 14px 0 0; font: italic 15.5px var(--display); color: var(--ink-soft); text-align: center; }
+@media (pointer: fine) { html.motion .lamp-hint { display: block; } }
+html.capture-card .lamp-hint { display: none !important; }
+html.uv-on .lamp-hint { opacity: 0; transition: opacity 0.6s 1.5s; }
+
+/* Under the lamp the plate's own secrets show: the hatching fluoresces, and a
+   latent image printed in invisible ink (the four-number rule) appears along the
+   hatching angle. Both are masked by the lamp in the plate's own coordinates. */
+.platemark .glow, .platemark .latent { pointer-events: none; opacity: 0; transition: opacity 0.4s;
+  -webkit-mask: radial-gradient(circle 150px at var(--lx, -400px) var(--ly, -400px), #000 0 35%, rgba(0, 0, 0, 0.5) 65%, transparent 100%);
+  mask: radial-gradient(circle 150px at var(--lx, -400px) var(--ly, -400px), #000 0 35%, rgba(0, 0, 0, 0.5) 65%, transparent 100%); }
+html.uv-on .platemark .glow, html.uv-on .platemark .latent { opacity: 1; }
+.platemark .glow { position: absolute; inset: 0; mix-blend-mode: var(--uv-blend); }
+.platemark .glow::before { content: ''; position: absolute; inset: 11% 6% 14%; background: var(--uv-ink); filter: drop-shadow(0 0 3px var(--uv-ink));
+  -webkit-mask: url('print/griffin-engraved.webp') center / contain no-repeat; mask: url('print/griffin-engraved.webp') center / contain no-repeat; }
+.platemark .latent { position: absolute; inset: 0; mix-blend-mode: var(--uv-blend); }
+/* The latent image is outlined artwork (assets/print/latent.svg), set along the hatching. */
+.platemark .latent > span { position: absolute; inset: 22% 8%; rotate: -28deg; background: var(--uv-ink); filter: drop-shadow(0 0 6px var(--uv-ink));
+  -webkit-mask: url("print/latent.svg") center / contain no-repeat; mask: url("print/latent.svg") center / contain no-repeat; }
+.uv-wash { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.5s; background: var(--uv-wash); mix-blend-mode: var(--uv-blend);
+  -webkit-mask: radial-gradient(circle 200px at var(--mx, -400px) var(--my, -400px), #000 0 20%, transparent 100%);
+  mask: radial-gradient(circle 200px at var(--mx, -400px) var(--my, -400px), #000 0 20%, transparent 100%); }
+html.uv-on .uv-wash { opacity: 1; }
+
+/* ---------- The loop guard, run as a simulation ---------- */
+.loop { position: relative; margin: 0 0 18px; border: 1px solid var(--rule-strong); background: var(--paper-2); padding: 16px 18px 18px; overflow: hidden; }
+.loop-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font: 13px var(--figs); color: var(--ink-soft); }
+.tape { list-style: none; margin: 12px 0 14px; padding: 0; height: 200px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
+  font: 13px/1.7 var(--figs); -webkit-mask-image: linear-gradient(transparent, #000 35%); mask-image: linear-gradient(transparent, #000 35%); }
+.tape li { display: grid; grid-template-columns: 7.2rem 4.4rem minmax(0, 1fr); gap: 10px; color: var(--ink-soft); white-space: nowrap; }
+.tape li .c { color: var(--ink); text-align: right; }
+.tape li.blocked { color: var(--notkept); white-space: normal; }
+.tape li.blocked .c { color: var(--notkept); }
+.meter-label, .meter-scale { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); }
+.meter-val { color: var(--ink); }
+.meter { position: relative; height: 10px; margin: 6px 0; background: var(--paper-3); border: 1px solid var(--rule); }
+.meter i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(min(1, var(--w, 0))); background: var(--or); transition: transform 0.12s linear; }
+.loop.blocked .meter i { background: var(--notkept); }
+.meter b { position: absolute; top: -4px; bottom: -4px; width: 2px; translate: -2px 0; background: var(--notkept); }
+.loop-verdict { margin-top: 14px; font-size: 14px; color: var(--notkept); }
+.loop-verdict .figs { font-weight: 600; margin-right: 6px; }
+.loop-stamp { top: 52px; right: 22px; border-color: var(--notkept); color: var(--notkept); }
+.loop-replay { margin-top: 14px; min-height: 40px; padding: 8px 16px; }
+html.motion .loop:not(.blocked) .loop-verdict { opacity: 0; }
+html.motion .loop:not(.blocked) .loop-stamp { opacity: 0; }
+html.motion .loop.blocked .loop-stamp { animation: thunk 0.45s 0.15s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
+html.motion .loop.blocked .loop-verdict { animation: surface 0.4s ease-out both; }
+html.motion .loop.blocked { animation: jolt 0.25s 0.45s ease-out; }
+
+/* ---------- The statement prints line by line; the receipt feeds out of a slot ---------- */
+@keyframes feed { from { clip-path: inset(0 0 100% 0); translate: 0 -28px; } to { clip-path: inset(0 0 -14px 0); translate: 0 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  html.motion .statement:not(.inked) .lines > .line { opacity: 0; }
+  html.motion .statement.inked .lines > .line { animation: surface 0.45s calc(var(--k, 0) * 0.09s) ease-out both; }
+  html.motion .slip.ink-on:not(.inked) { clip-path: inset(0 0 100% 0); }
+  html.motion .slip.inked { animation: feed 1.3s cubic-bezier(0.55, 0.1, 0.35, 1) both; }
+}
+.lines > .line:nth-child(2) { --k: 1; } .lines > .line:nth-child(3) { --k: 2; } .lines > .line:nth-child(4) { --k: 3; }
+.lines > .line:nth-child(5) { --k: 4; } .lines > .line:nth-child(6) { --k: 5; } .lines > .line:nth-child(7) { --k: 6; }
+.lines > .line:nth-child(8) { --k: 7; } .lines > .line:nth-child(9) { --k: 8; } .lines > .line:nth-child(10) { --k: 9; }
+html.settled .statement .lines > .line, html.settled .loop .loop-verdict, html.settled .loop .loop-stamp { opacity: 1 !important; }
+html.settled .slip { clip-path: none !important; }
+
+/* ---------- Method page ---------- */
+.toc { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 15.5px; margin-top: 26px; }
+.toc a { color: var(--ink-soft); }
+.eq { font: 15.5px/1.6 var(--figs); background: var(--paper-3); border: 1px solid var(--rule); padding: 14px 18px; overflow-x: auto; white-space: nowrap; color: var(--ink); }
+.measured { font: 500 14px/1.6 var(--figs); color: var(--kept); }
+.status { display: inline-block; font: 600 13px var(--body); border: 1px solid currentColor; border-radius: 3px; padding: 1px 8px; }
+.status.ships { color: var(--kept); } .status.lib { color: var(--or); } .status.none { color: var(--notkept); }
+.funnel { display: grid; gap: 6px; margin-top: 18px; }
+.frow { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) 13rem; gap: 14px; align-items: center; font-size: 15.5px; }
+.frow .g { text-align: right; color: var(--ink-soft); }
+.frow .bar { height: 14px; background: var(--paper-3); border: 1px solid var(--rule); }
+.frow .bar i { display: block; height: 100%; background: var(--engrave); }
+.frow.kept .bar i { background: var(--kept); }
+.frow .v { font: 14px var(--figs); color: var(--ink-soft); }
+.method-grid { display: grid; gap: 56px; }
+.method-item { display: grid; grid-template-columns: minmax(0, 0.42fr) minmax(0, 1fr); gap: 16px 48px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.method-item .body { display: grid; gap: 14px; }
+.method-item .body p { color: var(--ink-soft); max-width: 58ch; }
+.method-item .body b { color: var(--ink); font-weight: 600; }
+.method-hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 48px; align-items: center; padding-block: 56px 72px; }
+.method-hero h1 { font-size: clamp(2.4rem, 1.4rem + 3.4vw, 4rem); }
+.method-hero .lede { margin-top: 22px; }
+.method-hero .rosette-plate { width: 100%; max-width: 380px; aspect-ratio: 1; justify-self: end; background: var(--guil-a); -webkit-mask: url("print/guilloche-rosette.svg") center / contain no-repeat; mask: url("print/guilloche-rosette.svg") center / contain no-repeat; }
+
+/* ---------- The print run (motion) ---------- */
+@keyframes burin { from { --burin: 0; filter: blur(1.4px); } 70% { filter: blur(0.3px); } to { --burin: 1; filter: none; } }
+@keyframes press-in { from { opacity: 0; transform: scale(1.012); } to { opacity: 1; transform: none; } }
+@keyframes strike { 0% { opacity: 0; transform: translateY(-0.1em) scale(1.08); filter: blur(4px); } 55% { opacity: 1; filter: blur(0); transform: translateY(0.01em) scale(0.995); } 100% { opacity: 1; transform: none; } }
+@keyframes trace { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes surface { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes rosette-turn { from { opacity: 0; rotate: -24deg; scale: 0.92; } to { opacity: 1; rotate: 0deg; scale: 1; } }
+@keyframes sheen { from { --sheen: -100%; } to { --sheen: 100%; } }
+@keyframes thunk { 0% { opacity: 0; transform: rotate(-14deg) scale(2.1); filter: blur(3px); } 62% { opacity: 1; transform: rotate(-4deg) scale(0.94); filter: blur(0); } 100% { opacity: 0.88; transform: rotate(-5deg) scale(1); } }
+@keyframes jolt { 0%, 100% { translate: 0 0; } 30% { translate: 0 2px; } 60% { translate: 0 -1px; } }
+@keyframes print-across { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Opening: the plate is pulled. */
+  html.motion.intro .platemark .emb { animation: press-in 0.6s 0.05s ease-out both; }
+  html.motion.intro .platemark .burin { animation: burin 1.5s 0.3s cubic-bezier(0.5, 0.05, 0.3, 1) both; }
+  html.motion.intro .platemark .trace path { stroke-dasharray: 1 1; animation: trace 1.8s calc(0.15s + var(--d, 0s)) cubic-bezier(0.3, 0.1, 0.2, 1) both; }
+  html.motion.intro .platemark .edge-text, html.motion.intro .platemark .plate-no { animation: surface 0.6s 1.3s ease-out both; }
+  html.motion.intro .hero h1 .w { animation: strike 0.7s calc(0.5s + var(--i, 0) * 0.09s) var(--ease-press) both; }
+  html.motion.intro .hero h1 .w:nth-child(1) { --i: 0; } html.motion.intro .hero h1 .w:nth-child(2) { --i: 1; }
+  html.motion.intro .hero h1 .w:nth-child(3) { --i: 2; } html.motion.intro .hero h1 .w:nth-child(4) { --i: 3; }
+  html.motion.intro .hero h1 .w:nth-child(5) { --i: 4.6; }
+  html.motion.intro .hero .lede, html.motion.intro .hero .cta, html.motion.intro .hero .note { animation: surface 0.6s 0.95s ease-out both; }
+
+  /* As each plate reaches the reader: engravings are cut, rosettes turn into register,
+     figures roll on their wheels, the stamp comes down, rope borders print across. */
+  html.motion .ink-on:not(.inked) .vignette { --burin: 0; }
+  html.motion .ink-on .vignette { transition: --burin 1.7s cubic-bezier(0.5, 0.05, 0.3, 1); }
+  html.motion .note-cert.inked .rosette { animation: rosette-turn 1.4s var(--ease-press) both; }
+  html.motion .note-cert.inked .rosette.b { animation-delay: 0.12s; }
+  html.motion .note-cert:not(.inked) .rosette { opacity: 0; }
+  html.motion .note-cert.inked .foil::after { animation: sheen 1.6s 0.6s ease-in-out both; }
+  html.motion .note-cert .griffin { transition: opacity 0.8s 0.2s; }
+  html.motion .note-cert:not(.inked) .griffin { opacity: 0; }
+  html.motion .dg > span { transition: transform 1.3s var(--ease-press) var(--delay, 0s); }
+  html.motion .ink-on:not(.inked) .dg > span { transform: translateY(0); }
+  html.motion .statement:not(.inked) .stamp { opacity: 0; }
+  html.motion .statement.inked .stamp { animation: thunk 0.45s 1.5s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
+  html.motion .statement.inked { animation: jolt 0.25s 1.78s ease-out; }
+  html.motion .rope-rule:not(.inked) { clip-path: inset(0 100% 0 0); }
+  html.motion .rope-rule.inked { animation: print-across 1.4s cubic-bezier(0.6, 0.1, 0.3, 1) both; }
+  html.motion .slip:not(.inked) .seal { opacity: 0; }
+  html.motion .slip.inked .seal { animation: thunk 0.45s 1.35s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
+}
+@property --sheen { syntax: "<percentage>"; inherits: false; initial-value: 100%; }
+
+/* Failsafe: if the script never runs, or the animation timeline stalls (a frozen
+   background tab, a power-saving mode), everything is printed: the intro included. */
+html.settled .hero h1 .w, html.settled .hero .lede, html.settled .hero .cta, html.settled .hero .note,
+html.settled .platemark .emb, html.settled .platemark .burin, html.settled .platemark .edge-text, html.settled .platemark .plate-no,
+html.settled .platemark .trace path { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; --burin: 1 !important; stroke-dasharray: none !important; }
+html.settled .ink-on .vignette { --burin: 1 !important; }
+html.settled .note-cert .rosette, html.settled .note-cert .griffin, html.settled .statement .stamp, html.settled .slip .seal { opacity: 1 !important; }
+html.settled .rope-rule { clip-path: none !important; }
+html.settled .dg > span { transform: translateY(calc(var(--n) * -1.2em)) !important; }
+
+@media (max-width: 960px) {
+  .hero, .head, .head.note-head, .split, .receipt, .start, .method-hero { grid-template-columns: minmax(0, 1fr); }
+  .hero { padding-block: 32px 24px; gap: 32px; min-height: 0; }
+  .press { justify-self: center; max-width: 420px; }
+  .head .vignette { max-width: 420px; }
+  .kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kinds > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .order { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .order li:nth-child(3) { padding-left: 0; border-left: 0; }
+  .method-item { grid-template-columns: minmax(0, 1fr); }
+  .method-hero .rosette-plate { justify-self: start; max-width: 240px; }
+  section.band { padding-block: 64px; }
+}
+@media (max-width: 620px) {
+  .sheet { padding-bottom: 60px; }
+  .sheet-paper::before { -webkit-mask-size: 100% calc(100% - 50px), 100% 50px; mask-size: 100% calc(100% - 50px), 100% 50px; }
+  .sheet-paper .tear-core { height: 50px; }
+  .press { order: -1; max-width: 250px; }
+  .hero { gap: 22px; padding-top: 22px; }
+  .note-cert { aspect-ratio: auto; min-height: 420px; }
+  .note-cert .panel { grid-template-columns: minmax(0, 1fr); inset: 32px 40px 30px 16px; padding: 16px; }
+  .note-cert .griffin { max-width: 140px; }
+  .denom { justify-items: center; text-align: center; }
+  .note-cert .serial { display: none; }
+  .note-cert .rosette { width: 150%; left: -70%; }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .kinds { grid-template-columns: minmax(0, 1fr); }
+  .kinds > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); }
+  .order { grid-template-columns: minmax(0, 1fr); }
+  .order li + li { padding-left: 0; border-left: 0; }
+  .facts > div { grid-template-columns: minmax(0, 1fr); }
+  .line { grid-template-columns: 3.5rem minmax(0, 1fr); }
+  .line .no { font-size: 13px; white-space: nowrap; }
+  .line .val, .line .val.none { grid-column: 2; text-align: left; }
+  .line .stamp { position: static; display: inline-block; grid-column: 2; justify-self: start; margin-top: 8px; }
+  .top nav { gap: 4px 16px; font-size: 14px; }
+  .frow { grid-template-columns: 5rem minmax(0, 1fr); }
+  .frow .v { grid-column: 2; }
+  .slip .row { grid-template-columns: 6rem minmax(0, 1fr); }
+  .slip .seal { width: 44px; height: 44px; }
+  .tape li { grid-template-columns: 5.6rem 3.8rem minmax(0, 1fr); font-size: 12px; }
+  .loop-stamp { top: 46px; right: 12px; }
+}
+@media print {
+  body::before, .theme, .note-cert .mask, .uv, .platemark .trace { display: none; }
+  .sheet { transform: none; } .sheet-paper { filter: none; }
+}
