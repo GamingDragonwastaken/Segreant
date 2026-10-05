@@ -437,11 +437,16 @@ The design is calibrated to the empirical record, not invented:
 - **Tokens are mostly overhead.** Field data shows 85–95% of agentic tokens go to
   orientation / context re-send / retries — so token *volume* is a cost signal,
   never a value signal. RoI treats it accordingly.
-- **The cautionary precedent.** In early 2026 Meta ("Claudeonomics") and Amazon
-  ("KiroRank") ran internal token-consumption leaderboards; spend spiked ~10× with
-  no output gain and they were shut down. RoI is the outcome-based answer to
-  exactly that failure — and its geometric-mean composite is structurally immune
-  to the single-axis gaming that sank those leaderboards.
+- **The cautionary precedent.** In 2026 employees at Meta ("Claudeonomics") and
+  Amazon ("KiroRank") built internal leaderboards ranking colleagues by tokens
+  used. Amazon took KiroRank down after staff ran agents on low-value tasks to
+  climb it and compute costs rose (CIO, 2026:
+  https://www.cio.com/article/4178825/amazon-deletes-devs-tokenmaxxing-leaderboard-to-minimize-costs-2.html);
+  Meta's dashboard was taken down in April 2026 (Fortune, 9 Apr 2026:
+  https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/). RoI
+  is an outcome-based answer to that failure, and its geometric-mean composite
+  makes single-axis gaming harder: inflating one lens cannot offset a weak one.
+  It does not make gaming impossible; the drift alarm (§11) exists for the rest.
 
 **Sources:** METR RCT (arXiv:2507.09089); METR transcript analysis (metr.org,
 Feb 2026); METR 2026 technical-worker survey; *The Fast and Spurious* (arXiv

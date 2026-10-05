@@ -138,6 +138,7 @@ const CURRENT_CLAIM_SURFACES = [
   'src/judge/tier.ts',
   'src/judge/orchestrate.ts',
   'web/index.html',
+  'web/method.html',
 ] as const;
 
 const REJECTED_LIVE_CLAIMS: ReadonlyArray<[string, RegExp]> = [

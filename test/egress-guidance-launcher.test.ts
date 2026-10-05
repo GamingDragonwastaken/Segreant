@@ -203,7 +203,12 @@ test('checked-out npm entry points declare a build freshness lifecycle', () => {
   assert.match(claude, /npm run demo/);
   assert.match(claude, /npm run start -- --demo/);
   assert.match(landing, /npm run start/);
-  assert.match(landing, /navigator\.clipboard\.writeText\('npm run start'\)/);
+  // The landing page's copy button copies its install block (site.js reads the
+  // block it points at), so the block itself must run through an npm entry
+  // point that rebuilds dist/ first.
+  const install = landing.slice(landing.indexOf('id="install-cmds"'), landing.indexOf('</pre>', landing.indexOf('id="install-cmds"')));
+  assert.match(install, /npm run demo/);
+  assert.match(landing, /data-copy="install-cmds"/);
 });
 
 test('invalid config ports fail closed before guide command interpolation', () => {
