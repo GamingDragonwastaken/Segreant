@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Segreant method: how the figures are worked out</title>
+<meta name="description" content="How Segreant, a local-first AI cost tool, works out list cost, kept work, the value score, its 95% range and the change alert, with what each figure cannot tell you. Routed provider traffic goes to the configured provider.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b0d14">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/mark-32.png">
+<link rel="preload" href="assets/fonts/castoro-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/schibsted-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+  try { var t = localStorage.getItem('segreant-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="index.html" aria-label="Segreant home"><span class="mark" aria-hidden="true"></span><span class="word">SEGREANT</span></a>
+    <nav aria-label="Site">
+      <a href="index.html#sample">Sample month</a>
+      <a href="index.html#caps">Caps</a>
+      <a href="index.html#how">How it works</a>
+      <a href="method.html" aria-current="page">Method</a>
+      <a href="https://github.com/GamingDragonwastaken/Segreant">GitHub</a>
+      <button class="theme" type="button" data-theme-toggle hidden>Light theme</button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="method-hero" aria-labelledby="m-title">
+      <div>
+        <h1 id="m-title">How each figure is worked out, and what it can't tell you.</h1>
+        <p class="lede">This page is the detail layer behind the site and the app. Formulas are named, measured claims link to the test that measures them, and anything the product doesn't yet offer says so.</p>
+        <nav class="toc" aria-label="On this page">
+          <a href="#kinds">Four kinds of number</a>
+          <a href="#kept">Kept work</a>
+          <a href="#score">Value score</a>
+          <a href="#range">95% range</a>
+          <a href="#alert">Change alert</a>
+          <a href="#receipts">Receipts</a>
+          <a href="#not-offered">Not offered</a>
+        </nav>
+      </div>
+      <span class="rosette-plate" aria-hidden="true"></span>
+    </section>
+
+    <section class="band" aria-label="Method">
+      <div class="method-grid">
+
+        <article class="method-item" id="kinds">
+          <div><h2>Four kinds of number</h2></div>
+          <div class="body">
+            <p><b>List cost (estimate)</b> is tokens priced at each provider's published list price, from a dated price list. <b>Billed cost</b> exists only once you import an invoice or cost export, and Segreant compares the two by project and day. <b>Allocated cost</b> is spend divided by rules you write. <b>Value (kept work)</b> counts outcomes, not money.</p>
+            <p>The four are never merged or substituted. A calculation on your computer is never presented as your provider's bill, and a share of spend that reached kept work is never presented as a return or a productivity gain. The terms follow the FinOps FOCUS vocabulary (list cost, billed cost) so they can be read beside a finance team's own reports.</p>
+            <p>Older requests without a verified exact price keep an "unknown" marker. Segreant never fills one in from context.</p>
+          </div>
+        </article>
+
+        <article class="method-item" id="kept">
+          <div><h2>Kept work</h2></div>
+          <div class="body">
+            <p>Each commit passes through eight checks in order: <b>proposed</b> by the AI, <b>accepted</b> (at least 60% of the suggestion kept), <b>committed</b>, <b>tested</b>, <b>merged</b>, <b>shipped</b>, <b>survived</b> (at least half its lines still in the code) and <b>clean</b> (no incidents). Work is judged 14 days after it is committed; until then it is too early to tell.</p>
+            <p>A check can be passed, failed, <b>not tracked</b> (Segreant can't see it, so it is never counted as passed) or <b>conflicted</b> (two sources disagree, for example a deploy reported success and a rollback reported failure). Conflicted never counts as passed, and the disagreement stays visible. Every report states how many checks were tracked.</p>
+            <p><b>Kept-work rate</b> is the share of judged work that passed every tracked check, counted in units of work rather than dollars. <b>First-pass acceptance</b> is how much of the AI's proposed change you kept; only a tool in the request path can see it, and it measures collaboration, not outcome.</p>
+            <div class="funnel" role="img" aria-label="Illustrative funnel: of $1,000 of AI spend in one sprint, $610 reached work that was kept.">
+              <p class="soft" style="font-size:14px">How $1,000 of spend might fall away across one sprint. <span class="sample">Illustrative</span></p>
+              <div class="frow"><span class="g">Proposed</span><span class="bar"><i style="width:100%"></i></span><span class="v">$1,000</span></div>
+              <div class="frow"><span class="g">Accepted</span><span class="bar"><i style="width:88%"></i></span><span class="v">−$120 rewritten</span></div>
+              <div class="frow"><span class="g">Committed</span><span class="bar"><i style="width:88%"></i></span><span class="v">$880 in git</span></div>
+              <div class="frow"><span class="g">Tested</span><span class="bar"><i style="width:82%"></i></span><span class="v">−$60 failed tests</span></div>
+              <div class="frow"><span class="g">Merged</span><span class="bar"><i style="width:78%"></i></span><span class="v">−$40 never merged</span></div>
+              <div class="frow"><span class="g">Shipped</span><span class="bar"><i style="width:72%"></i></span><span class="v">−$60 never shipped</span></div>
+              <div class="frow"><span class="g">Survived</span><span class="bar"><i style="width:66%"></i></span><span class="v">−$60 rewritten later</span></div>
+              <div class="frow kept"><span class="g">Clean</span><span class="bar"><i style="width:61%"></i></span><span class="v">−$50 incidents · $610 kept</span></div>
+            </div>
+            <p>The $610 is spend that went into kept work. It is a cost, not a measure of what the work was worth.</p>
+          </div>
+        </article>
+
+        <article class="method-item" id="score">
+          <div><h2>Value score</h2></div>
+          <div class="body">
+            <p>Four measures, each scaled 0 to 1: did the work stick (<b>realization</b>), did you keep what the AI gave you (<b>acceptance</b>), did it save time (<b>lift</b>, measured from session timing, never self-reported, and always a range) and did it matter (<b>impact</b>: reached production, how much it touched, incident-free). They are combined as a weighted geometric mean:</p>
+            <div class="eq">score = 100 · exp( Σ wᵢ ln xᵢ / Σ wᵢ )</div>
+            <p>Unlike an average, a low measure pulls the whole score down, so one strong result can't hide a weak one. That makes the score harder to game along a single measure. It doesn't make gaming impossible, which is why the change alert exists.</p>
+            <p>A measure you don't track is shown as missing, never scored as a pass. With measures missing, the score is reported as a range, for example "somewhere between 0 and 64", and <code>segreant roi</code> names the measure whose absence widens it most. That line says which measurement would matter most; it is not advice to buy anything.</p>
+            <p>Value figures describe what was observed. They don't show that AI caused the result: that needs a randomized study, and Segreant's study tools currently inspect retained studies only.</p>
+          </div>
+        </article>
+
+        <article class="method-item" id="range">
+          <div><h2>A 95% range you can check at any time</h2></div>
+          <div class="body">
+            <p>An ordinary confidence interval is valid if you look once, at a sample size fixed in advance. Dashboards are watched continuously, and every extra look adds a chance of being wrong. Segreant's kept-work rate carries a <b>confidence sequence</b>: a range built so that its guarantee holds at every look, whenever you stop. The cost is width, about 1.5 to 2 times an ordinary interval, and Segreant shows that width rather than hiding it.</p>
+            <p class="measured">Measured: checking after every observation, an ordinary 90% interval was wrong at some point in 63.8% of simulated runs; the 90% confidence sequence in 6.0%, inside its 10% budget. <code>segreant roi</code> reports 95% ranges.</p>
+            <p class="sources">Method: <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/RETURN-ON-INTELLIGENCE.md#10-anytime-valid--the-number-you-are-allowed-to-watch">RETURN-ON-INTELLIGENCE.md §10</a> · Test: <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/test/anytime.test.ts">test/anytime.test.ts</a> (simulated-peeking coverage test)</p>
+          </div>
+        </article>
+
+        <article class="method-item" id="alert">
+          <div><h2>Change alert</h2></div>
+          <div class="body">
+            <p>The alert watches whether your kept-work rate has stopped being steady. It compares a forecaster that only ever sees the past with the best single steady rate chosen in hindsight; when the forecaster wins by enough, the alert fires. Its false-alarm rate is bounded over all time, not per look.</p>
+            <p>It detects that the rate moved, not why. A new model, a new workflow and a gamed number all set it off; telling them apart takes evidence the rate doesn't carry. "No change alert fired" means that, and not that nothing changed.</p>
+            <p class="measured">Measured: false alarms 0.2% against a 5% budget across three steady rates; an abrupt collapse caught in 100 of 100 runs; a slow drift caught in 93 of 100.</p>
+            <p class="sources">Method: <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/RETURN-ON-INTELLIGENCE.md#11-the-rate-drift-alarm--detecting-that-a-rate-is-not-constant">RETURN-ON-INTELLIGENCE.md §11</a> · Test: <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/test/drift.test.ts">test/drift.test.ts</a></p>
+          </div>
+        </article>
+
+        <article class="method-item" id="receipts">
+          <div><h2>Receipts</h2></div>
+          <div class="body">
+            <p>A value receipt is a canonical record of one unit of work: its cost, each check's result and the outcome, signed with an ed25519 key. Verifying it answers two questions. <b>Intact:</b> has any byte changed since signing? <b>Authentic:</b> was it signed by the key you expected, which you pin yourself?</p>
+            <p>It answers nothing else. A faithfully signed wrong number verifies perfectly. Whether the checks inside were right rests on the tests, deploys and history that produced them, and the cost inside is list cost unless it says otherwise.</p>
+          </div>
+        </article>
+
+        <article class="method-item" id="not-offered">
+          <div><h2>Not offered</h2></div>
+          <div class="body">
+            <p><span class="status none">Not offered</span> <b>A "shadow price" for the next AI dollar.</b> Earlier versions of this site advertised a figure, μ = β·V*/B, said to show whether one more dollar of AI spend would return more than a dollar. Segreant doesn't offer it. The formula needs the dollar value of the work, and Segreant measures what work cost, not what it was worth; fed with kept spend, μ can essentially never reach 1. No screen or command shows it, and <code>segreant budget --recommend --json</code> reports it as null.</p>
+            <p><span class="status none">Not offered</span> <b>A promised saving.</b> What you save depends on how much waste there was to find.</p>
+            <p><span class="status none">Not offered</span> <b>Proof that AI caused a result.</b> See the note under the value score.</p>
+            <p>The full, current list of what is supported, intended and not offered is in <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/CAPABILITY-EVIDENCE-CONTRACT.md">CAPABILITY-EVIDENCE-CONTRACT.md</a>, and what can leave your computer is in <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/DATA-BOUNDARIES.md">DATA-BOUNDARIES.md</a>.</p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="row">
+      <a class="brand" href="index.html" aria-label="Segreant home"><span class="mark" aria-hidden="true"></span><span class="word">SEGREANT</span></a>
+      <nav aria-label="Footer">
+        <a href="index.html">Home</a>
+        <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/DATA-BOUNDARIES.md">Data boundaries</a>
+        <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/RETURN-ON-INTELLIGENCE.md">Full derivation</a>
+        <a href="https://github.com/GamingDragonwastaken/Segreant">GitHub</a>
+      </nav>
+    </div>
+    <p>Free for personal use under the PolyForm Noncommercial licence; commercial licences are available. Type set in Castoro, Schibsted Grotesk and Spline Sans Mono, under the SIL Open Font License.</p>
+  </footer>
+</div>
+</body>
+</html>

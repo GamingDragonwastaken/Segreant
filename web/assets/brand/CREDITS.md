@@ -25,9 +25,10 @@ gradient, texture or live text.
 
 - `hero-1920.jpg` is the website hero: a generated ledger-grid background with
   the traced mark placed on it at half opacity.
-- `social-card.png` (1280 x 640) and `social-card-1600.jpg` (1600 x 800) carry
-  the same background, the mark, the headline "Govern the spend. Not the
-  developer." and the four-number rule "metered ≠ billed ≠ allocated ≠ value".
+- `social-card.png` (1280 x 640) and `social-card-1600.jpg` (1600 x 800) are captures
+  of the website hero itself (dark theme, after the opening print run), rendered
+  in headless Chrome from `web/index.html` with its `?card` capture flag, so the
+  card always shows the site as it is.
 
 The Warden pixel sprite is still in design and is not shipped yet.
 
