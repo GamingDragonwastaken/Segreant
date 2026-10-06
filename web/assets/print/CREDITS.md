@@ -1,59 +1,46 @@
 # Security-print assets for the website
 
-Every image here ships as an alpha mask: black pixels whose opacity is the ink.
-The site paints each one with CSS `mask-image` over a theme colour, so the same
-file prints gold on the dark theme and bottle green on the light one. No file
+Every image here ships as an alpha mask (black pixels whose opacity is the ink)
+and is painted in a theme colour by CSS or by the plate shader, so one file
+prints bottle green on the light stock and gold on the dark one. No file
 carries its own colour.
 
-## Engravings
+## The griffin
 
-- `griffin-engraved.webp` is the Segreant griffin as an intaglio engraving,
-  computed from the traced mark (the same trace as `../brand/mark-plain.svg`): a
-  depth field by repeated erosion, a raking light from the upper left, and
-  parallel hatching that bows around the form, with each line's width set by
-  how dark the surface is. No generated raster is involved.
-- `vignette-ledger.webp`, `vignette-gate.webp` and `vignette-workshop.webp` are
-  banknote-style vignettes generated with ChatGPT image generation on
-  2026-09-30, from briefs written for this site. A faux signature in the gate
-  vignette was removed by hand. Each was converted to an ink mask (ink density =
-  1 − luminance, paper clipped to zero) and resized to 960 px.
-- `mark-ink.svg` is `../brand/mark-plain.svg` without its background square, for
-  use as a mask.
+- `plate-griffin.webp` (1800 px) and `plate-griffin-900.webp` are an intaglio
+  engraving of the Segreant griffin, generated with OpenAI's image generation
+  through the Codex CLI on 2026-10-06 from a brief written for this site, with
+  the traced mark (`../brand/mark-plain-512.png`) as the reference. The alpha
+  channel is the line work (ink density = 1 − luminance, paper clipped to
+  zero); the colour channels carry the creature's silhouette, which the dark
+  theme uses to give the gold lines a faint body.
+- `plate-griffin-body-900.webp` is that silhouette on its own, for the bill.
+- `mark-ink.svg` is `../brand/mark-plain.svg` without its background square.
 
-## Guilloche
+## The bill
 
-`guilloche-rosette.svg`, `guilloche-border.svg` and `guilloche-corner.svg` are
-generated geometry: families of closed hypotrochoids (rosettes) and
-phase-shifted sine strands (the rope border), each curve a hair out of phase
-with the next, the way a guilloche lathe builds a banknote background.
+`note-frame.webp` is an empty banknote frame (border, oval window, value panel,
+corner cartouches, foil strip), generated with the same tool on 2026-10-06 from
+a brief that excluded all text, numerals and portraits. Every word and figure on
+the bill is live HTML set inside the frame's measured panels; the griffin in the
+oval is the plate above.
 
-## Paper
+## Vignettes
 
-`paper-uv.webp` (dark) and `paper-light.webp` (light) are paper-stock textures
-generated with ChatGPT image generation on 2026-09-30, made tileable with a
-half-offset cross-blend and resized for the web.
+`vignette-ledger.webp`, `vignette-gate.webp` and `vignette-workshop.webp` are
+banknote-style vignettes generated with ChatGPT image generation on 2026-09-30,
+converted to ink masks and resized to 960 px. A faux signature in the gate
+vignette was removed by hand. They print as the reverse of the note.
 
-## The print run (motion layer)
+## Paper, fibres and edges
 
-- `griffin-emboss-hi.webp` / `griffin-emboss-lo.webp`: a blind emboss of the plate,
-  computed from the engraving's own ink (blurred to a height field, lit from the
-  upper left), shipped as highlight and shade masks.
-- `rosette-hero.svg`: a lighter rosette whose curves the page traces in turn.
+- `paper-uv.webp` (dark) and `paper-light.webp` (light) are paper-stock textures
+  generated with ChatGPT image generation on 2026-09-30, made tileable with a
+  half-offset cross-blend.
+- `uv-fibres.webp`: fluorescent security fibres, drawn as seeded random curves.
 - `tear.svg` / `tear-core.svg`: the hero sheet's torn edge (midpoint-displacement
   tear with fibre jitter) and the lighter core that shows where paper tears.
-- `foil.svg`: the note's foil stripe, struck metal with a hairline diffraction
-  ruling and a specular band.
-- `uv-fibres.webp`: fluorescent security fibres, drawn as seeded random curves.
-- `latent.svg`: the plate's latent image (the four-number rule) as Castoro
-  Titling glyph outlines. `uv-print.svg`: microprint of the site's own fine print.
-  Both are masks revealed only under the pointer's UV lamp.
+- `guilloche-border.svg`: a rope border of phase-shifted sine strands.
 
-Generators: `site_assets.py`, `compact_svg.py`, `print_run_assets.py` and
-`uv_text_assets.py` in the brand working folder.
-
-## Fonts
-
-`../fonts/` holds Castoro, Castoro Titling, Schibsted Grotesk and Spline Sans
-Mono from github.com/google/fonts, subset to Latin with their weight axes kept
-and converted to WOFF2. All four are under the SIL Open Font License 1.1; the
-licences are in `../fonts/OFL.txt`.
+The generators (Python) live in the project's private studio folder; their
+outputs are the files here.
