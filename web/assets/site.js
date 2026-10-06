@@ -1,8 +1,9 @@
 // Segreant site: the only script. Everything on the page reads and works without
 // it. It adds the theme switch and the copy button (both hidden until wired)
-// and, when html.motion was set before first paint, runs "the print run":
-// the rosette trace, the numbering wheels, inking as plates come into view,
-// the sheet lifting as you scroll, and the UV lamp under the pointer.
+// and, when html.motion was set before first paint, runs "the print run": the
+// numbering wheels, inking as plates come into view, the sheet lifting as you
+// scroll, the loop-guard simulation and the bill's tilt. The hero plate and its
+// UV lamp are assets/hero.js.
 (() => {
   const root = document.documentElement;
   const light = matchMedia('(prefers-color-scheme: light)');
@@ -56,16 +57,6 @@
   if (!root.classList.contains('motion')) return;
   const params = new URLSearchParams(location.search);
 
-  // ---- The rosette is traced as a lathe would: each curve drawn in turn. ----
-  document.querySelectorAll('[data-trace]').forEach(async (holder) => {
-    try {
-      const res = await fetch(holder.dataset.trace);
-      if (!res.ok) return;
-      holder.innerHTML = await res.text();
-      holder.querySelectorAll('path').forEach((path, i) => path.style.setProperty('--d', `${(i * 0.055).toFixed(3)}s`));
-    } catch (e) { /* the plate reads without its rosette */ }
-  });
-
   // ---- Numbering wheels: each digit rolls to its figure. ----
   const wheel = (el, stagger) => {
     const text = el.textContent;
@@ -82,6 +73,7 @@
         strip.style.setProperty('--delay', `${(stagger + k * 0.07).toFixed(2)}s`);
         for (let d = 0; d <= 9; d++) { const s = document.createElement('span'); s.textContent = String(d); strip.append(s); }
         dg.append(strip);
+        dg.dataset.d = ch;
         el.append(dg);
         k += 1;
       } else {
@@ -93,10 +85,16 @@
     }
   };
   document.querySelectorAll('[data-roll]').forEach((el, i) => wheel(el, 0.15 + (i % 6) * 0.12));
-  document.querySelectorAll('[data-count]').forEach((el) => {
-    wheel(el, root.classList.contains('intro') ? 1.2 : 0);
-    el.closest('.platemark')?.classList.add('ink-on');
+  // Size each wheel to its own digit once the face is loaded, so "$251.10" sets
+  // like type and never like "$25 1. 10" (a wheel is otherwise as wide as its widest digit).
+  const fitWheels = () => document.querySelectorAll('.dg').forEach((dg) => {
+    const probe = document.createElement('span');
+    probe.textContent = dg.dataset.d; probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    dg.parentElement.append(probe);
+    dg.style.setProperty('--dw', `${probe.getBoundingClientRect().width.toFixed(2)}px`);
+    probe.remove();
   });
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(fitWheels);
 
   // ---- Ink each plate as it reaches the reader, once. ----
   const inkAll = params.has('inkall');
@@ -108,8 +106,6 @@
     }
   }, { threshold: 0.22 });
   document.querySelectorAll('.ink-on').forEach((el) => (inkAll ? el.classList.add('inked') : io.observe(el)));
-  // The hero plate number rolls with the intro, not on intersection.
-  requestAnimationFrame(() => document.querySelectorAll('.platemark.ink-on').forEach((el) => el.classList.add('inked')));
 
   // ---- The sheet lifts away as you scroll past it. ----
   const sheet = document.querySelector('.sheet');
@@ -125,26 +121,27 @@
     lift();
   }
 
-  // ---- The UV lamp: fibres glow above the paper, fine print shows in its margins. ----
-  const uv = document.querySelector('.uv');
-  const lampAt = (x, y) => { root.style.setProperty('--mx', `${x}px`); root.style.setProperty('--my', `${y}px`); };
-  // Elements that react to the lamp in their own coordinates (the plate's latent image).
-  const lampTargets = [...document.querySelectorAll('[data-uv]')];
-  const localLamp = (x, y) => lampTargets.forEach((el) => {
-    const r = el.getBoundingClientRect();
-    el.style.setProperty('--lx', `${x - r.left}px`); el.style.setProperty('--ly', `${y - r.top}px`);
+  // ---- The bill tilts toward the pointer; its foil and a glare follow the light. ----
+  if (matchMedia('(pointer: fine)').matches) document.querySelectorAll('.note-cert').forEach((note) => {
+    const face = note.querySelector('.nf');
+    if (!face) return;
+    note.addEventListener('pointermove', (event) => {
+      const r = face.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (event.clientX - r.left) / r.width));
+      const y = Math.min(1, Math.max(0, (event.clientY - r.top) / r.height));
+      note.classList.add('tilting');
+      face.style.setProperty('--ry', `${((x - 0.5) * 10).toFixed(2)}deg`);
+      face.style.setProperty('--rx', `${((0.5 - y) * 8).toFixed(2)}deg`);
+      face.style.setProperty('--gx', `${(x * 100).toFixed(1)}%`);
+      face.style.setProperty('--gy', `${(y * 100).toFixed(1)}%`);
+      face.style.setProperty('--fy', (x * 0.6 + y * 0.4).toFixed(3));
+      face.style.setProperty('--glare', '1');
+    });
+    note.addEventListener('pointerleave', () => {
+      note.classList.remove('tilting');
+      face.style.setProperty('--rx', '0deg'); face.style.setProperty('--ry', '0deg'); face.style.setProperty('--glare', '0');
+    });
   });
-  if (uv && matchMedia('(pointer: fine)').matches) {
-    let raf = 0; let x = -400; let y = -400;
-    addEventListener('pointermove', (event) => {
-      x = event.clientX; y = event.clientY;
-      root.classList.add('uv-on');
-      if (!raf) raf = requestAnimationFrame(() => { raf = 0; lampAt(x, y); localLamp(x, y); });
-    }, { passive: true });
-    document.addEventListener('pointerleave', () => root.classList.remove('uv-on'));
-    // Scrolling moves the plate under a still pointer; the lamp stays under the pointer.
-    addEventListener('scroll', () => { if (root.classList.contains('uv-on')) localLamp(x, y); }, { passive: true });
-  }
 
   // ---- The loop guard, as a simulation with sample figures. An agent loop sends
   // requests ever faster; once the spend in the last 60 seconds reaches the $2.00
@@ -203,14 +200,9 @@
     else new MutationObserver((list, obs) => { if (loop.classList.contains('inked')) { obs.disconnect(); start(); } }).observe(loop, { attributes: true, attributeFilter: ['class'] });
   }
 
-  // ---- Capture hooks for visual regression. ?uv=x,y places the lamp; ?freeze=<ms>
+  // ---- Capture hooks for visual regression. ?freeze=<ms>
   // pauses every animation at that moment, so a headless browser can photograph
   // any frame of the run. ----
-  if (uv && params.has('uv')) {
-    const [ux, uy] = params.get('uv').split(',').map(Number);
-    lampAt(ux, uy); localLamp(ux, uy); root.classList.add('uv-on');
-    addEventListener('scroll', () => localLamp(ux, uy), { passive: true });
-  }
   if (params.has('card')) root.classList.add('capture-card'); // social-card capture: no pointer hint
   if (params.has('at')) setTimeout(() => scrollTo(0, Number(params.get('at')) || 0), 300);
   if (params.has('freeze')) {

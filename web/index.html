@@ -18,6 +18,7 @@
 <link rel="preload" href="assets/fonts/castoro-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/schibsted-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/castoro-titling.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/print/plate-griffin-900.webp" as="image">
 <!-- Everything on this page is served from this folder: no CDN, web-font host or
      analytics. The page describes a local-first product whose routed provider
      traffic goes to the configured provider (see docs/DATA-BOUNDARIES.md). -->
@@ -40,6 +41,7 @@
 </script>
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js" defer></script>
+<script type="module" src="assets/hero.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -67,22 +69,14 @@
           <a class="btn ghost" href="#sample">See a sample month</a>
         </div>
         <p class="note">No telemetry by default. Requests you route through Segreant still go to your AI provider. <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/DATA-BOUNDARIES.md">See what stays on your computer</a></p>
+        <div class="lamp-row"><button class="lamp" type="button" aria-pressed="false" data-lamp hidden><i aria-hidden="true"></i>UV lamp</button><span class="lamp-note" data-lamp-note hidden></span></div>
       </div>
 
-      <div class="press" aria-hidden="true">
-        <div class="platemark">
-          <div class="trace" data-trace="assets/print/rosette-hero.svg"></div>
-          <span class="emb hi"></span>
-          <span class="emb lo"></span>
-          <span class="burin"></span>
-          <span class="glow" data-uv></span>
-          <span class="latent" data-uv><span></span></span>
-          <svg class="edge-text t" focusable="false"><text x="0" y="9">SEGREANT · INTAGLIO · LIST COST IS AN ESTIMATE · BILLED COST COMES FROM YOUR INVOICE · KEPT WORK IS JUDGED AFTER 14 DAYS · SEGREANT · INTAGLIO</text></svg>
-          <svg class="edge-text b" focusable="false"><text x="0" y="9">PLATE 01 · THE GRIFFIN SEGREANT · ENGRAVED FROM THE TRACED MARK · NOTHING HERE IS A STOCK IMAGE · PLATE 01 · THE GRIFFIN SEGREANT</text></svg>
-          <span class="plate-no">No. <span data-count="0926">0926</span></span>
-        </div>
-        <p class="lamp-hint">Move your pointer over the plate to see it under UV light.</p>
-      </div>
+      <figure class="hero-plate" data-plate aria-hidden="true">
+        <span class="print"></span><canvas></canvas>
+        <figcaption class="cap"><span>Plate 01 · the griffin segreant</span><span class="no">No. <span data-serial>S 0926 25110</span></span></figcaption>
+      </figure>
+
     </div>
   </div>
   <div class="sheet-paper" aria-hidden="true"><span class="tear-core"></span></div>
@@ -90,7 +84,25 @@
 
 <div class="wrap">
   <main id="main">
-    <section class="band first" id="sample" aria-labelledby="sample-title">
+    <section class="reverse" aria-labelledby="rev-title">
+      <h2 id="rev-title">On the reverse of the note: three jobs, done on your computer.</h2>
+      <ol>
+        <li><div class="scene ink-on"><span class="vignette ledger" aria-hidden="true"></span></div>
+          <h3><span class="n">1</span>Record</h3>
+          <p>Every request it sees is priced against a dated price list and written to a ledger on your computer.</p>
+          <a href="#sample">See a sample month</a></li>
+        <li><div class="scene ink-on"><span class="vignette gate" aria-hidden="true"></span></div>
+          <h3><span class="n">2</span>Guard</h3>
+          <p>Caps refuse a request before it is forwarded, so a runaway loop stops before the bill arrives.</p>
+          <a href="#caps">How caps work</a></li>
+        <li><div class="scene ink-on"><span class="vignette workshop" aria-hidden="true"></span></div>
+          <h3><span class="n">3</span>Judge</h3>
+          <p>Spend is matched to the work you kept, judged 14 days after the commit, from git, tests and deploys.</p>
+          <a href="#method">How it is judged</a></li>
+      </ol>
+    </section>
+
+    <section class="band" id="sample" aria-labelledby="sample-title">
       <div class="head note-head">
         <div>
           <h2 id="sample-title">Every figure says what kind it is.</h2>
@@ -100,25 +112,22 @@
         </div>
 
         <figure class="note-cert ink-on" aria-label="Sample: in September, $251.10 of $412.60 list cost was spent on work that was kept.">
-          <span class="mask rosette" aria-hidden="true"></span>
-          <span class="mask rosette b" aria-hidden="true"></span>
-          <span class="mask rope t" aria-hidden="true"></span>
-          <span class="mask rope b" aria-hidden="true"></span>
-          <span class="mask corner tl" aria-hidden="true"></span>
-          <span class="mask corner bl" aria-hidden="true"></span>
-          <svg class="micro t" aria-hidden="true" focusable="false"><text x="0" y="9" font-family="Castoro Titling, Georgia, serif" font-size="7" letter-spacing="0.3">SEGREANT · LIST COST · ESTIMATE · BILLED COST · FROM YOUR INVOICE · SEGREANT · LIST COST · ESTIMATE · BILLED COST · FROM YOUR INVOICE · SEGREANT · LIST COST · ESTIMATE · BILLED COST · FROM YOUR INVOICE</text></svg>
-          <svg class="micro b" aria-hidden="true" focusable="false"><text x="0" y="9" font-family="Castoro Titling, Georgia, serif" font-size="7" letter-spacing="0.3">WHERE IT WENT · KEPT · NOT KEPT · TOO EARLY TO TELL · WHERE IT WENT · KEPT · NOT KEPT · TOO EARLY TO TELL · WHERE IT WENT · KEPT · NOT KEPT · TOO EARLY TO TELL · WHERE IT WENT</text></svg>
-          <span class="serial" aria-hidden="true">No. S 0926 25110</span>
-          <div class="panel">
-            <span class="griffin" aria-hidden="true"></span>
-            <div class="denom">
-              <span class="what">September<br>spent on kept work</span>
-              <span class="amount" data-roll>$251.10</span>
-              <span class="of">of $412.60 list cost (estimate)</span>
-              <span class="sample">Sample</span>
-            </div>
+          <div class="nf" aria-hidden="true">
+            <span class="nf-frame"></span>
+            <span class="nf-oval"></span>
+            <span class="nf-under"></span>
+            <span class="nf-griffin"></span>
+            <span class="nf-corner tl"></span><span class="nf-corner tr"></span><span class="nf-corner bl"></span><span class="nf-corner br"></span>
+            <p class="nf-issuer"><b>Segreant</b><span>September 2026</span></p>
+            <span class="nf-serial s1">S 0926 25110</span>
+            <span class="nf-serial s2">S 0926 25110</span>
+            <div class="nf-panel"><span class="what">Spent on kept work</span><span class="amount" data-roll>$251.10</span></div>
+            <p class="nf-of">of $412.60 list cost (estimate)</p>
+            <span class="nf-foil"></span>
+            <span class="sample">Sample</span>
+            <span class="nf-glare"></span>
           </div>
-          <span class="foil" aria-hidden="true"></span>
+          <figcaption class="nf-caption">Sample: $251.10 of $412.60 list cost (estimate) was spent on work you kept in September.</figcaption>
         </figure>
       </div>
 
@@ -179,7 +188,6 @@
       <div class="split">
         <div class="why-side">
           <h2 id="why-title">Count tokens, and people spend tokens.</h2>
-          <figure class="plate ink-on" aria-hidden="true"><span class="vignette ledger"></span></figure>
         </div>
         <div class="prose">
           <p>AI coding agents bill by the token, and a stuck loop runs up the bill without a warning. When usage itself becomes the target, it gets worse: people chase the number.</p>
@@ -201,7 +209,6 @@
             <p>For requests sent through Segreant, set a daily cap, a cap per agent session and a loop guard. A warning fires at the soft limit. At the hard limit Segreant refuses the request with a clear error instead of forwarding it.</p>
           </div>
         </div>
-        <figure class="plate ink-on" aria-hidden="true"><span class="vignette gate"></span></figure>
       </div>
 
       <div class="split">
@@ -298,7 +305,6 @@
             <p>Every figure comes with the way it was worked out, and with what it can't tell you. A calculation on your computer is never presented as your provider's bill, or as proof that AI made you more productive.</p>
           </div>
         </div>
-        <figure class="plate ink-on" aria-hidden="true"><span class="vignette workshop"></span></figure>
       </div>
       <dl class="facts">
         <div><dt>Value score</dt><dd>Combines four measures so that one strong result can't hide a weak one. A measure you don't track stays open and is shown as missing; it is never scored as a pass.</dd></div>
@@ -382,12 +388,5 @@
   </footer>
 </div>
 
-<!-- The UV lamp: fluorescent fibres and fine print that light up under the
-     pointer. Decorative only; everything it shows is also in the page text. -->
-<div class="uv" aria-hidden="true">
-  <div class="uv-wash"></div>
-  <div class="uv-fibres"></div>
-  <div class="uv-print"></div>
-</div>
 </body>
 </html>
