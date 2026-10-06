@@ -252,12 +252,7 @@ html.motion.settled .hero-plate:not(.gl) .print { opacity: 1; transition: opacit
 .nf-panel .amount { font: 400 6.3cqw/1.05 var(--caps); font-variant-numeric: lining-nums proportional-nums; color: var(--ink); white-space: nowrap; }
 .nf-of { left: 49.17%; width: 35.62%; top: 66.5%; text-align: center; font: italic 1.75cqw/1.2 var(--display); color: var(--ink-soft); }
 .nf-serial { font: 600 1.5cqw/1 var(--figs); letter-spacing: 0.12em; color: var(--note-red); }
-.nf-serial.s1 { right: 14.2%; top: 12.4%; }
 .nf-serial.s2 { left: 41.5%; bottom: 13.2%; }
-/* The foil stripe: struck metal with a diffraction ruling; tilting the note runs the colours along it. */
-.nf-foil { left: 90.77%; width: 3.48%; top: 10.01%; height: 79.85%; overflow: hidden; border-radius: 1px;
-  background: linear-gradient(172deg, #9c7424 0%, #f3df9c 16%, #c79a3c 28%, #a9cfa8 40%, #d6b0cf 50%, #f6e2a0 62%, #b48632 76%, #f0d48a 88%, #8d6620 100%) 50% calc(var(--fy, 0.5) * 100%) / 100% 320%; }
-.nf-foil::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px); mix-blend-mode: multiply; }
 .nf-glare { inset: 0; pointer-events: none; opacity: var(--glare, 0); transition: opacity 0.5s;
   background: radial-gradient(circle at var(--gx, 30%) var(--gy, 20%), rgba(255, 255, 255, 0.32), transparent 42%); mix-blend-mode: soft-light; }
 /* SAMPLE, overprinted the way a specimen note is: red, struck at an angle, outside the figure. */
@@ -283,9 +278,6 @@ html.motion .note-cert:not(.inked) .nf .sample { opacity: 0; }
 html.motion .note-cert.inked .nf .sample { animation: thunk 0.45s 1.5s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
 html.settled .note-cert .nf-griffin, html.settled .note-cert .nf .sample { opacity: 0.8 !important; }
 html.settled .note-cert .nf-griffin { opacity: 1 !important; }
-@keyframes foil-run { from { background-position: 50% 100%; } to { background-position: 50% 50%; } }
-html.motion .note-cert.inked .nf-foil { animation: foil-run 1.8s 0.4s var(--ease-press) both; }
-html.motion .note-cert.tilting .nf-foil { animation: none; }
 
 /* ---------- The reverse of the note: three engraved scenes, one per job ---------- */
 .reverse { padding-block: 88px 72px; }
