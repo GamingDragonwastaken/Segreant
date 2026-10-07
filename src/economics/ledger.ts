@@ -261,7 +261,8 @@ export class EconomicLedger {
    * aborts the upgrade so an old database cannot open with a partial graph.
    */
   private backfillSourceLinks(): void {
-    const rows = prepared(this.db, 
+    if (!this.sourceLinksMayBeMissing()) return;
+    const rows = prepared(this.db,
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY event_id ASC',
     ).all() as unknown as StoredEconomicRow[];
     if (rows.length === 0) return;
@@ -283,6 +284,28 @@ export class EconomicLedger {
     } catch (error) {
       try { prepared(this.db, 'ROLLBACK').run(); } catch { /* preserve original failure */ }
       throw error;
+    }
+  }
+
+  /**
+   * Whether any stored event declares more source events than it has link rows.
+   * Only those need the upgrade above, and asking SQLite takes milliseconds,
+   * where reading and verifying every event in JavaScript took about five
+   * seconds per open on a ledger of 65,000 events. Any doubt (malformed JSON
+   * makes the query throw) answers yes, so the full path still runs and still
+   * refuses a damaged ledger exactly as before.
+   */
+  private sourceLinksMayBeMissing(): boolean {
+    try {
+      const row = prepared(this.db,
+        `SELECT 1 AS missing FROM economic_events e
+         WHERE json_array_length(e.event_json, '$.sourceEventIds')
+             > (SELECT COUNT(*) FROM economic_event_sources s WHERE s.event_id = e.event_id)
+         LIMIT 1`,
+      ).get();
+      return row !== undefined;
+    } catch {
+      return true;
     }
   }
 
