@@ -131,8 +131,24 @@ async function git(repoPath: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/** A commit's numstat never changes, so it is read once per process. */
+const commitFilesCache = new Map<string, Promise<Array<{ path: string; added: number }>>>();
+
 /** Files a commit touched, with lines added per file (numstat). */
-async function commitFiles(repoPath: string, hash: string): Promise<Array<{ path: string; added: number }>> {
+function commitFiles(repoPath: string, hash: string): Promise<Array<{ path: string; added: number }>> {
+  const key = `${repoPath}\0${hash}`;
+  let pending = commitFilesCache.get(key);
+  if (pending === undefined) {
+    if (commitFilesCache.size >= BLAME_CACHE_MAX) commitFilesCache.clear();
+    pending = readCommitFiles(repoPath, hash);
+    // A failed read is not cached: the next caller retries rather than inheriting it.
+    pending.catch(() => commitFilesCache.delete(key));
+    commitFilesCache.set(key, pending);
+  }
+  return pending;
+}
+
+async function readCommitFiles(repoPath: string, hash: string): Promise<Array<{ path: string; added: number }>> {
   // --format= suppresses the commit header; --numstat gives "added<TAB>deleted<TAB>path".
   const out = await git(repoPath, ['show', '--numstat', '--format=', hash]);
   const files: Array<{ path: string; added: number }> = [];
@@ -145,24 +161,117 @@ async function commitFiles(repoPath: string, hash: string): Promise<Array<{ path
   return files;
 }
 
+/** Lines at a given HEAD attributed to each commit, for one file. */
+type BlameCounts = ReadonlyMap<string, number>;
+
 /**
- * Count how many lines currently in the file (at HEAD) remain attributed to
+ * Blame results keyed by repository, the HEAD commit they were taken at, and
+ * the file. One blame of a file at HEAD already says how many of its lines
+ * belong to EVERY commit, so a repository with forty commits touching the same
+ * file needs one `git blame`, not forty. Measured on a 21-repository machine,
+ * the per-commit blames were 85% of a 367-second correlation, spent idle while
+ * one git process after another started.
+ *
+ * Keying by the HEAD commit (never the symbolic name) keeps a long-lived
+ * dashboard process correct after a new commit: a new HEAD is a new key. The
+ * map is bounded and cleared wholesale when full; a miss only costs a blame.
+ */
+const blameCache = new Map<string, Promise<BlameCounts | null>>();
+const BLAME_CACHE_MAX = 4096;
+
+/** Exposed for tests: forget every cached blame and numstat. */
+export function clearBlameCache(): void {
+  blameCache.clear();
+  commitFilesCache.clear();
+}
+
+/**
+ * Warm the numstat and blame caches for many commits at once, with up to
+ * `concurrency` git processes running. Callers then measure commit by commit
+ * exactly as before and find the answers waiting: this changes how long a
+ * survival scan takes, never what it reports. Work is not STARTED after
+ * `deadlineMs`; whether a commit counts as measured is still decided by the
+ * caller's own deadline check, so a prefetch can never turn an unmeasured
+ * commit into a measured one.
+ */
+export async function prefetchSurvival(
+  repoPath: string,
+  hashes: readonly string[],
+  deadlineMs?: number,
+  concurrency = 8,
+): Promise<void> {
+  const expired = () => deadlineMs !== undefined && Date.now() >= deadlineMs;
+  const pool = async <T>(items: readonly T[], work: (item: T) => Promise<unknown>) => {
+    let next = 0;
+    const lanes = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
+      while (next < items.length && !expired()) {
+        const item = items[next++]!;
+        try { await work(item); } catch { /* the measuring pass will see and report it */ }
+      }
+    });
+    await Promise.all(lanes);
+  };
+  const head = await headCommit(repoPath);
+  if (head === null) return;
+  const paths = new Set<string>();
+  await pool(hashes, async (hash) => {
+    for (const f of await commitFiles(repoPath, hash)) if (f.added > 0) paths.add(f.path);
+  });
+  await pool([...paths], (path) => blameAt(repoPath, head, path));
+}
+
+async function headCommit(repoPath: string): Promise<string | null> {
+  try {
+    const out = (await git(repoPath, ['rev-parse', 'HEAD'])).trim();
+    return /^[0-9a-f]{40,64}$/.test(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse `git blame --porcelain` into lines per commit. Every source line gets a
+ * header line `<sha> <orig-line> <final-line>[ <group-size>]`; commit metadata
+ * (author, summary, `previous`, `boundary`, ...) never starts with a hex
+ * object name followed by two numbers, and content lines start with a tab.
+ */
+export function blameCountsFromPorcelain(out: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const line of out.split('\n')) {
+    const m = /^([0-9a-f]{40,64}) \d+ \d+(?: \d+)?\r?$/.exec(line);
+    if (!m) continue;
+    counts.set(m[1]!, (counts.get(m[1]!) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function blameAt(repoPath: string, head: string, path: string): Promise<BlameCounts | null> {
+  const key = `${repoPath}\0${head}\0${path}`;
+  let pending = blameCache.get(key);
+  if (pending === undefined) {
+    if (blameCache.size >= BLAME_CACHE_MAX) blameCache.clear();
+    pending = git(repoPath, ['blame', '--porcelain', head, '--', path]).then(
+      blameCountsFromPorcelain,
+      () => null, // file deleted/renamed at HEAD
+    );
+    blameCache.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * Count how many lines currently in the file (at `head`) remain attributed to
  * `hash` by git blame. This is the retained-line count for `hash`'s introduced
  * artifact lines; it is not a quality score.
  */
-async function survivingLinesInFile(repoPath: string, hash: string, path: string): Promise<number> {
-  let out: string;
-  try {
-    out = await git(repoPath, ['blame', '--line-porcelain', 'HEAD', '--', path]);
-  } catch {
-    return 0; // file deleted/renamed at HEAD → none of its lines survived as-is
-  }
-  // --line-porcelain emits a header line per source line beginning with the SHA.
-  const needle = hash + ' ';
+async function survivingLinesInFile(repoPath: string, head: string, hash: string, path: string): Promise<number> {
+  const counts = await blameAt(repoPath, head, path);
+  if (counts === null) return 0; // file deleted/renamed at HEAD → none of its lines survived as-is
+  const exact = counts.get(hash);
+  if (exact !== undefined) return exact;
+  // An abbreviated hash: sum every full name it prefixes (normally exactly one).
   let count = 0;
-  for (const line of out.split('\n')) {
-    if (line.startsWith(needle)) count += 1;
-  }
+  for (const [sha, n] of counts) if (sha.startsWith(hash)) count += n;
   return count;
 }
 
@@ -207,18 +316,19 @@ export async function survivingLines(
   hash: string,
   deadlineMs?: number,
 ): Promise<SurvivingLines> {
-  const files = await commitFiles(repoPath, hash);
+  const [files, head] = await Promise.all([commitFiles(repoPath, hash), headCommit(repoPath)]);
   let added = 0;
   let surviving = 0;
   let measured = true;
   for (const f of files) {
     added += f.added;
     if (f.added === 0) continue;
-    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+    if (head === null || (deadlineMs !== undefined && Date.now() >= deadlineMs)) {
+      // No HEAD to blame against (an unborn branch) is unmeasured, never zero.
       measured = false;
       continue;
     }
-    surviving += await survivingLinesInFile(repoPath, hash, f.path);
+    surviving += await survivingLinesInFile(repoPath, head, hash, f.path);
   }
   return { added, surviving, measured };
 }
