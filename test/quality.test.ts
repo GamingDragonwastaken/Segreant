@@ -5,7 +5,13 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
-import { computeQuality } from '../src/git/quality.ts';
+import {
+  computeQuality,
+  survivingLines,
+  prefetchSurvival,
+  clearBlameCache,
+  blameCountsFromPorcelain,
+} from '../src/git/quality.ts';
 
 function g(cwd: string, args: string[], env: Record<string, string> = {}): void {
   execFileSync('git', args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' });
@@ -75,6 +81,80 @@ test('AI Yield = surviving lines per dollar of attributed spend', async () => {
     assert.ok(report.matured.aiYield !== null && Math.abs(report.matured.aiYield - 5.0) < 1e-9);
   } finally {
     store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function head(dir: string, rev = 'HEAD'): string {
+  return execFileSync('git', ['rev-parse', rev], { cwd: dir }).toString().trim();
+}
+
+test('porcelain blame is counted per commit, ignoring metadata and content lines', () => {
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const out = [
+    `${a} 1 1 2`,
+    'author tester',
+    'summary feat: four lines',
+    'filename a.txt',
+    '\ta1',
+    `${a} 2 2`,
+    '\ta2',
+    `${b} 3 3 1`,
+    'previous ' + a + ' a.txt',
+    'filename a.txt',
+    `\t${a} 9 9`, // file content that looks like a header stays content
+  ].join('\n');
+  const counts = blameCountsFromPorcelain(out);
+  assert.equal(counts.get(a), 2);
+  assert.equal(counts.get(b), 1);
+  assert.equal(counts.size, 2);
+});
+
+test('the blame cache follows HEAD: a later rewrite is seen in the same process', async () => {
+  const dir = makeRepo();
+  try {
+    clearBlameCache();
+    commit(dir, 'a.txt', 'a1\na2\na3\na4\n', 'feat: four', '2026-01-01T10:00:00+00:00');
+    const first = head(dir);
+    commit(dir, 'a.txt', 'a1\na2\nb3\nb4\n', 'fix: two', '2026-01-02T10:00:00+00:00');
+    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 2, measured: true });
+    commit(dir, 'a.txt', 'c1\na2\nb3\nb4\n', 'fix: one more', '2026-01-03T10:00:00+00:00');
+    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 1, measured: true });
+    // An abbreviated hash finds the same lines.
+    assert.equal((await survivingLines(dir, first.slice(0, 12))).surviving, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('prefetching changes speed, never the answer, and never measures past the deadline', async () => {
+  const dir = makeRepo();
+  try {
+    commit(dir, 'a.txt', 'a1\na2\na3\na4\n', 'feat: four', '2026-01-01T10:00:00+00:00');
+    const c1 = head(dir);
+    commit(dir, 'b.txt', 'b1\nb2\n', 'feat: two', '2026-01-02T10:00:00+00:00');
+    const c2 = head(dir);
+    commit(dir, 'a.txt', 'a1\nx2\na3\na4\n', 'fix: one', '2026-01-03T10:00:00+00:00');
+
+    clearBlameCache();
+    const cold = [await survivingLines(dir, c1), await survivingLines(dir, c2)];
+    clearBlameCache();
+    await prefetchSurvival(dir, [c1, c2]);
+    const warm = [await survivingLines(dir, c1), await survivingLines(dir, c2)];
+    assert.deepEqual(warm, cold);
+    assert.deepEqual(cold, [
+      { added: 4, surviving: 3, measured: true },
+      { added: 2, surviving: 2, measured: true },
+    ]);
+
+    // An expired deadline: the prefetch starts nothing, and the measuring pass
+    // still reports the commit as unmeasured rather than zero.
+    clearBlameCache();
+    const past = Date.now() - 1;
+    await prefetchSurvival(dir, [c1], past);
+    assert.deepEqual(await survivingLines(dir, c1, past), { added: 4, surviving: 0, measured: false });
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
