@@ -49,6 +49,8 @@ export interface ImportSummary {
    * because it means two local logs disagree about one request.
    */
   conflictingObservations?: number;
+  /** Files skipped because they have not changed since their last complete import. */
+  filesUnchanged?: number;
 }
 
 export function emptyImportSummary(files = 0): ImportSummary {
@@ -109,6 +111,71 @@ export function boundedJsonlFiles(root: string): { files: string[]; truncated: b
   return { files, truncated };
 }
 
+/** A file's identity for the unchanged-file check. */
+export interface FileStamp {
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+/**
+ * Decide whether a tool log file needs reading. Returns 'unchanged' when its
+ * size and mtime match the last COMPLETE import of it into this ledger, its
+ * stamp when it must be read, and null when it cannot be stat'ed (read it
+ * anyway and record nothing). `rescan` always reads.
+ */
+export function fileStampForImport(store: Store, source: string, file: string, opts: ImportOptions): FileStamp | 'unchanged' | null {
+  let stamp: FileStamp;
+  try {
+    const st = statSync(file);
+    stamp = { size: st.size, mtimeMs: Math.trunc(st.mtimeMs) };
+  } catch {
+    return null;
+  }
+  if (opts.rescan) return stamp;
+  const last = store.importFileCursor(source, file);
+  return last !== null && last.size === stamp.size && last.mtimeMs === stamp.mtimeMs ? 'unchanged' : stamp;
+}
+
+/**
+ * Account for a skipped file: count it, and replay the truncation its last full
+ * read recorded, so the summary discloses exactly what re-reading it would.
+ */
+export function noteFileUnchanged(store: Store, source: string, file: string, summary: ImportSummary): void {
+  summary.filesUnchanged = (summary.filesUnchanged ?? 0) + 1;
+  const last = store.importFileCursor(source, file);
+  if (last === null) return;
+  if (last.truncatedLines > 0) markImportTruncated(summary, 'lines', last.truncatedLines);
+  if (last.truncatedRows > 0) markImportTruncated(summary, 'rows', last.truncatedRows);
+}
+
+/** The truncation counts recorded so far, to diff around one file's read. */
+export interface TruncationMark {
+  readonly lines: number;
+  readonly rows: number;
+}
+
+export function truncationMark(summary: ImportSummary): TruncationMark {
+  return { lines: summary.truncatedLines ?? 0, rows: summary.truncatedRows ?? 0 };
+}
+
+/**
+ * Record a file as read in full, with the truncation that read saw. Nothing is
+ * recorded for a --since read, which skipped rows on purpose.
+ */
+export function noteFileImported(
+  store: Store, source: string, file: string, stamp: FileStamp | null,
+  opts: ImportOptions, before: TruncationMark, summary: ImportSummary,
+): void {
+  if (stamp === null || (opts.sinceMs ?? 0) > 0) return;
+  const now = truncationMark(summary);
+  store.saveImportFileCursor(source, file, {
+    size: stamp.size,
+    mtimeMs: stamp.mtimeMs,
+    truncatedLines: now.lines - before.lines,
+    truncatedRows: now.rows - before.rows,
+  });
+}
+
 /** Mark a source import as incomplete without changing its accounting rows. */
 export function markImportTruncated(summary: ImportSummary, field: 'files' | 'lines' | 'rows', amount = 1): void {
   summary.captureCoverage = 'truncated';
@@ -131,6 +198,8 @@ export interface ImportOptions {
   sinceMs?: number;
   /** The `source` tag stored on each row (defaults per importer). */
   source?: string;
+  /** Read every file again, ignoring what earlier imports recorded. */
+  rescan?: boolean;
 }
 
 /**

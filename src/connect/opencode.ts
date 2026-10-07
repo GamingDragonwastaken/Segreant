@@ -119,7 +119,17 @@ const REPRICEABLE: Record<string, Provider> = { anthropic: 'anthropic', openai: 
  * Import opencode's local usage. Read-only against the live DB (WAL snapshot),
  * idempotent by message id, so this is safe to re-run or poll on a timer.
  */
+/** Imports in periodic commits rather than one commit per row (see Store.importBatch). */
 export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSummary {
+  const batch = store.importBatch();
+  try {
+    return importOpencodeRows(store, opts);
+  } finally {
+    batch.end();
+  }
+}
+
+function importOpencodeRows(store: Store, opts: ImportOptions): ImportSummary {
   const dbPath = opts.root ?? defaultOpencodeDbPath();
   const source = opts.source ?? 'opencode';
   const sinceMs = opts.sinceMs ?? 0;

@@ -228,6 +228,23 @@ CREATE TABLE IF NOT EXISTS project_aliases (
   at_ms     INTEGER NOT NULL
 );
 
+-- A tool log file's size and modification time when it was last read in full
+-- (no --since window). A re-import skips a file whose size and mtime still
+-- match, because every row it can yield is already in this ledger, and it
+-- replays the truncated line and row counts that read recorded, so a skipped
+-- file discloses exactly what a re-read would. Kept in the ledger itself, so a replaced or deleted database
+-- can never inherit a cursor that would skip rows it never received.
+CREATE TABLE IF NOT EXISTS import_file_cursors (
+  source   TEXT NOT NULL,
+  path     TEXT NOT NULL,
+  size     INTEGER NOT NULL,
+  mtime_ms INTEGER NOT NULL,
+  truncated_lines INTEGER NOT NULL DEFAULT 0,
+  truncated_rows  INTEGER NOT NULL DEFAULT 0,
+  at_ms    INTEGER NOT NULL,
+  PRIMARY KEY (source, path)
+);
+
 -- What retention deleted, so an absence can be told from a deletion.
 --
 -- prune used to run one DELETE, print a count, and leave nothing behind. A
