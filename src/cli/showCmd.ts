@@ -63,7 +63,19 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   const truncation = retentionNotice(retention);
   if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
-  console.log(`  Spend       ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests)`)}`);
+  // Every figure here is priced from the rate card, so it is LIST COST, never
+  // "spend": imported subscription usage is what the work would bill at API
+  // list price, not what was paid, and even proxied API traffic is metered at
+  // list price until a bill reconciles it. Say which part is which.
+  const liveCostUsd = store.spendBetween(startMs, endMs, true);
+  const importedCostUsd = Math.max(0, summary.costUsd - liveCostUsd);
+  console.log(`  List cost   ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests · priced from the rate card · an estimate)`)}`);
+  if (importedCostUsd >= 0.005) {
+    console.log(color(tty, C.gray, `              ${usd(importedCostUsd)} read from tool logs: what this use would bill at API list price, not your invoice`));
+  }
+  if (liveCostUsd >= 0.005) {
+    console.log(color(tty, C.gray, `              ${usd(liveCostUsd)} metered through the proxy: list price; your provider's bill may differ`));
+  }
   console.log(`  Input       ${num(summary.inputTokens)} tokens`);
   console.log(`  Output      ${num(summary.outputTokens)} tokens`);
 
