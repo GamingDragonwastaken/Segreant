@@ -242,12 +242,30 @@ export async function cmdImport(flags: Flags): Promise<void> {
  * per-project snapshot that then lights up `roi`, `today`, and the dashboard. Each
  * project is reported with the TOOLS that coded it (repo↔project↔tool).
  */
+/**
+ * A one-line, redrawn progress report on stderr while repositories are measured.
+ * Silent for --json and when stderr is not a terminal, so piped output and
+ * parsers never see it. Returns the callback and a function that clears the line.
+ */
+function repoProgress(flags: Flags): { onProgress?: (done: number, total: number, project: string) => void; finish: () => void } {
+  const err = process.stderr;
+  if (flags.json || !err.isTTY) return { finish: () => {} };
+  const write = (text: string) => { err.write('\r\x1b[2K' + text); };
+  write('  Measuring what your AI work kept, repo by repo…');
+  return {
+    onProgress: (done, total, project) => write(`  Measuring what your AI work kept… ${done}/${total} repos (last: ${project})`),
+    finish: () => { err.write('\r\x1b[2K'); },
+  };
+}
+
 export async function cmdDiscover(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const windowDays = flags.window ? Number(flags.window) : undefined;
   const store = new Store(dbPath());
   const paths = store.projectPaths();
-  const discovered = await realizeDiscoveredProjects(store, { windowDays });
+  const progress = repoProgress(flags);
+  const discovered = await realizeDiscoveredProjects(store, { windowDays, onProgress: progress.onProgress });
+  progress.finish();
   const projects = projectValueBreakdown(store, { windowDays });
   store.close();
 
@@ -460,7 +478,10 @@ export async function cmdScan(flags: Flags): Promise<void> {
       }
       continue;
     }
+    const reading = !flags.json && process.stderr.isTTY;
+    if (reading) process.stderr.write(`    Reading ${t.label} logs…`);
     const sum = await runner.run(store, {});
+    if (reading) process.stderr.write('\r\x1b[2K');
     totalNew += sum.inserted;
     if (!flags.json) {
       console.log(
@@ -474,7 +495,9 @@ export async function cmdScan(flags: Flags): Promise<void> {
   }
   if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));
 
-  const discovered = await realizeDiscoveredProjects(store, {});
+  const progress = repoProgress(flags);
+  const discovered = await realizeDiscoveredProjects(store, { onProgress: progress.onProgress });
+  progress.finish();
   const projects = projectValueBreakdown(store, {});
   const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));
   store.close();
