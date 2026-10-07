@@ -19,7 +19,7 @@ import { promisify } from 'node:util';
 import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
 import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
-import { survivingLines, revertScan } from '../git/quality.ts';
+import { survivingLines, revertScan, prefetchSurvival } from '../git/quality.ts';
 import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
@@ -442,6 +442,9 @@ export async function computeRealization(
   // the whole allowance before measuring anything — turning a scheduling
   // accident into forty unknown gates.
   gitDeadlineMs = Number.isFinite(gitBudgetMs) ? Date.now() + gitBudgetMs : undefined;
+  // Warm the git caches for every unit in parallel; the loop below still
+  // measures (and decides measured/unmeasured) one unit at a time.
+  await prefetchSurvival(repoPath, attributions.map((a) => a.hash), gitDeadlineMs);
 
   const units: WorkUnit[] = [];
   for (const a of attributions) {
@@ -1026,19 +1029,40 @@ export async function discoverProjectRepos(store: Store): Promise<DiscoveredProj
  */
 export async function realizeDiscoveredProjects(
   store: Store,
-  opts: { windowDays?: number; limit?: number } = {},
+  opts: {
+    windowDays?: number;
+    limit?: number;
+    /** Called as each repository finishes: (done, total, project). */
+    onProgress?: (done: number, total: number, project: string) => void;
+    /** Repositories measured at once (default 3). */
+    concurrency?: number;
+  } = {},
 ): Promise<Array<DiscoveredProject & { units: number; realizedUnits: number }>> {
   const repos = await discoverProjectRepos(store);
-  const results: Array<DiscoveredProject & { units: number; realizedUnits: number }> = [];
-  for (const r of repos) {
-    const rep = await computeRealization(store, r.repoPath, {
-      limit: opts.limit ?? 40,
-      windowDays: opts.windowDays,
-      persist: true,
-    });
-    const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
-    results.push({ ...r, units: rep.units.length, realizedUnits });
-  }
+  const results = new Array<DiscoveredProject & { units: number; realizedUnits: number }>(repos.length);
+  // Repositories are independent and almost all of their time is spent waiting
+  // on git, so a few run at once. Safe on one DatabaseSync handle because every
+  // store write in computeRealization is synchronous and no transaction is held
+  // open across an await. Results keep discovery order.
+  let next = 0;
+  let done = 0;
+  const lane = async () => {
+    while (next < repos.length) {
+      const i = next++;
+      const r = repos[i]!;
+      const rep = await computeRealization(store, r.repoPath, {
+        limit: opts.limit ?? 40,
+        windowDays: opts.windowDays,
+        persist: true,
+      });
+      const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
+      results[i] = { ...r, units: rep.units.length, realizedUnits };
+      done += 1;
+      opts.onProgress?.(done, repos.length, r.project);
+    }
+  };
+  const lanes = Math.max(1, Math.min(opts.concurrency ?? 3, repos.length));
+  await Promise.all(Array.from({ length: lanes }, lane));
   return results;
 }
 
