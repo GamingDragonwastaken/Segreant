@@ -123,8 +123,10 @@ function cmdHelp(): void {
                           already logs locally — works on subscriptions the proxy
                           can never see. Tools: claude-code, opencode, codex (or
                           all). Idempotent. --watch keeps it live (poll every N
-                          sec: --every N). (--root <dir>, --days N, --json)
-    billing <action>      Import, inspect, or export LOCAL operator-supplied
+                          sec: --every N). Files unchanged since their last full
+                          import are skipped; --rescan reads them again.
+                          (--root <dir>, --days N, --json)
+    billing <action>     Import, inspect, or export LOCAL operator-supplied
                           provider billing evidence. V1 accepts a strict OpenAI
                           evidence JSON only; it never overwrites metered estimates
                           or claims invoice reconciliation. Actions: import --file,

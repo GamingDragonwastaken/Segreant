@@ -36,6 +36,10 @@ import {
   noteRelabel,
   boundedJsonlFiles,
   markImportTruncated,
+  fileStampForImport,
+  noteFileImported,
+  noteFileUnchanged,
+  truncationMark,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
@@ -232,7 +236,17 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
 const REPRICEABLE: Record<string, Provider> = { openai: 'openai', anthropic: 'anthropic' };
 
 /** Import Codex rollout usage into the store. Idempotent; re-run/poll safe. */
+/** Imports in periodic commits rather than one commit per row (see Store.importBatch). */
 export async function importCodex(store: Store, opts: ImportOptions = {}): Promise<ImportSummary> {
+  const batch = store.importBatch();
+  try {
+    return await importCodexRows(store, opts);
+  } finally {
+    batch.end();
+  }
+}
+
+async function importCodexRows(store: Store, opts: ImportOptions): Promise<ImportSummary> {
   const root = opts.root ?? defaultCodexRoot();
   const source = opts.source ?? 'codex';
   const sinceMs = opts.sinceMs ?? 0;
@@ -247,6 +261,12 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
   const resolveProject = createRepoResolver();
 
   for (const file of files) {
+    const stamp = fileStampForImport(store, source, file, opts);
+    if (stamp === 'unchanged') {
+      noteFileUnchanged(store, source, file, summary);
+      continue;
+    }
+    const truncationsBefore = truncationMark(summary);
     try {
       await parseCodexRollout(file, {
         onTruncatedLine: () => markImportTruncated(summary, 'lines'),
@@ -297,6 +317,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
     } catch {
       continue; // unreadable file — skip, never abort the whole import
     }
+    noteFileImported(store, source, file, stamp, opts, truncationsBefore, summary);
   }
   return summary;
 }

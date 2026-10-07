@@ -37,6 +37,10 @@ import {
   noteRelabel,
   boundedJsonlFiles,
   markImportTruncated,
+  fileStampForImport,
+  noteFileImported,
+  noteFileUnchanged,
+  truncationMark,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
@@ -127,7 +131,17 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
  * Idempotent by construction (request_id is the store's natural key), so
  * re-running after new sessions only picks up the new traffic.
  */
+/** Imports in periodic commits rather than one commit per row (see Store.importBatch). */
 export async function importClaudeCode(store: Store, opts: ImportOptions = {}): Promise<ImportSummary> {
+  const batch = store.importBatch();
+  try {
+    return await importClaudeCodeRows(store, opts);
+  } finally {
+    batch.end();
+  }
+}
+
+async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<ImportSummary> {
   const root = opts.root ?? defaultClaudeCodeRoot();
   const source = opts.source ?? 'claude-code';
   const sinceMs = opts.sinceMs ?? 0;
@@ -142,6 +156,18 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
   const resolveProject = createRepoResolver();
 
   for (const file of files) {
+    const stamp = fileStampForImport(store, source, file, opts);
+    if (stamp === 'unchanged') {
+      noteFileUnchanged(store, source, file, summary);
+      continue;
+    }
+    const truncationsBefore = truncationMark(summary);
+    await importTranscriptFile(file);
+    noteFileImported(store, source, file, stamp, opts, truncationsBefore, summary);
+  }
+  return summary;
+
+  async function importTranscriptFile(file: string): Promise<void> {
     // One API request = many transcript lines; first wins. A copy in ANOTHER file
     // (a resumed session) goes to the store, which recognises the same charge as a
     // duplicate and counts a different charge as a conflict instead of hiding it.
@@ -201,5 +227,4 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
       recordInsert(store, summary, row, cost.estimated);
     }
   }
-  return summary;
 }

@@ -95,7 +95,7 @@ interface ImportRunner {
   label: string;
   /** Human-readable location of the source data (for the report + "not found"). */
   location: (root?: string) => string;
-  run: (store: Store, opts: { root?: string; sinceMs?: number }) => ImportSummary | Promise<ImportSummary>;
+  run: (store: Store, opts: { root?: string; sinceMs?: number; rescan?: boolean }) => ImportSummary | Promise<ImportSummary>;
 }
 
 const IMPORT_RUNNERS: Record<string, ImportRunner> = {
@@ -125,6 +125,15 @@ function resolveImporterId(what: string): string | null {
   return null;
 }
 
+/** "3 files, 507 lines" — the parts of an import that hit a resource bound. */
+function truncationDetail(sum: ImportSummary): string {
+  return [
+    sum.truncatedFiles ? `${num(sum.truncatedFiles)} files` : '',
+    sum.truncatedLines ? `${num(sum.truncatedLines)} lines` : '',
+    sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
+  ].filter(Boolean).join(', ') || 'bounds reached';
+}
+
 function renderImportSummary(tty: boolean, id: string, location: string, sum: ImportSummary): void {
   const label = IMPORT_RUNNERS[id]!.label;
   console.log('');
@@ -132,7 +141,15 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  Source       ${color(tty, C.gray, location)}${sum.files > 1 ? color(tty, C.gray, `  (${num(sum.files)} files)`) : ''}`);
   if (sum.eventsSeen === 0) {
-    console.log(color(tty, C.gray, `  No usage entries found — has ${label} run on this machine?`));
+    if (sum.filesUnchanged) {
+      // Every file was already imported in full: that is "nothing new", never "nothing found".
+      console.log(color(tty, C.gray, `  Up to date   ${num(sum.filesUnchanged)} file(s) unchanged since they were last imported in full (--rescan reads them again)`));
+      if (sum.captureCoverage === 'truncated') {
+        console.log(color(tty, C.yellow, `  Coverage     TRUNCATED (${truncationDetail(sum)}) — imported values are not a complete source capture.`));
+      }
+    } else {
+      console.log(color(tty, C.gray, `  No usage entries found — has ${label} run on this machine?`));
+    }
     console.log('');
     return;
   }
@@ -141,16 +158,14 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
       ? `${new Date(sum.earliestMs).toISOString().slice(0, 10)} → ${new Date(sum.latestMs).toISOString().slice(0, 10)}`
       : '—';
   console.log(`  Requests     ${num(sum.eventsSeen)} found · ${color(tty, C.green, `${num(sum.inserted)} new`)} imported  (${span})`);
+  if (sum.filesUnchanged) {
+    console.log(color(tty, C.gray, `  Skipped      ${num(sum.filesUnchanged)} file(s) unchanged since they were last imported in full (--rescan reads them again)`));
+  }
   console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
   for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
   if (sum.captureCoverage === 'truncated') {
-    const details = [
-      sum.truncatedFiles ? `${num(sum.truncatedFiles)} files` : '',
-      sum.truncatedLines ? `${num(sum.truncatedLines)} lines` : '',
-      sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
-    ].filter(Boolean).join(', ');
-    console.log(color(tty, C.yellow, `  Coverage     TRUNCATED${details ? ` (${details})` : ''} — imported values are not a complete source capture.`));
+    console.log(color(tty, C.yellow, `  Coverage     TRUNCATED (${truncationDetail(sum)}) — imported values are not a complete source capture.`));
   }
   if (sum.conflictingObservations) {
     console.log(color(tty, C.yellow, `  Conflicts    ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
@@ -209,7 +224,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
     const runner = IMPORT_RUNNERS[id]!;
     // `all` with a single --root would mis-point the other tools; only pass it for a single target.
     const useRoot = targets.length === 1 ? root : undefined;
-    const sum = await runner.run(store, { root: useRoot, sinceMs });
+    const sum = await runner.run(store, { root: useRoot, sinceMs, rescan: Boolean(flags.rescan) });
     results.push({ id, location: runner.location(useRoot), sum });
   }
   store.close();

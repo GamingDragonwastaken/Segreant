@@ -162,3 +162,64 @@ test('import: a transcript cwd becomes an INFERRED attribution; a missing one is
   assert.equal(byBasis.get('claude-code'), 'tool_log_fallback', 'the tool name is a placeholder, not a project');
   store.close();
 });
+
+function freshStore(): Store {
+  return new Store(join(mkdtempSync(join(tmpdir(), 'cc-cursor-db-')), 'test.db'));
+}
+
+test('re-import skips a file unchanged since its last full read, and reads it again once it grows', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-cursor-'));
+  const file = join(root, 's.jsonl');
+  writeFileSync(file, assistantLine() + '\n', 'utf8');
+  const store = freshStore();
+  const first = await importClaudeCode(store, { root });
+  assert.deepEqual([first.inserted, first.filesUnchanged ?? 0], [1, 0]);
+
+  const again = await importClaudeCode(store, { root });
+  assert.deepEqual([again.eventsSeen, again.inserted, again.filesUnchanged], [0, 0, 1]);
+
+  writeFileSync(file, assistantLine() + '\n' + assistantLine({ uuid: 'u2', requestId: 'req_B' }) + '\n', 'utf8');
+  const grown = await importClaudeCode(store, { root });
+  assert.deepEqual([grown.inserted, grown.filesUnchanged ?? 0], [1, 0], 'a changed file is read again; the old row stays a duplicate');
+
+  const rescan = await importClaudeCode(store, { root, rescan: true });
+  assert.deepEqual([rescan.eventsSeen, rescan.inserted, rescan.filesUnchanged ?? 0], [2, 0, 0]);
+  store.close();
+});
+
+test('a skipped file still discloses the truncation its last full read saw', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-cursor-trunc-'));
+  const oversized = JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8', usage: {}, content: 'x'.repeat(2 * 1024 * 1024) } });
+  writeFileSync(join(root, 'big.jsonl'), oversized + '\n' + assistantLine() + '\n', 'utf8');
+  const store = freshStore();
+  const first = await importClaudeCode(store, { root });
+  assert.deepEqual([first.inserted, first.truncatedLines], [1, 1]);
+  const again = await importClaudeCode(store, { root });
+  assert.equal(again.filesUnchanged, 1);
+  assert.equal(again.captureCoverage, 'truncated');
+  assert.equal(again.truncatedLines, 1, 'the same disclosure a re-read would make');
+  store.close();
+});
+
+test('a --since read records no cursor, so a later full import still reads the older rows', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-cursor-since-'));
+  writeFileSync(join(root, 's.jsonl'), assistantLine() + '\n', 'utf8'); // 2026-07-01
+  const store = freshStore();
+  const windowed = await importClaudeCode(store, { root, sinceMs: Date.parse('2026-09-01T00:00:00Z') });
+  assert.equal(windowed.inserted, 0);
+  const full = await importClaudeCode(store, { root });
+  assert.deepEqual([full.inserted, full.filesUnchanged ?? 0], [1, 0]);
+  store.close();
+});
+
+test('a new ledger never inherits another ledger\'s cursors', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-cursor-ledgers-'));
+  writeFileSync(join(root, 's.jsonl'), assistantLine() + '\n', 'utf8');
+  const a = freshStore();
+  await importClaudeCode(a, { root });
+  a.close();
+  const b = freshStore();
+  const sum = await importClaudeCode(b, { root });
+  assert.deepEqual([sum.inserted, sum.filesUnchanged ?? 0], [1, 0]);
+  b.close();
+});
