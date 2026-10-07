@@ -16,6 +16,7 @@ import { deserializeEconomicEvent, deserializeHistoricalRateObservation, seriali
 import { applyExactRate, historicalRateBook as buildHistoricalRateBook, historicalRateObservation, rateFromJson, type HistoricalRateBook, type HistoricalRateObservation, type HistoricalRateObservationInput } from './rate.ts';
 import { translateEffectiveChargeFromRateBook, type EffectiveFxChargeProjection } from './fx.ts';
 import { AppendMark, prepared } from '../util/statements.ts';
+import { transact } from '../util/transaction.ts';
 import { canonicalPeriod, closeFinalizationMetadata, closeInvalidationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseInvalidationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
@@ -286,15 +287,7 @@ export class EconomicLedger {
   }
 
   private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      const result = work();
-      this.db.exec('COMMIT');
-      return result;
-    } catch (error) {
-      try { this.db.exec('ROLLBACK'); } catch { /* preserve original failure */ }
-      throw error;
-    }
+    return transact(this.db, work);
   }
 
   private readStored(id: string): EconomicEvent | null {

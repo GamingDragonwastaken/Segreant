@@ -35,6 +35,15 @@ import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
 import { canonicalEconomicAttribution, economicAttributionFromRows } from '../economics/attribution.ts';
 import { canonicalJson } from '../epistemic/serialization.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { transact, writeBatch, type WriteBatch } from '../util/transaction.ts';
+
+/** What the last full read of a tool log file saw. */
+export interface ImportFileCursor {
+  size: number;
+  mtimeMs: number;
+  truncatedLines: number;
+  truncatedRows: number;
+}
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
@@ -738,15 +747,45 @@ export class Store {
   }
 
   private transaction<T>(work: () => T): T {
-    prepared(this.db, 'BEGIN IMMEDIATE').run();
-    try {
-      const result = work();
-      prepared(this.db, 'COMMIT').run();
-      return result;
-    } catch (error) {
-      try { prepared(this.db, 'ROLLBACK').run(); } catch { /* preserve original failure */ }
-      throw error;
-    }
+    return transact(this.db, work);
+  }
+
+  /**
+   * Group many writes into periodic commits for a bulk import. Each row still
+   * commits or rolls back as its own unit (a savepoint inside the batch); the
+   * batch only removes the per-row commit. Always `end()` it, in a finally.
+   */
+  importBatch(opts?: { maxRows?: number; maxMs?: number }): WriteBatch {
+    const inner = writeBatch(this.db, opts);
+    const outer: WriteBatch = {
+      tick: () => inner.tick(),
+      end: () => {
+        if (this.activeBatch === outer) this.activeBatch = null;
+        inner.end();
+      },
+    };
+    if (this.activeBatch === null) this.activeBatch = outer;
+    return outer;
+  }
+
+  /** The open import batch, ticked once per persisted request row. */
+  private activeBatch: WriteBatch | null = null;
+
+  /** The size and mtime a tool log file had when it was last imported completely. */
+  importFileCursor(source: string, path: string): ImportFileCursor | null {
+    const row = prepared(this.db,
+      'SELECT size, mtime_ms AS mtimeMs, truncated_lines AS truncatedLines, truncated_rows AS truncatedRows FROM import_file_cursors WHERE source = ? AND path = ?',
+    ).get(source, path) as ImportFileCursor | undefined;
+    return row ?? null;
+  }
+
+  /** Record that every row of this file, at this size and mtime, is in the ledger. */
+  saveImportFileCursor(source: string, path: string, cursor: ImportFileCursor): void {
+    prepared(this.db,
+      `INSERT INTO import_file_cursors (source, path, size, mtime_ms, truncated_lines, truncated_rows, at_ms) VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(source, path) DO UPDATE SET size = excluded.size, mtime_ms = excluded.mtime_ms,
+         truncated_lines = excluded.truncated_lines, truncated_rows = excluded.truncated_rows, at_ms = excluded.at_ms`,
+    ).run(source, path, cursor.size, Math.trunc(cursor.mtimeMs), cursor.truncatedLines, cursor.truncatedRows, Date.now());
   }
 
   /**
@@ -1113,7 +1152,13 @@ export class Store {
    * Returns true when the row was actually new.
    */
   insertRequestIfNew(r: RequestRow): boolean {
-    return this.persistRequest(r, true);
+    try {
+      return this.persistRequest(r, true);
+    } finally {
+      // Ticked even for a duplicate or a conflict: the batch bounds how long a
+      // transaction stays open, whatever each row turned out to be.
+      this.activeBatch?.tick();
+    }
   }
 
   // `liveOnly` restricts a spend reading to rows that arrived through the proxy —
