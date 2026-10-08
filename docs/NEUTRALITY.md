@@ -1,7 +1,7 @@
 # Neutrality
 
-Segreant's core product runs with no hosted service, no account, and, for
-any individual (including at work), no payment. Money, when it is taken, is kept outside the
+Segreant's core product runs with no hosted service, no account, and no
+payment, for people and organizations alike. Money, when it is taken, is kept outside the
 product (see "Sponsorship" below). This states what that means concretely and
 which paths are opt-in add-ons rather than requirements.
 
@@ -41,13 +41,13 @@ collects nothing centrally.
 
 ## Product and project neutrality
 
-- The LICENSE is PolyForm Noncommercial 1.0.0 (D-287) plus an individual use
-  permission (2026-10-08): any person may use Segreant for any purpose,
-  including paid work, with no account, key or payment. Organizational use
-  (running it for several people) needs a license from the maintainer
-  (`COMMERCIAL-LICENSE.md`). No function behaves differently for
-  licensed and unlicensed users: the license is a legal term, not a feature
-  gate. Earlier commits carried MIT, copyright "Segreant contributors".
+- The LICENSE is the Business Source License 1.1 with an Additional Use
+  Grant (2026-10-08, replacing PolyForm Noncommercial, D-287): any person or
+  organization may use, change and build on Segreant with no account, key or
+  payment; offering it as a hosted service and selling Segreant itself are
+  not allowed; each version becomes Apache 2.0 two years after publication
+  (`LICENSING.md`). No function behaves differently for anyone: the license
+  is a legal term, not a feature gate. Earlier commits carried MIT, copyright "Segreant contributors".
 - `docs/RELEASE-GATE.md`'s "Product claims allowed at this stage" section
   fixes the precise language this project may use about itself and forbids
   overclaiming (not "AI financial advice," not "zero egress," not a verified
@@ -60,10 +60,9 @@ collects nothing centrally.
 
 ## Sponsorship
 
-Segreant does not take sponsorship today; there is no Sponsor button. Paid
-commercial licenses (`COMMERCIAL-LICENSE.md`) are the only money involved. If
-sponsorship or any other payment channel is opened, these rules apply to it
-and to the commercial license alike:
+Segreant does not take sponsorship today; there is no Sponsor button, and no
+license is sold. If sponsorship, a paid arrangement under different terms,
+or any other payment channel is opened, these rules apply to it:
 
 - **Nothing is gated.** Every function works the same for someone who never
   sponsors. There is no license key, no "supporter edition", and no feature

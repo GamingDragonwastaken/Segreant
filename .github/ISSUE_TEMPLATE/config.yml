@@ -9,6 +9,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/GamingDragonwastaken/Segreant/security/advisories/new
     about: Private report to the maintainer. Please do not open a public issue.
-  - name: Commercial license
-    url: https://github.com/GamingDragonwastaken/Segreant/blob/main/COMMERCIAL-LICENSE.md
-    about: Using Segreant in a business? Here is how to get a license.
+  - name: Licensing
+    url: https://github.com/GamingDragonwastaken/Segreant/blob/main/LICENSING.md
+    about: Free for people and companies; not to be hosted as a service or resold.

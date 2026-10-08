@@ -11,12 +11,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
-- **Free for every person, including at work.** An individual use permission
-  (in `COMMERCIAL-LICENSE.md`, referenced from `LICENSE`) lets any person use
-  Segreant for any purpose, paid work included, to measure their own AI use.
-  A commercial license is now needed only for organizational use: running
-  Segreant for several people through a team server, a shared proxy or a
-  managed rollout. Selling it or hosting it as a service stays forbidden.
+- **Free for people and companies: the license is now the Business Source
+  License 1.1** with an Additional Use Grant (`LICENSE`, explained in
+  `LICENSING.md`). Anyone may use, change and build on Segreant, including
+  selling their own products built on it; offering Segreant as a hosted
+  service and selling Segreant itself are not allowed. Each version becomes
+  Apache 2.0 two years after it is published. No commercial license is sold;
+  `COMMERCIAL-LICENSE.md` is replaced by `LICENSING.md`.
 
 - **The first run is about four times faster and says what it is doing.** A
   first `scan --setup` over 5.6 GB of agent logs went from 645 s, silent, to
@@ -191,8 +192,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 ### Repository
 
 - License changed from MIT to PolyForm Noncommercial 1.0.0, with commercial
-  licenses available (`COMMERCIAL-LICENSE.md`). Commits up to `28dc6dd` remain
-  MIT.
+  licenses available (`COMMERCIAL-LICENSE.md`, since replaced by `LICENSING.md`).
+  Commits up to `28dc6dd` remain MIT.
 - Research modules recovered from the August `agent/truth-closure` lane into
   `src/research/` (Shapley decomposition, off-policy estimators, calibration,
   IRT complexity models and others), research-only and tested.
