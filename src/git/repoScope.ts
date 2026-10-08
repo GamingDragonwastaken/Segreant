@@ -30,6 +30,7 @@
  */
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { Store } from '../store/db.ts';
 import { evidenceMatcher, normPath as norm, pathUnder as under, type ScopeEvidence } from '../store/scopeEvidence.ts';
@@ -52,8 +53,12 @@ export interface ScopedRow {
 
 export interface LinkedFolder {
   path: string;
-  /** 'moved' = the folder no longer exists; 'worktree' = a checkout of this repository. */
-  reason: 'moved' | 'worktree';
+  /**
+   * 'moved' = the folder no longer exists; 'worktree' = a worktree of this
+   * repository; 'clone' = another checkout of the same repository (same root
+   * commit), such as an agent's working copy whose work arrived by merge.
+   */
+  reason: 'moved' | 'worktree' | 'clone';
   verifiedCommits: number;
 }
 
@@ -86,6 +91,38 @@ export function subjectsAgree(printed: string, actual: string): boolean {
   if (a.length === 0 || b.length === 0) return false;
   const n = Math.min(SUBJECT_PREFIX, b.length);
   return a.startsWith(b.slice(0, n)) || b.startsWith(a.slice(0, Math.min(SUBJECT_PREFIX, a.length)));
+}
+
+/**
+ * A repository's identity: its root commit(s), the one thing every clone,
+ * worktree and moved copy of it shares and no unrelated repository does. The
+ * folder is not the identity (it moves) and the remote URL is not either (an
+ * agent's working copy is often cloned from a local path).
+ */
+const identityCache = new Map<string, Promise<string | null>>();
+export function repoIdentity(dir: string): Promise<string | null> {
+  const key = norm(dir);
+  let pending = identityCache.get(key);
+  if (pending === undefined) {
+    pending = git(dir, ['rev-list', '--max-parents=0', 'HEAD']).then(
+      (out) => {
+        const roots = out.split('\n').map((s) => s.trim()).filter(Boolean).sort();
+        return roots.length > 0 ? roots.join(',') : null;
+      },
+      () => null,
+    );
+    identityCache.set(key, pending);
+  }
+  return pending;
+}
+
+async function topLevel(dir: string): Promise<string | null> {
+  try {
+    const out = (await git(dir, ['rev-parse', '--show-toplevel'])).trim();
+    return out === '' ? null : resolve(out);
+  } catch {
+    return null;
+  }
 }
 
 async function commonDir(dir: string): Promise<string | null> {
@@ -147,6 +184,7 @@ export async function repoSpendScope(store: Store, repoPath: string, opts: { max
   // A folder is linked as a whole only when it is gone (moved or deleted) or is
   // a checkout of this very repository. Its own top level is what is linked.
   const repoCommon = await commonDir(repoPath);
+  const repoId = await repoIdentity(repoPath);
   const repoRoot = norm(repoPath);
   const linkedFolders: LinkedFolder[] = [];
   for (const [key, entry] of folderCounts) {
@@ -156,9 +194,18 @@ export async function repoSpendScope(store: Store, repoPath: string, opts: { max
       continue;
     }
     const common = await commonDir(entry.path);
-    if (common !== null && repoCommon !== null && common === repoCommon) {
-      linkedFolders.push({ path: entry.path, reason: 'worktree', verifiedCommits: entry.count });
-    }
+    const reason = common !== null && repoCommon !== null && common === repoCommon
+      ? 'worktree'
+      : repoId !== null && (await repoIdentity(entry.path)) === repoId
+        ? 'clone'
+        : null;
+    if (reason === null) continue;
+    // The checkout's own top level is linked, so the rest of its work counts too.
+    const top = (await topLevel(entry.path)) ?? entry.path;
+    if (under(norm(top), repoRoot)) continue;
+    const existing = linkedFolders.find((f) => norm(f.path) === norm(top));
+    if (existing) existing.verifiedCommits += entry.count;
+    else linkedFolders.push({ path: top, reason, verifiedCommits: entry.count });
   }
   const linked = evidenceMatcher({ sessions: [...linkedSessions], folders: linkedFolders.map((f) => f.path) });
   const labelled = (row: ScopedRow): boolean =>
