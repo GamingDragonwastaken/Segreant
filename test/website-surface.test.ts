@@ -96,14 +96,23 @@ test('the shadow price appears only as not offered', () => {
   assert.doesNotMatch(method.slice(0, method.indexOf('id="not-offered"')), /shadow price/i, 'shadow price is described only under Not offered');
 });
 
-test('the primary route works from a fresh clone', () => {
+test('the primary route is the published package, and the commands it shows exist', () => {
   const index = read('index.html');
   const install = index.slice(index.indexOf('id="install-cmds"'), index.indexOf('</pre>', index.indexOf('id="install-cmds"')));
-  assert.match(install, /git clone https:\/\/github\.com\/GamingDragonwastaken\/Segreant\.git/);
-  assert.match(install, /npm install/);
-  assert.match(install, /npm run demo/);
-  const pkg = JSON.parse(readFileSync(join(dirname(WEB), 'package.json'), 'utf8')) as { scripts: Record<string, string>; engines: { node: string } };
-  assert.ok(pkg.scripts.demo, 'the page tells people to run npm run demo');
+  const pkg = JSON.parse(readFileSync(join(dirname(WEB), 'package.json'), 'utf8')) as {
+    name: string; bin: Record<string, string>; scripts: Record<string, string>; engines: { node: string };
+  };
+  assert.equal(pkg.name, 'segreant', 'the page installs the package by this name');
+  assert.ok(pkg.bin.segreant, 'the package must ship the segreant command the page runs');
+  assert.match(install, /npx segreant demo --serve/);
+  assert.match(install, /npm install -g segreant/);
+  // `demo --serve` must be a real command of the CLI the package ships.
+  const cli = readFileSync(join(dirname(WEB), 'src', 'cli.ts'), 'utf8');
+  assert.match(cli, /demo --serve/, 'the CLI help must document demo --serve');
+  // Installing must run nothing: no install-time lifecycle script in the package.
+  for (const hook of ['preinstall', 'install', 'postinstall', 'prepare']) {
+    assert.equal(pkg.scripts[hook], undefined, `the published package must not carry a ${hook} script`);
+  }
   assert.match(index, new RegExp(`Node ${pkg.engines.node.replace(/[^0-9]/g, '').slice(0, 2)} or later`), 'stated Node version must match package.json engines');
 });
 

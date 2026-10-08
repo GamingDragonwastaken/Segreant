@@ -9,11 +9,11 @@ Segreant has no hosted collection or telemetry by default, but proxy traffic sti
 goes to the AI provider you configure, and proposal capture is a local storage
 choice.
 
-> **Release status:** Segreant is not published to npm yet, so `npx segreant`
-> will not work. From a clone, run `npm install` and then `npm link` once; that
-> puts this checkout's `segreant` command on your `PATH`, and every command
-> below works as written. Without linking, run the same commands as
-> `npm run segreant -- <verb>`.
+> **Install:** `npm install -g segreant` puts the `segreant` command on your
+> `PATH`, and every command below works as written. To try it without
+> installing, prefix a command with `npx`, for example
+> `npx segreant demo --serve`. From a clone of the repository, run
+> `npm install`, `npm run build` and `npm link` once instead.
 
 ---
 
