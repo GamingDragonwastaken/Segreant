@@ -20,7 +20,7 @@ import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCovera
 import { attributeCommits, commitCountSince, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
 import { survivingLines, revertScan, prefetchSurvival } from '../git/quality.ts';
-import { repoSpendScope, type LinkedFolder } from '../git/repoScope.ts';
+import { repoIdentity, repoSpendScope, type LinkedFolder } from '../git/repoScope.ts';
 import { modelSpendFromRows, type ScopeEvidence } from '../store/scopeEvidence.ts';
 import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
@@ -410,6 +410,14 @@ export const CLI_PERIOD_DAYS = 90;
  * a real period, and what the budget does not reach is still reported unknown.
  */
 export const CLI_GIT_BUDGET_MS = 180_000;
+/**
+ * The time `scan` and `discover` give the value pass across ALL repositories
+ * together. Per-repository budgets alone stacked: a machine with dozens of
+ * repositories (agent worktrees count) spent 14 minutes and more. Largest spend
+ * goes first; a repository the stage does not reach is reported as not
+ * measured, with the command that measures it.
+ */
+export const SCAN_VALUE_BUDGET_MS = 120_000;
 
 export interface RealizationOptions {
   limit?: number;
@@ -574,10 +582,20 @@ export async function computeRealization(
   const blameSinceSec = attributions.length > 0
     ? Math.floor(Math.min(...attributions.map((a) => a.tsEpochMs)) / 1000) - 24 * 60 * 60
     : undefined;
-  await prefetchSurvival(repoPath, attributions.map((a) => a.hash), gitDeadlineMs, 8, blameSinceSec);
+  // A budget that runs out leaves the rest unmeasured, so spend it where the
+  // dollars are: matured commits (the only ones survival can judge) by
+  // attributed cost, largest first, then the maturing ones. The report keeps
+  // the attribution order.
+  const position = new Map(attributions.map((a, i) => [a.hash, i]));
+  const measureOrder = [...attributions].sort((a, b) => {
+    const am = now - a.tsEpochMs < windowMs ? 1 : 0;
+    const bm = now - b.tsEpochMs < windowMs ? 1 : 0;
+    return am - bm || b.attributedCostUsd - a.attributedCostUsd;
+  });
+  await prefetchSurvival(repoPath, measureOrder.map((a) => a.hash), gitDeadlineMs, 8, blameSinceSec);
 
   const units: WorkUnit[] = [];
-  for (const a of attributions) {
+  for (const a of measureOrder) {
     const ageDays = (now - a.tsEpochMs) / (24 * 60 * 60 * 1000);
     const maturing = now - a.tsEpochMs < windowMs;
     // Checked ONCE per unit and reused, so a unit is measured or unmeasured as a
@@ -832,6 +850,8 @@ export async function computeRealization(
 
   // Persist the snapshot so this realized-value picture can be served later
   // without the repo (e.g. to a manager's dashboard). Keyed by commit hash.
+  units.sort((x, y) => (position.get(x.hash) ?? 0) - (position.get(y.hash) ?? 0));
+
   if (opts.persist) {
     store.saveRealizationUnits(
       units.map((u): RealizationUnitRecord => ({
@@ -1178,12 +1198,77 @@ export function projectTaskStrata(store: Store, opts: { windowDays?: number } = 
   return out.sort((a, b) => b.costUsd - a.costUsd);
 }
 
+export interface DiscoveredResult extends DiscoveredProject {
+  units: number;
+  realizedUnits: number;
+  /** False when the repository was not measured in this pass; `skipped` says why. */
+  measured: boolean;
+  skipped?: 'deadline' | 'no-spend';
+  kept?: KeptSummary;
+  /**
+   * The repository's spend in the period, scoped by label AND commit evidence
+   * (git/repoScope.ts). Present when a period was measured; `costUsd` stays the
+   * label's all-time total.
+   */
+  periodCostUsd?: number;
+  /** Other checkouts of the same repository (same root commit) folded into this one. */
+  otherCheckouts?: string[];
+}
+
 export interface DiscoveredProject {
   project: string;
   repoPath: string; // the captured cwd that is a git working tree
   sources: string[]; // the tools that produced this project's spend
   costUsd: number;
   requests: number;
+}
+
+/**
+ * Clones, worktrees and copies of one repository (same root commit) are one
+ * repository: measured once, on the checkout whose HEAD is newest (the one the
+ * others' work was merged into), with the others' spend in its scope through
+ * git/repoScope.ts. Measuring each separately counted the same spend once per
+ * checkout.
+ */
+async function oneCheckoutPerRepository(
+  repos: DiscoveredProject[],
+): Promise<Array<DiscoveredProject & { otherCheckouts?: string[] }>> {
+  const groups = new Map<string, Array<DiscoveredProject & { headMs: number }>>();
+  const out: Array<DiscoveredProject & { otherCheckouts?: string[] }> = [];
+  for (const r of repos) {
+    const id = await repoIdentity(r.repoPath);
+    if (id === null) {
+      out.push(r);
+      continue;
+    }
+    const head = await headCommitTimeMs(r.repoPath);
+    const list = groups.get(id) ?? [];
+    list.push({ ...r, headMs: head });
+    groups.set(id, list);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => b.headMs - a.headMs || b.costUsd - a.costUsd);
+    const [best, ...rest] = list;
+    const { headMs: _h, ...keep } = best!;
+    out.push({
+      ...keep,
+      sources: [...new Set(list.flatMap((r) => r.sources))].sort(),
+      costUsd: list.reduce((s, r) => s + r.costUsd, 0),
+      requests: list.reduce((s, r) => s + r.requests, 0),
+      ...(rest.length > 0 ? { otherCheckouts: rest.map((r) => r.repoPath) } : {}),
+    });
+  }
+  return out.sort((a, b) => b.costUsd - a.costUsd);
+}
+
+async function headCommitTimeMs(repoPath: string): Promise<number> {
+  try {
+    const { stdout } = await run('git', ['-C', repoPath, 'log', '-1', '--format=%ct', 'HEAD']);
+    const n = Number(stdout.trim());
+    return Number.isFinite(n) ? n * 1000 : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -1225,10 +1310,31 @@ export async function realizeDiscoveredProjects(
     /** Measure the commits of this many days per repository (see RealizationOptions). */
     sinceDays?: number;
     gitScanBudgetMs?: number;
+    /**
+     * One deadline for the whole pass. Repositories then run largest spend
+     * first, each with the time left as its git budget (capped by
+     * gitScanBudgetMs); one not started before the deadline is not measured.
+     */
+    stageBudgetMs?: number;
   } = {},
-): Promise<Array<DiscoveredProject & { units: number; realizedUnits: number }>> {
-  const repos = await discoverProjectRepos(store);
-  const results = new Array<DiscoveredProject & { units: number; realizedUnits: number }>(repos.length);
+): Promise<DiscoveredResult[]> {
+  const found = await oneCheckoutPerRepository(await discoverProjectRepos(store));
+  // With a period and a shared deadline, rank by what each repository really
+  // spent in the period (label plus commit evidence: a moved checkout's label
+  // alone can hold a sliver of it), and skip one with no priced spend at all.
+  const periodCost = new Map<string, number>();
+  if (opts.stageBudgetMs !== undefined && opts.sinceDays !== undefined) {
+    const now = Date.now();
+    const rows = store.requestsInRange(now - opts.sinceDays * 24 * 60 * 60 * 1000, now + 1);
+    for (const r of found) {
+      const scope = await repoSpendScope(store, r.repoPath);
+      periodCost.set(r.repoPath, rows.reduce((s, row) => (scope.matches(row) ? s + row.costUsd : s), 0));
+    }
+  }
+  const rank = (r: DiscoveredProject): number => periodCost.get(r.repoPath) ?? r.costUsd;
+  const repos = opts.stageBudgetMs === undefined ? found : [...found].sort((a, b) => rank(b) - rank(a));
+  const stageDeadline = opts.stageBudgetMs === undefined ? undefined : Date.now() + opts.stageBudgetMs;
+  const results = new Array<DiscoveredResult>(repos.length);
   // Repositories are independent and almost all of their time is spent waiting
   // on git, so a few run at once. Safe on one DatabaseSync handle because every
   // store write in computeRealization is synchronous and no transaction is held
@@ -1239,15 +1345,33 @@ export async function realizeDiscoveredProjects(
     while (next < repos.length) {
       const i = next++;
       const r = repos[i]!;
+      const left = stageDeadline === undefined ? undefined : stageDeadline - Date.now();
+      const spent = periodCost.get(r.repoPath);
+      if (spent !== undefined && spent <= 0) {
+        results[i] = { ...r, units: 0, realizedUnits: 0, measured: false, skipped: 'no-spend', periodCostUsd: 0 };
+        done += 1;
+        opts.onProgress?.(done, repos.length, r.project);
+        continue;
+      }
+      if (left !== undefined && left <= 0) {
+        results[i] = { ...r, units: 0, realizedUnits: 0, measured: false, skipped: 'deadline', ...(spent === undefined ? {} : { periodCostUsd: spent }) };
+        done += 1;
+        opts.onProgress?.(done, repos.length, r.project);
+        continue;
+      }
       const rep = await computeRealization(store, r.repoPath, {
         limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
         sinceDays: opts.sinceDays,
-        gitScanBudgetMs: opts.gitScanBudgetMs,
+        gitScanBudgetMs: left === undefined ? opts.gitScanBudgetMs : Math.min(left, opts.gitScanBudgetMs ?? left),
         windowDays: opts.windowDays,
         persist: true,
       });
       const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
-      results[i] = { ...r, units: rep.units.length, realizedUnits };
+      const periodCostUsd = rep.periodCoverage?.scopedCostUsd ?? spent;
+      results[i] = {
+        ...r, units: rep.units.length, realizedUnits, measured: true, kept: keptSummary(rep),
+        ...(periodCostUsd === undefined ? {} : { periodCostUsd }),
+      };
       done += 1;
       opts.onProgress?.(done, repos.length, r.project);
     }

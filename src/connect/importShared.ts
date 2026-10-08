@@ -51,6 +51,8 @@ export interface ImportSummary {
   conflictingObservations?: number;
   /** Files skipped because they have not changed since their last complete import. */
   filesUnchanged?: number;
+  /** Files left for a later pass because they were last modified before `modifiedSinceMs`. */
+  filesDeferred?: number;
 }
 
 export function emptyImportSummary(files = 0): ImportSummary {
@@ -157,7 +159,9 @@ export interface FileStamp {
  * stamp when it must be read, and null when it cannot be stat'ed (read it
  * anyway and record nothing). `rescan` always reads.
  */
-export function fileStampForImport(store: Store, source: string, file: string, opts: ImportOptions): FileStamp | 'unchanged' | null {
+export function fileStampForImport(
+  store: Store, source: string, file: string, opts: ImportOptions,
+): FileStamp | 'unchanged' | 'deferred' | null {
   let stamp: FileStamp;
   try {
     const st = statSync(file);
@@ -165,6 +169,7 @@ export function fileStampForImport(store: Store, source: string, file: string, o
   } catch {
     return null;
   }
+  if (opts.modifiedSinceMs !== undefined && stamp.mtimeMs < opts.modifiedSinceMs) return 'deferred';
   if (opts.rescan) return stamp;
   const last = store.importFileCursor(source, file);
   return last !== null && last.readerVersion === IMPORT_READER_VERSION && last.size === stamp.size && last.mtimeMs === stamp.mtimeMs
@@ -237,6 +242,13 @@ export interface ImportOptions {
   source?: string;
   /** Read every file again, ignoring what earlier imports recorded. */
   rescan?: boolean;
+  /**
+   * Read only files modified at or after this time; leave the rest for a later
+   * pass, with no cursor recorded, so that pass reads them. A log file's mtime
+   * is at least the time of its last line, so every event at or after this time
+   * is in a file this pass reads: the recent total is exact before the backfill.
+   */
+  modifiedSinceMs?: number;
 }
 
 /**

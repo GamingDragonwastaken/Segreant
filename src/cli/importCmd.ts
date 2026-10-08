@@ -9,14 +9,17 @@ import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig } from '../config.ts';
 import { pricingStatus } from '../cost/pricing.ts';
-import { realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS } from '../value/realization.ts';
+import {
+  realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS, SCAN_VALUE_BUDGET_MS,
+  type DiscoveredResult,
+} from '../value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
-import type { Flags } from './flags.ts';
+import { rangeFor, type Flags } from './flags.ts';
 
 /**
  * Live import: poll the source(s) on an interval and fold in new traffic as it
@@ -95,7 +98,9 @@ interface ImportRunner {
   label: string;
   /** Human-readable location of the source data (for the report + "not found"). */
   location: (root?: string) => string;
-  run: (store: Store, opts: { root?: string; sinceMs?: number; rescan?: boolean }) => ImportSummary | Promise<ImportSummary>;
+  run: (store: Store, opts: { root?: string; sinceMs?: number; rescan?: boolean; modifiedSinceMs?: number }) => ImportSummary | Promise<ImportSummary>;
+  /** Whether `modifiedSinceMs` splits this source into a recent pass and a backfill (file-based sources). */
+  recentFirst?: boolean;
 }
 
 const IMPORT_RUNNERS: Record<string, ImportRunner> = {
@@ -103,6 +108,7 @@ const IMPORT_RUNNERS: Record<string, ImportRunner> = {
     label: 'Claude Code',
     location: (r) => r ?? defaultClaudeCodeRoot(),
     run: (store, opts) => importClaudeCode(store, opts),
+    recentFirst: true,
   },
   opencode: {
     label: 'opencode',
@@ -113,6 +119,7 @@ const IMPORT_RUNNERS: Record<string, ImportRunner> = {
     label: 'Codex CLI',
     location: (r) => r ?? defaultCodexRoot() ?? '(Codex not found on this machine)',
     run: (store, opts) => importCodex(store, opts),
+    recentFirst: true,
   },
 };
 
@@ -123,6 +130,64 @@ function resolveImporterId(what: string): string | null {
   if (w === 'opencode') return 'opencode';
   if (w === 'codex' || w === 'codex-cli') return 'codex';
   return null;
+}
+
+/**
+ * One source's two passes as one summary. The backfill counted every file
+ * again (the recent ones as unchanged), so file and truncation totals come
+ * from it; rows and money add, because each pass inserted different rows.
+ */
+function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSummary): ImportSummary {
+  if (recent === undefined) return rest;
+  const byModel: ImportSummary['byModel'] = {};
+  for (const part of [recent.byModel, rest.byModel]) {
+    for (const [model, v] of Object.entries(part)) {
+      const into = byModel[model] ?? { requests: 0, costUsd: 0 };
+      into.requests += v.requests;
+      into.costUsd += v.costUsd;
+      byModel[model] = into;
+    }
+  }
+  const lo = [recent.earliestMs, rest.earliestMs].filter((v): v is number => v !== null);
+  const hi = [recent.latestMs, rest.latestMs].filter((v): v is number => v !== null);
+  const conflicts = (recent.conflictingObservations ?? 0) + (rest.conflictingObservations ?? 0);
+  return {
+    ...rest,
+    inserted: recent.inserted + rest.inserted,
+    eventsSeen: recent.eventsSeen + rest.eventsSeen,
+    costUsd: recent.costUsd + rest.costUsd,
+    estimatedCostUsd: recent.estimatedCostUsd + rest.estimatedCostUsd,
+    byModel,
+    earliestMs: lo.length > 0 ? Math.min(...lo) : null,
+    latestMs: hi.length > 0 ? Math.max(...hi) : null,
+    relabelled: [...recent.relabelled, ...rest.relabelled],
+    ...(conflicts > 0 ? { conflictingObservations: conflicts } : {}),
+  };
+}
+
+/** "kept $1,643 · not kept $408": a project's answer from git, or why there is none yet. */
+function keptLine(tty: boolean, d: DiscoveredResult): string {
+  if (!d.measured) return color(tty, C.gray, d.skipped === 'no-spend' ? 'no priced spend' : 'not measured in this run');
+  const k = d.kept;
+  if (k === undefined || k.kept.units + k.notKept.units + k.unknown.units === 0) {
+    return color(tty, C.gray, k !== undefined && k.maturing.units > 0 ? 'maturing (commits under 14 days)' : 'no commits to judge');
+  }
+  const parts: string[] = [];
+  if (k.kept.costUsd >= 0.005) parts.push(color(tty, C.green, `kept ${usd(k.kept.costUsd)}`));
+  if (k.notKept.costUsd >= 0.005) parts.push(color(tty, C.yellow, `not kept ${usd(k.notKept.costUsd)}`));
+  if (k.unknown.costUsd >= 0.005) parts.push(color(tty, C.gray, `not measured yet ${usd(k.unknown.costUsd)}`));
+  if (k.maturing.costUsd >= 0.005) parts.push(color(tty, C.gray, `maturing ${usd(k.maturing.costUsd)}`));
+  if (parts.length === 0) return color(tty, C.gray, 'no spend on its commits');
+  return parts.join(color(tty, C.gray, ' · '));
+}
+
+/** Repositories the shared deadline did not reach: named, with the command that measures them. */
+function printUnmeasured(tty: boolean, discovered: DiscoveredResult[]): void {
+  const left = discovered.filter((d) => d.skipped === 'deadline');
+  if (left.length === 0) return;
+  const spend = left.reduce((s, d) => s + (d.periodCostUsd ?? d.costUsd), 0);
+  console.log(color(tty, C.gray, `    ${left.length} smaller project(s) (${usd(spend)} of spend) were not measured in the time this scan allows.`));
+  console.log(color(tty, C.gray, `    Measure one with: segreant realize --repo "${left[0]!.repoPath}"`));
 }
 
 /** "3 files, 507 lines" — the parts of an import that hit a resource bound. */
@@ -281,6 +346,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
   const progress = repoProgress(flags);
   const discovered = await realizeDiscoveredProjects(store, {
     windowDays, onProgress: progress.onProgress, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+    stageBudgetMs: SCAN_VALUE_BUDGET_MS,
   });
   progress.finish();
   const projects = projectValueBreakdown(store, { windowDays });
@@ -320,10 +386,11 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
         ? color(tty, C.gray, 'RoI —')
         : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
     const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
-    console.log(`  ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${d.realizedUnits}/${d.units} realized   ${roiStr}`);
+    console.log(`  ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${keptLine(tty, d)}   ${roiStr}`);
     console.log(color(tty, C.gray, `    ${d.repoPath}`));
     console.log(color(tty, C.gray, `    coded with: ${tools}`));
   }
+  printUnmeasured(tty, discovered);
   console.log('');
   console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "segreant roi --repo" scopes to a window — the two can differ.'));
   console.log(color(tty, C.gray, '  Now live in: segreant roi · segreant today · the dashboard (By project).'));
@@ -487,6 +554,24 @@ export async function cmdScan(flags: Flags): Promise<void> {
   // other command in this file (cmdImport, cmdDiscover, …) — never mixed with prose.
   if (!flags.json) console.log(color(tty, C.bold, '  Setting up…'));
   let totalNew = 0;
+  // Newest first: the logs of the last 30 days, then the month's number, then
+  // the older history. The month is exact after the first pass (see
+  // ImportOptions.modifiedSinceMs); the backfill only adds older rows.
+  const month = rangeFor('month');
+  const reading = !flags.json && process.stderr.isTTY;
+  const recent = new Map<string, ImportSummary>();
+  for (const t of present) {
+    const runner = IMPORT_RUNNERS[t.id];
+    if (!runner) continue;
+    if (reading) process.stderr.write(`    Reading the last 30 days of ${t.label} logs…`);
+    recent.set(t.id, await runner.run(store, runner.recentFirst ? { modifiedSinceMs: month.startMs } : {}));
+    if (reading) process.stderr.write('\r\x1b[2K');
+  }
+  if (!flags.json && recent.size > 0) {
+    const m = store.summary(month.startMs, month.endMs);
+    console.log(`    ${color(tty, C.bold, 'Last 30 days')}  ${color(tty, C.green, usd(m.costUsd))} list cost  ${color(tty, C.gray, `(${num(m.requests)} requests · priced from the rate card · an estimate, not your bill)`)}`);
+    console.log(color(tty, C.gray, '    Now reading older history, then measuring what the work produced…'));
+  }
   for (const t of present) {
     const runner = IMPORT_RUNNERS[t.id];
     if (!runner) {
@@ -495,10 +580,15 @@ export async function cmdScan(flags: Flags): Promise<void> {
       }
       continue;
     }
-    const reading = !flags.json && process.stderr.isTTY;
-    if (reading) process.stderr.write(`    Reading ${t.label} logs…`);
-    const sum = await runner.run(store, {});
-    if (reading) process.stderr.write('\r\x1b[2K');
+    const first = recent.get(t.id);
+    let sum: ImportSummary;
+    if (runner.recentFirst) {
+      if (reading) process.stderr.write(`    Reading older ${t.label} logs…`);
+      sum = mergeImportSummaries(first, await runner.run(store, {}));
+      if (reading) process.stderr.write('\r\x1b[2K');
+    } else {
+      sum = first!;
+    }
     totalNew += sum.inserted;
     if (!flags.json) {
       console.log(
@@ -515,27 +605,27 @@ export async function cmdScan(flags: Flags): Promise<void> {
   const progress = repoProgress(flags);
   const discovered = await realizeDiscoveredProjects(store, {
     onProgress: progress.onProgress, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+    stageBudgetMs: SCAN_VALUE_BUDGET_MS,
   });
   progress.finish();
-  const projects = projectValueBreakdown(store, {});
-  const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));
   store.close();
 
   if (!flags.json) {
     console.log('');
-    console.log(color(tty, C.bold, `  Correlated ${discovered.length} project(s) into per-project RoI`));
-    for (const d of discovered.slice(0, 12)) {
-      const roi = roiByProject.get(d.project);
-      const roiStr =
-        roi == null
-          ? color(tty, C.gray, 'RoI —')
-          : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
+    const shown = discovered.filter((d) => d.skipped !== 'no-spend');
+    console.log(color(tty, C.bold, `  Did the AI work stay in the code?`) + color(tty, C.gray, `   last ${CLI_PERIOD_DAYS} days by project · list cost (estimate), not your bill`));
+    for (const d of shown.slice(0, 12)) {
       const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
-      console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
+      console.log(`    ${color(tty, C.bold, d.project.padEnd(24))} ${usd(d.periodCostUsd ?? d.costUsd).padStart(10)}   ${keptLine(tty, d)}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
     }
+    if (shown.length > 12) console.log(color(tty, C.gray, `    …and ${shown.length - 12} more (segreant discover lists them all)`));
+    const idle = discovered.length - shown.length;
+    if (idle > 0) console.log(color(tty, C.gray, `    ${idle} more repositor${idle === 1 ? 'y has' : 'ies have'} no priced AI spend in the last ${CLI_PERIOD_DAYS} days.`));
+    printUnmeasured(tty, discovered);
     console.log('');
-    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "segreant roi --repo" scopes to a window — the two can differ.'));
-    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: segreant today · roi · the dashboard.`));
+    console.log(color(tty, C.gray, '  Kept: most of a commit\'s lines are still in the code after 14 days. Not kept: rewritten, removed or reverted.'));
+    console.log(color(tty, C.gray, '  The full picture for one project: segreant realize --repo <path> · value against your time: segreant roi'));
+    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: segreant today · month · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
     console.log('');
   }
