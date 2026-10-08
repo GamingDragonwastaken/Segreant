@@ -118,3 +118,52 @@ test('realizeDiscoveredProjects: honest no-op when no working directory was capt
     store.close();
   }
 });
+
+test('realizeDiscoveredProjects: a shared stage deadline goes largest spend first and never reports an unreached repo as zero', async () => {
+  const small = makeRepo();
+  const large = makeRepo();
+  const store = new Store(':memory:');
+  try {
+    commit(small, 'a.txt', 'one\n', 'feat: small', '2026-06-01T10:00:00+00:00');
+    commit(large, 'a.txt', 'one\n', 'feat: large', '2026-06-01T10:00:00+00:00');
+    store.insertRequest(row(await projectName(small), small, 'claude-code', '2026-06-01T09:30:00Z', 0.5, 's'));
+    store.insertRequest(row(await projectName(large), large, 'codex', '2026-06-01T09:30:00Z', 5, 'l'));
+
+    const none = await realizeDiscoveredProjects(store, { windowDays: 14, stageBudgetMs: 0 });
+    assert.deepEqual(none.map((r) => r.repoPath), [large, small], 'largest spend first');
+    assert.ok(none.every((r) => !r.measured && r.kept === undefined), 'nothing reached is reported as not measured');
+
+    const all = await realizeDiscoveredProjects(store, { windowDays: 14, stageBudgetMs: 60_000 });
+    assert.ok(all.every((r) => r.measured && r.kept !== undefined));
+    assert.equal(all[0]!.kept!.kept.units + all[0]!.kept!.notKept.units + all[0]!.kept!.unknown.units, 1,
+      'the matured commit has a verdict bucket');
+  } finally {
+    store.close();
+    rmSync(small, { recursive: true, force: true });
+    rmSync(large, { recursive: true, force: true });
+  }
+});
+
+test('realizeDiscoveredProjects: clones of one repository are measured once, on the newest checkout', async () => {
+  const origin = makeRepo();
+  const cloneDir = mkdtempSync(join(tmpdir(), 'segreant-disc-clone-'));
+  const store = new Store(':memory:');
+  try {
+    commit(origin, 'a.txt', 'one\n', 'feat: base', '2026-06-01T10:00:00+00:00');
+    execFileSync('git', ['clone', '-q', origin, join(cloneDir, 'copy')], { stdio: 'ignore' });
+    const copy = join(cloneDir, 'copy');
+    commit(origin, 'a.txt', 'one\ntwo\n', 'feat: newer', '2026-06-02T10:00:00+00:00');
+    store.insertRequest(row(await projectName(origin), origin, 'claude-code', '2026-06-01T09:30:00Z', 1, 'o'));
+    store.insertRequest(row(await projectName(copy), copy, 'codex', '2026-06-01T09:31:00Z', 2, 'c'));
+
+    const results = await realizeDiscoveredProjects(store, { windowDays: 14 });
+    assert.equal(results.length, 1, 'one repository, not one per checkout');
+    assert.equal(results[0]!.repoPath, origin, 'the checkout with the newest HEAD');
+    assert.deepEqual(results[0]!.otherCheckouts, [copy]);
+    assert.deepEqual(results[0]!.sources, ['claude-code', 'codex']);
+  } finally {
+    store.close();
+    rmSync(origin, { recursive: true, force: true });
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});

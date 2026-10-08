@@ -11,6 +11,19 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **`scan --setup` shows the month first, then what stayed in the code.** It
+  reads the logs of the last 30 days, prints that period's list cost, then
+  reads older history. The value pass then shares one two-minute deadline
+  across all repositories, with the largest 90-day spend going first. Within a
+  repository, the most expensive matured commits are measured first. The list
+  shows each project's 90-day spend as kept / not kept / not measured yet /
+  maturing. A repository the deadline does not reach is named, with the
+  command that measures it, and is never shown as zero.
+- **One repository, however many checkouts.** Clones, worktrees and moved
+  copies share a root commit. They are now measured once, on the checkout with
+  the newest HEAD, and a clone's spend joins that repository's scope. Before
+  this, every agent working copy of a repository claimed the same spend.
+
 - **The value answer covers your whole history on the first run.**
   `realize`, `roi`, `frontier` and `scan` measure every commit of the last
   90 days (up to 1,500), not the newest 30 or 40, with a three-minute git

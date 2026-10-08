@@ -275,6 +275,10 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
 
   for (const file of files) {
     const stamp = fileStampForImport(store, source, file, opts);
+    if (stamp === 'deferred') {
+      summary.filesDeferred = (summary.filesDeferred ?? 0) + 1;
+      continue;
+    }
     if (stamp === 'unchanged') {
       noteFileUnchanged(store, source, file, summary);
       continue;
