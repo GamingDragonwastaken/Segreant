@@ -81,6 +81,10 @@ const DEMO_OUTCOME_BASELINE_MINUTES: Record<string, number> = { used: 10, resolv
 const DEFAULT_SPEND_WINDOW_DAYS = 30;
 
 export interface ValueSpineOptions {
+  /** Measure the commits of this many days instead of a fixed count (see RealizationOptions). */
+  sinceDays?: number;
+  /** The git budget for the realization pass (terminal commands allow more). */
+  gitScanBudgetMs?: number;
   /**
    * The repository this report is about. Required, because the spine resolves a
    * PROJECT baseline against it — a value report with no project to name has no
@@ -164,9 +168,11 @@ export async function valueSpine(
 ): Promise<ValueSpine | null> {
   const windowDays = opts.windowDays ?? 14;
   const loaded = await loadRealization(store, opts.repo, {
-    limit: opts.limit ?? 40,
+    limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
     windowDays,
     persist: opts.persist ?? false,
+    sinceDays: opts.sinceDays,
+    gitScanBudgetMs: opts.gitScanBudgetMs,
   });
   if (!loaded) return null;
   const report = loaded.report;

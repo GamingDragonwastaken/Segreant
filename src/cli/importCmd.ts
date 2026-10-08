@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig } from '../config.ts';
 import { pricingStatus } from '../cost/pricing.ts';
-import { realizeDiscoveredProjects, projectValueBreakdown } from '../value/realization.ts';
+import { realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS } from '../value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
@@ -279,7 +279,9 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const paths = store.projectPaths();
   const progress = repoProgress(flags);
-  const discovered = await realizeDiscoveredProjects(store, { windowDays, onProgress: progress.onProgress });
+  const discovered = await realizeDiscoveredProjects(store, {
+    windowDays, onProgress: progress.onProgress, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+  });
   progress.finish();
   const projects = projectValueBreakdown(store, { windowDays });
   store.close();
@@ -511,7 +513,9 @@ export async function cmdScan(flags: Flags): Promise<void> {
   if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));
 
   const progress = repoProgress(flags);
-  const discovered = await realizeDiscoveredProjects(store, { onProgress: progress.onProgress });
+  const discovered = await realizeDiscoveredProjects(store, {
+    onProgress: progress.onProgress, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+  });
   progress.finish();
   const projects = projectValueBreakdown(store, {});
   const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));

@@ -41,6 +41,7 @@ import {
   noteFileImported,
   noteFileUnchanged,
   truncationMark,
+  commitObservationsInLine,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
@@ -167,6 +168,24 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
   }
   return summary;
 
+  // A tool result that shows git creating a commit names the session that made
+  // it. Each transcript line carries its own session id, time and directory.
+  function recordCommitsIn(line: string): void {
+    const commits = commitObservationsInLine(line);
+    if (commits.length === 0) return;
+    const sessionId = /"sessionId":"([^"]+)"/.exec(line)?.[1];
+    const ts = Date.parse(/"timestamp":"([^"]+)"/.exec(line)?.[1] ?? '');
+    if (!sessionId || !Number.isFinite(ts) || ts < sinceMs) return;
+    let cwd: string | null = null;
+    const rawCwd = /"cwd":"((?:[^"\\]|\\.)*)"/.exec(line)?.[1];
+    if (rawCwd !== undefined) {
+      try { cwd = JSON.parse(`"${rawCwd}"`) as string; } catch { cwd = null; }
+    }
+    for (const c of commits) {
+      store.recordObservedCommit({ source, sessionId, shortSha: c.shortSha, branch: c.branch, subject: c.subject, tsEpochMs: ts, cwd });
+    }
+  }
+
   async function importTranscriptFile(file: string): Promise<void> {
     // One API request = many transcript lines; first wins. A copy in ANOTHER file
     // (a resumed session) goes to the store, which recognises the same charge as a
@@ -178,6 +197,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         markImportTruncated(summary, 'lines');
         continue;
       }
+      recordCommitsIn(line);
       const ev = parseTranscriptLine(line);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
       if (seenInFile.has(ev.requestId)) continue;

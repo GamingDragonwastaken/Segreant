@@ -199,6 +199,8 @@ export async function prefetchSurvival(
   hashes: readonly string[],
   deadlineMs?: number,
   concurrency = 8,
+  /** The same history bound the measuring pass will use, so the caches meet. */
+  sinceSec?: number,
 ): Promise<void> {
   const expired = () => deadlineMs !== undefined && Date.now() >= deadlineMs;
   const pool = async <T>(items: readonly T[], work: (item: T) => Promise<unknown>) => {
@@ -217,7 +219,7 @@ export async function prefetchSurvival(
   await pool(hashes, async (hash) => {
     for (const f of await commitFiles(repoPath, hash)) if (f.added > 0) paths.add(f.path);
   });
-  await pool([...paths], (path) => blameAt(repoPath, head, path));
+  await pool([...paths], (path) => blameAt(repoPath, head, path, sinceSec));
 }
 
 async function headCommit(repoPath: string): Promise<string | null> {
@@ -245,12 +247,20 @@ export function blameCountsFromPorcelain(out: string): Map<string, number> {
   return counts;
 }
 
-function blameAt(repoPath: string, head: string, path: string): Promise<BlameCounts | null> {
-  const key = `${repoPath}\0${head}\0${path}`;
+/**
+ * `sinceSec` bounds blame's walk back through history. Every commit newer than
+ * it keeps its exact line count; lines from older history are credited to a
+ * boundary commit instead of being traced to their origin, which is where
+ * almost all of blame's time goes on a long-lived file. Callers pass a bound
+ * older than every commit they measure, so their counts are unchanged.
+ */
+function blameAt(repoPath: string, head: string, path: string, sinceSec?: number): Promise<BlameCounts | null> {
+  const key = `${repoPath}\0${head}\0${path}\0${sinceSec ?? ''}`;
   let pending = blameCache.get(key);
   if (pending === undefined) {
     if (blameCache.size >= BLAME_CACHE_MAX) blameCache.clear();
-    pending = git(repoPath, ['blame', '--porcelain', head, '--', path]).then(
+    const bound = sinceSec === undefined ? [] : [`--since=${sinceSec}`];
+    pending = git(repoPath, ['blame', '--porcelain', ...bound, head, '--', path]).then(
       blameCountsFromPorcelain,
       () => null, // file deleted/renamed at HEAD
     );
@@ -264,8 +274,8 @@ function blameAt(repoPath: string, head: string, path: string): Promise<BlameCou
  * `hash` by git blame. This is the retained-line count for `hash`'s introduced
  * artifact lines; it is not a quality score.
  */
-async function survivingLinesInFile(repoPath: string, head: string, hash: string, path: string): Promise<number> {
-  const counts = await blameAt(repoPath, head, path);
+async function survivingLinesInFile(repoPath: string, head: string, hash: string, path: string, sinceSec?: number): Promise<number> {
+  const counts = await blameAt(repoPath, head, path, sinceSec);
   if (counts === null) return 0; // file deleted/renamed at HEAD → none of its lines survived as-is
   const exact = counts.get(hash);
   if (exact !== undefined) return exact;
@@ -315,6 +325,8 @@ export async function survivingLines(
   repoPath: string,
   hash: string,
   deadlineMs?: number,
+  /** Optional history bound for blame; must be older than `hash` (see blameAt). */
+  sinceSec?: number,
 ): Promise<SurvivingLines> {
   const [files, head] = await Promise.all([commitFiles(repoPath, hash), headCommit(repoPath)]);
   let added = 0;
@@ -328,7 +340,7 @@ export async function survivingLines(
       measured = false;
       continue;
     }
-    surviving += await survivingLinesInFile(repoPath, head, hash, f.path);
+    surviving += await survivingLinesInFile(repoPath, head, hash, f.path, sinceSec);
   }
   return { added, surviving, measured };
 }
