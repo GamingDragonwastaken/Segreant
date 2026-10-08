@@ -964,15 +964,18 @@ export function assertDatabasePragmas(
  */
 export function assertDatabaseIntegrity(
   db: DatabaseSync,
-  options: { appendOnlyTriggers?: boolean } = {},
+  options: { appendOnlyTriggers?: boolean; btree?: boolean } = {},
 ): void {
-  const quickRows = db.prepare('PRAGMA quick_check').all() as Array<{ quick_check?: unknown }>;
-  if (quickRows.length === 0 || quickRows.some((row) => row.quick_check !== 'ok')) {
-    throw new Error('SQLite quick_check reported corruption');
-  }
-  const integrityRows = db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check?: unknown }>;
-  if (integrityRows.length === 0 || integrityRows.some((row) => row.integrity_check !== 'ok')) {
-    throw new Error('SQLite integrity_check reported corruption');
+  // `integrity_check` is a strict superset of `quick_check` (it adds index and
+  // UNIQUE verification), so one pass of it is the full structural check; the
+  // two used to run back to back, doubling the cost of every open for nothing.
+  // `btree: false` skips only this O(database) pass, for a caller that has just
+  // run it and changed no schema since (see initializeSchema).
+  if (options.btree !== false) {
+    const integrityRows = db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check?: unknown }>;
+    if (integrityRows.length === 0 || integrityRows.some((row) => row.integrity_check !== 'ok')) {
+      throw new Error('SQLite integrity_check reported corruption');
+    }
   }
   const foreignKeyRows = db.prepare('PRAGMA foreign_key_check').all();
   if (foreignKeyRows.length > 0) throw new Error('SQLite foreign_key_check reported violations');
@@ -2315,6 +2318,7 @@ export function initializeSchema(
     // must precede idempotent DDL, which would otherwise recreate a deleted
     // trigger and erase the evidence of tampering.
     assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
+    const schemaVersionBeforeDdl = (db.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version;
     runScript(db, SCHEMA);
     initializeEpistemicSchema(db);
     initializeEconomicSchema(db);
@@ -2330,7 +2334,12 @@ export function initializeSchema(
         (finalAttestation.defectIds.join(',') || 'CAUSAL_V2_SCHEMA_INCOMPLETE'),
       );
     }
-    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
+    // The full structural pass already ran above, inside this same lock. It is
+    // repeated only when the DDL and migrations actually changed the schema
+    // (PRAGMA schema_version moved); otherwise the schema-text, foreign-key and
+    // trigger-authority checks run again on their own, which are cheap.
+    const schemaChanged = (db.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version !== schemaVersionBeforeDdl;
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true, btree: schemaChanged });
     const schemaVersion = readSchemaVersion(db);
     if (schemaVersion > CURRENT_SCHEMA_VERSION) {
       throw new Error(`schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`);
