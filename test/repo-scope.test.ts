@@ -99,3 +99,25 @@ test('with no observations the scope is the label alone', async () => {
   assert.equal(scope.matches({ project: 'other', sessionId: 'any' }), false);
   store.close();
 });
+
+test('another checkout of the same repository (a clone) is linked as a whole; an unrelated repository is not', async () => {
+  const { parent, repo, sha, store } = fixture();
+  const clone = join(parent, 'agent-copy');
+  execFileSync('git', ['clone', '-q', repo, clone]);
+  const other = join(parent, 'unrelated');
+  mkdirSync(other);
+  gitIn(other, ['init', '-q', '-b', 'main']);
+  writeFileSync(join(other, 'b.txt'), 'two\n');
+  gitIn(other, ['add', '.']);
+  gitIn(other, ['commit', '-q', '-m', 'Unrelated work']);
+  const short = sha.slice(0, 7);
+  store.recordObservedCommit(obs({ sessionId: 'in-clone', shortSha: short, cwd: join(clone) }));
+  store.recordObservedCommit(obs({ sessionId: 'in-other', shortSha: short, cwd: other }));
+  const scope = await repoSpendScope(store, repo);
+  const reasons = Object.fromEntries(scope.linkedFolders.map((f) => [f.path, f.reason]));
+  assert.equal(reasons[clone], 'clone');
+  assert.equal(reasons[other], undefined, 'a repository with different roots is never linked as a whole');
+  assert.equal(scope.matches({ project: 'x', sessionId: 'someone-else', cwd: clone }), true);
+  assert.equal(scope.matches({ project: 'x', sessionId: 'someone-else', cwd: other }), false);
+  store.close();
+});

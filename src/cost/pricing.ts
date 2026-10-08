@@ -190,8 +190,18 @@ function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+// Every priced request carries its card's hash, and an import prices tens of
+// thousands of them against one card. A loaded card is replaced, never mutated,
+// when pricing is refreshed, so the hash is remembered per card object.
+const cardHashes = new WeakMap<PricingFile, string>();
+
 function pricingCardHash(file: PricingFile): string {
-  return sha256(JSON.stringify(file));
+  let hash = cardHashes.get(file);
+  if (hash === undefined) {
+    hash = sha256(JSON.stringify(file));
+    cardHashes.set(file, hash);
+  }
+  return hash;
 }
 
 function redactedUrl(raw: string): string | null {

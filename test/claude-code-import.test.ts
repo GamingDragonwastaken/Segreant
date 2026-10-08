@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -222,4 +222,27 @@ test('a new ledger never inherits another ledger\'s cursors', async () => {
   const sum = await importClaudeCode(b, { root });
   assert.deepEqual([sum.inserted, sum.filesUnchanged ?? 0], [1, 0]);
   b.close();
+});
+
+test('newest first: a recent pass reads only recently modified files, and the backfill reads the rest', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-recent-'));
+  const dir = join(root, 'proj');
+  mkdirSync(dir, { recursive: true });
+  const recentFile = join(dir, 'recent.jsonl');
+  const oldFile = join(dir, 'old.jsonl');
+  writeFileSync(recentFile, assistantLine({ requestId: 'req_new', uuid: 'u-new' }) + '\n', 'utf8');
+  writeFileSync(oldFile, assistantLine({ requestId: 'req_old', uuid: 'u-old' }) + '\n', 'utf8');
+  const now = Date.now();
+  const longAgo = (now - 60 * 86_400_000) / 1000;
+  utimesSync(oldFile, longAgo, longAgo);
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'cc-recent-db-')), 'test.db'));
+
+  const first = await importClaudeCode(store, { root, modifiedSinceMs: now - 30 * 86_400_000 });
+  assert.equal(first.inserted, 1, 'only the recently modified file');
+  assert.equal(first.filesDeferred, 1);
+
+  const backfill = await importClaudeCode(store, { root });
+  assert.equal(backfill.inserted, 1, 'the deferred file has no cursor, so the backfill reads it');
+  assert.equal(backfill.filesUnchanged, 1, 'the file the recent pass read is not read twice');
+  store.close();
 });

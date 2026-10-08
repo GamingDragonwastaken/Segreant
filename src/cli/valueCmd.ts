@@ -134,11 +134,11 @@ function printKeptAnswer(tty: boolean, report: RealizationReport): void {
   const s = report.spendScope;
   if (s !== undefined) {
     const moved = s.linkedFolders.filter((f) => f.reason === 'moved').length;
-    const worktrees = s.linkedFolders.filter((f) => f.reason === 'worktree').length;
+    const worktrees = s.linkedFolders.filter((f) => f.reason === 'worktree' || f.reason === 'clone').length;
     const extra = [
       `${s.linkedSessions} agent session${s.linkedSessions === 1 ? '' : 's'}`,
       ...(moved > 0 ? [`${moved} earlier location${moved === 1 ? '' : 's'} of this checkout`] : []),
-      ...(worktrees > 0 ? [`${worktrees} worktree${worktrees === 1 ? '' : 's'}`] : []),
+      ...(worktrees > 0 ? [`${worktrees} other checkout${worktrees === 1 ? '' : 's'} (worktrees, clones)`] : []),
     ];
     console.log(color(tty, C.gray, `    Includes ${extra.join(', ')}, linked by ${s.verifiedObservations} commits git confirmed they made.`));
   }
