@@ -81,11 +81,10 @@ evidence model underneath, and it behaves like one.
 
 ## See it in 30 seconds
 
-No API key, no account, no setup. Clone the repo, then:
+No API key, no account, no setup. With Node 24 or newer:
 
 ```bash
-npm install     # builds the local CLI; the only packages installed are dev tooling
-npm run demo    # seeds labelled synthetic data and opens the dashboard
+npx segreant demo --serve   # labelled synthetic data; opens the dashboard
 ```
 
 Open **http://localhost:8091**. You'll see spend by project and model, budget
@@ -95,11 +94,10 @@ labelled as synthetic. Clear it with `segreant demo --clear`.
 
 ## Use it on your real work
 
-Put the `segreant` command on your `PATH` from the clone (Segreant is not on npm
-yet):
+Install the `segreant` command (it has no runtime dependencies):
 
 ```bash
-npm link
+npm install -g segreant
 ```
 
 **Option A: no wiring at all.** If you use Claude Code, Codex or opencode,
@@ -115,7 +113,7 @@ segreant today           # what today cost, by model, project and tool
 **Option B: route traffic through Segreant** to meter it live and enforce budgets:
 
 ```bash
-npm run start          # proxy on :8090, dashboard on :8091
+segreant start         # proxy on :8090, dashboard on :8091
 ```
 
 ```bash
@@ -218,8 +216,7 @@ rollups) is opt-in and listed in [DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md).
 
 ## Status
 
-Segreant is **pre-release (0.1.0)** and not on npm yet; run it from a clone as
-shown above. CI covers Linux, macOS and Windows, including a packaged-install
+Segreant is **pre-release (0.1.0)**, published on npm as `segreant`. CI covers Linux, macOS and Windows, including a packaged-install
 smoke test, a browser accessibility pass and supply-chain checks.
 Reconciliation and outcome measurement are implemented and tested but have not
 yet been validated against real provider accounts or with outside users. That
@@ -255,6 +252,8 @@ npm install          # dev-only: typescript + @types/node
 npm run build        # compile to dist/
 npm test             # the full suite
 npm run typecheck    # strict TypeScript
+npm run demo         # rebuilds, then the demo dashboard from this checkout
+npm run start        # rebuilds, then the proxy and dashboard from this checkout
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are verified,
