@@ -117,6 +117,17 @@ export async function repoToplevel(dir: string): Promise<string | null> {
   }
 }
 
+/** Commits reachable from HEAD made in the last `days` days (0 when unreadable). */
+export async function commitCountSince(repoPath: string, days: number): Promise<number> {
+  try {
+    const out = await git(repoPath, ['rev-list', '--count', `--since=${days}.days`, 'HEAD']);
+    const n = Number(out.trim());
+    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function projectName(repoPath: string): Promise<string> {
   try {
     const top = (await git(repoPath, ['rev-parse', '--show-toplevel'])).trim();
@@ -195,7 +206,14 @@ export async function readCommitsBefore(repoPath: string, beforeMs: number, limi
 export async function attributeCommits(
   store: Store,
   repoPath: string,
-  opts: { limit?: number; maxLookbackHours?: number; persist?: boolean; scopeProject?: string } = {},
+  opts: {
+    limit?: number;
+    maxLookbackHours?: number;
+    persist?: boolean;
+    scopeProject?: string;
+    /** Evidence-extended scope (git/repoScope.ts). Wins over scopeProject when given. */
+    scope?: { matches(row: { project: string; projectCanonical?: string; cwd?: string | null; sessionId: string | null }): boolean };
+  } = {},
 ): Promise<CommitAttribution[]> {
   const limit = opts.limit ?? 20;
   const maxLookbackMs = (opts.maxLookbackHours ?? 8) * 60 * 60 * 1000;
@@ -214,10 +232,25 @@ export async function attributeCommits(
     // commit absorbs only its own project's native/imported spend, not every
     // project's concurrent traffic. Undefined scope = the project-blind window sum
     // (proxy default), preserving the original behavior.
-    const spend = store.summary(windowStartMs, windowEndMs, opts.scopeProject);
-    const economicRows = store.economicRequestRowsInRange(windowStartMs, windowEndMs, {
-      project: opts.scopeProject,
-    });
+    let spend: { costUsd: number; requests: number; outputTokens: number };
+    let economicRows: ReturnType<Store['economicRequestRowsInRange']>;
+    if (opts.scope) {
+      // The repository's label PLUS the folders and sessions its commits prove
+      // belong to it (a moved checkout, a worktree, a session started elsewhere).
+      const rows = store.requestsInRange(windowStartMs, windowEndMs).filter((r) => opts.scope!.matches(r));
+      const ids = new Set(rows.map((r) => r.requestId));
+      spend = {
+        costUsd: rows.reduce((s, r) => s + r.costUsd, 0),
+        requests: rows.length,
+        outputTokens: rows.reduce((s, r) => s + r.outputTokens, 0),
+      };
+      economicRows = store.economicRequestRowsInRange(windowStartMs, windowEndMs).filter((r) => ids.has(r.requestId));
+    } else {
+      spend = store.summary(windowStartMs, windowEndMs, opts.scopeProject);
+      economicRows = store.economicRequestRowsInRange(windowStartMs, windowEndMs, {
+        project: opts.scopeProject,
+      });
+    }
     const economic = economicAttributionFromRows(economicRows);
     const totalLines = commit.linesAdded + commit.linesDeleted;
     const attributedCostUsd = economicAttributionNumber(economic, spend.costUsd);

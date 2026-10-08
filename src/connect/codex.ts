@@ -40,6 +40,7 @@ import {
   noteFileImported,
   noteFileUnchanged,
   truncationMark,
+  commitObservationsInLine,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
@@ -117,6 +118,8 @@ export interface CodexParseOptions {
   onRow?: (row: CodexUsageRow) => void | Promise<void>;
   onTruncatedLine?: () => void;
   onTruncatedRow?: () => void;
+  /** A commit git reported creating in this rollout's own turns (never a fork's replayed history). */
+  onCommit?: (c: { sessionId: string; branch: string; shortSha: string; subject: string; tsEpochMs: number; cwd: string | null }) => void;
   maxRows?: number;
 }
 
@@ -157,6 +160,16 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
       continue; // torn tail of a live session — next import gets it whole
     }
     const p = o.payload ?? {};
+    // A fork or subagent file opens with its parent's history replayed; its own
+    // turns begin after its first token count. Commits in the replay are the
+    // parent's, so they are not credited to this thread.
+    if (options.onCommit && o.type !== 'session_meta' && o.type !== 'turn_context' && !(forked && firstCount)) {
+      const thread = forkId ?? sessionId;
+      const ts = Date.parse(o.timestamp ?? '');
+      if (thread && Number.isFinite(ts)) {
+        for (const c of commitObservationsInLine(line)) options.onCommit({ sessionId: thread, ...c, tsEpochMs: ts, cwd });
+      }
+    }
     if (o.type === 'session_meta') {
       // Only the first session_meta names this file's thread; later ones are
       // the parent's context replayed into a subagent or fork.
@@ -271,6 +284,9 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
       await parseCodexRollout(file, {
         onTruncatedLine: () => markImportTruncated(summary, 'lines'),
         onTruncatedRow: () => markImportTruncated(summary, 'rows'),
+        onCommit: (c) => {
+          if (c.tsEpochMs >= sinceMs) store.recordObservedCommit({ source, ...c });
+        },
         onRow: async (ev) => {
           if (ev.tsEpochMs < sinceMs) return;
           const attribution = await resolveProject(ev.cwd, 'codex');
