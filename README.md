@@ -265,17 +265,15 @@ for how a release is gated.
 
 ## Supporting Segreant
 
-Segreant is built independently and is free for every person, including for
-paid work. Organizations that run it for their teams pay for a cheap
-commercial license ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)), and that
-is what funds the work. Paying never unlocks features
+Segreant is built independently and is free to use for everyone, people and
+organizations alike ([LICENSING.md](LICENSING.md)). Paying never unlocks features
 ([docs/NEUTRALITY.md](docs/NEUTRALITY.md) makes that a checkable commitment).
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) plus an individual use permission:
-**any person may use Segreant for free, including at work and on paid client
-work**, to measure their own AI use. An organization running it for several
-people (a team server, a shared proxy, a managed rollout) needs a commercial
-license, which is cheap and quick to get. Nobody may sell Segreant or host it
-as a service. See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+[Business Source License 1.1](LICENSE) with an Additional Use Grant: **anyone,
+person or company, may use, change and build on Segreant for free**, including
+selling their own products built on it. The two things not allowed are
+offering Segreant as a hosted service and selling Segreant itself. Two years
+after each version is published, it becomes Apache 2.0 open source. Plain
+words: [LICENSING.md](LICENSING.md).

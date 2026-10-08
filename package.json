@@ -51,7 +51,7 @@
     "baselines",
     "docs/*.md",
     "web/assets/brand/mark-256.png",
-    "COMMERCIAL-LICENSE.md"
+    "LICENSING.md"
   ],
   "keywords": [
     "finops",
@@ -65,7 +65,7 @@
     "ai-governance"
   ],
   "author": "2am_seeker",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "BUSL-1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GamingDragonwastaken/Segreant.git"
