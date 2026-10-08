@@ -116,10 +116,17 @@ export function repoIdentity(dir: string): Promise<string | null> {
   return pending;
 }
 
+/**
+ * A checkout's top level, spelled the way `dir` is spelled. `--show-toplevel`
+ * returns the physical path (macOS adds /private, Windows expands 8.3 short
+ * names), while ledger rows keep the spelling the agent logged; a linked folder
+ * spelled differently would never match them. `--show-cdup` is relative, so
+ * resolving it against `dir` keeps that spelling.
+ */
 async function topLevel(dir: string): Promise<string | null> {
   try {
-    const out = (await git(dir, ['rev-parse', '--show-toplevel'])).trim();
-    return out === '' ? null : resolve(out);
+    const up = (await git(dir, ['rev-parse', '--show-cdup'])).trim();
+    return resolve(dir, up);
   } catch {
     return null;
   }
