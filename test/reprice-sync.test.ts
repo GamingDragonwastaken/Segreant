@@ -342,3 +342,22 @@ test('reprice: a pre-migration snapshot table gains the columns without inventin
   assert.equal(realizationFromStore(store).costStaleUnits, 1);
   store.close();
 });
+
+test('reprice: a snapshot scoped by commit evidence re-sums its linked sessions, not the label alone', () => {
+  const store = new Store(':memory:');
+  // r1 carries the unit's own label; r2 ran under another label in a session that
+  // verifiably committed to this repository; r3 is unrelated traffic.
+  store.insertRequest(req({ requestId: 'r1' }));
+  store.insertRequest(req({ requestId: 'r2', project: 'old-folder-name', sessionId: 'linked' }));
+  store.insertRequest(req({ requestId: 'r3', project: 'elsewhere', sessionId: 'other' }));
+  saveUnit(store, 'project', { attributedCostUsd: 6, attributedRequests: 2, spendScope: { sessions: ['linked'], folders: [] } });
+
+  const sync = store.applyRepricedCosts(updatesFor(store));
+  assert.equal(sync.resynced, 1);
+  assert.equal(sync.unresolvable, 0);
+  const unit = realizationFromStore(store).units[0]!;
+  assert.ok(Math.abs(unit.attributedCostUsd - 2 * exactCost()) < 1e-9,
+    'the label row AND the linked session row, re-priced; never the unrelated row');
+  assert.equal(unit.attributedRequests, 2);
+  store.close();
+});

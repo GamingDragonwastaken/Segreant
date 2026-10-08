@@ -20,13 +20,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import { runScript } from './schema.ts';
 import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
-import type { SpendBucket } from './db.ts';
+import type { RequestRow, SpendBucket } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
 import type { Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
 import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
 import { canonicalModelAttribution, type EconomicModelUnit, type EffectiveRequestRow } from './economicReadModel.ts';
+import { evidenceMatcher, modelSpendFromRows, parseScopeEvidence } from './scopeEvidence.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -123,6 +124,12 @@ export interface RealizationDeps {
   economicRequestRows?: (startMs: number, endMs: number, project?: string) => EffectiveRequestRow[];
   /** Exact provider/model groups used to keep model-trial attribution in step. */
   economicModelUnits?: (startMs: number, endMs: number, project?: string) => EconomicModelUnit[];
+  /**
+   * Raw request rows of a window. A snapshot whose dollars include spend linked
+   * by commit evidence (unit.spendScope) is re-summed over these, filtered by
+   * the label family OR that evidence: the rule that produced it.
+   */
+  requestsInRange?: (startMs: number, endMs: number) => RequestRow[];
   /** Shared economic ledger; exact reprices must append through this handle. */
   economicLedger?: EconomicLedger;
 }
@@ -429,8 +436,12 @@ function syncRealizationCosts(
     // repricing the ledger cannot have staled them. Skipped rather than marked.
     if (scope === 'synthetic_demo') continue;
     const unitProject = canon(row.project);
+    const evidence = scope === 'project' ? parseScopeEvidence(unit.spendScope) : undefined;
+    // A unit scoped by evidence also absorbed linked sessions' and folders' spend
+    // under other labels, so any repriced request in its window may touch it.
     const affected = priced.some(
-      (p) => p.tsEpochMs >= startMs && p.tsEpochMs < endMs && (scope !== 'project' || p.project === unitProject),
+      (p) => p.tsEpochMs >= startMs && p.tsEpochMs < endMs
+        && (scope !== 'project' || evidence !== undefined || p.project === unitProject),
     );
     if (!affected) continue;
 
@@ -441,10 +452,35 @@ function syncRealizationCosts(
       continue;
     }
 
+    if (evidence !== undefined && deps.requestsInRange === undefined) {
+      // The rule that produced these dollars cannot be re-run here: disclose.
+      markStale.run(row.commitHash);
+      out.unresolvable += 1;
+      continue;
+    }
     const scoped = scope === 'project' ? row.project : undefined;
-    const spend = deps.summary(startMs, endMs, scoped);
-    const modelSpend = deps.byModel(startMs, endMs, scoped);
-    const economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
+    let spend: SpendBucket;
+    let modelSpend: ReturnType<RealizationDeps['byModel']>;
+    let economicRows: EffectiveRequestRow[] | undefined;
+    if (evidence !== undefined) {
+      const linked = evidenceMatcher(evidence);
+      const rows = deps.requestsInRange!(startMs, endMs)
+        .filter((r) => canon(r.projectCanonical ?? r.project) === unitProject || linked(r));
+      const ids = new Set(rows.map((r) => r.requestId));
+      spend = {
+        label: row.project,
+        costUsd: rows.reduce((s, r) => s + r.costUsd, 0),
+        requests: rows.length,
+        inputTokens: rows.reduce((s, r) => s + r.inputTokens, 0),
+        outputTokens: rows.reduce((s, r) => s + r.outputTokens, 0),
+      };
+      modelSpend = modelSpendFromRows(rows);
+      economicRows = deps.economicRequestRows?.(startMs, endMs, undefined).filter((r) => ids.has(r.requestId));
+    } else {
+      spend = deps.summary(startMs, endMs, scoped);
+      modelSpend = deps.byModel(startMs, endMs, scoped);
+      economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
+    }
     const economic = economicRows === undefined ? undefined : economicAttributionFromRows(economicRows);
     const modelAuthority = economicRows === undefined ? undefined : canonicalModelAttribution(economicRows);
     const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);

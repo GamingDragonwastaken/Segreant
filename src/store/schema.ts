@@ -241,9 +241,26 @@ CREATE TABLE IF NOT EXISTS import_file_cursors (
   mtime_ms INTEGER NOT NULL,
   truncated_lines INTEGER NOT NULL DEFAULT 0,
   truncated_rows  INTEGER NOT NULL DEFAULT 0,
+  reader_version  INTEGER NOT NULL DEFAULT 1,
   at_ms    INTEGER NOT NULL,
   PRIMARY KEY (source, path)
 );
+
+-- A git commit an agent session reported making, read from the session's own
+-- log (git prints "[branch sha] subject" when it creates a commit). This is an
+-- observation, not yet a fact about any repository: realization accepts it only
+-- when the sha exists in the repo, the subject matches and the times agree.
+CREATE TABLE IF NOT EXISTS observed_commits (
+  source      TEXT NOT NULL,
+  session_id  TEXT NOT NULL,
+  short_sha   TEXT NOT NULL,
+  branch      TEXT NOT NULL,
+  subject     TEXT NOT NULL,
+  ts_epoch_ms INTEGER NOT NULL,
+  cwd         TEXT,
+  PRIMARY KEY (source, session_id, short_sha)
+);
+CREATE INDEX IF NOT EXISTS idx_observed_commits_sha ON observed_commits(short_sha);
 
 -- What retention deleted, so an absence can be told from a deletion.
 --
@@ -1244,6 +1261,12 @@ function migrate(db: DatabaseSync): void {
     // from context rather than from evidence is the exact failure this
     // column exists to prevent. Unknown stays unknown.
     db.prepare("ALTER TABLE openai_cost_observation_runs ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+  }
+  const cursorCols = db.prepare('PRAGMA table_info(import_file_cursors)').all() as Array<{ name: string }>;
+  if (cursorCols.length > 0 && !cursorCols.some((c) => c.name === 'reader_version')) {
+    // Cursors written before readers learned to capture commits: version 1, so
+    // their files are read once more by the current reader.
+    db.prepare('ALTER TABLE import_file_cursors ADD COLUMN reader_version INTEGER NOT NULL DEFAULT 1').run();
   }
   const signalCols = db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
   if (!signalCols.some((c) => c.name === 'evidence_source')) {

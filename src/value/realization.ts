@@ -17,9 +17,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
-import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
+import { attributeCommits, commitCountSince, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
 import { survivingLines, revertScan, prefetchSurvival } from '../git/quality.ts';
+import { repoSpendScope, type LinkedFolder } from '../git/repoScope.ts';
+import { modelSpendFromRows, type ScopeEvidence } from '../store/scopeEvidence.ts';
 import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
@@ -184,6 +186,11 @@ export interface WorkUnit extends CommitAttribution {
   proposalCaptureCoverage?: ProposalCaptureCoverage;
   /** Contribution association evidence; never an outcome, quality, or value verdict. */
   contributionEvidence?: ContributionEvidenceResult;
+  /**
+   * Sessions and folders outside the project label whose spend this unit's
+   * dollars include (git/repoScope.ts). Absent when the label alone scoped it.
+   */
+  spendScope?: ScopeEvidence;
 }
 
 export const CLEAN_COMPLETENESS_EVENT_TYPES = CODING_CLEAN_COMPLETENESS_EVENT_TYPES;
@@ -240,6 +247,22 @@ export interface RealizationReport {
    * stated beside the number rather than discovered later.
    */
   survivalUnmeasuredUnits: number;
+  /**
+   * What widened this report's spend scope beyond the project label: the
+   * sessions and folders whose commits git verified (git/repoScope.ts).
+   * Absent on stored reports and when the label alone scoped the spend.
+   */
+  spendScope?: {
+    linkedSessions: number;
+    linkedFolders: LinkedFolder[];
+    verifiedObservations: number;
+  };
+  /**
+   * The period's in-scope spend that no measured commit's window covers, by
+   * reason. Present when the report covered a period (`sinceDays`) and the
+   * spend was scoped to the project; otherwise there is no period to cover.
+   */
+  periodCoverage?: PeriodCoverage;
   matured: {
     units: number;
     realizedUnits: number;
@@ -301,8 +324,102 @@ export interface RealizationEconomicRollup {
   realized: EconomicAttribution | null;
 }
 
+/** `Store.modelPricingBasis`, over rows already in scope (same rule: null cards are not revisions). */
+function pricingLineageFromRows(
+  rows: ReadonlyArray<{ model: string; provider: string; costBasis?: string | null; rateCardSha256?: string | null }>,
+  model: string,
+  provider: string,
+): { costBases: string[]; rateCardShas: string[] } {
+  const bases = new Set<string>();
+  const cards = new Set<string>();
+  for (const r of rows) {
+    if (r.model !== model || r.provider !== provider) continue;
+    if (r.costBasis != null) bases.add(r.costBasis);
+    if (r.rateCardSha256) cards.add(r.rateCardSha256);
+  }
+  return { costBases: [...bases].sort(), rateCardShas: [...cards].sort() };
+}
+
+export interface PeriodCoverage {
+  periodStartMs: number;
+  periodEndMs: number;
+  /** In-scope list cost of the whole period. */
+  scopedCostUsd: number;
+  /** Of it, the part inside some measured commit's window. */
+  onCommitsUsd: number;
+  /** Before the oldest measured commit's window (older commits not measured). */
+  beforeOldestUsd: number;
+  /** Between commits, beyond the attribution lookback: no commit followed it. */
+  noCommitFollowedUsd: number;
+  /** After the newest commit: work not committed yet. */
+  notCommittedYetUsd: number;
+}
+
+/**
+ * The plain answer to "did my AI spend stay in the code?", from git alone.
+ * Kept: the Survived gate passed and the commit was not reverted. Not kept:
+ * survival failed or a revert names it. Unknown: matured but survival was not
+ * measured. Maturing: younger than the window, verdict due later. Dollars are
+ * the units' attributed list cost; this is not realized value (that needs
+ * every gate) and not a bill.
+ */
+export interface KeptSummary {
+  kept: { units: number; costUsd: number };
+  notKept: { units: number; costUsd: number };
+  unknown: { units: number; costUsd: number };
+  maturing: { units: number; costUsd: number; nextVerdictMs: number | null };
+}
+
+export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDays'>): KeptSummary {
+  const out: KeptSummary = {
+    kept: { units: 0, costUsd: 0 },
+    notKept: { units: 0, costUsd: 0 },
+    unknown: { units: 0, costUsd: 0 },
+    maturing: { units: 0, costUsd: 0, nextVerdictMs: null },
+  };
+  const windowMs = report.windowDays * 24 * 60 * 60 * 1000;
+  for (const u of report.units) {
+    const cost = Number.isFinite(u.attributedCostUsd) ? u.attributedCostUsd : 0;
+    if (u.maturing) {
+      out.maturing.units += 1;
+      out.maturing.costUsd += cost;
+      const due = u.tsEpochMs + windowMs;
+      out.maturing.nextVerdictMs = out.maturing.nextVerdictMs === null ? due : Math.min(out.maturing.nextVerdictMs, due);
+      continue;
+    }
+    const survived = u.funnel.results.find((r) => r.gate === 'survived')?.verdict;
+    const bucket = u.reverted || survived === 'fail'
+      ? out.notKept
+      : survived === 'pass'
+        ? out.kept
+        : out.unknown;
+    bucket.units += 1;
+    bucket.costUsd += cost;
+  }
+  return out;
+}
+
+/** The most commits one period scan measures (the newest first). */
+export const MAX_PERIOD_COMMITS = 1500;
+/** The value period the terminal commands cover by default. */
+export const CLI_PERIOD_DAYS = 90;
+/**
+ * The git budget for a terminal command. The 20 s default exists so a
+ * dashboard route answers instead of hanging (it once took 416 s); a command
+ * someone runs and watches, with a progress line, can spend longer to measure
+ * a real period, and what the budget does not reach is still reported unknown.
+ */
+export const CLI_GIT_BUDGET_MS = 180_000;
+
 export interface RealizationOptions {
   limit?: number;
+  /**
+   * Measure every commit of the last `sinceDays` days (capped at
+   * MAX_PERIOD_COMMITS) instead of a fixed number. Used by the terminal
+   * commands, so the value answer covers the same period as the spend.
+   * Ignored when `limit` is given.
+   */
+  sinceDays?: number;
   /**
    * Wall-clock ceiling on the per-unit git work, in milliseconds. `Infinity`
    * removes the bound; zero exhausts it immediately. The default keeps a
@@ -374,7 +491,10 @@ export async function computeRealization(
   repoPath: string,
   opts: RealizationOptions = {},
 ): Promise<RealizationReport> {
-  const limit = opts.limit ?? 30;
+  const limit = opts.limit
+    ?? (opts.sinceDays !== undefined
+      ? Math.max(1, Math.min(MAX_PERIOD_COMMITS, await commitCountSince(repoPath, opts.sinceDays)))
+      : 30);
   const windowDays = opts.windowDays ?? 14;
   // ONE budget across every commit's git work, not one per commit.
   //
@@ -413,12 +533,17 @@ export async function computeRealization(
   // x-segreant-project); otherwise fall back to the project-blind window sum so a
   // classic 'default'-tagged proxy store is unchanged. This is the bridge that
   // makes native, no-proxy imported spend produce correct per-project RoI.
-  const projectScoped = store.hasProjectSpend(project);
+  // Extended by evidence: folders and sessions that verifiably made commits in
+  // this repository (git/repoScope.ts). Without any such evidence the scope is
+  // the label alone, exactly as before.
+  const spendScope = await repoSpendScope(store, repoPath);
+  const projectScoped = store.hasProjectSpend(project) || spendScope.extended;
 
   const attributions = await attributeCommits(store, repoPath, {
     limit,
     persist: opts.persist,
-    scopeProject: projectScoped ? project : undefined,
+    scopeProject: projectScoped && !spendScope.extended ? project : undefined,
+    scope: projectScoped && spendScope.extended ? spendScope : undefined,
   });
   const scan = await revertScan(repoPath, limit);
   const reverted = scan.reverted;
@@ -444,7 +569,12 @@ export async function computeRealization(
   gitDeadlineMs = Number.isFinite(gitBudgetMs) ? Date.now() + gitBudgetMs : undefined;
   // Warm the git caches for every unit in parallel; the loop below still
   // measures (and decides measured/unmeasured) one unit at a time.
-  await prefetchSurvival(repoPath, attributions.map((a) => a.hash), gitDeadlineMs);
+  // Blame need not trace history older than the oldest commit measured here: a
+  // day before it keeps every measured commit's line count exact (blameAt).
+  const blameSinceSec = attributions.length > 0
+    ? Math.floor(Math.min(...attributions.map((a) => a.tsEpochMs)) / 1000) - 24 * 60 * 60
+    : undefined;
+  await prefetchSurvival(repoPath, attributions.map((a) => a.hash), gitDeadlineMs, 8, blameSinceSec);
 
   const units: WorkUnit[] = [];
   for (const a of attributions) {
@@ -457,7 +587,7 @@ export async function computeRealization(
     // were gathered.
     const scanned = !gitBudgetSpent();
     const survival = scanned
-      ? await survivingLines(repoPath, a.hash, gitDeadlineMs)
+      ? await survivingLines(repoPath, a.hash, gitDeadlineMs, blameSinceSec)
       : { added: 0, surviving: 0, measured: false };
     const { added, surviving } = survival;
     const survivalRatio = added > 0 ? Math.min(1, surviving / added) : 0;
@@ -618,10 +748,21 @@ export async function computeRealization(
     // from another project's concurrent traffic. A partial exact window has no
     // winner; a wholly legacy window retains a display-only compatibility label
     // with null cost/share so the frontier cannot treat it as priceable evidence.
-    const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
-    const economicModelRows = store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs, {
-      project: projectScoped ? project : undefined,
-    });
+    // With an evidence-extended scope the model read takes the SAME rows the
+    // dollars came from (label, linked sessions, linked folders).
+    const scopedRows = spendScope.extended
+      ? store.requestsInRange(a.windowStartMs, a.windowEndMs).filter((r) => spendScope.matches(r))
+      : null;
+    const scopedIds = scopedRows === null ? null : new Set(scopedRows.map((r) => r.requestId));
+    const unitSpendScope = scopedRows === null ? undefined : spendScope.evidenceFor(scopedRows);
+    const modelSpend = scopedRows !== null
+      ? modelSpendFromRows(scopedRows)
+      : store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
+    const economicModelRows = scopedIds !== null
+      ? store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs).filter((r) => scopedIds.has(r.requestId))
+      : store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs, {
+        project: projectScoped ? project : undefined,
+      });
     const modelAuthority = canonicalModelAttribution(economicModelRows);
     const dominantProvider = modelAuthority.coverage === 'exact'
       ? modelAuthority.dominant?.provider ?? null
@@ -649,13 +790,15 @@ export async function computeRealization(
     let dominantModelCostBasis: string | null = null;
     let dominantModelRateCard: string | null = null;
     if (dominantProvider !== null && dominantModel !== null) {
-      const lineage = store.modelPricingBasis(
-        a.windowStartMs,
-        a.windowEndMs,
-        dominantModel,
-        projectScoped ? project : undefined,
-        dominantProvider,
-      );
+      const lineage = scopedRows !== null
+        ? pricingLineageFromRows(scopedRows, dominantModel, dominantProvider)
+        : store.modelPricingBasis(
+          a.windowStartMs,
+          a.windowEndMs,
+          dominantModel,
+          projectScoped ? project : undefined,
+          dominantProvider,
+        );
       dominantModelCostBasis =
         lineage.costBases.length === 1 ? lineage.costBases[0]! : lineage.costBases.length > 1 ? 'mixed' : null;
       dominantModelRateCard =
@@ -683,6 +826,7 @@ export async function computeRealization(
       cleanCompleteness: completeness,
       proposalCaptureCoverage,
       ...(contributionEvidence === undefined ? {} : { contributionEvidence }),
+      ...(unitSpendScope === undefined ? {} : { spendScope: unitSpendScope }),
     });
   }
 
@@ -707,7 +851,7 @@ export async function computeRealization(
     );
   }
 
-  return rollupRealization(units, {
+  const report = rollupRealization(units, {
     generatedAt: now,
     windowDays,
     acceptanceThreshold,
@@ -715,6 +859,46 @@ export async function computeRealization(
     projectScoped,
     survivalUnmeasuredUnits: unmeasuredSurvival,
   });
+  if (spendScope.extended) {
+    report.spendScope = {
+      linkedSessions: spendScope.linkedSessions.size,
+      linkedFolders: [...spendScope.linkedFolders],
+      verifiedObservations: spendScope.verifiedObservations,
+    };
+  }
+  if (opts.sinceDays !== undefined && projectScoped) {
+    report.periodCoverage = periodCoverage(
+      store.requestsInRange(now - opts.sinceDays * 24 * 60 * 60 * 1000, now + 1).filter((r) => spendScope.matches(r)),
+      units,
+      now - opts.sinceDays * 24 * 60 * 60 * 1000,
+      now,
+    );
+  }
+  return report;
+}
+
+/** Split the period's in-scope spend by whether, and why not, a commit window covers it. */
+export function periodCoverage(
+  rows: ReadonlyArray<{ tsEpochMs: number; costUsd: number }>,
+  units: ReadonlyArray<{ windowStartMs: number; windowEndMs: number }>,
+  periodStartMs: number,
+  periodEndMs: number,
+): PeriodCoverage {
+  const windows = units.map((u) => [u.windowStartMs, u.windowEndMs] as const).sort((a, b) => a[0] - b[0]);
+  const oldest = windows.length > 0 ? windows[0]![0] : Infinity;
+  const newest = windows.length > 0 ? Math.max(...windows.map((w) => w[1])) : -Infinity;
+  const out: PeriodCoverage = {
+    periodStartMs, periodEndMs, scopedCostUsd: 0, onCommitsUsd: 0,
+    beforeOldestUsd: 0, noCommitFollowedUsd: 0, notCommittedYetUsd: 0,
+  };
+  for (const r of rows) {
+    out.scopedCostUsd += r.costUsd;
+    if (r.tsEpochMs < oldest) out.beforeOldestUsd += r.costUsd;
+    else if (r.tsEpochMs >= newest) out.notCommittedYetUsd += r.costUsd;
+    else if (windows.some(([a, b]) => r.tsEpochMs >= a && r.tsEpochMs < b)) out.onCommitsUsd += r.costUsd;
+    else out.noCommitFollowedUsd += r.costUsd;
+  }
+  return out;
 }
 
 /**
@@ -813,13 +997,15 @@ export interface LoadedRealization {
 export async function loadRealization(
   store: Store,
   repo: string | undefined,
-  opts: { windowDays?: number; limit?: number; persist?: boolean } = {},
+  opts: { windowDays?: number; limit?: number; persist?: boolean; sinceDays?: number; gitScanBudgetMs?: number } = {},
 ): Promise<LoadedRealization | null> {
   if (!isDemo() && repo && (await isGitRepo(repo))) {
     return {
       source: 'git',
       report: await computeRealization(store, repo, {
-        limit: opts.limit ?? 40,
+        limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
+        sinceDays: opts.sinceDays,
+        gitScanBudgetMs: opts.gitScanBudgetMs,
         windowDays: opts.windowDays ?? 14,
         persist: opts.persist ?? false,
       }),
@@ -1036,6 +1222,9 @@ export async function realizeDiscoveredProjects(
     onProgress?: (done: number, total: number, project: string) => void;
     /** Repositories measured at once (default 3). */
     concurrency?: number;
+    /** Measure the commits of this many days per repository (see RealizationOptions). */
+    sinceDays?: number;
+    gitScanBudgetMs?: number;
   } = {},
 ): Promise<Array<DiscoveredProject & { units: number; realizedUnits: number }>> {
   const repos = await discoverProjectRepos(store);
@@ -1051,7 +1240,9 @@ export async function realizeDiscoveredProjects(
       const i = next++;
       const r = repos[i]!;
       const rep = await computeRealization(store, r.repoPath, {
-        limit: opts.limit ?? 40,
+        limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
+        sinceDays: opts.sinceDays,
+        gitScanBudgetMs: opts.gitScanBudgetMs,
         windowDays: opts.windowDays,
         persist: true,
       });
