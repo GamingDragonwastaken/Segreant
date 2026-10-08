@@ -12,7 +12,7 @@ import { loadConfig, mutateConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeArtifactPersistence } from '../git/quality.ts';
 import { contributionEvidenceLines, summarizeContributionEvidence } from '../git/contribution.ts';
-import { loadRealization } from '../value/realization.ts';
+import { loadRealization, keptSummary, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS, type RealizationReport } from '../value/realization.ts';
 import { WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeFrontier } from '../value/frontier.ts';
 // The value report's one composition — shared with the dashboard's '/api/value'.
@@ -96,12 +96,68 @@ export async function cmdYield(flags: Flags): Promise<void> {
   store.close();
 }
 
+/**
+ * The first answer a person wants, from git alone: of the AI work that became
+ * commits, how much is still in the code. Printed before the Standard, which
+ * needs more gates to call anything realized. Every figure is list cost.
+ */
+function printKeptAnswer(tty: boolean, report: RealizationReport): void {
+  const k = keptSummary(report);
+  const total = k.kept.units + k.notKept.units + k.unknown.units + k.maturing.units;
+  if (total === 0) return;
+  const days = report.windowDays;
+  const row = (label: string, b: { units: number; costUsd: number }, what: string, tone: string): void => {
+    if (b.units === 0) return;
+    console.log(`    ${color(tty, C.bold, label.padEnd(10))} ${color(tty, tone, usd(b.costUsd).padStart(10))}  ${String(b.units).padStart(4)} commit${b.units === 1 ? ' ' : 's'}  ${color(tty, C.gray, what)}`);
+  };
+  console.log('');
+  console.log(color(tty, C.bold, '  Did the AI work stay in the code?') + color(tty, C.gray, '   from git history · list cost (estimate), not your bill'));
+  row('Kept', k.kept, `most of its lines are still in the code after ${days} days`, C.green);
+  row('Not kept', k.notKept, 'most of its lines were rewritten or removed, or it was reverted', C.yellow);
+  row('Unknown', k.unknown, 'not measured in this run (the git time budget ran out)', C.gray);
+  const due = k.maturing.nextVerdictMs === null ? '' : `; first verdict ${new Date(k.maturing.nextVerdictMs).toISOString().slice(0, 10)}`;
+  row('Maturing', k.maturing, `younger than ${days} days${due}`, C.gray);
+  const c = report.periodCoverage;
+  if (c !== undefined) {
+    const days90 = Math.round((c.periodEndMs - c.periodStartMs) / 86_400_000);
+    const off = c.beforeOldestUsd + c.noCommitFollowedUsd + c.notCommittedYetUsd;
+    const share = c.scopedCostUsd > 0 ? Math.round((c.onCommitsUsd / c.scopedCostUsd) * 100) : 0;
+    console.log(color(tty, C.gray, `    ${share}% of this repository's ${usd(c.scopedCostUsd)} over the last ${days90} days is on a commit above.`));
+    if (off > 0.005) {
+      const parts: string[] = [];
+      if (c.noCommitFollowedUsd > 0.005) parts.push(`${usd(c.noCommitFollowedUsd)} no commit followed within 8 hours`);
+      if (c.beforeOldestUsd > 0.005) parts.push(`${usd(c.beforeOldestUsd)} before the oldest commit measured`);
+      if (c.notCommittedYetUsd > 0.005) parts.push(`${usd(c.notCommittedYetUsd)} not committed yet`);
+      console.log(color(tty, C.gray, `    Not on a commit: ${parts.join(' · ')}.`));
+    }
+  }
+  const s = report.spendScope;
+  if (s !== undefined) {
+    const moved = s.linkedFolders.filter((f) => f.reason === 'moved').length;
+    const worktrees = s.linkedFolders.filter((f) => f.reason === 'worktree').length;
+    const extra = [
+      `${s.linkedSessions} agent session${s.linkedSessions === 1 ? '' : 's'}`,
+      ...(moved > 0 ? [`${moved} earlier location${moved === 1 ? '' : 's'} of this checkout`] : []),
+      ...(worktrees > 0 ? [`${worktrees} worktree${worktrees === 1 ? '' : 's'}`] : []),
+    ];
+    console.log(color(tty, C.gray, `    Includes ${extra.join(', ')}, linked by ${s.verifiedObservations} commits git confirmed they made.`));
+  }
+}
+
 export async function cmdRealize(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
-  const limit = flags.limit ? Number(flags.limit) : 30;
+  const limit = flags.limit ? Number(flags.limit) : undefined;
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
-  const loaded = await loadRealization(store, repo, { limit, windowDays, persist: true });
+  // Without --limit: every commit of the last 90 days, so the answer covers
+  // the same period the spend does.
+  const loaded = await loadRealization(store, repo, {
+    limit,
+    windowDays,
+    persist: true,
+    sinceDays: limit === undefined ? CLI_PERIOD_DAYS : undefined,
+    gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+  });
   if (!loaded) {
     printNotAGitRepo(repo);
     process.exitCode = 1;
@@ -119,6 +175,8 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const m = report.matured;
   const wiredGates = GATE_LADDER.filter((g) => m.instrumentation[g] > 0).length;
+
+  printKeptAnswer(tty, report);
 
   console.log('');
   console.log(color(tty, C.bold, '  The Realization Standard — did AI spend become real outcomes?'));
@@ -371,6 +429,8 @@ export async function cmdRoi(flags: Flags): Promise<void> {
     repo,
     windowDays,
     persist: true,
+    sinceDays: CLI_PERIOD_DAYS,
+    gitScanBudgetMs: CLI_GIT_BUDGET_MS,
     laborRatePerHour: flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : undefined,
     tsfUpperBound: flags.tsf !== undefined ? Number(flags.tsf) : undefined,
     riskAversion: flags['risk'] !== undefined ? Number(flags['risk']) : 0,
@@ -721,7 +781,9 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
-  const loaded = await loadRealization(store, repo, { windowDays, persist: true });
+  const loaded = await loadRealization(store, repo, {
+    windowDays, persist: true, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
+  });
   if (!loaded) {
     printNotAGitRepo(repo);
     process.exitCode = 1;

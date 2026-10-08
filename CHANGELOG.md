@@ -11,6 +11,25 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **The value answer covers your whole history on the first run.**
+  `realize`, `roi`, `frontier` and `scan` measure every commit of the last
+  90 days (up to 1,500), not the newest 30 or 40, with a three-minute git
+  budget; the dashboard keeps its 20-second one. `realize` now opens with the
+  plain answer from git: how much list cost went into commits that are still
+  in the code after 14 days (Kept), that were rewritten, removed or reverted
+  (Not kept), that were not measured (Unknown), or that are still maturing. It
+  also says what share of the period's spend landed on a commit, and why the
+  rest did not.
+- **Spend follows the repository, not the folder name.** The Claude Code and
+  Codex importers record the commits an agent session made (git's
+  `[branch sha] subject` line in the session log). An observation counts only
+  when git confirms the sha, the subject and the time. A session that
+  committed here, and an earlier location of a moved checkout or a worktree,
+  then count toward this repository. An existing parent folder never does as a whole. Nothing in the
+  ledger is relabelled; the links are recomputed from evidence on each run,
+  recorded in each value snapshot, and used again when prices are corrected.
+  Files read by the previous importer are read once more to pick up history.
+
 - **Install from npm.** `npx segreant demo --serve` shows the demo and
   `npm install -g segreant` installs the command. The package no longer
   carries a `prepare` script, so installing it runs nothing and npm raises no

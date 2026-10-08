@@ -111,6 +111,40 @@ export function boundedJsonlFiles(root: string): { files: string[]; truncated: b
   return { files, truncated };
 }
 
+/**
+ * The version of what the importers read from a log file. A file read in full
+ * by an older reader is read once more: version 2 added commit observations.
+ */
+export const IMPORT_READER_VERSION = 2;
+
+/** A commit git reported creating, found in a line of an agent's log. */
+export interface CommitObservationText {
+  branch: string;
+  shortSha: string;
+  subject: string;
+}
+
+// git prints "[main 3f60dcf] subject" when it creates a commit, "[main
+// (root-commit) 3f60dcf] subject" for the first one, and "[detached HEAD
+// 3f60dcf] subject" off a branch. In a JSON log line the subject ends at an
+// escaped newline or the closing quote of the string.
+const COMMIT_LINE = /\[((?:detached HEAD)|[A-Za-z0-9._\/-]{1,120})(?: \(root-commit\))? ([0-9a-f]{7,40})\] ((?:[^"\\]|\\[^n]){1,200})/g;
+
+/** Every commit-creation line in one raw (JSON-encoded) log line. */
+export function commitObservationsInLine(line: string): CommitObservationText[] {
+  if (!line.includes('] ')) return [];
+  const found: CommitObservationText[] = [];
+  for (const m of line.matchAll(COMMIT_LINE)) {
+    let subject = m[3]!;
+    try { subject = JSON.parse(`"${subject}"`) as string; } catch { /* keep the raw text */ }
+    subject = subject.trim();
+    if (subject.length === 0) continue;
+    if (found.some((f) => f.shortSha === m[2])) continue;
+    found.push({ branch: m[1]!, shortSha: m[2]!, subject });
+  }
+  return found;
+}
+
 /** A file's identity for the unchanged-file check. */
 export interface FileStamp {
   readonly size: number;
@@ -133,7 +167,9 @@ export function fileStampForImport(store: Store, source: string, file: string, o
   }
   if (opts.rescan) return stamp;
   const last = store.importFileCursor(source, file);
-  return last !== null && last.size === stamp.size && last.mtimeMs === stamp.mtimeMs ? 'unchanged' : stamp;
+  return last !== null && last.readerVersion === IMPORT_READER_VERSION && last.size === stamp.size && last.mtimeMs === stamp.mtimeMs
+    ? 'unchanged'
+    : stamp;
 }
 
 /**
@@ -173,6 +209,7 @@ export function noteFileImported(
     mtimeMs: stamp.mtimeMs,
     truncatedLines: now.lines - before.lines,
     truncatedRows: now.rows - before.rows,
+    readerVersion: IMPORT_READER_VERSION,
   });
 }
 

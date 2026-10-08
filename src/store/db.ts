@@ -43,6 +43,19 @@ export interface ImportFileCursor {
   mtimeMs: number;
   truncatedLines: number;
   truncatedRows: number;
+  /** The reader that produced this cursor; an older reader's cursor is not trusted. */
+  readerVersion: number;
+}
+
+/** A commit an agent session reported making, as read from its log. */
+export interface ObservedCommit {
+  source: string;
+  sessionId: string;
+  shortSha: string;
+  branch: string;
+  subject: string;
+  tsEpochMs: number;
+  cwd: string | null;
 }
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
@@ -774,7 +787,7 @@ export class Store {
   /** The size and mtime a tool log file had when it was last imported completely. */
   importFileCursor(source: string, path: string): ImportFileCursor | null {
     const row = prepared(this.db,
-      'SELECT size, mtime_ms AS mtimeMs, truncated_lines AS truncatedLines, truncated_rows AS truncatedRows FROM import_file_cursors WHERE source = ? AND path = ?',
+      'SELECT size, mtime_ms AS mtimeMs, truncated_lines AS truncatedLines, truncated_rows AS truncatedRows, reader_version AS readerVersion FROM import_file_cursors WHERE source = ? AND path = ?',
     ).get(source, path) as ImportFileCursor | undefined;
     return row ?? null;
   }
@@ -782,10 +795,27 @@ export class Store {
   /** Record that every row of this file, at this size and mtime, is in the ledger. */
   saveImportFileCursor(source: string, path: string, cursor: ImportFileCursor): void {
     prepared(this.db,
-      `INSERT INTO import_file_cursors (source, path, size, mtime_ms, truncated_lines, truncated_rows, at_ms) VALUES (?,?,?,?,?,?,?)
+      `INSERT INTO import_file_cursors (source, path, size, mtime_ms, truncated_lines, truncated_rows, reader_version, at_ms) VALUES (?,?,?,?,?,?,?,?)
        ON CONFLICT(source, path) DO UPDATE SET size = excluded.size, mtime_ms = excluded.mtime_ms,
-         truncated_lines = excluded.truncated_lines, truncated_rows = excluded.truncated_rows, at_ms = excluded.at_ms`,
-    ).run(source, path, cursor.size, Math.trunc(cursor.mtimeMs), cursor.truncatedLines, cursor.truncatedRows, Date.now());
+         truncated_lines = excluded.truncated_lines, truncated_rows = excluded.truncated_rows,
+         reader_version = excluded.reader_version, at_ms = excluded.at_ms`,
+    ).run(source, path, cursor.size, Math.trunc(cursor.mtimeMs), cursor.truncatedLines, cursor.truncatedRows, cursor.readerVersion, Date.now());
+  }
+
+  /** Record that a session reported making a commit. The first observation of a sha in a session stands. */
+  recordObservedCommit(o: ObservedCommit): void {
+    prepared(this.db,
+      `INSERT INTO observed_commits (source, session_id, short_sha, branch, subject, ts_epoch_ms, cwd) VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(source, session_id, short_sha) DO NOTHING`,
+    ).run(o.source, o.sessionId, o.shortSha, o.branch, o.subject, Math.trunc(o.tsEpochMs), o.cwd);
+    this.activeBatch?.tick();
+  }
+
+  /** Every commit observation on record (one row per session and sha). */
+  observedCommits(): ObservedCommit[] {
+    return prepared(this.db,
+      'SELECT source, session_id AS sessionId, short_sha AS shortSha, branch, subject, ts_epoch_ms AS tsEpochMs, cwd FROM observed_commits ORDER BY ts_epoch_ms',
+    ).all().map((row) => ({ ...(row as unknown as ObservedCommit) }));
   }
 
   /**
@@ -927,6 +957,7 @@ export class Store {
       byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
       economicRequestRows: (startMs, endMs, project) => this.economicRequestRowsInRange(startMs, endMs, { project }),
       economicModelUnits: (startMs, endMs, project) => this.economicModelUnits(startMs, endMs, project),
+      requestsInRange: (startMs, endMs) => this.requestsInRange(startMs, endMs),
       economicLedger: this.economicLedger,
     };
   }
