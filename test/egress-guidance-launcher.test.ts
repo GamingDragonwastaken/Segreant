@@ -198,16 +198,18 @@ test('checked-out npm entry points declare a build freshness lifecycle', () => {
   assert.doesNotMatch(gettingStarted, /node(?:\s+--[^\n]+)?\s+bin\/segreant\.mjs/);
   assert.doesNotMatch(claude, /node(?:\s+--[^\n]+)?\s+bin\/segreant\.mjs/);
   assert.doesNotMatch(landing, /node(?:\s+--[^\n]+)?\s+bin\/segreant\.mjs/);
+  // From a checkout, the documented entry points rebuild dist/ first.
   assert.match(readme, /npm run demo/);
   assert.match(readme, /npm run start/);
   assert.match(claude, /npm run demo/);
   assert.match(claude, /npm run start -- --demo/);
-  assert.match(landing, /npm run start/);
   // The landing page's copy button copies its install block (site.js reads the
-  // block it points at), so the block itself must run through an npm entry
-  // point that rebuilds dist/ first.
+  // block it points at). That block installs the PUBLISHED package, whose
+  // dist/ is built by `prepack` at publish time, so it never runs a checkout.
   const install = landing.slice(landing.indexOf('id="install-cmds"'), landing.indexOf('</pre>', landing.indexOf('id="install-cmds"')));
-  assert.match(install, /npm run demo/);
+  assert.match(install, /npx segreant demo --serve|npm install -g segreant/);
+  assert.doesNotMatch(install, /git clone/, 'the copied block must not mix a checkout into the published route');
+  assert.equal(pkg.scripts?.prepack, 'npm run build', 'the published dist/ is built when the package is packed');
   assert.match(landing, /data-copy="install-cmds"/);
 });
 

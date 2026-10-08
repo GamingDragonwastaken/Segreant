@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **Install from npm.** `npx segreant demo --serve` shows the demo and
+  `npm install -g segreant` installs the command. The package no longer
+  carries a `prepare` script, so installing it runs nothing and npm raises no
+  install-script warning; inside the repository, `npm run build` (or the
+  `demo`, `start` and `test` scripts, which build first) compiles it.
+
 - **Free for people and companies: the license is now the Business Source
   License 1.1** with an Additional Use Grant (`LICENSE`, explained in
   `LICENSING.md`). Anyone may use, change and build on Segreant, including

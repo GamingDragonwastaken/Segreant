@@ -257,7 +257,7 @@
           <h3><span class="n">2</span>Route requests through Segreant</h3>
           <p>Point a tool at the local proxy to measure it as it runs and enforce caps. There's no certificate to install, and it sees only traffic you send to it. Segreant forwards each request to the provider you configure, and it starts locked: nothing is forwarded until you allow that route.</p>
           <pre class="term"><span class="c"># proxy on :8090, dashboard on :8091</span>
-<span class="p">$ </span>npm run start
+<span class="p">$ </span>segreant start
 <span class="c"># run one tool through it (or codex, opencode, aider)</span>
 <span class="p">$ </span>segreant launch -- claude</pre>
         </div>
@@ -352,16 +352,14 @@
           <h2 id="start-title">See it on sample data first.</h2>
           <div class="prose" style="margin-top:18px">
             <p>The demo runs on labelled sample data in its own database, so it never touches your real usage. No API key, no account. You need Node 24 or later.</p>
-            <p>Segreant isn't on npm yet, so start from the repository. Then open <code>http://localhost:8091</code>. When you move to real work, <code>segreant guide</code> reads your setup and names the next step.</p>
+            <p>One command fetches it from npm and opens the dashboard at <code>http://localhost:8091</code>. When you move to real work, <code>segreant guide</code> reads your setup and names the next step.</p>
           </div>
         </div>
         <div>
-          <pre class="term" id="install-cmds"><span class="p">$ </span>git clone https://github.com/GamingDragonwastaken/Segreant.git
-<span class="p">$ </span>cd Segreant
-<span class="c"># dev tooling only; no runtime packages</span>
-<span class="p">$ </span>npm install
-<span class="c"># sample data, opens the dashboard</span>
-<span class="p">$ </span>npm run demo</pre>
+          <pre class="term" id="install-cmds"><span class="c"># sample data, opens the dashboard</span>
+<span class="p">$ </span>npx segreant demo --serve
+<span class="c"># for real work: install the command</span>
+<span class="p">$ </span>npm install -g segreant</pre>
           <div class="cta" style="margin-top:14px">
             <button class="btn ghost" type="button" data-copy="install-cmds" hidden>Copy commands</button>
             <a class="btn ghost" href="https://github.com/GamingDragonwastaken/Segreant#use-it-on-your-real-work">Set it up for real work</a>
