@@ -16,6 +16,7 @@ import {
   readSync,
   renameSync,
   Stats,
+  type BigIntStats,
   unlinkSync,
   writeSync,
 } from 'node:fs';
@@ -198,7 +199,7 @@ function contentionLockPathState(path: string): ContentionLockPathState {
 function releaseReceiptLock(fd: number, lockPath: string, acquiredIdentity: ReceiptFileIdentity): void {
   let failure: EgressReceiptError | null = null;
   try {
-    const current = lstatSync(lockPath);
+    const current = lstatSync(lockPath, { bigint: true });
     if (!current.isFile() || !sameReceiptObject(acquiredIdentity, receiptFileIdentity(current))) {
       failure = new EgressReceiptError(
         'lock',
@@ -243,8 +244,8 @@ function withReceiptLock<T>(fn: () => T): T {
     try {
       const candidate = openSync(lockPath, 'wx');
       try {
-        const candidateIdentity = receiptFileIdentity(fstatSync(candidate));
-        const pathStat = lstatSync(lockPath);
+        const candidateIdentity = receiptFileIdentity(fstatSync(candidate, { bigint: true }));
+        const pathStat = lstatSync(lockPath, { bigint: true });
         if (!pathStat.isFile() || !sameReceiptObject(candidateIdentity, receiptFileIdentity(pathStat))) {
           throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed while opening the lock: lock path identity changed; refusing an ambiguous owner');
         }
@@ -399,23 +400,32 @@ const MAX_RECEIPT_LINE_BYTES = 1024 * 1024;
 const MAX_RETAINED_RECEIPT_ERRORS = 64;
 const MAX_RETAINED_RECEIPT_ERROR_BYTES = 16 * 1024;
 
+/**
+ * A file's identity, read EXACTLY. Every field comes from a bigint stat and is
+ * kept as a decimal string (so a checkpoint can still be JSON). The default
+ * number stat rounds NTFS's 64-bit file IDs to 53 bits: two different files
+ * created moments apart in one folder can round to the same `ino`, and NTFS
+ * file-name tunnelling gives a file recreated under a just-deleted name the
+ * deleted file's creation time. Together that let a replaced receipt file pass
+ * the identity check on Windows, intermittently.
+ */
 interface ReceiptFileIdentity {
-  dev: number;
-  ino: number;
-  size: number;
-  mtimeMs: number;
-  ctimeMs: number;
-  birthtimeMs: number;
+  dev: string;
+  ino: string;
+  size: string;
+  mtimeNs: string;
+  ctimeNs: string;
+  birthtimeNs: string;
 }
 
-function receiptFileIdentity(stat: Stats): ReceiptFileIdentity {
+function receiptFileIdentity(stat: BigIntStats): ReceiptFileIdentity {
   return {
-    dev: stat.dev,
-    ino: stat.ino,
-    size: stat.size,
-    mtimeMs: stat.mtimeMs,
-    ctimeMs: stat.ctimeMs,
-    birthtimeMs: stat.birthtimeMs,
+    dev: String(stat.dev),
+    ino: String(stat.ino),
+    size: String(stat.size),
+    mtimeNs: String(stat.mtimeNs),
+    ctimeNs: String(stat.ctimeNs),
+    birthtimeNs: String(stat.birthtimeNs),
   };
 }
 
@@ -423,9 +433,9 @@ function sameReceiptFile(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolea
   return a.dev === b.dev
     && a.ino === b.ino
     && a.size === b.size
-    && a.mtimeMs === b.mtimeMs
-    && a.ctimeMs === b.ctimeMs
-    && a.birthtimeMs === b.birthtimeMs;
+    && a.mtimeNs === b.mtimeNs
+    && a.ctimeNs === b.ctimeNs
+    && a.birthtimeNs === b.birthtimeNs;
 }
 
 interface ReceiptCheckpoint {
@@ -508,12 +518,12 @@ function writeReceiptCheckpoint(historyPath: string, receiptCount: number, valid
 }
 
 function sameReceiptObject(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolean {
-  return a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
+  return a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
 }
 
-function receiptHistoryStat(path: string): Stats | null {
+function receiptHistoryStat(path: string): BigIntStats | null {
   try {
-    const stat = lstatSync(path);
+    const stat = lstatSync(path, { bigint: true });
     if (stat.isSymbolicLink()) {
       throw new EgressReceiptError('persistence', 'egress receipt history path is a symbolic link/reparse point; restore a regular local file before retrying');
     }
@@ -568,7 +578,7 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
   let fd: number | null = null;
   try {
     fd = openSync(path, 'r');
-    const openedIdentity = receiptFileIdentity(fstatSync(fd));
+    const openedIdentity = receiptFileIdentity(fstatSync(fd, { bigint: true }));
     if (!sameReceiptFile(identity, openedIdentity)) {
       throw new EgressReceiptError('persistence', 'egress receipt history changed before it was read; retry only after the history is stable');
     }
@@ -748,7 +758,7 @@ function persistReceiptLine(path: string, history: ReceiptHistoryInspection, lin
         throw new EgressReceiptError('persistence', 'egress receipt history identity was not retained; refuse to extend it');
       }
       fd = openSync(path, 'a');
-      const current = receiptFileIdentity(fstatSync(fd));
+      const current = receiptFileIdentity(fstatSync(fd, { bigint: true }));
       if (!sameReceiptFile(history.identity, current)) {
         throw new EgressReceiptError('persistence', 'egress receipt history changed before append; retry only after the history is stable');
       }
@@ -773,9 +783,15 @@ function persistReceiptLine(path: string, history: ReceiptHistoryInspection, lin
       if (written <= 0) throw new EgressReceiptError('persistence', 'egress receipt persistence wrote no bytes');
       offset += written;
     }
-    const afterFd = receiptFileIdentity(fstatSync(fd));
+    const afterFd = receiptFileIdentity(fstatSync(fd, { bigint: true }));
     const afterPath = receiptHistoryStat(path);
-    if (afterPath === null || !sameReceiptObject(afterFd, receiptFileIdentity(afterPath))) {
+    // Same object, AND the same length: straight after our own write (other
+    // Segreant writers wait on the lock) the path must show every byte the
+    // handle just wrote. The length check holds even on file systems whose
+    // file IDs are not unique (FAT, exFAT, some network shares).
+    if (afterPath === null
+        || !sameReceiptObject(afterFd, receiptFileIdentity(afterPath))
+        || afterFd.size !== String(afterPath.size)) {
       throw new EgressReceiptError('persistence', 'egress receipt history path identity changed after append; the write was not accepted');
     }
   } catch (error) {
