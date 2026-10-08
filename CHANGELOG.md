@@ -11,6 +11,24 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **Free for every person, including at work.** An individual use permission
+  (in `COMMERCIAL-LICENSE.md`, referenced from `LICENSE`) lets any person use
+  Segreant for any purpose, paid work included, to measure their own AI use.
+  A commercial license is now needed only for organizational use: running
+  Segreant for several people through a team server, a shared proxy or a
+  managed rollout. Selling it or hosting it as a service stays forbidden.
+
+- **The first run is about four times faster and says what it is doing.** A
+  first `scan --setup` over 5.6 GB of agent logs went from 645 s, silent, to
+  168 s with progress lines. Each file is blamed once per HEAD, git runs in a
+  pool, imports commit in batches, log files already read in full are skipped
+  (`import --rescan` reads them again), and opening the ledger no longer
+  re-reads every economic event.
+
+- **`today`, `week` and `month` head with list cost, not spend,** and say which
+  part was read from tool logs ("not your invoice") and which was metered
+  through the proxy.
+
 - **The product is now Segreant.** It was called Fiscus until 2026-09-26; an
   unrelated AI-payments project owns that name on npm (D-290). The command is
   `segreant`, the environment overrides are `SEGREANT_HOME`, `SEGREANT_DB`,

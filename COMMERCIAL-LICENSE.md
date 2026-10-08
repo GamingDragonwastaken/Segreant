@@ -1,24 +1,51 @@
-# Commercial use
+# Who pays, and who does not
 
-Segreant is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-This page explains who needs a commercial license, and then states the
+Segreant is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE),
+plus the individual use permission below, which the licensor grants to every
+person. This page explains who needs a commercial license, and then states the
 commercial license itself.
 
-## Free, no permission needed
+In short: **every person may use Segreant for free, including for paid work.
+Organizations that run it for many people pay. Nobody may sell it or host it
+for others.**
 
-- Personal use: your own projects, learning, research, experiments, hobby work.
+## The individual use permission
+
+In addition to the PolyForm Noncommercial License, the licensor (the copyright
+holder named in [LICENSE](LICENSE)) grants every natural person a worldwide,
+royalty-free, non-exclusive permission to use, copy and modify Segreant for any
+purpose, including paid work, employment, freelancing and consulting, to meter,
+cap and measure that person's own use of AI on the devices they use.
+
+This permission does not cover:
+
+1. **Selling it or offering it to others.** Selling, renting, sublicensing or
+   redistributing Segreant or a modified version for a fee; including it in a
+   product or service that is sold; or running it as a hosted or managed
+   service for anyone else.
+2. **Running it for an organization.** Using Segreant to meter, cap, allocate
+   or report on other people's use of AI is organizational use (below). That
+   includes running a team server or team rollups, running one proxy or
+   gateway that several people's traffic passes through, and an organization
+   installing or managing Segreant on machines it controls.
+
+Sharing the unmodified code, or a modified version for free with this page and
+the LICENSE included, stays allowed, as the PolyForm license already provides.
+
+## Also free
+
 - Charities, schools and universities, public research institutions, and
-  government bodies, whatever their funding.
-- Reading, modifying and sharing the code for any of those purposes.
-- Evaluating Segreant at work for up to 30 days to decide whether to license
-  it. The licensor grants this permission here; the PolyForm text alone does
-  not.
+  government bodies, for any use, including organizational use, as the PolyForm
+  license provides.
+- Evaluating organizational use for up to 30 days to decide whether to license
+  it.
 
-## Needs a commercial license
+## Needs a commercial license: organizational use
 
-Using Segreant for a business: inside a company, for paid client work, or as
-part of a product or service you sell. That includes using it to manage your
-company's own AI spend, and freelancers using it on paid work.
+A company or other organization using Segreant for more than one person's AI
+use: a team server or team rollups, a shared proxy or gateway, organization-wide
+budgets, allocation or finance exports, or a rollout it installs or manages.
+Each person using Segreant for their own work never needs one.
 
 ## Getting one
 
