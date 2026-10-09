@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated": "2026-09-29",
+  "updated": "2026-10-09",
   "currency": "USD",
   "unit": "per_million_tokens",
   "notes": [
@@ -79,11 +79,19 @@
     },
     "google": {
       "verified": true,
-      "source": "ai.google.dev/gemini-api/docs/pricing (2026-06)",
+      "source": "ai.google.dev/gemini-api/docs/pricing (2.5 models read 2026-06; 3.x models read 2026-10-09, page updated 2026-10-07). Gemini 3.6-3.8 Flash carry the rates through 2026-12-31 (the page lists higher rates from 2027-01-01); gemini-3.1-pro-preview carries the rate for prompts of 200k tokens or fewer.",
       "models": {
         "gemini-2.5-pro": {"input": 1.25, "output": 10.0, "cache_read": 0.125, "exact": {"input": "1.25", "output": "10", "cache_read": "0.125"}},
         "gemini-2.5-flash": {"input": 0.3, "output": 2.5, "cache_read": 0.03, "exact": {"input": "0.3", "output": "2.5", "cache_read": "0.03"}},
-        "gemini-2.5-flash-lite": {"input": 0.1, "output": 0.4, "cache_read": 0.01, "exact": {"input": "0.1", "output": "0.4", "cache_read": "0.01"}}
+        "gemini-2.5-flash-lite": {"input": 0.1, "output": 0.4, "cache_read": 0.01, "exact": {"input": "0.1", "output": "0.4", "cache_read": "0.01"}},
+        "gemini-3.8-flash": {"input": 0.75, "output": 3.75, "cache_read": 0.075, "exact": {"input": "0.75", "output": "3.75", "cache_read": "0.075"}},
+        "gemini-3.7-flash": {"input": 0.75, "output": 3.75, "cache_read": 0.075, "exact": {"input": "0.75", "output": "3.75", "cache_read": "0.075"}},
+        "gemini-3.6-flash": {"input": 0.75, "output": 3.75, "cache_read": 0.075, "exact": {"input": "0.75", "output": "3.75", "cache_read": "0.075"}},
+        "gemini-3.5-flash": {"input": 1.5, "output": 9.0, "cache_read": 0.15, "exact": {"input": "1.5", "output": "9", "cache_read": "0.15"}},
+        "gemini-3.5-flash-lite": {"input": 0.3, "output": 2.5, "cache_read": 0.03, "exact": {"input": "0.3", "output": "2.5", "cache_read": "0.03"}},
+        "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.5, "cache_read": 0.025, "exact": {"input": "0.25", "output": "1.5", "cache_read": "0.025"}},
+        "gemini-3.1-pro-preview": {"input": 2.0, "output": 12.0, "cache_read": 0.2, "exact": {"input": "2", "output": "12", "cache_read": "0.2"}},
+        "gemini-3-flash-preview": {"input": 0.5, "output": 3.0, "cache_read": 0.05, "exact": {"input": "0.5", "output": "3", "cache_read": "0.05"}}
       }
     }
   },

@@ -1,7 +1,7 @@
 /**
  * Known-app inventory — the wider, honest half of `scan`.
  *
- * `detectTools()` (scan.ts) answers "which of our 3 NATIVELY SUPPORTED tools are
+ * `detectTools()` (scan.ts) answers "which of our NATIVELY SUPPORTED tools are
  * here" — present implies Segreant can read its usage data. This module answers
  * a different, narrower question: "which OTHER AI coding tools do we merely SEE
  * evidence of on this machine". Presence here implies nothing about import
@@ -39,9 +39,12 @@ export interface DetectedApp {
   present: boolean;
   /** The config/data path or PATH binary that proved presence, else null. */
   evidence: string | null;
+  /** Why its usage is not read, when the reason is known (the routes tried). */
+  notReadBecause?: string;
 }
 
 interface KnownAppSignature {
+  notReadBecause?: string;
   id: string;
   label: string;
   blurb: string;
@@ -86,6 +89,7 @@ const KNOWN_APPS: KnownAppSignature[] = [
     id: 'cursor',
     label: 'Cursor',
     blurb: 'AI-first code editor.',
+    notReadBecause: 'its local token counts are best-effort and often 0 (Cursor staff, forum.cursor.com/t/155984); a team Admin API connector is planned',
     detect: (env) => firstExisting(env, [join(env.home, '.cursor')]),
   },
   {
@@ -130,6 +134,9 @@ export function detectKnownApps(opts: Partial<DetectEnv> = {}): DetectedApp[] {
   };
   return KNOWN_APPS.map((sig) => {
     const evidence = sig.detect(env);
-    return { id: sig.id, label: sig.label, blurb: sig.blurb, present: evidence !== null, evidence };
+    return {
+      id: sig.id, label: sig.label, blurb: sig.blurb, present: evidence !== null, evidence,
+      ...(sig.notReadBecause === undefined ? {} : { notReadBecause: sig.notReadBecause }),
+    };
   });
 }
