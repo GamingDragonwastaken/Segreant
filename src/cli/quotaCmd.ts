@@ -6,6 +6,8 @@
 import { Store } from '../store/db.ts';
 import { dbPath } from '../config.ts';
 import { quotaView, median, type WindowView } from '../quota/view.ts';
+import { statuslineLine } from '../quota/statusline.ts';
+import { readFileSync } from 'node:fs';
 import { detectPlans, planName } from '../plans/detect.ts';
 import { C, color, usd, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
@@ -30,6 +32,29 @@ function windowLabel(w: WindowView): string {
   if (w.windowMinutes === 300) return '5-hour';
   if (w.windowMinutes === 10_080) return 'weekly';
   return w.windowMinutes === null ? 'window' : `${Math.round(w.windowMinutes / 60)}-hour`;
+}
+
+const STATUSLINE_SETUP = `  Add this to ~/.claude/settings.json (or merge it into an existing statusLine):
+
+    "statusLine": { "type": "command", "command": "segreant-statusline" }
+
+  Claude Code then hands Segreant its live usage meter (5-hour and weekly percentages)
+  each time the status line refreshes. Segreant records a reading when it changes and
+  prints one short line. Nothing leaves your machine; segreant quota shows the history.`;
+
+/**
+ * `segreant statusline`: the same lean path as the `segreant-statusline` bin
+ * (src/quota/statusline.ts), reachable through the full CLI for convenience.
+ * The bin is what the setup snippet names, because it starts far faster.
+ */
+export function cmdStatusline(flags: Flags): void {
+  if (flags.setup) {
+    console.log(STATUSLINE_SETUP);
+    return;
+  }
+  let raw = '';
+  try { raw = readFileSync(0, 'utf8').slice(0, 1_000_000); } catch { raw = ''; }
+  process.stdout.write(statuslineLine(dbPath(), raw, Date.now()) + '\n');
 }
 
 export function cmdQuota(flags: Flags): void {
@@ -89,7 +114,24 @@ export function cmdQuota(flags: Flags): void {
   if (c === null) {
     console.log(color(tty, C.gray, '    No Claude Code use or limit messages in the last 35 days.'));
   } else {
-    console.log(color(tty, C.gray, '    Claude Code logs no percentage; it logs a message when a limit is reached. Its live meter is at claude.ai/settings/usage.'));
+    if (view.claudeWindows.length > 0) {
+      for (const w of view.claudeWindows) {
+        const label = (w.kind === 'claude_spend_window' ? 'spend' : windowLabel(w)).padEnd(7);
+        if (w.reset) {
+          console.log(`    ${label} ${color(tty, C.gray, `reset at ${when(w.resetsAtMs!, now)}; no reading since`)}`);
+          continue;
+        }
+        const resets = w.resetsAtMs === null ? '' : ` · resets ${when(w.resetsAtMs, now)} (in ${inFor(w.resetsAtMs, now)})`;
+        const tone = w.usedPercent >= 90 ? C.red : w.usedPercent >= 70 ? C.yellow : C.green;
+        console.log(`    ${label} ${color(tty, tone, `${Math.round(w.usedPercent)}% used`)}${resets}${color(tty, C.gray, ` · read ${when(w.asOfMs, now)} from the status line`)}`);
+        if (w.limitAtMs !== null && w.limitAtMs > now) {
+          console.log(color(tty, C.yellow, `            at this pace you reach the limit ${when(w.limitAtMs, now)} (estimate: the pace since the window opened)`));
+        }
+      }
+    } else {
+      console.log(color(tty, C.gray, '    Claude Code logs no percentage; it logs a message when a limit is reached. For the live percentage, set segreant as'));
+      console.log(color(tty, C.gray, '    your Claude Code status line (segreant statusline --setup shows how), or see claude.ai/settings/usage.'));
+    }
     const parts = [
       `the session limit ${c.sessionHits} time${c.sessionHits === 1 ? '' : 's'}`,
       `the weekly limit ${c.weeklyHits} time${c.weeklyHits === 1 ? '' : 's'}`,

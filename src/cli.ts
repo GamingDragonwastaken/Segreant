@@ -66,6 +66,7 @@ function cmdHelpShort(): void {
     today | week | month  Spend for a window                        (--json)
     plan                  Your plans, what you pay, and the work they did  (set <tool> <usd>)
     quota                 The vendors' usage meters, pace to reset, and Segreant's count  (--json)
+    statusline            Claude Code status line: records its live usage meter (--setup shows how)
     start                 Start the proxy and the local dashboard
     launch -- <command>   Run a tool metered through the proxy while it runs
     budget                Set caps: --daily N --soft N --session N --runaway N
@@ -353,6 +354,9 @@ async function main(): Promise<void> {
     case 'quota':
     case 'limits':
       (await quotaCmd()).cmdQuota(flags);
+      break;
+    case 'statusline':
+      (await quotaCmd()).cmdStatusline(flags);
       break;
     case 'economic':
     case 'economics':

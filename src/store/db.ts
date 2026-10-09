@@ -832,6 +832,15 @@ export class Store {
     return row.c;
   }
 
+  /** The newest reading of one meter, or null. */
+  latestQuotaEvent(source: string, kind: string): QuotaEvent | null {
+    const row = prepared(this.db,
+      `SELECT source, kind, ts_epoch_ms AS tsEpochMs, used_percent AS usedPercent, window_minutes AS windowMinutes,
+              resets_at_ms AS resetsAtMs, detail FROM quota_events WHERE source = ? AND kind = ? ORDER BY ts_epoch_ms DESC LIMIT 1`,
+    ).get(source, kind);
+    return row === undefined ? null : { ...(row as unknown as QuotaEvent) };
+  }
+
   /** Vendor meter events at or after `sinceMs`, oldest first. */
   quotaEvents(sinceMs = 0): QuotaEvent[] {
     return prepared(this.db,

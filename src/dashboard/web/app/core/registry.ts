@@ -136,6 +136,7 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'report', label: 'Period report', plain: 'A summary you can hand to someone.', territory: 'spend', consequence: 'read', coverage: 'partial', command: 'segreant report' },
   { id: 'export', label: 'Export CSV', plain: 'Download the ledger as a spreadsheet.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant export' },
   { id: 'quota', label: 'Quota', plain: "The vendors' usage meters, the pace to their reset, and whether they match what Segreant counted.", territory: 'spend', consequence: 'read', coverage: 'planned', command: 'segreant quota' },
+  { id: 'statusline', label: 'Claude status line', plain: "Records Claude Code's live usage meter from its status line.", territory: 'spend', consequence: 'local', coverage: 'planned', command: 'segreant statusline' },
   { id: 'plan', label: 'Plans', plain: 'Which plan each tool is on, what you pay, and the list-price work it did.', territory: 'spend', consequence: 'local', coverage: 'planned', command: 'segreant plan' },
 
   // ---- Control ------------------------------------------------------------

@@ -53,6 +53,8 @@ export interface ClaudeLimitView {
 export interface QuotaView {
   codex: { windows: WindowView[]; weekly: MeterCheck } | null;
   claude: ClaudeLimitView | null;
+  /** Claude's live meter, when a `segreant statusline` has recorded it. */
+  claudeWindows: WindowView[];
 }
 
 /** A reader for Segreant's own count: list cost of one source in [startMs, endMs). */
@@ -156,9 +158,20 @@ export function quotaView(events: QuotaEvent[], spend: SpendReader, nowMs: numbe
     .map((k) => latest.get(k))
     .filter((e): e is QuotaEvent => e !== undefined)
     .map((e) => windowView(e, nowMs));
+  const claudeLatest = new Map<QuotaKind, QuotaEvent>();
+  for (const e of events) {
+    if (e.kind !== 'claude_five_hour' && e.kind !== 'claude_seven_day' && e.kind !== 'claude_spend_window') continue;
+    const prev = claudeLatest.get(e.kind);
+    if (prev === undefined || e.tsEpochMs >= prev.tsEpochMs) claudeLatest.set(e.kind, e);
+  }
+  const claudeWindows = (['claude_five_hour', 'claude_seven_day', 'claude_spend_window'] as const)
+    .map((k) => claudeLatest.get(k))
+    .filter((e): e is QuotaEvent => e !== undefined)
+    .map((e) => windowView(e, nowMs));
   return {
     codex: windows.length === 0 ? null : { windows, weekly: meterCheck(codexEvents, spend) },
-    claude: claudeLimitView(events, spend, nowMs),
+    claude: claudeLimitView(events.filter((e) => !e.kind.startsWith('claude_') || e.usedPercent === null), spend, nowMs),
+    claudeWindows,
   };
 }
 
