@@ -470,6 +470,45 @@ export interface SegreantConfig {
    * `segreant prune` and the dashboard "clear stored proposals now" button both use it.
    */
   proposalRetentionDays: number;
+  /**
+   * What the person pays per month for each tool's plan, set by them
+   * (`segreant plan set`). Never inferred: the same plan costs different
+   * amounts by channel, tax and billing period. Absent means unknown.
+   */
+  plans: Record<string, PlanPrice>;
+}
+
+export interface PlanPrice {
+  /** US dollars per month, as the person entered it. */
+  monthlyUsd: number;
+  /** The plan the tool reported when the price was set, so a plan change is visible. */
+  plan: string | null;
+  setAt: string;
+}
+
+export const PLAN_SOURCES = ['claude-code', 'codex'] as const;
+
+/** Plan prices are bounded and shaped exactly; anything else stops the load. */
+export function validatePlansConfig(value: unknown): asserts value is Record<string, PlanPrice> {
+  if (!isRecord(value)) throw new ConfigValidationError('plans must be an object of tool -> { monthlyUsd, plan, setAt }');
+  for (const [source, price] of Object.entries(value)) {
+    if (!(PLAN_SOURCES as readonly string[]).includes(source)) {
+      throw new ConfigValidationError(`plans.${source}: unknown tool (expected one of ${PLAN_SOURCES.join(', ')})`);
+    }
+    if (!isRecord(price)) throw new ConfigValidationError(`plans.${source} must be an object`);
+    const usdValue = price.monthlyUsd;
+    if (typeof usdValue !== 'number' || !Number.isFinite(usdValue) || usdValue < 0 || usdValue > 100_000) {
+      throw new ConfigValidationError(`plans.${source}.monthlyUsd must be a number from 0 to 100000`);
+    }
+    if (price.plan !== null && (typeof price.plan !== 'string' || price.plan.length > 40)) {
+      throw new ConfigValidationError(`plans.${source}.plan must be null or a short name`);
+    }
+    if (typeof price.setAt !== 'string' || Number.isNaN(Date.parse(price.setAt))) {
+      throw new ConfigValidationError(`plans.${source}.setAt must be a date`);
+    }
+    const extra = Object.keys(price).filter((k) => !['monthlyUsd', 'plan', 'setAt'].includes(k));
+    if (extra.length > 0) throw new ConfigValidationError(`plans.${source}: unexpected field ${extra[0]}`);
+  }
 }
 
 export const DEFAULT_CONFIG: SegreantConfig = {
@@ -537,6 +576,7 @@ export const DEFAULT_CONFIG: SegreantConfig = {
   retentionDays: 180,
   metadataOnly: false,
   proposalRetentionDays: 30,
+  plans: {},
 };
 
 /**
@@ -723,6 +763,7 @@ export function loadConfig(): SegreantConfig {
   };
   validateBudgetConfig(cfg.budget);
   validateFeaturesConfig(cfg.features);
+  validatePlansConfig(cfg.plans);
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 

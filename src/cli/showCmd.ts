@@ -17,6 +17,7 @@ import { C, color, usd, num, pct, printJson } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { rangeFor, UserInputError, usdFlag, type Flags } from './flags.ts';
 import { retentionNotice } from './retention.ts';
+import { planComparisons, printPlanLines } from './planCmd.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
@@ -76,6 +77,8 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   if (liveCostUsd >= 0.005) {
     console.log(color(tty, C.gray, `              ${usd(liveCostUsd)} metered through the proxy: list price; your provider's bill may differ`));
   }
+  // A plan price is monthly, so only the 30-day window sets the two side by side.
+  if (window === 'month' && !isDemo()) printPlanLines(tty, planComparisons(store, startMs, endMs));
   console.log(`  Input       ${num(summary.inputTokens)} tokens`);
   console.log(`  Output      ${num(summary.outputTokens)} tokens`);
 

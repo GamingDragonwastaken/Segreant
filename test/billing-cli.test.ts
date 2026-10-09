@@ -80,7 +80,8 @@ test('billing scope is an explicit local declaration and changes only on --apply
     assert.equal(previewPayload.preview.trust, 'operator_declared_unverified');
     assert.equal(previewPayload.preview.upstreamDisplay, 'https://api.openai.com');
 
-    const before = await runCli(['billing', 'scope', 'status', '--json'], db);
+    const before = await runCli(['billing', 'scope', 'status', '--json'], db, join(dir, 'home'));
+    assert.equal(before.code, 0, before.stderr);
     assert.equal((JSON.parse(before.stdout) as { active: unknown }).active, null);
 
     const apply = await runCli(['billing', 'scope', 'set', '--account-ref', 'finops-test', '--project-ref', 'proj_local', '--apply', '--json'], db, join(dir, 'home'));
@@ -90,7 +91,7 @@ test('billing scope is an explicit local declaration and changes only on --apply
     assert.equal(appliedPayload.declaration.trust, 'operator_declared_unverified');
     assert.equal(appliedPayload.declaration.billingAccountRef, 'finops-test');
 
-    const clear = await runCli(['billing', 'scope', 'clear', '--apply', '--json'], db);
+    const clear = await runCli(['billing', 'scope', 'clear', '--apply', '--json'], db, join(dir, 'home'));
     assert.equal(clear.code, 0, clear.stderr);
     assert.equal((JSON.parse(clear.stdout) as { cleared: boolean }).cleared, true);
   } finally {
