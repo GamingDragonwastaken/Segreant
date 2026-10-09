@@ -55,6 +55,16 @@ figure, and each stays on the machine under the Segreant home:
 Everything above is local. Only the declared egress paths below leave the
 Segreant process, and none of them carries these columns.
 
+The 0.2.0 readers add local reads only; none of them opens an outbound connection. `import` and `scan` read
+the session logs that Claude Code, Codex, opencode and Antigravity write on this
+machine. They keep token counts, model names, working directories (stored as
+`requests.cwd`) and the vendors' own rate-limit readings (`quota_events`; the
+`detail` column holds at most 120 characters of the vendor's limit message). `plan`
+reads only the `oauthAccount` plan fields of `~/.claude.json` and the `plan_type` of
+the newest Codex session log. It never opens Claude Code's credentials file. A plan
+price exists only when the operator sets it. `segreant-statusline` reads the JSON
+that Claude Code passes on standard input and makes no network request.
+
 When an operator explicitly runs `segreant billing import --file ... --apply`,
 Segreant also stores an immutable, provider-declared billing-evidence ledger. V1
 accepts only a strict local OpenAI evidence JSON contract. It retains the file
