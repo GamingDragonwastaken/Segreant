@@ -33,6 +33,7 @@ const capitalCmd = () => import('./cli/capitalCmd.ts');
 const opsCmd = () => import('./cli/opsCmd.ts');
 const showCmd = () => import('./cli/showCmd.ts');
 const planCmd = () => import('./cli/planCmd.ts');
+const homeCmd = () => import('./cli/homeCmd.ts');
 const quotaCmd = () => import('./cli/quotaCmd.ts');
 const runCmd = () => import('./cli/runCmd.ts');
 const launchCmd = () => import('./cli/launchCmd.ts');
@@ -300,9 +301,10 @@ function cmdHelp(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Bare `segreant` opens the guide, not the reference: the tool's first job
-  // is to tell you where you are and the single next step. `help` is one word away.
-  const cmd = argv[0] ?? 'guide';
+  // Bare `segreant` opens the home view, not the reference: what was spent this
+  // month, what stayed in the code, and the next step (or, on a new machine, the
+  // one command that reads the logs). `guide` keeps the full checklist.
+  const cmd = argv[0] ?? 'home';
   // `exec` wraps another command: everything after the bare `--` belongs to the
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
@@ -400,6 +402,9 @@ async function main(): Promise<void> {
       break;
     case 'export':
       (await showCmd()).cmdExport(flags);
+      break;
+    case 'home':
+      (await homeCmd()).cmdHome(flags);
       break;
     case 'guide':
     case 'next':
