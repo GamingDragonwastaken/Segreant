@@ -43,6 +43,7 @@ import {
   commitObservationsInLine,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { codexRateLimitEvents, type QuotaEvent } from '../quota/limits.ts';
 
 /** Codex home: ~/.codex (override with CODEX_HOME). null = not installed. */
 export function defaultCodexRoot(): string | null {
@@ -120,6 +121,8 @@ export interface CodexParseOptions {
   onTruncatedRow?: () => void;
   /** A commit git reported creating in this rollout's own turns (never a fork's replayed history). */
   onCommit?: (c: { sessionId: string; branch: string; shortSha: string; subject: string; tsEpochMs: number; cwd: string | null }) => void;
+  /** The vendor's rate-limit meter, each time its percentage or reset changes within this file. */
+  onRateLimit?: (e: QuotaEvent) => void;
   maxRows?: number;
 }
 
@@ -147,6 +150,7 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
   const maxRows = options.maxRows ?? RESOURCE_LIMITS.importRows;
 
   const projFromCwd = (cwd: string) => projectKeyWithBasis(cwd, 'codex');
+  const lastMeter = new Map<string, string>();
 
   for await (const line of rl) {
     if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
@@ -191,6 +195,17 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         ({ project, basis: attributionBasis } = projFromCwd(p.cwd));
       }
       continue;
+    }
+    if (o.type === 'event_msg' && p.type === 'token_count' && options.onRateLimit && p.rate_limits !== undefined) {
+      const ts = Date.parse(o.timestamp ?? '');
+      if (Number.isFinite(ts)) {
+        for (const e of codexRateLimitEvents(p.rate_limits, ts)) {
+          const key = JSON.stringify([e.usedPercent, e.resetsAtMs]);
+          if (lastMeter.get(e.kind) === key) continue;
+          lastMeter.set(e.kind, key);
+          options.onRateLimit(e);
+        }
+      }
     }
     if (o.type === 'event_msg' && p.type === 'token_count') {
       const info = p.info as { total_token_usage?: Record<string, number>; last_token_usage?: Record<string, number> } | undefined;
@@ -290,6 +305,9 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
         onTruncatedRow: () => markImportTruncated(summary, 'rows'),
         onCommit: (c) => {
           if (c.tsEpochMs >= sinceMs) store.recordObservedCommit({ source, ...c });
+        },
+        onRateLimit: (e) => {
+          if (e.tsEpochMs >= sinceMs) store.recordQuotaEvent(e);
         },
         onRow: async (ev) => {
           if (ev.tsEpochMs < sinceMs) return;
