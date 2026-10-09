@@ -48,6 +48,9 @@ export interface ImportFileCursor {
 }
 
 /** A commit an agent session reported making, as read from its log. */
+export type { QuotaEvent } from '../quota/limits.ts';
+import type { QuotaEvent } from '../quota/limits.ts';
+
 export interface ObservedCommit {
   source: string;
   sessionId: string;
@@ -809,6 +812,32 @@ export class Store {
        ON CONFLICT(source, session_id, short_sha) DO NOTHING`,
     ).run(o.source, o.sessionId, o.shortSha, o.branch, o.subject, Math.trunc(o.tsEpochMs), o.cwd);
     this.activeBatch?.tick();
+  }
+
+  /** Record what a vendor's meter said at an instant. The first record of an instant stands. */
+  recordQuotaEvent(e: QuotaEvent): void {
+    prepared(this.db,
+      `INSERT INTO quota_events (source, kind, ts_epoch_ms, used_percent, window_minutes, resets_at_ms, detail)
+       VALUES (?,?,?,?,?,?,?) ON CONFLICT(source, kind, ts_epoch_ms) DO NOTHING`,
+    ).run(e.source, e.kind, Math.trunc(e.tsEpochMs), e.usedPercent, e.windowMinutes,
+      e.resetsAtMs === null ? null : Math.trunc(e.resetsAtMs), e.detail);
+    this.activeBatch?.tick();
+  }
+
+  /** List cost the ledger holds for one source (tool) in [startMs, endMs). */
+  sourceCostBetween(source: string, startMs: number, endMs: number): number {
+    const row = prepared(this.db,
+      'SELECT COALESCE(SUM(cost_usd),0) AS c FROM requests WHERE source = ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?',
+    ).get(source, Math.trunc(startMs), Math.trunc(endMs)) as { c: number };
+    return row.c;
+  }
+
+  /** Vendor meter events at or after `sinceMs`, oldest first. */
+  quotaEvents(sinceMs = 0): QuotaEvent[] {
+    return prepared(this.db,
+      `SELECT source, kind, ts_epoch_ms AS tsEpochMs, used_percent AS usedPercent, window_minutes AS windowMinutes,
+              resets_at_ms AS resetsAtMs, detail FROM quota_events WHERE ts_epoch_ms >= ? ORDER BY ts_epoch_ms`,
+    ).all(sinceMs).map((row) => ({ ...(row as unknown as QuotaEvent) }));
   }
 
   /** Every commit observation on record (one row per session and sha). */
