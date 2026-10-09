@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClaimLayers, type ClaimInputs } from '../src/dashboard/web/app/core/claimLayers.ts';
+import { buildClaimLayers, chainIsSampleData, type ClaimInputs } from '../src/dashboard/web/app/core/claimLayers.ts';
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload, ReconciliationRunRecord } from '../src/dashboard/web/app/core/api.ts';
 
 /** No prune on record: this fixture's ledger has never been pruned, which is the
@@ -278,4 +278,12 @@ test('a payload that answers without stating its support reads as unknown, and d
   // And the prose still renders, from the fields that ARE present.
   assert.match(layers[1]!.basis, /9 provider records held/);
   assert.equal(layers[0]!.inspection.coverage, '100% of spend priced from a matched rate card, not estimated');
+});
+
+test('the spine is labelled sample data when any payload behind it is seeded', () => {
+  assert.equal(chainIsSampleData(NOTHING), false, 'nothing loaded says nothing');
+  assert.equal(chainIsSampleData({ ...NOTHING, overview: anOverview(5, 10) }), false);
+  assert.equal(chainIsSampleData({ ...NOTHING, overview: { ...anOverview(5, 10), demo: true } }), true);
+  assert.equal(chainIsSampleData({ ...NOTHING, value: { demo: true } as unknown as ValuePayload }), true,
+    'one seeded payload is enough: the spine mixes all four');
 });

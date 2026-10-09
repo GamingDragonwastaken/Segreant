@@ -14,7 +14,7 @@
 import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from './core/dom.ts';
 import { signal, effect, computed, onCleanup } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
-import { loadChain } from './core/chain.ts';
+import { loadChainState } from './core/chain.ts';
 import { spine, type LayerId } from './components/spine.ts';
 import { mountDrawer } from './components/drawer.ts';
 import { mountClaimInspector, openClaimInspector } from './components/claimInspector.ts';
@@ -54,6 +54,7 @@ const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'da
 
 const current = signal<Territory>(readRoute());
 const chain = signal<Layer[] | null>(null);
+const sampleData = signal(false);
 
 /**
  * Whether the operator has chosen a register at all — NOT which one they chose.
@@ -127,6 +128,15 @@ function topbar(): Node {
         h('span', { class: 'brand-name', text: 'Segreant' }),
         h('span', { class: 'brand-tag', text: 'AI Financial Ops' }))),
 
+    () => (sampleData()
+      ? h('span', {
+          class: 'pill pill-demo topbar-demo',
+          role: 'status',
+          title: 'Sample data. None of this was measured from your machine.',
+          text: 'sample data',
+        })
+      : null),
+
     h('nav', { class: 'ops', 'aria-label': 'Operations' },
       ...OPERATIONS.map((op) => h('button', {
         class: 'op',
@@ -177,7 +187,10 @@ function boot(): void {
   // wording register, and re-reading them on a plain/precise click re-issued
   // every endpoint behind the spine — including `/api/value`, which correlates
   // against the repository and is the slowest read this product has.
-  void loadChain('30d').then((layers) => chain.set(layers)).catch(() => chain.set(null));
+  void loadChainState('30d').then((s) => {
+    chain.set(s.layers);
+    sampleData.set(s.demo);
+  }).catch(() => chain.set(null));
 
   effect(() => {
     // `registerChosen()`, never `register()`. Reading the register itself made

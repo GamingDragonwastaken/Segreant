@@ -44,6 +44,16 @@ export interface ClaimInputs {
 const iso = (ms: number | null | undefined): string =>
   typeof ms === 'number' ? new Date(ms).toISOString() : 'not established';
 
+/**
+ * Whether any payload behind the spine is seeded sample data. The spine shows
+ * four money figures before any view's own demo banner; on a phone that banner
+ * sat a full screen below them, so sample dollars filled the first screen with
+ * nothing saying they were samples. A payload that failed to load says nothing.
+ */
+export function chainIsSampleData(input: ClaimInputs): boolean {
+  return Object.values(input).some((p) => (p as { demo?: unknown } | null)?.demo === true);
+}
+
 export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const { overview: o, billing: b, allocation: a, value: v } = input;
 
