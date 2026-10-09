@@ -16,10 +16,16 @@
  */
 
 import { api } from './api.ts';
-import { buildClaimLayers } from './claimLayers.ts';
+import { buildClaimLayers, chainIsSampleData } from './claimLayers.ts';
 import type { Layer } from './claimTypes.ts';
 
-export async function loadChain(range: string): Promise<Layer[]> {
+export interface ChainState {
+  layers: Layer[];
+  /** True when any payload behind the spine says it is seeded sample data. */
+  demo: boolean;
+}
+
+export async function loadChainState(range: string): Promise<ChainState> {
   const [overview, billing, allocation, value] = await Promise.allSettled([
     api.overview(range),
     api.billing(),
@@ -28,11 +34,19 @@ export async function loadChain(range: string): Promise<Layer[]> {
   ]);
 
   const ok = <T,>(r: PromiseSettledResult<T>): T | null => (r.status === 'fulfilled' ? r.value : null);
-
-  return buildClaimLayers({
+  const inputs = {
     overview: ok(overview),
     billing: ok(billing),
     allocation: ok(allocation),
     value: ok(value),
-  }, range);
+  };
+
+  return {
+    layers: buildClaimLayers(inputs, range),
+    demo: chainIsSampleData(inputs),
+  };
+}
+
+export async function loadChain(range: string): Promise<Layer[]> {
+  return (await loadChainState(range)).layers;
 }
