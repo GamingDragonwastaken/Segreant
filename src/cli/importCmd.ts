@@ -21,6 +21,7 @@ import { importAntigravity, defaultAntigravityRoot } from '../connect/antigravit
 import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
+import { askPlanPrices } from './planCmd.ts';
 
 /**
  * Live import: poll the source(s) on an interval and fold in new traffic as it
@@ -635,6 +636,11 @@ export async function cmdScan(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  The full picture for one project: segreant realize --repo <path> · value against your time: segreant roi'));
     console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: segreant today · month · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
+    console.log('');
+    if (await askPlanPrices(tty) > 0) console.log(color(tty, C.gray, '  Saved. segreant month now shows each plan beside the work it did.'));
+    if (present.some((t) => t.id === 'claude-code')) {
+      console.log(color(tty, C.gray, '  Claude\'s live usage meter: segreant statusline --setup shows the one line to add to Claude Code.'));
+    }
     console.log('');
   }
 

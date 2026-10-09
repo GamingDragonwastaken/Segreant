@@ -11,6 +11,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **`scan --setup` asks what you pay.**
+  - At the end, in an interactive terminal, it asks the monthly price of each plan your tools report and you have not priced. The public price is shown as a hint, and Enter skips.
+  - Scripts, pipes and `--json` are never asked.
+  - It also points Claude Code users to `segreant statusline --setup` for the live usage meter.
+
 - **Google Antigravity is metered from its own logs.** `segreant import
   antigravity` (also part of `import all` and `scan --setup`) reads the
   conversation databases the IDE and the `agy` CLI keep under `~/.gemini`.
