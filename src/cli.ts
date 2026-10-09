@@ -33,6 +33,7 @@ const capitalCmd = () => import('./cli/capitalCmd.ts');
 const opsCmd = () => import('./cli/opsCmd.ts');
 const showCmd = () => import('./cli/showCmd.ts');
 const planCmd = () => import('./cli/planCmd.ts');
+const quotaCmd = () => import('./cli/quotaCmd.ts');
 const runCmd = () => import('./cli/runCmd.ts');
 const launchCmd = () => import('./cli/launchCmd.ts');
 const backupCmd = () => import('./cli/backupCmd.ts');
@@ -64,6 +65,7 @@ function cmdHelpShort(): void {
   Every day
     today | week | month  Spend for a window                        (--json)
     plan                  Your plans, what you pay, and the work they did  (set <tool> <usd>)
+    quota                 The vendors' usage meters, pace to reset, and Segreant's count  (--json)
     start                 Start the proxy and the local dashboard
     launch -- <command>   Run a tool metered through the proxy while it runs
     budget                Set caps: --daily N --soft N --session N --runaway N
@@ -109,6 +111,7 @@ function cmdHelp(): void {
                           policy-relative fairness; no chargeback or action.
     today | week | month  Show spend for a window      (--json)
     plan                  Plans, prices you set, and the list-price work they did
+    quota                 Vendor usage meters and the pace to their reset
     economic              Inspect exact economic events, roles, bases, and legacy coverage
                           (--days N | --all, --target-currency UNIT, --as-of <ISO>,
                           --effective-at <ISO>, --json). Period controls use canonical
@@ -346,6 +349,10 @@ async function main(): Promise<void> {
     case 'plan':
     case 'plans':
       (await planCmd()).cmdPlan(flags);
+      break;
+    case 'quota':
+    case 'limits':
+      (await quotaCmd()).cmdQuota(flags);
       break;
     case 'economic':
     case 'economics':

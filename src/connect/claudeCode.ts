@@ -44,6 +44,7 @@ import {
   commitObservationsInLine,
 } from './importShared.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { claudeLimitEvent } from '../quota/limits.ts';
 
 export type { ImportSummary, ImportOptions } from './importShared.ts';
 
@@ -202,6 +203,11 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         continue;
       }
       recordCommitsIn(line);
+      if (line.includes('"isApiErrorMessage":true')) {
+        const ts = Date.parse(/"timestamp":"([^"]+)"/.exec(line)?.[1] ?? '');
+        const limit = Number.isFinite(ts) && ts >= sinceMs ? claudeLimitEvent(line, ts) : null;
+        if (limit !== null) store.recordQuotaEvent(limit);
+      }
       const ev = parseTranscriptLine(line);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
       if (seenInFile.has(ev.requestId)) continue;

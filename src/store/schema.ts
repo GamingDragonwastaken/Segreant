@@ -262,6 +262,21 @@ CREATE TABLE IF NOT EXISTS observed_commits (
 );
 CREATE INDEX IF NOT EXISTS idx_observed_commits_sha ON observed_commits(short_sha);
 
+-- The vendors' own usage meters, as their tools log them (src/quota/limits.ts):
+-- Codex's rate-limit percentages when they change, Claude's limit messages.
+-- Evidence of what the vendor said, kept apart from Segreant's own count.
+CREATE TABLE IF NOT EXISTS quota_events (
+  source         TEXT NOT NULL,
+  kind           TEXT NOT NULL,
+  ts_epoch_ms    INTEGER NOT NULL,
+  used_percent   REAL,
+  window_minutes INTEGER,
+  resets_at_ms   INTEGER,
+  detail         TEXT,
+  PRIMARY KEY (source, kind, ts_epoch_ms)
+);
+CREATE INDEX IF NOT EXISTS idx_quota_events_ts ON quota_events(ts_epoch_ms);
+
 -- What retention deleted, so an absence can be told from a deletion.
 --
 -- prune used to run one DELETE, print a count, and leave nothing behind. A
