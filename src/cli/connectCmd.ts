@@ -278,10 +278,11 @@ function connectOpencode(cfg: SegreantConfig, flags: Flags, tty: boolean): void 
 }
 
 /**
- * Antigravity's BUILT-IN Gemini agent routes through Google's own servers — a
- * managed backend no cooperative proxy can meter (same class as opencode Zen).
- * But Antigravity supports CUSTOM OpenAI-compatible providers (base URL + key),
- * and those we meter fully: provider → proxy → the upstream of your choice.
+ * Antigravity's BUILT-IN agent routes through Google's own servers, which no
+ * cooperative proxy sits in front of; its usage is read instead from the
+ * conversation databases Antigravity keeps locally (`segreant import
+ * antigravity`, src/connect/antigravity.ts). Its CUSTOM OpenAI-compatible
+ * providers can also be routed through the proxy: provider → proxy → upstream.
  * `--write` points the proxy's OpenAI upstream at Gemini's OpenAI-compatible
  * endpoint, the free-tier test path; the user's key passes through untouched.
  */
@@ -299,8 +300,10 @@ function connectAntigravity(cfg: SegreantConfig, flags: Flags, tty: boolean): vo
   console.log('');
   console.log(color(tty, C.bold, '  Connect Google Antigravity as a source'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(52)));
-  console.log(color(tty, C.gray, '  Antigravity’s built-in Gemini agent runs on Google’s servers — unmeterable'));
-  console.log(color(tty, C.gray, '  by any cooperative proxy. Its CUSTOM providers, however, meter fully:'));
+  console.log(color(tty, C.gray, '  Antigravity’s built-in agent runs on Google’s servers, so no proxy sits in front'));
+  console.log(color(tty, C.gray, '  of it. Its usage is read from the logs it keeps on this machine instead:'));
+  console.log(color(tty, C.green, '       segreant import antigravity'));
+  console.log(color(tty, C.gray, '  Custom providers can also go through the proxy, live:'));
   console.log('');
   console.log(`  1) ${color(tty, C.bold, 'Choose the upstream')} the proxy forwards to. For the Gemini free tier:`);
   console.log(color(tty, C.green, '       segreant connect antigravity --write'));

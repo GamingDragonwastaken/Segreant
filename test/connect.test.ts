@@ -168,7 +168,10 @@ test('connect antigravity --write points the OpenAI upstream at the Gemini endpo
   assert.equal(out.code, 0);
   // The recipe names the two facts that matter: proxy base URL + honest scope note.
   assert.match(out.stdout, /localhost:8090\/v1/);
-  assert.match(out.stdout, /built-in Gemini agent/);
+  // The built-in agent is read from Antigravity's own logs, and the recipe says how.
+  assert.match(out.stdout, /built-in agent/);
+  assert.match(out.stdout, /segreant import antigravity/);
+  assert.doesNotMatch(out.stdout, /unmeterable/);
   // And the config actually changed — the proxy now fronts Gemini's OpenAI-compatible API.
   const cfg = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')) as { upstreams: { openai: string } };
   assert.equal(cfg.upstreams.openai, 'https://generativelanguage.googleapis.com/v1beta/openai');
