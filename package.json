@@ -8,6 +8,7 @@
   },
   "bin": {
     "segreant": "bin/segreant.mjs",
+    "segreant-statusline": "bin/segreant-statusline.mjs",
     "segreantpack-verify": "standalone/segreantpack-verifier.mjs"
   },
   "exports": {

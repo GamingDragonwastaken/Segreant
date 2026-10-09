@@ -117,7 +117,7 @@ export function boundedJsonlFiles(root: string): { files: string[]; truncated: b
  * The version of what the importers read from a log file. A file read in full
  * by an older reader is read once more: version 2 added commit observations.
  */
-export const IMPORT_READER_VERSION = 2;
+export const IMPORT_READER_VERSION = 3;
 
 /** A commit git reported creating, found in a line of an agent's log. */
 export interface CommitObservationText {
