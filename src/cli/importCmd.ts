@@ -484,7 +484,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     if (otherPresent.length > 0) {
       console.log(color(tty, C.bold, '  Other AI tools detected (not yet natively supported)'));
       for (const a of otherPresent) {
-        console.log(`  ${color(tty, C.gray, '·')} ${a.label.padEnd(16)} ${color(tty, C.gray, a.evidence ?? '')}`);
+        console.log(`  ${color(tty, C.gray, '·')} ${a.label.padEnd(16)} ${color(tty, C.gray, a.notReadBecause ? `not read: ${a.notReadBecause}` : a.evidence ?? '')}`);
       }
       console.log(color(tty, C.gray, '    We see these exist, but don\'t read their usage data yet — spend from them isn\'t counted above.'));
       console.log('');
