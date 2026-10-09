@@ -11,6 +11,16 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **`segreant plan`: your plan, what you pay, and the work it did.**
+  Segreant reads which plan each tool runs on from the tool's own files:
+  Claude's `organizationType` in `~/.claude.json`, and ChatGPT's `plan_type` in
+  the newest Codex log. It never reads a credentials file. The price is only
+  what you enter (`segreant plan set claude-code 20`), because App Store
+  billing, tax and annual plans change it; public prices are offered as a
+  hint, with their date. `month` then shows, for example, "Your $20.00/month
+  Claude Pro plan did $1789.24 of list-price work in the last 30 days, 89.5×
+  its price", naming both bases.
+
 - **`scan --setup` shows the month first, then what stayed in the code.** It
   reads the logs of the last 30 days, prints that period's list cost, then
   reads older history. The value pass then shares one two-minute deadline
