@@ -60,6 +60,45 @@ export function printPlanLines(tty: boolean, rows: PlanComparison[]): void {
   }
 }
 
+/**
+ * Ask once, at the end of `scan --setup`, what the person pays for each plan a
+ * tool reports and no price is set for. Interactive terminals only: a script,
+ * a pipe or --json never waits. Enter skips; an answer is saved through the
+ * same validated path as `segreant plan set`. Returns how many were saved.
+ */
+export async function askPlanPrices(
+  tty: boolean,
+  io: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream; interactive: boolean } = {
+    input: process.stdin, output: process.stdout, interactive: process.stdin.isTTY === true,
+  },
+): Promise<number> {
+  if (!io.interactive) return 0;
+  const cfg = loadConfig();
+  const pending = detectPlans().filter((p) => p.plan !== null && cfg.plans[p.source] === undefined);
+  if (pending.length === 0) return 0;
+  const { createInterface } = await import('node:readline/promises');
+  const rl = createInterface({ input: io.input, output: io.output, terminal: false });
+  let saved = 0;
+  try {
+    io.output.write(color(tty, C.bold, '  What do you pay for your plans?') + color(tty, C.gray, '   so Segreant can set the plan price beside the list-price work (Enter skips)') + '\n');
+    for (const p of pending) {
+      const hint = suggestedPrice(p);
+      const answer = (await rl.question(`    ${planName(p)}, dollars per month${hint !== null ? ` (public price ${hint})` : ''}: `)).trim().replace(/^\$/, '');
+      if (answer === '') continue;
+      const monthlyUsd = Number(answer);
+      if (!Number.isFinite(monthlyUsd) || monthlyUsd < 0 || monthlyUsd > 100_000) {
+        io.output.write(color(tty, C.yellow, `      Not a dollar amount; skipped. Set it later: segreant plan set ${p.source} <dollars>`) + '\n');
+        continue;
+      }
+      mutateConfig((c) => ({ ...c, plans: { ...c.plans, [p.source]: { monthlyUsd, plan: p.plan, setAt: new Date().toISOString() } } }));
+      saved += 1;
+    }
+  } finally {
+    rl.close();
+  }
+  return saved;
+}
+
 export function cmdPlan(flags: Flags): void {
   const [action, tool, amount] = flags._.map(String);
   if (action === 'set' || action === 'clear') {
