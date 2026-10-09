@@ -75,7 +75,52 @@ the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
 
-### Current local candidate record — source commit `12add59`, 2026-08-29
+### Current local candidate record — commit `81ffa49`, 0.2.0, 2026-10-09
+
+This record supersedes the `12add59` record below without rewriting it. It is
+the first record since the package was renamed and published. **0.1.0 was
+published to npm on 2026-10-08 (from `dbe0f18`) with no gate record.** That gap
+is why 0.2.0 gets the full checklist on its exact commit.
+
+The exact candidate is `81ffa496ba8060caa00a781edd33ba74b8d467d3`, the merge of
+#63 on `main`. The first candidate, `698c027` (the merge of #62, version and
+changelog), passed every row below. Its visual check then found that sample
+dollar figures filled a phone's first screen while the demo label sat 1,039 px
+lower. #63 fixed that, and the whole checklist was re-run on `81ffa49`. The
+`698c027` → `81ffa49` delta is 5 files, +54/−8, all in the dashboard shell and
+its test. Every row was run in a fresh detached worktree at the candidate, with
+an isolated `SEGREANT_HOME`. The tree was clean (0 lines of `git status --short`)
+before and after.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `81ffa496ba8060caa00a781edd33ba74b8d467d3` before and after; `git status --short` empty both times. `git ls-remote origin refs/heads/main` returns the same SHA. |
+| Capability/evidence contract | **Pass.** The capability contract (last revised at `2448885`, 2026-09-27) was reviewed against the 0.2.0 surfaces it does not yet name. Plan prices are operator-set only, and the dated public prices are offered as a suggestion when asking, never used as a figure. Quota shows the vendors' own meters; its pace projection is labelled an estimate, and the meter check carries its band. Kept / Not kept / Unknown / Maturing answers keep the Realization gates. Antigravity rows are list-priced from the dated rate card. No new figure is promoted to billed, allocated, or causal. `test/public-claims-contract.test.ts` together with the four causal suites → **156 pass, 0 fail**. |
+| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 8 packages, 0 vulnerabilities. `team-server` `npm ci --ignore-scripts` → 20 packages, 0 vulnerabilities. Root, browser-app and team-server typechecks exit 0. `npm run build` exit 0. `npm test` → **2332 tests, 2328 pass, 0 fail, 0 cancelled, 4 intentional platform skips**. `team-server` `npm test` → **131 pass, 0 fail**. The same totals less the one test #63 added (2331/2327) held on `698c027`. |
+| Budget fail-closed integrity | **Pass.** On the candidate source: `test/budget-fail-closed.test.ts` (ledger-read failure refused before upstream dial; an unpersisted request opens the accounting circuit), `test/config-budget-fail-closed.test.ts` and `test/dashboard-settings.test.ts` (malformed and oversized settings rejected before persistence), and `test/budget-control-lock.test.ts`. All pass inside the full suite and again in a separate run (18 + 55 tests across the gate files, 0 fail). |
+| Packed artifact | **Pass.** `npm pack --ignore-scripts` → `segreant-0.2.0.tgz`, **314 entries, 1,276,599 bytes**, SHA-256 `56e3461d89220df1f680c34b153fbe46af6ec2df0071b8d5359633001b963eae`. Present: both launchers (`bin/segreant.mjs`, `bin/segreant-statusline.mjs`), `dist/cli.js`, the 0.2.0 modules (`connect/antigravity`, `quota/statusline`, `plans/detect`, `cli/homeCmd`), `pricing/models.json`, and the browser app including `core/chain.js`. No `.codex`, private, or research-only `causalExperiment` path. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory (1 package, 0 vulnerabilities); the package reports `0.2.0`. `segreant --help` prints the usage. `segreant-statusline` with no ledger printed `5h 12%` from a stdin reading and created no file. `demo --json` exit 0. Bare `segreant` printed the home view, `plan` printed the detected plans with "price not set", and `quota` printed the vendors' meters. |
+| Packaged dashboard/API | **Pass.** `start --demo --port 18640 --dashboard-port 18641` from the installed package returned HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing` (each API payload self-labelled `demo: true`), `/` (carries `id="app"`), `/classic`, and `/app/main.js` (`text/javascript`). The process was stopped and the port closed afterwards. |
+| Model-trial truthfulness | **Pass.** The packaged `/api/value` is `demo: true`, carries one model switch, labelled `trial`, and no switch labelled `observational_separation`. `/classic` carries the labelled demo renderer (4 `demobar` hits). `/` is proven separately by `id="app"` and its entry resolving as JavaScript. |
+| Causal-evidence integrity | **Pass for the local boundary, not a causal result.** Causal core/store/CLI/dashboard suites pass (inside the 156 above). The installed `causal status --json` reports `"studies": []` and no causal result. Nothing in 0.2.0 touches the causal substrate. |
+| Billing-boundary truthfulness | **Pass.** Installed `billing scope set --account-ref gate_ref_020 --json` → `"applied": false`, `"trust": "operator_declared_unverified"`, `"reconciliationStatus": "not_reconciled"`. Packaged `/api/billing` is demo-labelled. |
+| Direct-Costs connector boundary | **Pass for preview only**, by the suite's preview tests (`networkAttempted: false`, `credentialRead: false`). No provider account, credential, or amount was touched. |
+| Egress disclosure | **Pass for the local process boundary.** 0.2.0 adds local readers (Claude Code, Codex, opencode and Antigravity logs; plan fields of `~/.claude.json`; status-line stdin) and no outbound path. `src/plans`, `src/quota`, `src/connect/antigravity.ts` and `src/connect/protobuf.ts` contain no `fetch` or `http(s).request`. DATA-BOUNDARIES.md now states these reads. `test/egress-boundary.test.ts` passes. The scope stays Segreant-process transport, not a machine-wide firewall. |
+| Launcher/publication integrity | **Pass.** `test/build-race.test.ts` and `test/publication-lock-race.test.ts` pass. The new `segreant-statusline` launcher is a lean path that never opens or creates the ledger when it is absent (`test/statusline.test.ts`). The unmanaged `dist/*` and `npm pack` boundary is unchanged. |
+| Backup and recovery integrity | **Pass.** The installed CLI: `backup --out` → `ok: true`, `integrity: ok`, manifest present. `restore` preview → `applied: false` and no file written. `--apply` into a new path → `ok: true`, `integrity: ok`. A second `--apply` onto the now-existing path is refused (exit 1). `test/backup-restore.test.ts` passes. |
+| Reliability/performance observations | **Recorded as measurement, not an SLA.** `npm run benchmark` (`sourceRevision 81ffa49`, isolated home, no network, no credential; Node v24.18.0, win32/x64, 12 CPUs, 32 GiB) at 100/1,000/10,000 rows × 3 samples and 100,000 rows × 1 (`--stress`). Medians: ingest 22.9/122.9/1,273.7/15,094.5 ms; overview assembly 6.3/12.1/99.1/1,449.3 ms; frontier 0.8/2.7/22.4/404.9 ms; API overview p95 7.9/16.4/110.6/1,503.2 ms; RSS delta 1.2/1.3/50.9/218.4 MiB; compiled dist 3,920,627 bytes. **Open:** ingest is about 2.1× the `12add59` record at 10× rows (1,274 against 605 ms) and 2.2× at 100× rows, while overview and API latency improved. The cause has not been isolated. The first suspects are the 0.2.0 per-row quota and scope-evidence work and the load on this machine; the next step is a profiled ingest at the 10× scale. |
+| Redacted diagnostics | **Pass.** Installed `diagnostics --json` exit 0 with zero absolute-user-path hits. `--out <new-file>` exit 0, and a second export to the same path is refused (exit 1). `test/diagnostics.test.ts` passes. |
+| Intended CI | **Pass.** The push of `81ffa49` to `main` ran CI [37957923911](https://github.com/GamingDragonwastaken/Segreant/actions/runs/37957923911) → **success**. `test` passed on ubuntu, macos and windows; `team-server-test` passed on all three; `team-server-postgres`, `browser-accessibility`, `package-smoke` and `security` passed; `candidate-head` was skipped by design on a push. PR #63's checks passed 11/11 before the merge. The first candidate's own run, 37956026338 on `698c027`, also succeeded. A later commit that changes only this document does not need its own run. |
+| Visual check | **Pass for the inspected surfaces.** The installed dashboard was opened in the desktop app's built-in browser at 1366×768 and 375×812. The **SAMPLE DATA** pill sits in the sticky top bar (top 16–22 px) at both widths, with `role="status"`, above four claims that read demo figures. The spine and the per-view demo banner render. `scrollWidth` equals the viewport at 375 px. Keyboard Tab order runs skip link → brand → first operation, with a visible 1.6 px solid focus outline. CI `browser-accessibility` passed on this commit. **Not covered here:** the dashboard has no light theme (it ignores `prefers-color-scheme: light`; that is the open dashboard item), a screen-reader pass, and a contrast measurement beyond CI's automated check. |
+
+**What this candidate establishes.** 0.2.0 is a clean, locally verified build
+of the first-run value answer: newest-first import, the month view, Kept and
+Not-kept commits measured from git, plan and quota views, the Claude status
+line, and the Antigravity reader. The package and the installed CLI were
+exercised. CI passed on all three operating systems. Publishing to npm, tagging,
+and a GitHub release are the owner's steps and are not recorded here.
+
+### Superseded record — source commit `12add59`, 2026-08-29
 
 This record supersedes the `a5d1121` record above without rewriting it. The
 exact candidate head is
