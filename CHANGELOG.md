@@ -1,15 +1,15 @@
 # Changelog
 
-Segreant is pre-1.0. This repository carries no tag and no GitHub release, so
-everything below is unreleased. This file records user-visible changes from the
-point at which release discipline was formalized; Git history remains the
-authoritative record for earlier development. The verification procedure in
+Segreant is pre-1.0. 0.1.0 is published on npm (2026-10-08); the repository
+carries no tag and no GitHub release yet. This file records user-visible changes
+from the point at which release discipline was formalized; Git history remains
+the authoritative record for earlier development. The verification procedure in
 `docs/RELEASE-PROCESS.md` remains the release authority — an entry here is not
 release evidence.
 
 The format follows Keep a Changelog and releases will use Semantic Versioning.
 
-## [Unreleased]
+## [0.2.0] - Unreleased
 
 - **`scan --setup` asks what you pay.**
   - At the end, in an interactive terminal, it asks the monthly price of each plan your tools report and you have not priced. The public price is shown as a hint, and Enter skips.
@@ -96,6 +96,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   ledger is relabelled; the links are recomputed from evidence on each run,
   recorded in each value snapshot, and used again when prices are corrected.
   Files read by the previous importer are read once more to pick up history.
+
+## [0.1.0] - 2026-10-08
 
 - **Install from npm.** `npx segreant demo --serve` shows the demo and
   `npm install -g segreant` installs the command. The package no longer
