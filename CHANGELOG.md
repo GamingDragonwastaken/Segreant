@@ -11,6 +11,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **`segreant` on its own opens the home view.**
+  - **On a new machine** it names the AI coding tools it found, with their plans, and gives the one command that reads them. It records nothing itself.
+  - **With a ledger** it leads with the last 30 days' list cost and your plans, then how much of the last 90 days' AI work stayed in the code, as of the last measurement, then the next step.
+  - The old first screen sent a new person to set up the proxy and showed a line about outcomes that had never been recorded. That checklist is still `segreant guide`.
+
 - **`segreant quota`: the vendors' own meters, with the pace to the reset.**
   Codex's 5-hour and weekly percentages are read from its logs, with the pace
   to each reset; the projection is labelled an estimate. Segreant's list cost
