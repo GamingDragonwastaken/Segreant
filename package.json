@@ -1,6 +1,6 @@
 {
   "name": "segreant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first ledger and spend guard for AI coding agents: metering, budgets, provider-bill reconciliation, cost allocation and outcome evidence.",
   "type": "module",
   "engines": {
