@@ -18,7 +18,12 @@ export type QuotaKind =
   | 'claude_session' // Claude's 5-hour session limit
   | 'claude_weekly'
   | 'claude_spend' // Claude's monthly extra-usage spend limit
-  | 'claude_other';
+  | 'claude_other'
+  // Claude Code's live meter, as it hands it to a status line script
+  // (`segreant statusline`): percentages, like Codex's.
+  | 'claude_five_hour'
+  | 'claude_seven_day'
+  | 'claude_spend_window';
 
 export interface QuotaEvent {
   source: 'codex' | 'claude-code';
@@ -47,6 +52,33 @@ export function codexRateLimitEvents(rateLimits: unknown, tsEpochMs: number): Qu
     const minutes = typeof w.window_minutes === 'number' && w.window_minutes > 0 ? w.window_minutes : null;
     const resets = typeof w.resets_at === 'number' && w.resets_at > 0 ? w.resets_at * 1000 : null;
     out.push({ source: 'codex', kind, tsEpochMs, usedPercent: used, windowMinutes: minutes, resetsAtMs: resets, detail: null });
+  }
+  return out;
+}
+
+/**
+ * The `rate_limits` object Claude Code passes to a status line script
+ * (code.claude.com/docs/en/statusline): `five_hour`, `seven_day` and
+ * `spend_limit`, each with `used_percentage` (0-100) and `resets_at` (epoch
+ * seconds). Present for Pro and Max subscribers after a session's first
+ * response; each window may be absent.
+ */
+export function claudeStatuslineEvents(input: unknown, tsEpochMs: number): QuotaEvent[] {
+  if (input === null || typeof input !== 'object') return [];
+  const limits = (input as { rate_limits?: unknown }).rate_limits;
+  if (limits === null || typeof limits !== 'object') return [];
+  const out: QuotaEvent[] = [];
+  for (const [key, kind, minutes] of [
+    ['five_hour', 'claude_five_hour', 300],
+    ['seven_day', 'claude_seven_day', 10_080],
+    ['spend_limit', 'claude_spend_window', null],
+  ] as const) {
+    const w = (limits as Record<string, unknown>)[key] as { used_percentage?: unknown; resets_at?: unknown } | undefined;
+    if (w === null || w === undefined || typeof w !== 'object') continue;
+    const used = typeof w.used_percentage === 'number' && Number.isFinite(w.used_percentage) ? w.used_percentage : null;
+    if (used === null) continue;
+    const resets = typeof w.resets_at === 'number' && w.resets_at > 0 ? w.resets_at * 1000 : null;
+    out.push({ source: 'claude-code', kind, tsEpochMs, usedPercent: used, windowMinutes: minutes, resetsAtMs: resets, detail: null });
   }
   return out;
 }

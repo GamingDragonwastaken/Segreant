@@ -21,6 +21,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   each session limit held, and where the last 5 hours stand against that.
   Importers read every log file once more (reader version 3) to pick up this
   history.
+- **Claude's live usage percentage, through its status line.** Claude Code
+  hands a status line script its 5-hour and weekly meter. Set
+  `"statusLine": { "type": "command", "command": "segreant-statusline" }`
+  (`segreant statusline --setup` prints it). Segreant then records each
+  change, `quota` shows Claude's percentages with the pace to the reset, and
+  the bar reads `5h 25% · week 41% · today $5.68 list`. It answers in about
+  0.2 s and never breaks the bar: no ledger, or bad input, still prints a
+  line.
 
 - **`segreant plan`: your plan, what you pay, and the work it did.**
   Segreant reads which plan each tool runs on from the tool's own files:

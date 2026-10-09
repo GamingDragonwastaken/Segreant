@@ -12,6 +12,10 @@
   carrying `"isApiErrorMessage":true`
   (`src/connect/claudeCode.ts`). The reset clock time is resolved in the zone
   the message names.
+- Claude Code's status line input (`rate_limits.five_hour`, `seven_day`,
+  `spend_limit`: `used_percentage` and `resets_at`), when the person sets
+  `segreant-statusline` as their status line command (`statusline.ts`). This
+  is Claude's live percentage, which its transcripts do not carry.
 - `quota_events` (`src/store/schema.ts`), and list cost per source from the
   request ledger (`Store.sourceCostBetween`).
 
@@ -37,4 +41,10 @@
 - Parallel agents that hit the same limit count once (deduplicated by the
   window's reset time).
 - Pure parsing and view logic (`limits.ts`, `view.ts`): no I/O. I/O lives in
-  the importers and `src/cli/quotaCmd.ts`.
+  the importers, `statusline.ts` and `src/cli/quotaCmd.ts`.
+- The status line path (`statusline.ts`, `bin/segreant-statusline.mjs`)
+  always prints one line and exits 0. It never creates the ledger or a table,
+  waits at most 200 ms for the write lock, and writes a reading only when it
+  changed. It skips the Store's integrity pass (1.3 s) because a bar that
+  refreshes on every message cannot wait for it. The next ordinary open runs
+  that pass.
