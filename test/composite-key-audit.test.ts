@@ -60,6 +60,7 @@ const CLASSIFIED: ReadonlyArray<{ file: string; contains: string; reason: Reason
   { file: 'src/billing/epistemic.ts', contains: 'claim:billing:provider-observed:${input.run.observationRunId}:${line.observationId}', reason: 'constrained', why: 'as above' },
   { file: 'src/budget/capDecision.ts', contains: '${BUDGET_CAP_PROBLEM.id}:${key}', reason: 'constrained', why: 'the problem id is a literal constant and the key is a hex digest' },
   { file: 'src/connect/codex.ts', contains: 'codex:${forkId ?? sessionId ?? \'unknown\'}:${ordinal++}', reason: 'numeric_tail', why: 'the ordinal is numeric and last; a thread id may hold a colon and still parses from the right' },
+  { file: 'src/connect/antigravity.ts', contains: 'antigravity:${trajectoryId}:${g.idx}', reason: 'numeric_tail', why: 'the generator index is an integer and last; a trajectory id may hold a colon and still parses from the right' },
   { file: 'src/store/db.ts', contains: '${startMs}:${endMs}:${liveOnly ? \'live\' : \'all\'}', reason: 'constrained', why: 'a process-local cache key: two epoch integers and a literal, none of which can hold a colon' },
   { file: 'src/githubActionsEvidence.ts', contains: 'gha:${value.repository.id}:${value.workflow.runId}:${value.workflow.attempt}:tested:${value.commit}', reason: 'constrained', why: 'repository id, run id and attempt are validated numerics; the commit is a hex sha' },
   { file: 'src/githubActionsEvidence.ts', contains: 'gha:${input.repositoryId}:${input.runId}:${input.attempt}:tested:${input.commit}', reason: 'constrained', why: 'as above' },

@@ -14,6 +14,7 @@ import { dbPath, isDemo } from '../config.ts';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { defaultCodexRoot } from '../connect/codex.ts';
 import { defaultOpencodeDbPath } from '../connect/opencode.ts';
+import { defaultAntigravityRoot } from '../connect/antigravity.ts';
 import { detectPlans, planName } from '../plans/detect.ts';
 import { keptSummary, realizationFromStore } from '../value/realization.ts';
 import { planComparisons, printPlanLines } from './planCmd.ts';
@@ -32,6 +33,7 @@ function toolsOnThisMachine(): FoundTool[] {
   if (codex !== null && existsSync(codex)) out.push({ id: 'codex', label: 'Codex', plan: plans.get('codex') ?? null });
   const opencode = defaultOpencodeDbPath();
   if (opencode !== null && existsSync(opencode)) out.push({ id: 'opencode', label: 'opencode', plan: null });
+  if (defaultAntigravityRoot() !== null) out.push({ id: 'antigravity', label: 'Antigravity', plan: null });
   return out;
 }
 
@@ -74,7 +76,7 @@ export function cmdHome(flags: Flags): void {
       console.log(color(tty, C.cyan, '    segreant scan --setup'));
       console.log(color(tty, C.gray, '    Nothing leaves this machine. The first run takes a few minutes; the month appears after about one.'));
     } else {
-      console.log('  No AI coding tool logs found here (Claude Code, Codex and opencode are read today).');
+      console.log('  No AI coding tool logs found here (Claude Code, Codex, Antigravity and opencode are read today).');
       console.log(color(tty, C.cyan, '    segreant scan') + color(tty, C.gray, '   looks further and lists what it can and cannot read'));
     }
     console.log('');

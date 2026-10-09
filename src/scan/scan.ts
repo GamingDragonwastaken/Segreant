@@ -23,6 +23,7 @@ import { projectKey } from '../value/characterization.ts';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { defaultCodexRoot } from '../connect/codex.ts';
+import { defaultAntigravityRoot } from '../connect/antigravity.ts';
 import { detectKnownApps, type DetectedApp } from './knownApps.ts';
 
 /** A supported AI coding tool and whether its local usage data is on this machine. */
@@ -46,6 +47,7 @@ export function detectTools(): DetectedTool[] {
   const claudePresent = existsSync(claudeRoot);
   const opencodeDb = defaultOpencodeDbPath(); // already null when absent
   const codexRoot = defaultCodexRoot(); // already null when absent
+  const antigravityRoot = defaultAntigravityRoot(); // already null when absent
   return [
     {
       id: 'claude-code',
@@ -67,6 +69,13 @@ export function detectTools(): DetectedTool[] {
       present: codexRoot !== null,
       dataPath: codexRoot,
       blurb: 'Per-turn token usage from ~/.codex rollout session logs.',
+    },
+    {
+      id: 'antigravity',
+      label: 'Antigravity',
+      present: antigravityRoot !== null,
+      dataPath: antigravityRoot,
+      blurb: 'Per-call token usage from the IDE and agy conversation databases under ~/.gemini.',
     },
   ];
 }
