@@ -313,6 +313,7 @@ body {
   padding: 3px 8px; border-radius: 999px; border: 1px solid currentColor;
 }
 .pill-demo { color: var(--violet); }
+.topbar-demo { flex-shrink: 0; }
 .pill-estimate { color: var(--sky); }
 .pill-unverified { color: var(--gold-text); }
 .pill-ok { color: var(--mint); }
