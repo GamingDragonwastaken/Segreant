@@ -17,6 +17,7 @@ import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
+import { importAntigravity, defaultAntigravityRoot } from '../connect/antigravity.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
@@ -121,6 +122,12 @@ const IMPORT_RUNNERS: Record<string, ImportRunner> = {
     run: (store, opts) => importCodex(store, opts),
     recentFirst: true,
   },
+  antigravity: {
+    label: 'Antigravity',
+    location: (r) => r ?? defaultAntigravityRoot() ?? '(Antigravity not found on this machine)',
+    run: (store, opts) => importAntigravity(store, opts),
+    recentFirst: true,
+  },
 };
 
 /** Normalize the aliases users actually type. */
@@ -129,6 +136,7 @@ function resolveImporterId(what: string): string | null {
   if (w === 'claude-code' || w === 'claudecode' || w === 'claude') return 'claude-code';
   if (w === 'opencode') return 'opencode';
   if (w === 'codex' || w === 'codex-cli') return 'codex';
+  if (w === 'antigravity' || w === 'agy' || w === 'gemini') return 'antigravity';
   return null;
 }
 

@@ -115,9 +115,9 @@ test('findGitRepos: a nonexistent root is dropped, not thrown', () => {
   assert.deepEqual(res.roots, [], 'the missing root is not reported as walked');
 });
 
-test('detectTools: returns the three supported tools with a stable typed shape', () => {
+test('detectTools: returns the four supported tools with a stable typed shape', () => {
   const tools = detectTools();
-  assert.deepEqual(tools.map((t) => t.id).sort(), ['claude-code', 'codex', 'opencode']);
+  assert.deepEqual(tools.map((t) => t.id).sort(), ['antigravity', 'claude-code', 'codex', 'opencode']);
   for (const t of tools) {
     assert.equal(typeof t.present, 'boolean');
     assert.ok(t.label.length > 0);
@@ -157,7 +157,7 @@ test('planScan: honest empty — no repos under an empty root, no crash', () => 
   const plan = planScan(store, { roots: [root] });
   assert.deepEqual(plan.repos, []);
   assert.deepEqual(plan.reposWithSpend, []);
-  assert.equal(plan.tools.length, 3, 'tools are still detected even with no repos');
+  assert.equal(plan.tools.length, 4, 'tools are still detected even with no repos');
   assert.ok(Array.isArray(plan.otherApps) && plan.otherApps.length >= 5, 'the wider app inventory runs too');
   store.close();
 });

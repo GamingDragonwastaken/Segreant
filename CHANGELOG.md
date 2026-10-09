@@ -11,6 +11,21 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **Google Antigravity is metered from its own logs.** `segreant import
+  antigravity` (also part of `import all` and `scan --setup`) reads the
+  conversation databases the IDE and the `agy` CLI keep under `~/.gemini`.
+  Each model call becomes one row, with its model, its tokens, its time and the
+  workspace folder, which links it to its repository. The fields follow
+  Antigravity's published protobuf schema rather than guesses. On the owner's
+  machine that is 12,821 calls from 581 conversations, read in 9 seconds.
+  `connect antigravity` no longer calls the built-in agent unmeterable.
+- **The rate card carries Gemini 3.x.** It adds 3.8, 3.7, 3.6 and 3.5 Flash,
+  3.5 and 3.1 Flash-Lite, 3.1 Pro Preview and 3 Flash Preview, read from
+  Google's pricing page (updated 2026-10-07) on 2026-10-09. Without them these
+  calls fell to the $3/$15 fallback, about ten times Flash's real rate: the
+  owner's Antigravity month read $675.61 instead of $180.42. Rates Google has
+  announced for 2027 are noted on the card, not applied.
+
 - **`segreant` on its own opens the home view.**
   - **On a new machine** it names the AI coding tools it found, with their plans, and gives the one command that reads them. It records nothing itself.
   - **With a ledger** it leads with the last 30 days' list cost and your plans, then how much of the last 90 days' AI work stayed in the code, as of the last measurement, then the next step.
