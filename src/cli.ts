@@ -32,6 +32,7 @@ const causalCmd = () => import('./cli/causalCmd.ts');
 const capitalCmd = () => import('./cli/capitalCmd.ts');
 const opsCmd = () => import('./cli/opsCmd.ts');
 const showCmd = () => import('./cli/showCmd.ts');
+const planCmd = () => import('./cli/planCmd.ts');
 const runCmd = () => import('./cli/runCmd.ts');
 const launchCmd = () => import('./cli/launchCmd.ts');
 const backupCmd = () => import('./cli/backupCmd.ts');
@@ -62,6 +63,7 @@ function cmdHelpShort(): void {
 
   Every day
     today | week | month  Spend for a window                        (--json)
+    plan                  Your plans, what you pay, and the work they did  (set <tool> <usd>)
     start                 Start the proxy and the local dashboard
     launch -- <command>   Run a tool metered through the proxy while it runs
     budget                Set caps: --daily N --soft N --session N --runaway N
@@ -106,6 +108,7 @@ function cmdHelp(): void {
                           commitment, consumption, showback, opportunity and
                           policy-relative fairness; no chargeback or action.
     today | week | month  Show spend for a window      (--json)
+    plan                  Plans, prices you set, and the list-price work they did
     economic              Inspect exact economic events, roles, bases, and legacy coverage
                           (--days N | --all, --target-currency UNIT, --as-of <ISO>,
                           --effective-at <ISO>, --json). Period controls use canonical
@@ -339,6 +342,10 @@ async function main(): Promise<void> {
       break;
     case 'month':
       (await showCmd()).cmdShow('month', flags);
+      break;
+    case 'plan':
+    case 'plans':
+      (await planCmd()).cmdPlan(flags);
       break;
     case 'economic':
     case 'economics':
