@@ -15,6 +15,7 @@ whole tree loaded.
 | Prices, rate cards, repricing | `src/cost/` | `pricing/`, `docs/METHODOLOGY.md` |
 | Exact Money, economic events, conservation projections | `src/economics/` | `src/store/CONTEXT.md`, `docs/ARCHITECTURE.md` |
 | Budgets, caps, alerts | `src/budget/`, `src/alerts/` | — |
+| Subscription plans and the price a person pays | `src/plans/CONTEXT.md` | `src/cli/planCmd.ts`, `src/config.ts` |
 | Importing tool logs | `src/connect/`, `src/cli/importCmd.ts` | `docs/INTEGRATIONS.md` |
 | Robust decisions, regret, and VoI | `src/decision/` | `docs/METHODOLOGY.md`, `docs/CAUSAL-EVIDENCE-PROTOCOL.md` |
 | Epistemic state, derivation, and revocation | `src/epistemic/` | `docs/THE-STANDARD.md`, `docs/CAUSAL-EVIDENCE-PROTOCOL.md` |
