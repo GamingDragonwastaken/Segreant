@@ -100,7 +100,13 @@ Install the `segreant` command (it has no runtime dependencies):
 npm install -g segreant
 ```
 
-**Option A: no wiring at all.** If you use Claude Code, Codex or opencode,
+On Windows, a project-local install (`npm install segreant`) inside a folder
+whose path contains `&` cannot start through `npx` or `node_modules\.bin`:
+npm's generated `.cmd` shim does not quote that path. The global install above
+and `npx segreant` from any folder are not affected. For a local install there,
+run `node node_modules/segreant/bin/segreant.mjs` instead.
+
+**Option A: no wiring at all.** If you use Claude Code, Codex, opencode or Antigravity,
 Segreant reads the usage those tools already log on your machine, including
 subscription usage a proxy never sees:
 
