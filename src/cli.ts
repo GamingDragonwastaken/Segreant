@@ -129,8 +129,8 @@ function cmdHelp(): void {
                           recipe). No tool lists the connectors.
     import <tool|all>     NATIVE metering, no routing: read the usage a tool
                           already logs locally — works on subscriptions the proxy
-                          can never see. Tools: claude-code, opencode, codex (or
-                          all). Idempotent. --watch keeps it live (poll every N
+                          can never see. Tools: claude-code, opencode, codex,
+                          antigravity (or all). Idempotent. --watch keeps it live (poll every N
                           sec: --every N). Files unchanged since their last full
                           import are skipped; --rescan reads them again.
                           (--root <dir>, --days N, --json)
