@@ -416,7 +416,7 @@ export function cmdConnect(flags: Flags): void {
     console.log(color(tty, C.gray, '          segreant connect opencode --write  apply it for you (backs up first)'));
     console.log('');
     console.log(color(tty, C.gray, '  No base URL to wire? Meter subscription tools natively — no routing, no key:'));
-    console.log(color(tty, C.green, '          segreant import claude-code | opencode | codex | all   ') + color(tty, C.gray, '(--watch = live)'));
+    console.log(color(tty, C.green, '          segreant import claude-code | opencode | codex | antigravity | all   ') + color(tty, C.gray, '(--watch = live)'));
     console.log('');
     return;
   }

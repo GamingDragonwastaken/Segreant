@@ -345,4 +345,5 @@ export const IMPORTERS: ImporterInfo[] = [
   { id: 'claude-code', label: 'Claude Code', blurb: 'Exact per-request usage from ~/.claude transcripts — works on Pro/Max subscriptions.' },
   { id: 'opencode', label: 'opencode', blurb: "Token usage from opencode's local session database (all providers it ran)." },
   { id: 'codex', label: 'Codex CLI', blurb: 'Per-turn token usage from ~/.codex rollout session logs.' },
+  { id: 'antigravity', label: 'Antigravity', blurb: 'Per-call token usage from the conversation databases Antigravity and the agy CLI keep under ~/.gemini.' },
 ];
