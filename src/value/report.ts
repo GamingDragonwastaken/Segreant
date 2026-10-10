@@ -95,6 +95,8 @@ export interface ValueSpineOptions {
   repo: string;
   /** Maturity window for realization, in days. */
   windowDays?: number;
+  /** Use the stored realization when one exists (see loadRealization). */
+  preferStored?: boolean;
   /** Commits scanned on the live-git path. */
   limit?: number;
   /** Whether the computed snapshot is written back to the store. */
@@ -173,6 +175,7 @@ export async function valueSpine(
     persist: opts.persist ?? false,
     sinceDays: opts.sinceDays,
     gitScanBudgetMs: opts.gitScanBudgetMs,
+    preferStored: opts.preferStored,
   });
   if (!loaded) return null;
   const report = loaded.report;

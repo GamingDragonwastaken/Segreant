@@ -2022,10 +2022,50 @@ export class Store {
    * filter follows the alias family used by `summary()`; `liveOnly` preserves
    * the budget distinction between proxy traffic and imported observations.
    */
+  /**
+   * Run `work` with identical economic row reads served once. The value report
+   * read the same 30-day window three times (usage, cohort, self-reported),
+   * each mapping every row through the economic ledger; on a real ledger that
+   * was most of a 9-12 s dashboard read. The snapshot also makes the three
+   * agree with each other, since a write landing mid-report no longer splits
+   * them. Nested calls share the outer snapshot.
+   */
+  async withReadSnapshot<T>(work: () => Promise<T>): Promise<T> {
+    if (this.readSnapshot !== null) return work();
+    this.readSnapshot = new Map();
+    try {
+      return await work();
+    } finally {
+      this.readSnapshot = null;
+    }
+  }
+
+  private readSnapshot: Map<string, EffectiveRequestRow[]> | null = null;
+
   economicRequestRowsInRange(
     startMs: number,
     endMs: number,
     options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean } = {},
+  ): EffectiveRequestRow[] {
+    const key = this.readSnapshot === null ? null : JSON.stringify([
+      startMs, endMs, options.project ?? null, options.liveOnly === true,
+      options.asOf ?? null, options.targetUnit ?? null, options.effectiveAt ?? null,
+    ]);
+    const hit = key === null ? undefined : this.readSnapshot!.get(key);
+    if (hit !== undefined) return hit.slice();
+    // Inside a snapshot, proxy-only rows are the full read filtered, so the
+    // full read is done once and both questions are answered from it.
+    const out = key !== null && options.liveOnly === true
+      ? this.economicRequestRowsInRange(startMs, endMs, { ...options, liveOnly: false }).filter((row) => row.via === 'proxy')
+      : this.economicRequestRowsInRangeUncached(startMs, endMs, options);
+    if (key !== null) this.readSnapshot!.set(key, out.slice());
+    return out;
+  }
+
+  private economicRequestRowsInRangeUncached(
+    startMs: number,
+    endMs: number,
+    options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean },
   ): EffectiveRequestRow[] {
     const rows = this.requestsInRange(startMs, endMs).filter((row) => {
       if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
