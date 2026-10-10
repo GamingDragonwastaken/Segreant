@@ -14,7 +14,7 @@ import './util/quiet.ts';
 import { demoDbPath, envOverrideKey } from './config.ts';
 import { packageVersion } from './version.ts';
 
-import { parseFlags, UserInputError } from './cli/flags.ts';
+import { parseFlags, trackFlags, suggestOption, UserInputError } from './cli/flags.ts';
 
 // Command modules load on demand. Importing every command up front cost about
 // two seconds on every invocation, `--help` included; a command now pays only
@@ -309,7 +309,8 @@ async function main(): Promise<void> {
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
   const wraps = cmd === 'exec' || cmd === 'launch';
-  const flags = parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
+  const tracked = trackFlags(parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : argv.slice(1)));
+  const flags = tracked.flags;
   const wrapped = wraps && sep !== -1 ? argv.slice(sep + 1) : [];
 
   // Demo mode: point every store-open at an isolated demo.db and flag surfaces
@@ -411,7 +412,7 @@ async function main(): Promise<void> {
       await (await opsCmd()).cmdGuide(flags);
       break;
     case 'doctor':
-      await (await opsCmd()).cmdDoctor();
+      await (await opsCmd()).cmdDoctor(flags);
       break;
     case 'audit':
       await (await opsCmd()).cmdAudit(flags);
@@ -532,6 +533,22 @@ async function main(): Promise<void> {
     default:
       console.error(`  Unknown command: ${cmd}\n  Run "segreant help" for usage.`);
       process.exitCode = 1;
+      return;
+  }
+  // Long-running commands keep reading options after this point, so only
+  // commands that have finished are checked.
+  // A command that already failed has said why; its exit code stays.
+  const longRunning = cmd === 'start' || wraps || flags.watch === true || flags.serve === true;
+  const failed = typeof process.exitCode === 'number' && process.exitCode !== 0;
+  if (!longRunning && !failed) {
+    const unread = tracked.unread().filter((k) => k !== 'debug');
+    for (const k of unread) {
+      const near = suggestOption(k);
+      console.error(near === k
+        ? `  --${k} does nothing for "segreant ${cmd}"; nothing was done with it.`
+        : `  Unknown option --${k} for "segreant ${cmd}"; it did nothing.${near ? ` Did you mean --${near}?` : ''}`);
+    }
+    if (unread.length > 0) process.exitCode = 2;
   }
 }
 

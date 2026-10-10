@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A mistyped or unused option is no longer silent.** `segreant budget --dayly 5` used to exit 0 having set nothing (H014). Every option a finished command never read is now named on stderr, with the nearest real option when one is close ("Did you mean --daily?"), and the exit code is 2. A typed `--aply` is caught after the default preview, which writes nothing. `doctor` and `budget` now print JSON for `--json` instead of prose (H013), and `doctor`'s pricing line names the spend priced without the model's own rate rather than calling everything "priced from the rate card".
+
 - **One importer list for every surface.** The dashboard kept its own copy of the importers, which lacked Antigravity, so its "import all" skipped a tool the CLI read and `scan` reported (H008). The CLI, `scan` and the dashboard now build from `src/connect/registry.ts`. The `import` help and the `connect` hint name Antigravity too.
 
 - **The dashboard's value read uses what `scan` measured.** Without `?repo=`, `/api/value` reads the stored realization for every project, the same one the home view shows, instead of re-running git for the folder the dashboard was started in. Identical row reads inside one report are served once, and proxy-only rows are derived from the full read. On the owner's ledger the read went from 17–21 s to 6.5–8.9 s, with the same answer.
