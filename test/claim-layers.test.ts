@@ -29,6 +29,7 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from '../src/dashboard/claim-support.ts';
+import { summarizeBasis } from '../src/cost/basis.ts';
 
 const NOTHING: ClaimInputs = { overview: null, billing: null, allocation: null, value: null };
 
@@ -39,7 +40,10 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
   range: '30d',
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },
-  pricing: { status: { fresh: true }, autoRefresh: false, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [] },
+  pricing: {
+    status: { fresh: true }, autoRefresh: false, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [],
+    basis: summarizeBasis(requests > 0 ? [{ provider: 'anthropic', model: 'claude-sonnet-4-5', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests, costUsd }] : []),
+  },
   budget: { dailyUsd: null, dailySoftUsd: null, todaySpendUsd: 0, todayImportedUsd: 0, capExcludesImported: true, remainingDailyUsd: null, todaySpendBasis: { enforcedAgainst: 'rate_card_float', exactResolvedUsd: null, floatUsd: 0, unresolvedRequests: null, requestCount: null, sourceBases: [], complete: false } },
   byModel: [], byProject: [], attributionEvidence: [], bySource: [], byUser: [],
   characterization: { byProject: [], byModel: [], bySource: [], byUser: [] }, dimensions: [], series: [], recent: [],
@@ -277,7 +281,7 @@ test('a payload that answers without stating its support reads as unknown, and d
   assert.equal(layers[1]!.support.profile.epistemic, 'unknown');
   // And the prose still renders, from the fields that ARE present.
   assert.match(layers[1]!.basis, /9 provider records held/);
-  assert.equal(layers[0]!.inspection.coverage, '100% of spend priced from a matched rate card, not estimated');
+  assert.equal(layers[0]!.inspection.coverage, '$5.00 list price');
 });
 
 test('the spine is labelled sample data when any payload behind it is seeded', () => {
@@ -286,4 +290,26 @@ test('the spine is labelled sample data when any payload behind it is seeded', (
   assert.equal(chainIsSampleData({ ...NOTHING, overview: { ...anOverview(5, 10), demo: true } }), true);
   assert.equal(chainIsSampleData({ ...NOTHING, value: { demo: true } as unknown as ValuePayload }), true,
     'one seeded payload is enough: the spine mixes all four');
+});
+
+test('the metered claim states how each part was priced, and never calls a matched rate "not estimated" (H003)', () => {
+  const base = anOverview(100, 10);
+  const mixed = {
+    ...base,
+    pricing: {
+      ...base.pricing,
+      basis: summarizeBasis([
+        { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 8, costUsd: 70 },
+        { provider: 'openai', model: 'gpt-6.9-new', costBasis: 'fallback_estimate', rateMatchKind: 'fallback', requests: 2, costUsd: 30 },
+      ]),
+    },
+  };
+  const [metered] = buildClaimLayers({ ...NOTHING, overview: mixed }, '30d');
+  assert.match(metered!.basis, /^estimated: 30% priced without the model's own rate \(fallback rate\)$/);
+  assert.equal(metered!.inspection.coverage, '$70.00 list price · $30.00 fallback rate (gpt-6.9-new)');
+  assert.ok(!/not estimated/.test(JSON.stringify(metered)), 'no part of a list-price total is "not estimated"');
+  assert.deepEqual(metered!.inspection.missingEvidence, ['a model rate for gpt-6.9-new (if the card has learned it since, segreant reprice previews the new price)']);
+
+  const [clean] = buildClaimLayers({ ...NOTHING, overview: base }, '30d');
+  assert.equal(clean!.basis, "API list price: each model's own rate on the rate card");
 });

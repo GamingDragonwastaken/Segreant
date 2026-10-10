@@ -200,6 +200,28 @@ export interface ClaimSupportPayload {
   note?: string;
 }
 
+/**
+ * How a total was priced, in parts (`src/cost/basis.ts`). The headline word
+ * follows the weakest part: "List cost" only when every dollar was priced at a
+ * model's own card rate.
+ */
+export interface BasisSummaryPayload {
+  totalUsd: number;
+  requests: number;
+  headline: 'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost';
+  headlineLabel: string;
+  cohorts: Array<{
+    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'unrecorded';
+    costUsd: number;
+    requests: number;
+    label: string;
+    meaning: string;
+    models: Array<{ provider: string; model: string; costUsd: number; requests: number }>;
+  }>;
+  exactShare: number | null;
+  boundary: string;
+}
+
 export interface Overview {
   demo: boolean;
   /** The server's statement of this claim's support, on named axes (AII-014). */
@@ -237,6 +259,8 @@ export interface Overview {
     estimatedCostUsd: number;
     estimatedSpendShare: number;
     provenance: PricingEvidencePayload[];
+    /** The window's total split by how each part was priced. */
+    basis: BasisSummaryPayload;
   };
   budget: {
     dailyUsd: number | null;

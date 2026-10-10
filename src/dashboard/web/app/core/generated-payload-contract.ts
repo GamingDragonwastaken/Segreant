@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "79da38b4255cb4f55cf0241e65b4877070a10c2a052f442260c3ee2c893f97e8";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "4002816fcead40144b66e2529203cd3e2f1bbbaea4ebdff8b75904984627fba0";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -289,6 +289,43 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "note",
       "optional": true,
+      "type": "string"
+    }
+  ],
+  "BasisSummaryPayload": [
+    {
+      "name": "totalUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "headline",
+      "optional": false,
+      "type": "'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost'"
+    },
+    {
+      "name": "headlineLabel",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "cohorts",
+      "optional": false,
+      "type": "Array<{"
+    },
+    {
+      "name": "exactShare",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "boundary",
+      "optional": false,
       "type": "string"
     }
   ],

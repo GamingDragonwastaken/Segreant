@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 79da38b4255cb4f55cf0241e65b4877070a10c2a052f442260c3ee2c893f97e8 */
+/** Source SHA-256: 4002816fcead40144b66e2529203cd3e2f1bbbaea4ebdff8b75904984627fba0 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -202,6 +202,28 @@ export interface ClaimSupportPayload {
   note?: string;
 }
 
+/**
+ * How a total was priced, in parts (`src/cost/basis.ts`). The headline word
+ * follows the weakest part: "List cost" only when every dollar was priced at a
+ * model's own card rate.
+ */
+export interface BasisSummaryPayload {
+  totalUsd: number;
+  requests: number;
+  headline: 'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost';
+  headlineLabel: string;
+  cohorts: Array<{
+    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'unrecorded';
+    costUsd: number;
+    requests: number;
+    label: string;
+    meaning: string;
+    models: Array<{ provider: string; model: string; costUsd: number; requests: number }>;
+  }>;
+  exactShare: number | null;
+  boundary: string;
+}
+
 export interface Overview {
   demo: boolean;
   /** The server's statement of this claim's support, on named axes (AII-014). */
@@ -239,6 +261,8 @@ export interface Overview {
     estimatedCostUsd: number;
     estimatedSpendShare: number;
     provenance: PricingEvidencePayload[];
+    /** The window's total split by how each part was priced. */
+    basis: BasisSummaryPayload;
   };
   budget: {
     dailyUsd: number | null;
