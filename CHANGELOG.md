@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A mistyped or unused option is no longer silent.** `segreant budget --dayly 5` used to exit 0 having set nothing (H014). Every option a finished command never read is now named on stderr, with the nearest real option when one is close ("Did you mean --daily?"), and the exit code is 2. A typed `--aply` is caught after the default preview, which writes nothing. `doctor` and `budget` now print JSON for `--json` instead of prose (H013), and `doctor`'s pricing line names the spend priced without the model's own rate rather than calling everything "priced from the rate card".
+
 - **The status-line setup works however Segreant was installed.** `segreant statusline --setup` used to name `segreant-statusline`, which is on PATH only after a global install (H012). It now prints a `node "<installed file>"` command for this install, checked under bash and cmd with a path containing `&`. When Segreant runs from npx's temporary cache, it asks for a lasting install first.
 - **README:** Option A names Antigravity. A Windows note covers project-local installs in a folder whose path contains `&`, which npm's `.cmd` shim does not quote (H001). The global install and `npx` from the cache were tested from such a folder and work.
 
