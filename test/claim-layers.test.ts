@@ -313,3 +313,15 @@ test('the metered claim states how each part was priced, and never calls a match
   const [clean] = buildClaimLayers({ ...NOTHING, overview: base }, '30d');
   assert.equal(clean!.basis, "API list price: each model's own rate on the rate card");
 });
+
+test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {
+  const week = buildClaimLayers({ ...NOTHING, overview: anOverview(5, 2) }, '7d');
+  assert.deepEqual(week.map((l) => [l.id, l.period]), [
+    ['metered', 'last 7 days'],
+    ['billed', 'latest reconciliation run'],
+    ['allocated', 'latest allocation run'],
+    ['realized', 'outcomes on record'],
+  ]);
+  assert.equal(buildClaimLayers(NOTHING, 'today')[0]!.period, 'today');
+  assert.equal(buildClaimLayers(NOTHING, 'all')[0]!.period, 'all recorded time');
+});
