@@ -1999,6 +1999,15 @@ export class Store {
     return rows.map(requestRowFromRecord);
   }
 
+  /**
+   * The effective (exact-Money) rows for request rows the caller already holds.
+   * Row by row, so it equals `economicRequestRowsInRange` over the same rows; a
+   * caller slicing one read into many windows uses it instead of re-querying.
+   */
+  economicRowsOf(rows: readonly RequestRow[]): EffectiveRequestRow[] {
+    return effectiveRequestRows(rows, this.economicLedger);
+  }
+
   /** Exact-safe request export rows with original/effective Money and lineage. */
   economicRequestsInRange(
     startMs: number,

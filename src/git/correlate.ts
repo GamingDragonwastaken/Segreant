@@ -16,7 +16,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Store } from '../store/db.ts';
+import type { Store, RequestRow } from '../store/db.ts';
 import { projectKey } from '../value/characterization.ts';
 import { economicAttributionFromRows, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 
@@ -218,15 +218,57 @@ export async function attributeCommits(
   const limit = opts.limit ?? 20;
   const maxLookbackMs = (opts.maxLookbackHours ?? 8) * 60 * 60 * 1000;
   const project = await projectName(repoPath);
-  const commits = await readCommits(repoPath, limit + 1);
+  // Newest first BY TIME, not in log order. `git log` follows the graph, and
+  // after a rebase, cherry-pick or merge the author times along it are not
+  // monotonic; windows built from log neighbours then overlapped and booked the
+  // same request to two commits. On one real repository 40 windows overlapped
+  // and the Kept answer counted $99 of spend twice. Sorted, the windows tile
+  // time and every request lands in at most one of them.
+  const commits = (await readCommits(repoPath, limit + 1))
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => b.c.tsEpochMs - a.c.tsEpochMs || a.i - b.i)
+    .map((x) => x.c);
 
   const results: CommitAttribution[] = [];
-  for (let i = 0; i < Math.min(limit, commits.length); i++) {
+  const n = Math.min(limit, commits.length);
+  const windowOf = (i: number): [number, number] => {
     const commit = commits[i]!;
     const prev = commits[i + 1];
     const naturalStart = prev ? prev.tsEpochMs : commit.tsEpochMs - maxLookbackMs;
-    const windowStartMs = Math.max(naturalStart, commit.tsEpochMs - maxLookbackMs);
-    const windowEndMs = commit.tsEpochMs;
+    return [Math.max(naturalStart, commit.tsEpochMs - maxLookbackMs), commit.tsEpochMs];
+  };
+  // With an evidence scope, read the scoped rows ONCE for the whole span and
+  // slice each window out of them. Three queries per commit took 10.5 s for
+  // 1,018 commits on a real repository; the slices give the same rows, in the
+  // same [start, end) bounds and order, because the read is ordered by time.
+  let scoped: RequestRow[] | null = null;
+  let scopedTs: number[] = [];
+  if (opts.scope && n > 0) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const [a, b] = windowOf(i);
+      if (a < lo) lo = a;
+      if (b > hi) hi = b;
+    }
+    scoped = store.requestsInRange(lo, hi).filter((r) => opts.scope!.matches(r));
+    scopedTs = scoped.map((r) => r.tsEpochMs);
+  }
+  const firstAtOrAfter = (t: number): number => {
+    let a = 0;
+    let b = scopedTs.length;
+    while (a < b) {
+      const m = (a + b) >> 1;
+      if (scopedTs[m]! < t) a = m + 1;
+      else b = m;
+    }
+    return a;
+  };
+  // The retention floor is one fact for the whole pass; read it once.
+  const floor = store.windowCoverage(Number.POSITIVE_INFINITY);
+  for (let i = 0; i < n; i++) {
+    const commit = commits[i]!;
+    const [windowStartMs, windowEndMs] = windowOf(i);
 
     // Scope the window's spend to this repo's project when the caller asks — so a
     // commit absorbs only its own project's native/imported spend, not every
@@ -237,14 +279,15 @@ export async function attributeCommits(
     if (opts.scope) {
       // The repository's label PLUS the folders and sessions its commits prove
       // belong to it (a moved checkout, a worktree, a session started elsewhere).
-      const rows = store.requestsInRange(windowStartMs, windowEndMs).filter((r) => opts.scope!.matches(r));
-      const ids = new Set(rows.map((r) => r.requestId));
+      const rows = windowEndMs > windowStartMs
+        ? scoped!.slice(firstAtOrAfter(windowStartMs), firstAtOrAfter(windowEndMs))
+        : [];
       spend = {
         costUsd: rows.reduce((s, r) => s + r.costUsd, 0),
         requests: rows.length,
         outputTokens: rows.reduce((s, r) => s + r.outputTokens, 0),
       };
-      economicRows = store.economicRequestRowsInRange(windowStartMs, windowEndMs).filter((r) => ids.has(r.requestId));
+      economicRows = store.economicRowsOf(rows);
     } else {
       spend = store.summary(windowStartMs, windowEndMs, opts.scopeProject);
       economicRows = store.economicRequestRowsInRange(windowStartMs, windowEndMs, {
@@ -257,7 +300,10 @@ export async function attributeCommits(
     // Did retention delete rows from inside this window? Strictly before the
     // boundary, because `prune` removes rows older than it; a null boundary is
     // "no prune on record" and licenses nothing either way (D-170, D-176).
-    const coverage = store.windowCoverage(windowStartMs);
+    const coverage = {
+      truncated: floor.prunedBeforeMs !== null && windowStartMs < floor.prunedBeforeMs,
+      prunedBeforeMs: floor.prunedBeforeMs,
+    };
     const costPerHundredLines = totalLines > 0 && !coverage.truncated
       ? (attributedCostUsd / totalLines) * 100
       : null;
