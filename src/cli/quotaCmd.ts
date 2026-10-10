@@ -8,6 +8,7 @@ import { dbPath } from '../config.ts';
 import { quotaView, median, type WindowView } from '../quota/view.ts';
 import { statuslineLine } from '../quota/statusline.ts';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { detectPlans, planName } from '../plans/detect.ts';
 import { C, color, usd, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
@@ -34,13 +35,39 @@ function windowLabel(w: WindowView): string {
   return w.windowMinutes === null ? 'window' : `${Math.round(w.windowMinutes / 60)}-hour`;
 }
 
-const STATUSLINE_SETUP = `  Add this to ~/.claude/settings.json (or merge it into an existing statusLine):
-
-    "statusLine": { "type": "command", "command": "segreant-statusline" }
-
-  Claude Code then hands Segreant its live usage meter (5-hour and weekly percentages)
+const STATUSLINE_ABOUT = `  Claude Code then hands Segreant its live usage meter (5-hour and weekly percentages)
   each time the status line refreshes. Segreant records a reading when it changes and
   prints one short line. Nothing leaves your machine; segreant quota shows the history.`;
+
+/**
+ * The setup text for THIS install. It used to name the bare
+ * segreant-statusline command, which exists only after a global install;
+ * after a local install or npx, Claude Code ran a command that was not there
+ * (H012). It now names the installed file by its absolute path, run with node,
+ * so nothing has to be on PATH. Under npx the package lives in a cache that
+ * can be cleared, so it asks for a lasting install first.
+ *
+ * `launcher` is bin/segreant.mjs as started: process.argv[1] in the runtime
+ * child, which the launcher spawns with its own real path, never the snapshot.
+ */
+export function statuslineSetupText(launcher: string | undefined): string {
+  const bin = launcher ? join(dirname(launcher), 'segreant-statusline.mjs').replace(/\\/g, '/') : null;
+  if (bin === null || /[\\/]_npx[\\/]/.test(launcher!)) {
+    return `  Segreant is running from npx's temporary cache, which can be cleared at any time.
+  Install it so the status line has a file that stays put:
+
+    npm install -g segreant
+
+  then run  segreant statusline --setup  again for the exact line to add.`;
+  }
+  const command = `node "${bin}"`;
+  return `  Add this to ~/.claude/settings.json (or merge it into an existing statusLine):
+
+    "statusLine": ${JSON.stringify({ type: 'command', command })}
+
+  It runs the installed file directly, so nothing has to be on PATH.
+${STATUSLINE_ABOUT}`;
+}
 
 /**
  * `segreant statusline`: the same lean path as the `segreant-statusline` bin
@@ -49,7 +76,7 @@ const STATUSLINE_SETUP = `  Add this to ~/.claude/settings.json (or merge it int
  */
 export function cmdStatusline(flags: Flags): void {
   if (flags.setup) {
-    console.log(STATUSLINE_SETUP);
+    console.log(statuslineSetupText(process.argv[1]));
     return;
   }
   let raw = '';
