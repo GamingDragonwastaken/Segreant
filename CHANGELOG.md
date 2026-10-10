@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The dashboard's value read uses what `scan` measured.** Without `?repo=`, `/api/value` reads the stored realization for every project, the same one the home view shows, instead of re-running git for the folder the dashboard was started in. Identical row reads inside one report are served once, and proxy-only rows are derived from the full read. On the owner's ledger the read went from 17–21 s to 6.5–8.9 s, with the same answer.
+
 - **The first-run answer accounts for every dollar, and stops double-counting.**
   - Under each project, `scan --setup` now names the spend that is on no measured commit and why: no commit followed within 8 hours, before the oldest commit measured, or not committed yet. The buckets plus that line add up to the project's total. Before, $222 of one real project's $567 had no line (H009).
   - Commit windows are now built in time order. `git log` order is not time order after a rebase, cherry-pick or merge, and windows built from log neighbours overlapped. On one real repository, 40 windows overlapped and the Kept answer counted $99 of spend twice.

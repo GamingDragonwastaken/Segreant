@@ -1054,8 +1054,21 @@ export interface LoadedRealization {
 export async function loadRealization(
   store: Store,
   repo: string | undefined,
-  opts: { windowDays?: number; limit?: number; persist?: boolean; sinceDays?: number; gitScanBudgetMs?: number } = {},
+  opts: {
+    windowDays?: number; limit?: number; persist?: boolean; sinceDays?: number; gitScanBudgetMs?: number;
+    /**
+     * Read the realization `scan` already measured and stored, when there is
+     * one, instead of re-reading git. The dashboard asks for this: it re-ran
+     * forty commits of git work for its launch folder on every load (17-21 s
+     * on a real ledger) and answered for that one folder, while the CLI's home
+     * view answered for every project from the store, so the two disagreed.
+     */
+    preferStored?: boolean;
+  } = {},
 ): Promise<LoadedRealization | null> {
+  if (opts.preferStored && store.countRealizationUnits() > 0) {
+    return { source: 'store', report: realizationFromStore(store, { windowDays: opts.windowDays }) };
+  }
   if (!isDemo() && repo && (await isGitRepo(repo))) {
     return {
       source: 'git',

@@ -885,13 +885,17 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
       // `roi.lenses.lift.how` and labels the demo's synthetic TSF in
       // `roi.notes`; this endpoint never has. It is a disclosure difference
       // only — every value, interval and dollar is computed identically.
-      const value = await valueReport(store, config, {
+      const value = await store.withReadSnapshot(() => valueReport(store, config, {
         repo,
         windowDays,
         limit: 40,
         persist: false,
         discloseLiftSource: false,
-      });
+        // Without an explicit ?repo=, answer from what `scan` measured and
+        // stored (every project, as the CLI home view does) rather than
+        // re-reading the launch folder's git on every load.
+        preferStored: !url.searchParams.has('repo'),
+      }));
       const spine = value.spine;
       const rep = spine?.loaded.report ?? null;
       // The payload's realization slice is deliberately narrower than the
