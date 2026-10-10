@@ -27,6 +27,7 @@
  */
 
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload } from './api.ts';
+import { periodWords } from './periodWords.ts';
 import { projectRenderedAxes, unreachableSupport, type Layer } from './claimTypes.ts';
 
 export interface ClaimInputs {
@@ -100,12 +101,14 @@ export function meteredBasisParts(basis: Basis | undefined): string {
 }
 
 export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
+  // Each claim names its own window; only Metered follows the chosen period.
   const { overview: o, billing: b, allocation: a, value: v } = input;
 
   const estimatedShare = o?.pricing.estimatedSpendShare ?? null;
   const metered: Layer = {
     id: 'metered',
     label: 'Metered',
+    period: periodWords(range),
     claim: 'what we observed',
     valueUsd: o?.summary.costUsd ?? null,
     // Metered is the one layer whose figure IS the claim: if the ledger read,
@@ -157,6 +160,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const billedNote = b?.claimSupport?.note ?? null;
   const billed: Layer = {
     id: 'billed',
+    period: 'latest reconciliation run',
     label: 'Billed',
     claim: 'what the provider charged',
     valueUsd: null,
@@ -211,6 +215,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const centres = Array.isArray(a?.costCentres) ? a.costCentres.length : 0;
   const allocated: Layer = {
     id: 'allocated',
+    period: 'latest allocation run',
     label: 'Allocated',
     claim: 'whose cost it is',
     valueUsd: null,
@@ -282,6 +287,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
 
   const realized: Layer = {
     id: 'realized',
+    period: 'outcomes on record',
     label: 'Realized',
     claim: 'what it produced',
     valueUsd: valued ? (ret?.manualEquivalentValueUsd ?? null) : null,
