@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The dashboard has one period, and the four claims no longer wait for each other.** Choosing Today, 7 days, 30 days or All in Metered now moves the Metered claim above it as well; before, a Today table sat under a 30-day headline (H006). Each claim names the window it covers ("Metered · last 7 days", "Billed · latest reconciliation run"), and the choice is remembered in the browser.
+  - Each claim draws as soon as its own data arrives, in order: the cheap reads first, the value read last. On the owner's real ledger, Metered appeared after 20 s before and after 0.85 s now. Realized still takes about 18 s and says "reading…" until it lands.
+  - A claim still loading is no longer counted as "cannot answer yet".
+
 - **Every total says how it was priced, in parts.** `today`, `week`, `month`, the home view, the first-run month line and the dashboard's Metered claim used to call every dollar "priced from the rate card". That was wrong for:
   - amounts a tool reported;
   - models the card did not know, which were priced at the generic fallback rate;
