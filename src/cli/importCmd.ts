@@ -14,10 +14,8 @@ import {
   type DiscoveredResult,
 } from '../value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
-import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
-import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
-import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
-import { importAntigravity, defaultAntigravityRoot } from '../connect/antigravity.ts';
+import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
+import { IMPORT_REGISTRY, importerFor } from '../connect/registry.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
@@ -107,40 +105,17 @@ interface ImportRunner {
   recentFirst?: boolean;
 }
 
-const IMPORT_RUNNERS: Record<string, ImportRunner> = {
-  'claude-code': {
-    label: 'Claude Code',
-    location: (r) => r ?? defaultClaudeCodeRoot(),
-    run: (store, opts) => importClaudeCode(store, opts),
-    recentFirst: true,
-  },
-  opencode: {
-    label: 'opencode',
-    location: (r) => r ?? defaultOpencodeDbPath() ?? '(opencode not found on this machine)',
-    run: (store, opts) => importOpencode(store, opts),
-  },
-  codex: {
-    label: 'Codex CLI',
-    location: (r) => r ?? defaultCodexRoot() ?? '(Codex not found on this machine)',
-    run: (store, opts) => importCodex(store, opts),
-    recentFirst: true,
-  },
-  antigravity: {
-    label: 'Antigravity',
-    location: (r) => r ?? defaultAntigravityRoot() ?? '(Antigravity not found on this machine)',
-    run: (store, opts) => importAntigravity(store, opts),
-    recentFirst: true,
-  },
-};
+const IMPORT_RUNNERS: Record<string, ImportRunner> = Object.fromEntries(IMPORT_REGISTRY.map((e) => [e.id, {
+  label: e.label,
+  // Claude Code's root is reported even when absent (it says where to look).
+  location: (r?: string) => r ?? e.locate() ?? (e.id === 'claude-code' ? defaultClaudeCodeRoot() : `(${e.label} not found on this machine)`),
+  run: e.run,
+  recentFirst: e.recentFirst,
+} satisfies ImportRunner]));
 
 /** Normalize the aliases users actually type. */
 function resolveImporterId(what: string): string | null {
-  const w = what.toLowerCase();
-  if (w === 'claude-code' || w === 'claudecode' || w === 'claude') return 'claude-code';
-  if (w === 'opencode') return 'opencode';
-  if (w === 'codex' || w === 'codex-cli') return 'codex';
-  if (w === 'antigravity' || w === 'agy' || w === 'gemini') return 'antigravity';
-  return null;
+  return importerFor(what)?.id ?? null;
 }
 
 /**

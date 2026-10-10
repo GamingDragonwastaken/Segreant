@@ -48,10 +48,8 @@ import { requestsToCsv } from '../export/csv.ts';
 import { economicRequestsToCsv } from '../export/economic.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
-import { IMPORTERS, emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
-import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
-import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
-import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
+import { emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
+import { IMPORT_REGISTRY } from '../connect/registry.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
@@ -283,23 +281,11 @@ interface DashImporter {
   run: (store: Store, opts: { sinceMs?: number }) => ImportSummary | Promise<ImportSummary>;
 }
 
-const DASH_IMPORTERS: DashImporter[] = [
-  {
-    ...IMPORTERS.find((i) => i.id === 'claude-code')!,
-    locate: () => (existsSync(defaultClaudeCodeRoot()) ? defaultClaudeCodeRoot() : null),
-    run: (store, opts) => importClaudeCode(store, opts),
-  },
-  {
-    ...IMPORTERS.find((i) => i.id === 'opencode')!,
-    locate: () => defaultOpencodeDbPath(),
-    run: (store, opts) => importOpencode(store, opts),
-  },
-  {
-    ...IMPORTERS.find((i) => i.id === 'codex')!,
-    locate: () => defaultCodexRoot(),
-    run: (store, opts) => importCodex(store, opts),
-  },
-];
+// The same registry the CLI and `scan` use (src/connect/registry.ts), so the
+// dashboard can never again skip a tool the terminal reads.
+const DASH_IMPORTERS: DashImporter[] = IMPORT_REGISTRY.map((e) => ({
+  id: e.id, label: e.label, blurb: e.blurb, locate: e.locate, run: e.run,
+}));
 
 // ---------------------------------------------------------------------------
 // Handlers

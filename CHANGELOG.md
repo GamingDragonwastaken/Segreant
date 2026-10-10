@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **One importer list for every surface.** The dashboard kept its own copy of the importers, which lacked Antigravity, so its "import all" skipped a tool the CLI read and `scan` reported (H008). The CLI, `scan` and the dashboard now build from `src/connect/registry.ts`. The `import` help and the `connect` hint name Antigravity too.
+
 - **The dashboard's value read uses what `scan` measured.** Without `?repo=`, `/api/value` reads the stored realization for every project, the same one the home view shows, instead of re-running git for the folder the dashboard was started in. Identical row reads inside one report are served once, and proxy-only rows are derived from the full read. On the owner's ledger the read went from 17–21 s to 6.5–8.9 s, with the same answer.
 
 - **The first-run answer accounts for every dollar, and stops double-counting.**
