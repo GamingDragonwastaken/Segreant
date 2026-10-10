@@ -38,6 +38,7 @@ test('the window views head with list cost, and say imported usage is not the in
       sessionId: null, provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
       inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
       estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+      pricing: { costBasis: 'local_list_price' as const, rateCardSha256: null, rateCardSourceKind: 'bundled' as const, rateMatchKind: 'exact_provider' as const, rateMatchProvider: 'anthropic', rateMatchModel: 'claude-opus-4-8' },
     };
     store.insertRequestIfNew({ ...base, requestId: 'imported-1', tsEpochMs: Date.now() - 60_000, costUsd: 12.5, via: 'import', source: 'claude-code' });
     store.insertRequest({ ...base, requestId: 'proxied-1', tsEpochMs: Date.now() - 30_000, costUsd: 2.25 });
@@ -51,6 +52,28 @@ test('the window views head with list cost, and say imported usage is not the in
       assert.match(stdout, /\$12\.50 read from tool logs: .*not your invoice/, `${window}: imported usage is not the invoice`);
       assert.match(stdout, /\$2\.25 metered through the proxy: list price/, `${window}: proxied usage is list price`);
     }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a total whose rows carry no pricing basis is not called list cost', async () => {
+  // Rows recorded before Segreant kept the basis stay unknown; inferring "list
+  // price" for them is the provenance guess the basis column exists to stop.
+  const home = mkdtempSync(join(tmpdir(), 'segreant-unrecorded-'));
+  try {
+    const store = new Store(join(home, 'segreant.db'));
+    store.insertRequestIfNew({
+      requestId: 'old-1', sessionId: null, tsEpochMs: Date.now() - 60_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'p', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+      costUsd: 3, estimated: false, streamed: false, statusCode: 200, durationMs: 1, via: 'import', source: 'claude-code',
+    });
+    store.close();
+    const { code, stdout, stderr } = await runCli(['today'], home);
+    assert.equal(code, 0, stderr);
+    assert.match(stdout, /Estimated cost\s+\$3\.00/);
+    assert.match(stdout, /\$3\.00  basis not recorded: claude-opus-4-8/);
+    assert.doesNotMatch(stdout, /List cost/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

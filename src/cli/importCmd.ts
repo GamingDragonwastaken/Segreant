@@ -22,6 +22,8 @@ import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
 import { askPlanPrices } from './planCmd.ts';
+import { summarizeBasis } from '../cost/basis.ts';
+import { basisLines } from './basisLines.ts';
 
 /**
  * Live import: poll the source(s) on an interval and fold in new traffic as it
@@ -578,7 +580,12 @@ export async function cmdScan(flags: Flags): Promise<void> {
   }
   if (!flags.json && recent.size > 0) {
     const m = store.summary(month.startMs, month.endMs);
-    console.log(`    ${color(tty, C.bold, 'Last 30 days')}  ${color(tty, C.green, usd(m.costUsd))} list cost  ${color(tty, C.gray, `(${num(m.requests)} requests · priced from the rate card · an estimate, not your bill)`)}`);
+    const basis = summarizeBasis(store.pricingEvidenceByModel(month.startMs, month.endMs));
+    const plainList = basis.cohorts.length === 1 && basis.cohorts[0]!.id === 'list_exact';
+    console.log(`    ${color(tty, C.bold, 'Last 30 days')}  ${color(tty, C.green, usd(m.costUsd))} ${basis.headlineLabel.toLowerCase()}  ${color(tty, C.gray, plainList
+      ? `(${num(m.requests)} requests · each model's API list rate · not your bill)`
+      : `(${num(m.requests)} requests, priced in parts:)`)}`);
+    if (!plainList) for (const line of basisLines(basis, '                  ')) console.log(color(tty, C.gray, line));
     console.log(color(tty, C.gray, '    Now reading older history, then measuring what the work produced…'));
   }
   for (const t of present) {

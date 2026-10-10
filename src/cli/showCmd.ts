@@ -18,6 +18,8 @@ import { stringifyJson } from '../util/json.ts';
 import { rangeFor, UserInputError, usdFlag, type Flags } from './flags.ts';
 import { retentionNotice } from './retention.ts';
 import { planComparisons, printPlanLines } from './planCmd.ts';
+import { summarizeBasis } from '../cost/basis.ts';
+import { basisLines } from './basisLines.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
@@ -49,7 +51,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
 
   if (flags.json) {
     printJson({
-      window, label, demo: isDemo(), retention, summary, byModel, byProject, byUser, bySource,
+      window, label, demo: isDemo(), retention, summary, basis: summarizeBasis(store.pricingEvidenceByModel(startMs, endMs)), byModel, byProject, byUser, bySource,
       ...(alerts === null || coverage === null ? {} : { alerts, alertCoverage: coverage }),
     });
     store.close();
@@ -64,15 +66,22 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   const truncation = retentionNotice(retention);
   if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
-  // Every figure here is priced from the rate card, so it is LIST COST, never
-  // "spend": imported subscription usage is what the work would bill at API
-  // list price, not what was paid, and even proxied API traffic is metered at
-  // list price until a bill reconciles it. Say which part is which.
+  // The total is never "spend". Its word follows the weakest part of it: list
+  // cost only when every dollar was priced at a model's own card rate. A model
+  // missing from the card, an amount a tool reported, or an unpriced provider
+  // each gets its own line, so no part is presented as another (H003/H007).
+  const basis = summarizeBasis(store.pricingEvidenceByModel(startMs, endMs));
   const liveCostUsd = store.spendBetween(startMs, endMs, true);
   const importedCostUsd = Math.max(0, summary.costUsd - liveCostUsd);
-  console.log(`  List cost   ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests · priced from the rate card · an estimate)`)}`);
+  const single = basis.cohorts.length === 0 || (basis.cohorts.length === 1 && basis.cohorts[0]!.id === 'list_exact');
+  console.log(`  ${basis.headlineLabel.padEnd(10)}  ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, single
+    ? basis.cohorts.length === 0 ? `(${num(summary.requests)} requests)` : `(${num(summary.requests)} requests · priced at each model's API list rate · not your bill)`
+    : `(${num(summary.requests)} requests · priced in parts:)`)}`);
+  if (!single) {
+    for (const line of basisLines(basis)) console.log(color(tty, C.gray, line));
+  }
   if (importedCostUsd >= 0.005) {
-    console.log(color(tty, C.gray, `              ${usd(importedCostUsd)} read from tool logs: what this use would bill at API list price, not your invoice`));
+    console.log(color(tty, C.gray, `              ${usd(importedCostUsd)} read from tool logs: use on your plans and keys, priced as above, not your invoice`));
   }
   if (liveCostUsd >= 0.005) {
     console.log(color(tty, C.gray, `              ${usd(liveCostUsd)} metered through the proxy: list price; your provider's bill may differ`));
