@@ -58,3 +58,14 @@ test('period spend splits into on-a-commit, before the oldest commit, no commit 
   assert.equal(c.onCommitsUsd + c.beforeOldestUsd + c.noCommitFollowedUsd + c.notCommittedYetUsd, c.scopedCostUsd,
     'every dollar lands in exactly one bucket');
 });
+
+test('the first-run answer names the spend that is on no measured commit (H009)', async () => {
+  const { offCommitLine } = await import('../src/cli/importCmd.ts');
+  const coverage = {
+    periodStartMs: 0, periodEndMs: 1, scopedCostUsd: 567.13, onCommitsUsd: 344.4,
+    beforeOldestUsd: 0, noCommitFollowedUsd: 220.64, notCommittedYetUsd: 2.1,
+  };
+  assert.equal(offCommitLine({ coverage }), 'not on a commit: $220.64 no commit followed within 8 hours · $2.10 not committed yet');
+  assert.equal(offCommitLine({ coverage: { ...coverage, noCommitFollowedUsd: 0, notCommittedYetUsd: 0 } }), null);
+  assert.equal(offCommitLine({}), null, 'an unmeasured project has no coverage to state');
+});

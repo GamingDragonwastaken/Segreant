@@ -11,6 +11,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The first-run answer accounts for every dollar, and stops double-counting.**
+  - Under each project, `scan --setup` now names the spend that is on no measured commit and why: no commit followed within 8 hours, before the oldest commit measured, or not committed yet. The buckets plus that line add up to the project's total. Before, $222 of one real project's $567 had no line (H009).
+  - Commit windows are now built in time order. `git log` order is not time order after a rebase, cherry-pick or merge, and windows built from log neighbours overlapped. On one real repository, 40 windows overlapped and the Kept answer counted $99 of spend twice.
+- **The value stage keeps its time budget.** Its deadline now starts before discovery, and every repository's git work stops by it. Repositories are found and scoped in parallel, from one read of the commit observations. Attribution and model reads take each window's rows from one scoped read instead of three queries per commit, and the verified-event cache now holds a whole ledger.
+  - On the owner's logs the stage took 162 s against a 120 s budget; it now takes 119 s.
+  - Per repository, the measurement floor fell from 23 s to 11 s.
+  - When a large project comes back partly measured, the scan names the amount and the command that finishes it.
+
 - **The dashboard has one period, and the four claims no longer wait for each other.** Choosing Today, 7 days, 30 days or All in Metered now moves the Metered claim above it as well; before, a Today table sat under a 30-day headline (H006). Each claim names the window it covers ("Metered · last 7 days", "Billed · latest reconciliation run"), and the choice is remembered in the browser.
   - Each claim draws as soon as its own data arrives, in order: the cheap reads first, the value read last. On the owner's real ledger, Metered appeared after 20 s before and after 0.85 s now. Realized still takes about 18 s and says "reading…" until it lands.
   - A claim still loading is no longer counted as "cannot answer yet".

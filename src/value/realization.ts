@@ -16,11 +16,12 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
+import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage, RequestRow } from '../store/db.ts';
 import { attributeCommits, commitCountSince, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
 import { survivingLines, revertScan, prefetchSurvival } from '../git/quality.ts';
-import { repoIdentity, repoSpendScope, type LinkedFolder } from '../git/repoScope.ts';
+import { repoIdentity, repoSpendScope, type LinkedFolder, type RepoSpendScope } from '../git/repoScope.ts';
+import { mapLimit } from '../util/pool.ts';
 import { modelSpendFromRows, type ScopeEvidence } from '../store/scopeEvidence.ts';
 import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
@@ -418,6 +419,8 @@ export const CLI_GIT_BUDGET_MS = 180_000;
  * measured, with the command that measures it.
  */
 export const SCAN_VALUE_BUDGET_MS = 120_000;
+/** Time kept back from the stage deadline for scoring and writing each repository after its git work. */
+export const STAGE_FINISH_RESERVE_MS = 15_000;
 
 export interface RealizationOptions {
   limit?: number;
@@ -442,6 +445,15 @@ export interface RealizationOptions {
   persist?: boolean;
   /** Supported completeness witnesses for the negative clean channels. */
   completenessWitnesses?: readonly CompletenessWitness[];
+  /** A spend scope the caller already built for this repository (the value stage builds every one up front). */
+  spendScope?: RepoSpendScope;
+  /**
+   * An absolute wall-clock instant the per-unit git work must stop by, whatever
+   * `gitScanBudgetMs` allows. The git budget used to start only after
+   * attribution and the revert scan, so a stage that handed a repository its
+   * remaining time still finished 11-20 s past its own deadline.
+   */
+  gitDeadlineAtMs?: number;
 }
 
 /**
@@ -544,7 +556,7 @@ export async function computeRealization(
   // Extended by evidence: folders and sessions that verifiably made commits in
   // this repository (git/repoScope.ts). Without any such evidence the scope is
   // the label alone, exactly as before.
-  const spendScope = await repoSpendScope(store, repoPath);
+  const spendScope = opts.spendScope ?? await repoSpendScope(store, repoPath);
   const projectScoped = store.hasProjectSpend(project) || spendScope.extended;
 
   const attributions = await attributeCommits(store, repoPath, {
@@ -575,6 +587,9 @@ export async function computeRealization(
   // the whole allowance before measuring anything — turning a scheduling
   // accident into forty unknown gates.
   gitDeadlineMs = Number.isFinite(gitBudgetMs) ? Date.now() + gitBudgetMs : undefined;
+  if (opts.gitDeadlineAtMs !== undefined) {
+    gitDeadlineMs = gitDeadlineMs === undefined ? opts.gitDeadlineAtMs : Math.min(gitDeadlineMs, opts.gitDeadlineAtMs);
+  }
   // Warm the git caches for every unit in parallel; the loop below still
   // measures (and decides measured/unmeasured) one unit at a time.
   // Blame need not trace history older than the oldest commit measured here: a
@@ -587,6 +602,29 @@ export async function computeRealization(
   // attributed cost, largest first, then the maturing ones. The report keeps
   // the attribution order.
   const position = new Map(attributions.map((a, i) => [a.hash, i]));
+  // With an evidence scope, every unit's model attribution reads the SAME
+  // scoped rows its dollars came from. Read them once for the span of all
+  // windows and slice per unit: two queries per commit, one of them mapping
+  // every row of the window (scoped or not) through the economic ledger, took
+  // most of a repository's measurement time on a real ledger.
+  let scopedAll: RequestRow[] = [];
+  let scopedAllTs: number[] = [];
+  if (spendScope.extended && attributions.length > 0) {
+    const lo = Math.min(...attributions.map((a) => a.windowStartMs));
+    const hi = Math.max(...attributions.map((a) => a.windowEndMs));
+    scopedAll = store.requestsInRange(lo, hi).filter((r) => spendScope.matches(r));
+    scopedAllTs = scopedAll.map((r) => r.tsEpochMs);
+  }
+  const atOrAfter = (t: number): number => {
+    let lo = 0;
+    let hi = scopedAllTs.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (scopedAllTs[m]! < t) lo = m + 1;
+      else hi = m;
+    }
+    return lo;
+  };
   const measureOrder = [...attributions].sort((a, b) => {
     const am = now - a.tsEpochMs < windowMs ? 1 : 0;
     const bm = now - b.tsEpochMs < windowMs ? 1 : 0;
@@ -769,15 +807,14 @@ export async function computeRealization(
     // With an evidence-extended scope the model read takes the SAME rows the
     // dollars came from (label, linked sessions, linked folders).
     const scopedRows = spendScope.extended
-      ? store.requestsInRange(a.windowStartMs, a.windowEndMs).filter((r) => spendScope.matches(r))
+      ? (a.windowEndMs > a.windowStartMs ? scopedAll.slice(atOrAfter(a.windowStartMs), atOrAfter(a.windowEndMs)) : [])
       : null;
-    const scopedIds = scopedRows === null ? null : new Set(scopedRows.map((r) => r.requestId));
     const unitSpendScope = scopedRows === null ? undefined : spendScope.evidenceFor(scopedRows);
     const modelSpend = scopedRows !== null
       ? modelSpendFromRows(scopedRows)
       : store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
-    const economicModelRows = scopedIds !== null
-      ? store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs).filter((r) => scopedIds.has(r.requestId))
+    const economicModelRows = scopedRows !== null
+      ? store.economicRowsOf(scopedRows)
       : store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs, {
         project: projectScoped ? project : undefined,
       });
@@ -1211,6 +1248,12 @@ export interface DiscoveredResult extends DiscoveredProject {
    * label's all-time total.
    */
   periodCostUsd?: number;
+  /**
+   * Where the period's spend went relative to the measured commits. The Kept
+   * buckets cover only spend inside a commit's window; this names the rest, so
+   * the first answer accounts for every dollar of `periodCostUsd` (H009).
+   */
+  coverage?: PeriodCoverage;
   /** Other checkouts of the same repository (same root commit) folded into this one. */
   otherCheckouts?: string[];
 }
@@ -1280,13 +1323,13 @@ async function headCommitTimeMs(repoPath: string): Promise<number> {
  * a cwd that isn't a repo (or has been deleted), is simply skipped — never guessed.
  */
 export async function discoverProjectRepos(store: Store): Promise<DiscoveredProject[]> {
-  const out: DiscoveredProject[] = [];
-  for (const p of store.projectPaths()) {
-    if (await isGitRepo(p.cwd)) {
-      out.push({ project: p.project, repoPath: p.cwd, sources: p.sources, costUsd: p.costUsd, requests: p.requests });
-    }
-  }
-  return out;
+  // One git process per folder, several at once: one after another this took
+  // 5.7 s on a real ledger before any repository was measured.
+  const paths = store.projectPaths();
+  const isRepo = await mapLimit(paths, 8, (p) => isGitRepo(p.cwd));
+  return paths
+    .filter((_, i) => isRepo[i])
+    .map((p) => ({ project: p.project, repoPath: p.cwd, sources: p.sources, costUsd: p.costUsd, requests: p.requests }));
 }
 
 /**
@@ -1318,22 +1361,31 @@ export async function realizeDiscoveredProjects(
     stageBudgetMs?: number;
   } = {},
 ): Promise<DiscoveredResult[]> {
+  // The deadline starts HERE, before discovery and scoping. It used to start
+  // after them, so about 19 s of setup on a real ledger ran outside the budget
+  // and the stage that promised 120 s took 162 s (H010).
+  const stageDeadline = opts.stageBudgetMs === undefined ? undefined : Date.now() + opts.stageBudgetMs;
   const found = await oneCheckoutPerRepository(await discoverProjectRepos(store));
   // With a period and a shared deadline, rank by what each repository really
   // spent in the period (label plus commit evidence: a moved checkout's label
   // alone can hold a sliver of it), and skip one with no priced spend at all.
+  // Every scope is built once, several at once, from one read of the commit
+  // observations, and handed to the measurement below instead of rebuilt there.
   const periodCost = new Map<string, number>();
+  const scopes = new Map<string, RepoSpendScope>();
   if (opts.stageBudgetMs !== undefined && opts.sinceDays !== undefined) {
     const now = Date.now();
     const rows = store.requestsInRange(now - opts.sinceDays * 24 * 60 * 60 * 1000, now + 1);
-    for (const r of found) {
-      const scope = await repoSpendScope(store, r.repoPath);
+    const observations = store.observedCommits();
+    const built = await mapLimit(found, 6, (r) => repoSpendScope(store, r.repoPath, { observations }));
+    found.forEach((r, i) => {
+      const scope = built[i]!;
+      scopes.set(r.repoPath, scope);
       periodCost.set(r.repoPath, rows.reduce((s, row) => (scope.matches(row) ? s + row.costUsd : s), 0));
-    }
+    });
   }
   const rank = (r: DiscoveredProject): number => periodCost.get(r.repoPath) ?? r.costUsd;
   const repos = opts.stageBudgetMs === undefined ? found : [...found].sort((a, b) => rank(b) - rank(a));
-  const stageDeadline = opts.stageBudgetMs === undefined ? undefined : Date.now() + opts.stageBudgetMs;
   const results = new Array<DiscoveredResult>(repos.length);
   // Repositories are independent and almost all of their time is spent waiting
   // on git, so a few run at once. Safe on one DatabaseSync handle because every
@@ -1365,12 +1417,17 @@ export async function realizeDiscoveredProjects(
         gitScanBudgetMs: left === undefined ? opts.gitScanBudgetMs : Math.min(left, opts.gitScanBudgetMs ?? left),
         windowDays: opts.windowDays,
         persist: true,
+        ...(scopes.has(r.repoPath) ? { spendScope: scopes.get(r.repoPath)! } : {}),
+        // Stop git a little before the stage deadline: the scoring and the
+        // snapshot write after it still have to fit inside the promise.
+        ...(stageDeadline === undefined ? {} : { gitDeadlineAtMs: stageDeadline - STAGE_FINISH_RESERVE_MS }),
       });
       const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
       const periodCostUsd = rep.periodCoverage?.scopedCostUsd ?? spent;
       results[i] = {
         ...r, units: rep.units.length, realizedUnits, measured: true, kept: keptSummary(rep),
         ...(periodCostUsd === undefined ? {} : { periodCostUsd }),
+        ...(rep.periodCoverage === undefined ? {} : { coverage: rep.periodCoverage }),
       };
       done += 1;
       opts.onProgress?.(done, repos.length, r.project);
