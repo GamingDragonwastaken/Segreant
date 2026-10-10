@@ -286,6 +286,12 @@ export interface Layer {
   claim: string;
   /** The figure, when there is one. See `support.figure` for why there is not. */
   valueUsd: number | null;
+  /**
+   * What window or record this claim covers, in a few words ("last 30 days",
+   * "latest reconciliation run"). Shown beside the label, so a claim that cannot
+   * follow the chosen period says so instead of looking as if it did (H006).
+   */
+  period: string;
   /** What the evidence reaches, on the axes that decide it. Never one boolean. */
   support: LayerSupport;
   /** What the figure rests on, or what is missing when it does not exist. */

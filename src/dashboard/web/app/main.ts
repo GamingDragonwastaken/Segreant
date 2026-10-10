@@ -14,7 +14,9 @@
 import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from './core/dom.ts';
 import { signal, effect, computed, onCleanup } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
-import { loadChainState } from './core/chain.ts';
+import { api, type Overview, type BillingPayload, type AllocationPayload, type ValuePayload } from './core/api.ts';
+import { buildClaimLayers, chainIsSampleData } from './core/claimLayers.ts';
+import { period } from './core/period.ts';
 import { spine, type LayerId } from './components/spine.ts';
 import { mountDrawer } from './components/drawer.ts';
 import { mountClaimInspector, openClaimInspector } from './components/claimInspector.ts';
@@ -53,8 +55,26 @@ const OPERATIONS: ReadonlyArray<{ id: Territory; label: string; plain: string }>
 const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
 
 const current = signal<Territory>(readRoute());
-const chain = signal<Layer[] | null>(null);
-const sampleData = signal(false);
+// The four payloads behind the claims. `undefined` = still on its way; `null` =
+// the read failed, which the derivation already treats as missing evidence.
+const overviewIn = signal<Overview | null | undefined>(undefined);
+const billingIn = signal<BillingPayload | null | undefined>(undefined);
+const allocationIn = signal<AllocationPayload | null | undefined>(undefined);
+const valueIn = signal<ValuePayload | null | undefined>(undefined);
+const chainInputs = computed(() => ({
+  overview: overviewIn() ?? null,
+  billing: billingIn() ?? null,
+  allocation: allocationIn() ?? null,
+  value: valueIn() ?? null,
+}));
+const chain = computed<Layer[] | null>(() => buildClaimLayers(chainInputs(), period()));
+const pendingClaims = computed<ReadonlySet<LayerId>>(() => new Set<LayerId>([
+  ...(overviewIn() === undefined ? ['metered' as const] : []),
+  ...(billingIn() === undefined ? ['billed' as const] : []),
+  ...(allocationIn() === undefined ? ['allocated' as const] : []),
+  ...(valueIn() === undefined ? ['realized' as const] : []),
+]));
+const sampleData = computed(() => chainIsSampleData(chainInputs()));
 
 /**
  * Whether the operator has chosen a register at all — NOT which one they chose.
@@ -187,10 +207,36 @@ function boot(): void {
   // wording register, and re-reading them on a plain/precise click re-issued
   // every endpoint behind the spine — including `/api/value`, which correlates
   // against the repository and is the slowest read this product has.
-  void loadChainState('30d').then((s) => {
-    chain.set(s.layers);
-    sampleData.set(s.demo);
-  }).catch(() => chain.set(null));
+  //
+  // Each claim draws as soon as its own payload lands. They used to wait for all
+  // four, and `/api/value` (which reads git history) took 17-21 s on a real
+  // ledger, so the whole header said "Reading the ledger…" for that long.
+  // Billing, allocation and value do not depend on the period, so they are read
+  // once; the overview is re-read whenever the period changes.
+  //
+  // Order matters as much as independence: the server answers one request at a
+  // time, and the value read holds it for seconds. Fired together, it pushed
+  // the overview (0.5 s alone) to 10 s. So the cheap reads go first and the
+  // value read starts only once the overview has answered.
+  let restStarted = false;
+  const readTheRest = (): void => {
+    if (restStarted) return;
+    restStarted = true;
+    void Promise.allSettled([
+      api.billing().then((b) => billingIn.set(b), () => billingIn.set(null)),
+      api.allocation().then((a) => allocationIn.set(a), () => allocationIn.set(null)),
+    ]).then(() => api.value().then((v) => valueIn.set(v), () => valueIn.set(null)));
+  };
+  effect(() => {
+    const r = period();
+    const controller = new AbortController();
+    overviewIn.set(undefined);
+    void api.overview(r, controller.signal).then(
+      (o) => { if (!controller.signal.aborted) overviewIn.set(o); },
+      () => { if (!controller.signal.aborted) overviewIn.set(null); },
+    ).finally(readTheRest);
+    onCleanup(() => controller.abort());
+  });
 
   effect(() => {
     // `registerChosen()`, never `register()`. Reading the register itself made
@@ -234,6 +280,7 @@ function boot(): void {
           if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
           return spine({
             layers,
+            pending: pendingClaims(),
             active: ROUTE_LAYER[current()] ?? null,
             onSelect: (id) => go(LAYER_ROUTE[id]),
             onInspect: openClaimInspector,

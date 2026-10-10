@@ -10,7 +10,8 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect, onCleanup } from '../core/signal.ts';
-import { api, RANGES, type Overview, type Range, type GroupRow } from '../core/api.ts';
+import { api, RANGES, type Overview, type GroupRow } from '../core/api.ts';
+import { period, setPeriod } from '../core/period.ts';
 import { usd, count, pct, isPrecise, register } from '../core/fmt.ts';
 import { capability } from '../core/registry.ts';
 import { openAction } from '../components/drawer.ts';
@@ -25,7 +26,8 @@ const AXES: ReadonlyArray<{ id: Axis; label: string; plain: string; precise: str
 ];
 
 export function spendView(): Node {
-  const range = signal<Range>('30d');
+  // The shared period (core/period.ts): choosing Today here moves the Metered claim above with it.
+  const range = period;
   const axis = signal<Axis>('project');
   const data = signal<Overview | null>(null);
   const error = signal<string | null>(null);
@@ -63,7 +65,7 @@ export function spendView(): Node {
           ...RANGES.map((r) => h('button', {
             class: 'chip',
             'aria-pressed': () => (range() === r.id ? 'true' : 'false'),
-            onclick: () => range.set(r.id),
+            onclick: () => setPeriod(r.id),
             text: r.label,
             title: r.plain,
           })))),

@@ -49,6 +49,8 @@ export interface SpineState {
    * as a figure claiming evidence it does not have.
    */
   active: LayerId | null;
+  /** Claims whose data has not arrived yet. They draw as "reading…", never as a value. */
+  pending?: ReadonlySet<LayerId>;
   onSelect: (id: LayerId) => void;
   /** Open the long form of this claim's basis. Reads only; never acts. */
   onInspect: (layer: Layer) => void;
@@ -98,6 +100,21 @@ function bandValue(layer: Layer): string {
 
 function band(layer: Layer, state: SpineState): Node {
   const active = state.active === layer.id;
+  if (state.pending?.has(layer.id)) {
+    // Not a value and not an absence: the answer is on its way. Drawn as an
+    // open socket with no figure, so nothing here can be read as a zero.
+    return h('div', { class: `band band-open band-pending${active ? ' band-active' : ''}`, 'aria-busy': 'true' },
+      h('button', {
+        class: 'band-hit',
+        'aria-current': active ? 'page' : false,
+        onclick: () => state.onSelect(layer.id),
+      },
+        h('span', { class: 'band-label' }, layer.label, h('span', { class: 'band-period', text: ` · ${layer.period}` })),
+        h('span', { class: 'band-value band-unset', text: 'reading…' }),
+        h('span', { class: 'band-basis', text: layer.id === 'realized'
+          ? 'measuring what the work produced; the other claims do not wait for it'
+          : 'reading the ledger' })));
+  }
 
   const supported = claimIsSupported(layer);
 
@@ -107,7 +124,7 @@ function band(layer: Layer, state: SpineState): Node {
       'aria-current': active ? 'page' : false,
       onclick: () => state.onSelect(layer.id),
     },
-      h('span', { class: 'band-label', text: layer.label }),
+      h('span', { class: 'band-label' }, layer.label, h('span', { class: 'band-period', text: ` · ${layer.period}` })),
 
       // Three distinct situations, three different words. `established` said
       // "not established" for all of them, including a Billed band that had
@@ -147,11 +164,16 @@ export function spine(state: SpineState): Node {
   // claims that really are unevidenced, and the other two states say their own
   // thing. This became reachable when the axes moved to the wire: the browser's
   // count-based inference had no branch that could produce either one.
-  const missing = state.layers.filter(claimIsUnevidenced).map((l) => l.label.toLowerCase());
-  const conflicted = state.layers.filter(claimIsConflicted).map((l) => l.label.toLowerCase());
-  const refuted = state.layers.filter(claimIsRefuted).map((l) => l.label.toLowerCase());
-  const settled = state.layers.every(claimIsSupported);
-  const uncosted = state.layers.filter(claimIsSupportedButUncosted).map((l) => l.label.toLowerCase());
+  // A claim still on its way is neither missing nor answered. Counting it as
+  // "cannot answer yet" told the reader Realized had no evidence while it was
+  // being measured.
+  const arrived = state.layers.filter((l) => !state.pending?.has(l.id));
+  const waiting = state.layers.filter((l) => state.pending?.has(l.id)).map((l) => l.label.toLowerCase());
+  const missing = arrived.filter(claimIsUnevidenced).map((l) => l.label.toLowerCase());
+  const conflicted = arrived.filter(claimIsConflicted).map((l) => l.label.toLowerCase());
+  const refuted = arrived.filter(claimIsRefuted).map((l) => l.label.toLowerCase());
+  const settled = waiting.length === 0 && arrived.every(claimIsSupported);
+  const uncosted = arrived.filter(claimIsSupportedButUncosted).map((l) => l.label.toLowerCase());
 
   const uncostedLine = uncosted.length === 0
     ? null
@@ -187,5 +209,8 @@ export function spine(state: SpineState): Node {
               : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)),
     conflictedLine,
     refutedLine,
-    uncostedLine);
+    uncostedLine,
+    waiting.length === 0
+      ? null
+      : h('p', { class: 'spine-read', 'aria-live': 'polite', text: `Still reading: ${waiting.join(' and ')}.` }));
 }
