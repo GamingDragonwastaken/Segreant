@@ -192,13 +192,37 @@ function keptLine(tty: boolean, d: DiscoveredResult): string {
   return parts.join(color(tty, C.gray, ' · '));
 }
 
+/**
+ * The part of a project's period spend that is on no measured commit, with its
+ * reasons. Printed under the project line so the buckets above plus this line
+ * add up to the project's total; before, $222 of one project's $567 had no line.
+ */
+export function offCommitLine(d: Pick<DiscoveredResult, 'coverage'>): string | null {
+  const c = d.coverage;
+  if (c === undefined) return null;
+  const parts: string[] = [];
+  if (c.noCommitFollowedUsd >= 0.005) parts.push(`${usd(c.noCommitFollowedUsd)} no commit followed within 8 hours`);
+  if (c.beforeOldestUsd >= 0.005) parts.push(`${usd(c.beforeOldestUsd)} before the oldest commit measured`);
+  if (c.notCommittedYetUsd >= 0.005) parts.push(`${usd(c.notCommittedYetUsd)} not committed yet`);
+  return parts.length === 0 ? null : `not on a commit: ${parts.join(' · ')}`;
+}
+
 /** Repositories the shared deadline did not reach: named, with the command that measures them. */
 function printUnmeasured(tty: boolean, discovered: DiscoveredResult[]): void {
   const left = discovered.filter((d) => d.skipped === 'deadline');
-  if (left.length === 0) return;
-  const spend = left.reduce((s, d) => s + (d.periodCostUsd ?? d.costUsd), 0);
-  console.log(color(tty, C.gray, `    ${left.length} smaller project(s) (${usd(spend)} of spend) were not measured in the time this scan allows.`));
-  console.log(color(tty, C.gray, `    Measure one with: segreant realize --repo "${left[0]!.repoPath}"`));
+  if (left.length > 0) {
+    const spend = left.reduce((s, d) => s + (d.periodCostUsd ?? d.costUsd), 0);
+    console.log(color(tty, C.gray, `    ${left.length} smaller project(s) (${usd(spend)} of spend) were not measured in the time this scan allows.`));
+    console.log(color(tty, C.gray, `    Measure one with: segreant realize --repo "${left[0]!.repoPath}"`));
+  }
+  // The scan keeps to its time budget, so a large project can come back partly
+  // measured. Name the biggest such gap and the command that finishes it.
+  const partial = discovered
+    .filter((d) => d.measured && d.kept !== undefined && d.kept.unknown.costUsd >= 1)
+    .sort((a, b) => b.kept!.unknown.costUsd - a.kept!.unknown.costUsd)[0];
+  if (partial !== undefined) {
+    console.log(color(tty, C.gray, `    ${partial.project}: ${usd(partial.kept!.unknown.costUsd)} not measured yet in the time this scan allows. Finish it with: segreant realize --repo "${partial.repoPath}"`));
+  }
 }
 
 /** "3 files, 507 lines" — the parts of an import that hit a resource bound. */
@@ -633,6 +657,8 @@ export async function cmdScan(flags: Flags): Promise<void> {
     for (const d of shown.slice(0, 12)) {
       const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
       console.log(`    ${color(tty, C.bold, d.project.padEnd(24))} ${usd(d.periodCostUsd ?? d.costUsd).padStart(10)}   ${keptLine(tty, d)}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
+      const off = offCommitLine(d);
+      if (off !== null) console.log(color(tty, C.gray, `    ${''.padEnd(24)} ${''.padStart(10)}   ${off}`));
     }
     if (shown.length > 12) console.log(color(tty, C.gray, `    …and ${shown.length - 12} more (segreant discover lists them all)`));
     const idle = discovered.length - shown.length;

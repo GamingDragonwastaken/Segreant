@@ -32,7 +32,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { Store } from '../store/db.ts';
+import type { Store, ObservedCommit } from '../store/db.ts';
 import { evidenceMatcher, normPath as norm, pathUnder as under, type ScopeEvidence } from '../store/scopeEvidence.ts';
 import { projectName } from './correlate.ts';
 
@@ -145,10 +145,15 @@ async function commonDir(dir: string): Promise<string | null> {
  * Build the evidence-extended spend scope for one repository. `maxCommits`
  * bounds the history read to resolve observed shas (newest first).
  */
-export async function repoSpendScope(store: Store, repoPath: string, opts: { maxCommits?: number } = {}): Promise<RepoSpendScope> {
+export async function repoSpendScope(
+  store: Store,
+  repoPath: string,
+  opts: { maxCommits?: number; observations?: readonly ObservedCommit[] } = {},
+): Promise<RepoSpendScope> {
   const label = await projectName(repoPath);
   const labels = new Set(store.projectFamily(label));
-  const observations = store.observedCommits();
+  // A caller scoping many repositories reads the observations once and passes them in.
+  const observations = opts.observations ?? store.observedCommits();
 
   const linkedSessions = new Set<string>();
   const folderCounts = new Map<string, { path: string; count: number }>();

@@ -148,7 +148,7 @@ function canonicalBoundary(value: Instant): Instant {
 // Verification (parse, canonicalize, digest, identity) is a pure function of
 // the stored row's bytes and yields a deeply frozen event, so a row whose every
 // stored column is unchanged reuses it; any byte difference re-verifies.
-const VERIFIED_EVENT_CACHE_MAX = 20_000;
+const VERIFIED_EVENT_CACHE_MAX = 150_000;
 const verifiedEvents = new Map<string, { row: StoredEconomicRow; event: EconomicEvent }>();
 
 function sameStoredRow(a: StoredEconomicRow, b: StoredEconomicRow): boolean {
