@@ -53,3 +53,17 @@ test('no ledger, garbage, or nothing on stdin: still one line, and no file is cr
   assert.equal(statuslineLine(missing, 'not json', 1_000), 'segreant');
   assert.equal(statuslineLine(missing, '', 1_000), 'segreant');
 });
+
+test('setup names the installed file, so nothing has to be on PATH (H012)', async () => {
+  const { statuslineSetupText } = await import('../src/cli/quotaCmd.ts');
+  const local = statuslineSetupText('C:/Users/me/proj/node_modules/segreant/bin/segreant.mjs');
+  const line = local.split('\n').find((l) => l.includes('"statusLine"'))!;
+  const settings = JSON.parse(`{${line.trim()}}`) as { statusLine: { type: string; command: string } };
+  assert.deepEqual(settings.statusLine, {
+    type: 'command',
+    command: 'node "C:/Users/me/proj/node_modules/segreant/bin/segreant-statusline.mjs"',
+  }, 'a settings line that parses as JSON and runs the installed file');
+  const npx = statuslineSetupText('C:/Users/me/AppData/Local/npm-cache/_npx/abc/node_modules/segreant/bin/segreant.mjs');
+  assert.match(npx, /npm install -g segreant/);
+  assert.doesNotMatch(npx, /"statusLine"/, 'no path into a cache that can be cleared');
+});
