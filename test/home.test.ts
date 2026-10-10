@@ -43,11 +43,12 @@ test('with a ledger, home leads with the month as list cost', async () => {
     project: 'p', taskWeight: 1, inputTokens: 1000, outputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 0,
     reasoningTokens: 0, costUsd: 1.25, estimated: false, streamed: false, statusCode: 200, durationMs: 10,
     source: 'claude-code', via: 'import',
+    pricing: { costBasis: 'local_list_price', rateCardSha256: null, rateCardSourceKind: 'bundled', rateMatchKind: 'exact_provider', rateMatchProvider: 'anthropic', rateMatchModel: 'claude-opus-4-8' },
   });
   store.close();
   const r = await run(['home'], home);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /Last 30 days\s+\$1\.25 list cost/);
-  assert.match(r.stdout, /an estimate, not your bill/);
+  assert.match(r.stdout, /each model's API list rate · not your bill/);
   assert.ok(existsSync(join(home, 'segreant.db')));
 });

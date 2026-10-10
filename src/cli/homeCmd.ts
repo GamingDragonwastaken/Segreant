@@ -18,6 +18,8 @@ import { defaultAntigravityRoot } from '../connect/antigravity.ts';
 import { detectPlans, planName } from '../plans/detect.ts';
 import { keptSummary, realizationFromStore } from '../value/realization.ts';
 import { planComparisons, printPlanLines } from './planCmd.ts';
+import { summarizeBasis } from '../cost/basis.ts';
+import { basisLines } from './basisLines.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
 
@@ -49,13 +51,14 @@ export function cmdHome(flags: Flags): void {
   const recent = stored.units.filter((u) => u.tsEpochMs >= now - 90 * DAY);
   const kept = recent.length > 0 ? keptSummary({ units: recent, windowDays: stored.windowDays }) : null;
   const plans = everything.requests > 0 && !isDemo() ? planComparisons(store, month.startMs, month.endMs) : [];
+  const basis = summarizeBasis(store.pricingEvidenceByModel(month.startMs, month.endMs));
   store.close();
 
   if (flags.json) {
     printJson({
       empty: everything.requests === 0,
       tools,
-      last30Days: { listCostUsd: summary.costUsd, requests: summary.requests },
+      last30Days: { listCostUsd: summary.costUsd, requests: summary.requests, basis },
       kept: kept === null ? null : { ...kept, asOf: new Date(stored.generatedAt).toISOString() },
       plans,
     });
@@ -85,7 +88,11 @@ export function cmdHome(flags: Flags): void {
     return;
   }
 
-  console.log(`  ${color(tty, C.bold, 'Last 30 days')}  ${color(tty, C.green, usd(summary.costUsd))} list cost  ${color(tty, C.gray, `(${num(summary.requests)} requests · priced from the rate card · an estimate, not your bill)`)}`);
+  const plainList = basis.cohorts.length === 1 && basis.cohorts[0]!.id === 'list_exact';
+  console.log(`  ${color(tty, C.bold, 'Last 30 days')}  ${color(tty, C.green, usd(summary.costUsd))} ${basis.headlineLabel.toLowerCase()}  ${color(tty, C.gray, plainList
+    ? `(${num(summary.requests)} requests · each model's API list rate · not your bill)`
+    : `(${num(summary.requests)} requests, priced in parts:)`)}`);
+  if (!plainList) for (const line of basisLines(basis, '                ')) console.log(color(tty, C.gray, line));
   printPlanLines(tty, plans);
   console.log('');
   if (kept !== null && kept.kept.units + kept.notKept.units + kept.unknown.units + kept.maturing.units > 0) {

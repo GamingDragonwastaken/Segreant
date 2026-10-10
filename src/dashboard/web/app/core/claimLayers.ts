@@ -54,6 +54,51 @@ export function chainIsSampleData(input: ClaimInputs): boolean {
   return Object.values(input).some((p) => (p as { demo?: unknown } | null)?.demo === true);
 }
 
+type Basis = NonNullable<ClaimInputs['overview']>['pricing']['basis'];
+
+const money = (n: number): string => `$${n.toFixed(2)}`;
+
+/** "gpt-6.1-sol, codex-auto-review and 1 more". */
+function modelsOf(c: Basis['cohorts'][number]): string {
+  const names = c.models.map((m) => m.model);
+  return names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+}
+
+/**
+ * The Metered band's basis line. It used to read "priced from a rate card" for
+ * every total, including amounts a tool reported and models priced at the
+ * generic fallback rate; the inspector then called matched rows "not
+ * estimated" (H003). All local cost is an estimate of a bill; what varies is
+ * how each part was priced, and that is what this says.
+ */
+export function meteredBasisLine(basis: Basis | undefined): string {
+  if (!basis || basis.cohorts.length === 0) return 'no recorded requests in this period';
+  switch (basis.headline) {
+    case 'sample_cost': return 'sample data, priced from the rate card';
+    case 'tool_reported_cost': return 'amounts the tools reported, not verified';
+    case 'list_cost':
+      return basis.cohorts.some((c) => c.id === 'list_family')
+        ? "API list price from the rate card (some models at the nearest model's rate)"
+        : "API list price: each model's own rate on the rate card";
+    default: {
+      const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+      const share = basis.totalUsd > 0 ? Math.round((weak.reduce((s, c) => s + c.costUsd, 0) / basis.totalUsd) * 100) : 0;
+      return `estimated: ${share}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`;
+    }
+  }
+}
+
+/** Every part of the total, one clause each, for the inspector. */
+export function meteredBasisParts(basis: Basis | undefined): string {
+  if (!basis || basis.cohorts.length === 0) return 'no recorded requests in this period';
+  return basis.cohorts.map((c) => {
+    if (c.id === 'unpriced') return `${c.requests} request(s) not priced (${modelsOf(c)})`;
+    if (c.id === 'tool_reported' && c.costUsd < 0.005) return `${c.requests} request(s) the tool reported at no charge (${modelsOf(c)})`;
+    const which = c.id === 'list_exact' || c.id === 'demo' || c.id === 'tool_reported' ? '' : ` (${modelsOf(c)})`;
+    return `${money(c.costUsd)} ${c.label}${which}`;
+  }).join(' · ');
+}
+
 export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const { overview: o, billing: b, allocation: a, value: v } = input;
 
@@ -70,26 +115,33 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     support: o?.claimSupport ?? unreachableSupport('withheld_unsupported'),
     basis: o === null
       ? 'could not read the ledger'
-      : 'counted from requests, priced from a rate card',
+      : meteredBasisLine(o.pricing.basis),
     nextStep: o === null ? 'Check that Segreant is running.' : undefined,
     inspection: {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,
       freshness: o?.generatedAt ?? 'not established',
       coverage: o?.claimSupport?.note
-        ?? (estimatedShare === null
-          ? 'pricing coverage unavailable'
-          : `${Math.round((1 - estimatedShare) * 100)}% of spend priced from a matched rate card, not estimated`),
+        ?? (o?.pricing.basis
+          ? meteredBasisParts(o.pricing.basis)
+          : estimatedShare === null
+            ? 'pricing coverage unavailable'
+            : `${Math.round((1 - estimatedShare) * 100)}% of spend priced at the model's own card rate; all of it is a list-price estimate`),
       // The distinction the whole product is built on, stated where someone is
       // most likely to reach for the metered figure as if it were the bill.
       enforceability: 'observation claim; local caps can govern future in-path requests, but metered cost does not become billed cost',
       evidenceSource: 'local request ledger',
-      assumptions: ['Rate-card cost is an estimate unless provider billing evidence establishes a billed amount.'],
+      assumptions: ['Every local amount is an estimate of a bill: list price is what the use would cost at published API rates, with no plan, discount, credit or tax.'],
       missingEvidence: o === null
         ? ['a readable local ledger']
-        : estimatedShare !== null && estimatedShare > 0
-          ? ['exact rate-card matches for the estimated rows']
-          : [],
+        : [
+            ...(o.pricing.basis?.cohorts ?? []).flatMap((c) =>
+              c.id === 'fallback' ? [`a model rate for ${modelsOf(c)} (if the card has learned it since, segreant reprice previews the new price)`]
+              : c.id === 'tool_reported' ? ['verification of the tool-reported amounts']
+              : c.id === 'unrecorded' ? ['the pricing basis of rows recorded before it was kept']
+              : []),
+            ...(o.pricing.basis ? [] : estimatedShare !== null && estimatedShare > 0 ? ['exact rate-card matches for the estimated rows'] : []),
+          ],
     },
   };
 

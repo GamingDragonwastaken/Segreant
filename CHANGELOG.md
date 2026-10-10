@@ -11,6 +11,24 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Every total says how it was priced, in parts.** `today`, `week`, `month`, the home view, the first-run month line and the dashboard's Metered claim used to call every dollar "priced from the rate card". That was wrong for:
+  - amounts a tool reported;
+  - models the card did not know, which were priced at the generic fallback rate;
+  - rows recorded before the basis was kept.
+
+  A total now splits into parts:
+  - list price, at the model's own rate;
+  - list price, at the nearest model's rate;
+  - fallback rate, naming the models;
+  - tool-reported, including free models reported at no charge;
+  - not priced;
+  - basis not recorded.
+
+  Its headline word follows the weakest part: "List cost" only when every dollar is at a model's own rate, otherwise "Estimated cost". The dashboard inspector no longer calls matched rows "not estimated", since every local amount is an estimate of a bill. The overview API and the `--json` outputs carry the same parts.
+- **The rate card prices gpt-6.1-sol**, from OpenAI's model page read 2026-10-10: $2 input, $0.10 cached, $10 output per million. It also maps Antigravity's `gemini-3.1-pro-low` and `-high` to Gemini 3.1 Pro.
+  - On the owner's month, gpt-6.1-sol had read $305 at the fallback rate. `segreant reprice` previews it at $137 under the new card.
+  - Rows already imported keep their price until `reprice --apply`, and a fallback part now says so.
+
 - **`scan --setup` asks what you pay.**
   - At the end, in an interactive terminal, it asks the monthly price of each plan your tools report and you have not priced. The public price is shown as a hint, and Enter skips.
   - Scripts, pipes and `--json` are never asked.
