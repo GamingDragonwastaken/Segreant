@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated": "2026-10-09",
+  "updated": "2026-10-10",
   "currency": "USD",
   "unit": "per_million_tokens",
   "notes": [
@@ -42,9 +42,10 @@
     },
     "openai": {
       "verified": true,
-      "source": "developers.openai.com/api/docs/pricing, Standard tier, short-context rates (read 2026-09-29)",
+      "source": "developers.openai.com/api/docs/pricing, Standard tier, short-context rates (read 2026-09-29); gpt-6.1-sol from developers.openai.com/api/docs/models/gpt-6.1-sol (read 2026-10-10: prompts over 272K input tokens bill 2x input and cache and 1.5x output, Fast 2x, Batch and Flex 0.5x, regional processing +10%; none of these modifiers is applied here)",
       "models": {
         "gpt-6-astra": {"input": 10, "output": 50, "cache_read": 1, "exact": {"input": "10", "output": "50", "cache_read": "1"}},
+        "gpt-6.1-sol": {"input": 2, "output": 10, "cache_read": 0.1, "exact": {"input": "2", "output": "10", "cache_read": "0.1"}},
         "gpt-6-sol": {"input": 2, "output": 10, "cache_read": 0.2, "exact": {"input": "2", "output": "10", "cache_read": "0.2"}},
         "gpt-6-luna": {"input": 0.1, "output": 0.5, "cache_read": 0.01, "exact": {"input": "0.1", "output": "0.5", "cache_read": "0.01"}},
         "gpt-5.6-sol": {"input": 4, "output": 20, "cache_read": 0.4, "exact": {"input": "4", "output": "20", "cache_read": "0.4"}},
@@ -79,7 +80,7 @@
     },
     "google": {
       "verified": true,
-      "source": "ai.google.dev/gemini-api/docs/pricing (2.5 models read 2026-06; 3.x models read 2026-10-09, page updated 2026-10-07). Gemini 3.6-3.8 Flash carry the rates through 2026-12-31 (the page lists higher rates from 2027-01-01); gemini-3.1-pro-preview carries the rate for prompts of 200k tokens or fewer.",
+      "source": "ai.google.dev/gemini-api/docs/pricing (2.5 models read 2026-06; 3.x models read 2026-10-09, page updated 2026-10-07). Gemini 3.6-3.8 Flash carry the rates through 2026-12-31 (the page lists higher rates from 2027-01-01); gemini-3.1-pro-preview carries the rate for prompts of 200k tokens or fewer. gemini-3.1-pro is the family key for Antigravity's thinking-level names (gemini-3.1-pro-low, -high), at the same rate; those rows match by family, so they stay marked estimated.",
       "models": {
         "gemini-2.5-pro": {"input": 1.25, "output": 10.0, "cache_read": 0.125, "exact": {"input": "1.25", "output": "10", "cache_read": "0.125"}},
         "gemini-2.5-flash": {"input": 0.3, "output": 2.5, "cache_read": 0.03, "exact": {"input": "0.3", "output": "2.5", "cache_read": "0.03"}},
@@ -91,6 +92,7 @@
         "gemini-3.5-flash-lite": {"input": 0.3, "output": 2.5, "cache_read": 0.03, "exact": {"input": "0.3", "output": "2.5", "cache_read": "0.03"}},
         "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.5, "cache_read": 0.025, "exact": {"input": "0.25", "output": "1.5", "cache_read": "0.025"}},
         "gemini-3.1-pro-preview": {"input": 2.0, "output": 12.0, "cache_read": 0.2, "exact": {"input": "2", "output": "12", "cache_read": "0.2"}},
+        "gemini-3.1-pro": {"input": 2.0, "output": 12.0, "cache_read": 0.2, "exact": {"input": "2", "output": "12", "cache_read": "0.2"}},
         "gemini-3-flash-preview": {"input": 0.5, "output": 3.0, "cache_read": 0.05, "exact": {"input": "0.5", "output": "3", "cache_read": "0.05"}}
       }
     }

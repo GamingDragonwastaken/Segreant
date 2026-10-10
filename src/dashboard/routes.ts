@@ -55,6 +55,7 @@ import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
+import { summarizeBasis } from '../cost/basis.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
@@ -196,6 +197,7 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
     : todaySpend;
   const summary = store.summary(startMs, endMs);
   const pricingWindow = store.healthStats(startMs, endMs);
+  const provenance = store.pricingEvidenceByModel(startMs, endMs);
   // What retention deleted from inside this window. Read from the ledger's own
   // record, because an absence of rows is exactly what cannot distinguish a
   // quiet window from a pruned one (D-175).
@@ -237,7 +239,8 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
       // Per-row provenance, grouped without mixing cards or match paths. This
       // is deliberately separate from the active card above: a refresh never
       // rewrites the evidence captured for historical requests.
-      provenance: store.pricingEvidenceByModel(startMs, endMs),
+      provenance,
+      basis: summarizeBasis(provenance),
     },
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),
