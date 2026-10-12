@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "c2761ed82f3b347eddb39976c48325cf70843b653430370cf0f2f620b1abcc36";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "0fed6abdd84adde9d31f06fd3a9517d8a78328510afb0e39826b0ba627202446";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -711,6 +711,367 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "recordsDuplicate",
       "optional": false,
       "type": "number"
+    }
+  ],
+  "StatementPeriod": [
+    {
+      "name": "startMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "endMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "complete",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
+  "StatementProject": [
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "StatementModel": [
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "provider",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "StatementMetered": [
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "claimSupport",
+      "optional": false,
+      "type": "ClaimSupportPayload"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "BasisSummaryPayload"
+    },
+    {
+      "name": "retention",
+      "optional": false,
+      "type": "WindowRetentionCoveragePayload"
+    },
+    {
+      "name": "byProject",
+      "optional": false,
+      "type": "StatementProject[]"
+    },
+    {
+      "name": "byModel",
+      "optional": false,
+      "type": "StatementModel[]"
+    }
+  ],
+  "StatementBilledRun": [
+    {
+      "name": "reconciliationRunId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "computedAtMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "providerReportedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "localCapturedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unexplainedVarianceMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "providerSourceKind",
+      "optional": false,
+      "type": "'provider_api_pull' | 'operator_supplied_export' | 'legacy_unknown'"
+    },
+    {
+      "name": "offPathBound",
+      "optional": false,
+      "type": "'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention'"
+    },
+    {
+      "name": "coversWholeMonth",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
+  "StatementBilled": [
+    {
+      "name": "monthCoverage",
+      "optional": false,
+      "type": "StatementMonthCoverage"
+    },
+    {
+      "name": "overlappingRuns",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "scanComplete",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "runs",
+      "optional": false,
+      "type": "StatementBilledRun[]"
+    }
+  ],
+  "StatementCostCentreShare": [
+    {
+      "name": "costCentreId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "allocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requestCount",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "sourceBasis",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "StatementAllocatedRun": [
+    {
+      "name": "allocationRunId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "computedAtMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "totalMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "allocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unallocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "conserves",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "byCostCentre",
+      "optional": false,
+      "type": "StatementCostCentreShare[]"
+    },
+    {
+      "name": "coversWholeMonth",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
+  "StatementCostCentreName": [
+    {
+      "name": "costCentreId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "name",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "StatementAllocated": [
+    {
+      "name": "monthCoverage",
+      "optional": false,
+      "type": "StatementMonthCoverage"
+    },
+    {
+      "name": "overlappingRuns",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "scanComplete",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "runs",
+      "optional": false,
+      "type": "StatementAllocatedRun[]"
+    },
+    {
+      "name": "costCentres",
+      "optional": false,
+      "type": "StatementCostCentreName[]"
+    }
+  ],
+  "StatementRealized": [
+    {
+      "name": "standing",
+      "optional": false,
+      "type": "'not_computed_per_month'"
+    },
+    {
+      "name": "reason",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "StatementClose": [
+    {
+      "name": "status",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "activeFinalizationId",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "eventCount",
+      "optional": false,
+      "type": "number | null"
+    }
+  ],
+  "StatementPayload": [
+    {
+      "name": "demo",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "generatedAt",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "month",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "period",
+      "optional": false,
+      "type": "StatementPeriod"
+    },
+    {
+      "name": "metered",
+      "optional": false,
+      "type": "StatementMetered"
+    },
+    {
+      "name": "billed",
+      "optional": false,
+      "type": "StatementBilled"
+    },
+    {
+      "name": "allocated",
+      "optional": false,
+      "type": "StatementAllocated"
+    },
+    {
+      "name": "realized",
+      "optional": false,
+      "type": "StatementRealized"
+    },
+    {
+      "name": "close",
+      "optional": false,
+      "type": "StatementClose"
     }
   ],
   "BillingPayload": [
@@ -3607,6 +3968,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "billing",
       "optional": false,
       "type": "BillingPayload"
+    },
+    {
+      "name": "statement",
+      "optional": false,
+      "type": "StatementPayload"
     },
     {
       "name": "allocation",
