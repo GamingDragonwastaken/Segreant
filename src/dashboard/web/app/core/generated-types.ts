@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 62e8e3f2fd78dff8bae65d9b828db8e5b18e58e270f660eff36e65a4fb513d24 */
+/** Source SHA-256: ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -839,6 +839,23 @@ export interface AllocationRunRecord {
 }
 
 /**
+ * `POST /api/allocation/write`. One deliberate allocation change per request;
+ * the same Store methods and validation as `segreant alloc`. Preview runs
+ * (`op: 'run'` with `applied: false`) record nothing.
+ */
+export interface AllocationWritePayload {
+  ok: boolean;
+  op: 'centre' | 'archive' | 'rule' | 'revoke' | 'run';
+  applied: boolean;
+  message: string;
+  costCentre?: CostCentre;
+  rule?: AllocationRule;
+  revoked?: number;
+  allocationRunId?: string | null;
+  result?: AllocationRunResultPayload;
+}
+
+/**
  * The realized-value payload.
  *
  * Every field here was read off an actual /api/value response, not inferred from
@@ -1501,6 +1518,7 @@ export interface DashboardResponseMap {
   judge: JudgePayload;
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
+  'allocation-write': AllocationWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;

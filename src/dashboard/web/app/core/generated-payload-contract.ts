@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "62e8e3f2fd78dff8bae65d9b828db8e5b18e58e270f660eff36e65a4fb513d24";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1902,6 +1902,53 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "result",
       "optional": false,
+      "type": "AllocationRunResultPayload"
+    }
+  ],
+  "AllocationWritePayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "op",
+      "optional": false,
+      "type": "'centre' | 'archive' | 'rule' | 'revoke' | 'run'"
+    },
+    {
+      "name": "applied",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "message",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "costCentre",
+      "optional": true,
+      "type": "CostCentre"
+    },
+    {
+      "name": "rule",
+      "optional": true,
+      "type": "AllocationRule"
+    },
+    {
+      "name": "revoked",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "allocationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "result",
+      "optional": true,
       "type": "AllocationRunResultPayload"
     }
   ],

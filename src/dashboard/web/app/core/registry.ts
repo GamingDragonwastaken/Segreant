@@ -150,9 +150,18 @@ export const CAPABILITIES: readonly Capability[] = [
   // ---- Allocation ---------------------------------------------------------
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'segreant project --coverage' },
   { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'planned', command: 'segreant project alias' },
-  { id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc centre' },
-  { id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc rule' },
-  { id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc run --apply' },
+  {
+    id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'segreant alloc centre',
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'centre'", note: 'Allocate step 1 lists, adds and archives cost centres through /api/allocation/write' },
+  },
+  {
+    id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc rule',
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'rule'", note: 'all three methods; the GUI matches on project only, and priority and effective dates stay on the CLI' },
+  },
+  {
+    id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc run --apply',
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'run'", note: 'preview then record for last month or this month; arbitrary periods stay on the CLI' },
+  },
 
   // ---- Evidence -----------------------------------------------------------
   { id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set' },
