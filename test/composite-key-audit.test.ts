@@ -69,6 +69,7 @@ const CLASSIFIED: ReadonlyArray<{ file: string; contains: string; reason: Reason
   { file: 'src/store/causalProducer.ts', contains: 'lineage:${JSON.stringify([input.studyId, input.decisionId])}', reason: 'tuple', why: 'causal identifiers admit a colon (D-241)' },
   { file: 'src/value/frontier.ts', contains: 'frontier:${JSON.stringify([taskType, incumbent.model, candidate.model])}', reason: 'tuple', why: 'model names are free text (D-241)' },
   { file: 'src/value/realization.ts', contains: 'proxy:${JSON.stringify([proposal.provider, proposal.model])}', reason: 'tuple', why: 'model names are free text (D-241)' },
+  { file: 'src/dashboard/web/app/views/statement.ts', contains: "${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}", reason: 'constrained', why: 'a YYYY-MM month key: a four-digit year and a zero-padded month, neither of which can hold a hyphen' },
 ];
 
 test('every identity-shaped delimiter join under src/ is classified, and every classification still points at a live line', () => {

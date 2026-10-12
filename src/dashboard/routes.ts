@@ -449,6 +449,167 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
   }
 }
 
+const STATEMENT_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const STATEMENT_TOP = 10;
+const STATEMENT_RUN_LIMIT = 50;
+
+/**
+ * Local-time calendar month, half-open: local midnight on the 1st to local
+ * midnight on the 1st of the next month. Local time matches startOfLocalDay,
+ * which the day figures already use. Only the rolling `segreant month` window
+ * exists in the CLI, so there is no calendar helper to reuse.
+ */
+export function calendarMonthBounds(year: number, month: number): { startMs: number; endMs: number } {
+  return { startMs: new Date(year, month - 1, 1).getTime(), endMs: new Date(year, month, 1).getTime() };
+}
+
+/**
+ * How far a month's overlapping runs reach. Never a sum: a run that covers only
+ * part of the month says so, and no run is prorated into a month figure.
+ */
+function monthCoverageOf(runs: ReadonlyArray<{ coversWholeMonth: boolean }>): 'not_established' | 'partial' | 'whole' {
+  if (runs.length === 0) return 'not_established';
+  return runs.some((r) => r.coversWholeMonth) ? 'whole' : 'partial';
+}
+
+/**
+ * One calendar month as a finance reader would take it. Four claims sit side
+ * by side, each with its own basis and evidence, and they are never summed:
+ * metered usage (the request ledger), provider-billed cost (reconciliation
+ * runs), allocated cost (allocation runs), and realized value (not computed per
+ * month). A figure the store cannot establish for the month is reported as not
+ * established, never filled in.
+ */
+export function handleStatement({ res, url, store }: RouteContext): void {
+  try {
+    const now = Date.now();
+    const raw = url.searchParams.get('month');
+    let year: number;
+    let month: number;
+    if (raw === null) {
+      const current = new Date(now);
+      year = current.getFullYear();
+      month = current.getMonth() + 1;
+    } else {
+      const match = /^(\d{4})-(\d{2})$/.exec(raw);
+      if (!match) return json(res, 400, { error: 'month must be YYYY-MM, for example 2026-07' });
+      year = Number(match[1]);
+      month = Number(match[2]);
+      if (year < 1970 || month < 1 || month > 12) return json(res, 400, { error: 'month must be a calendar month from 1970 onward' });
+    }
+    const { startMs, endMs } = calendarMonthBounds(year, month);
+    if (startMs > now) return json(res, 400, { error: `month ${year}-${String(month).padStart(2, '0')} is entirely in the future` });
+    const overlaps = (periodStartMs: number, periodEndMs: number) => periodStartMs < endMs && periodEndMs > startMs;
+    const covers = (periodStartMs: number, periodEndMs: number) => periodStartMs <= startMs && periodEndMs >= endMs;
+
+    // Metered: the same reads buildOverview makes, for this month's range.
+    const summary = store.summary(startMs, endMs);
+    const pricingWindow = store.healthStats(startMs, endMs);
+    const retention = store.windowCoverage(startMs);
+    const basis = summarizeBasis(store.pricingEvidenceByModel(startMs, endMs));
+
+    // Provider-billed: runs whose period overlaps the month. A partial run is
+    // reported as itself, with its own figures, never prorated into the month.
+    const reconciliation = store.reconciliationRuns(STATEMENT_RUN_LIMIT);
+    const billedRuns = reconciliation
+      .filter((r) => overlaps(r.result.periodStartMs, r.result.periodEndMs))
+      .map((r) => ({
+        reconciliationRunId: r.reconciliationRunId,
+        computedAtMs: r.computedAtMs,
+        periodStartMs: r.result.periodStartMs,
+        periodEndMs: r.result.periodEndMs,
+        providerReportedMicros: r.result.providerReportedMicros,
+        localCapturedMicros: r.result.localCapturedMicros,
+        unexplainedVarianceMicros: r.result.unexplainedVarianceMicros,
+        providerSourceKind: r.result.providerSourceKind,
+        offPathBound: r.result.offPathBound,
+        coversWholeMonth: covers(r.result.periodStartMs, r.result.periodEndMs),
+      }));
+
+    // Allocated: the same rule over allocation runs.
+    const allocations = store.allocationRuns(STATEMENT_RUN_LIMIT);
+    const allocatedRuns = allocations
+      .filter((r) => overlaps(r.result.periodStartMs, r.result.periodEndMs))
+      .map((r) => ({
+        allocationRunId: r.allocationRunId,
+        computedAtMs: r.computedAtMs,
+        periodStartMs: r.result.periodStartMs,
+        periodEndMs: r.result.periodEndMs,
+        totalMicros: r.result.totalMicros,
+        allocatedMicros: r.result.allocatedMicros,
+        unallocatedMicros: r.result.unallocatedMicros,
+        conserves: r.result.conserves,
+        byCostCentre: r.result.byCostCentre.map((c) => ({
+          costCentreId: c.costCentreId,
+          allocatedMicros: c.allocatedMicros,
+          requestCount: c.requestCount,
+          sourceBasis: c.sourceBasis,
+        })),
+        coversWholeMonth: covers(r.result.periodStartMs, r.result.periodEndMs),
+      }));
+
+    const closeStatus = store.economicPeriodCloseStatus(startMs, endMs);
+    const byProject = store.byProject(startMs, endMs)
+      .slice(0, STATEMENT_TOP)
+      .map((p) => ({ label: p.label, costUsd: p.costUsd, requests: p.requests }));
+    const byModel = store.byModel(startMs, endMs)
+      .slice(0, STATEMENT_TOP)
+      .map((m) => ({ label: m.label, provider: m.provider, costUsd: m.costUsd, requests: m.requests }));
+
+    return json(res, 200, {
+      demo: isDemo(),
+      generatedAt: new Date(now).toISOString(),
+      month: `${year}-${String(month).padStart(2, '0')}`,
+      period: {
+        startMs,
+        endMs,
+        label: `${STATEMENT_MONTH_NAMES[month - 1]} ${year}`,
+        complete: endMs <= now,
+      },
+      metered: {
+        costUsd: summary.costUsd,
+        requests: summary.requests,
+        claimSupport: meteredClaimSupport({
+          totalCostUsd: pricingWindow.totalCostUsd,
+          estimatedCostUsd: pricingWindow.estimatedCostUsd,
+          retention,
+        }),
+        basis,
+        retention,
+        byProject,
+        byModel,
+      },
+      billed: {
+        monthCoverage: monthCoverageOf(billedRuns),
+        overlappingRuns: billedRuns.length,
+        // False when the store returned as many runs as it was asked for, so an
+        // older overlapping run may exist beyond the read. A "not established"
+        // with this false is a limit of the read, not a finding.
+        scanComplete: reconciliation.length < STATEMENT_RUN_LIMIT,
+        runs: billedRuns,
+      },
+      allocated: {
+        monthCoverage: monthCoverageOf(allocatedRuns),
+        overlappingRuns: allocatedRuns.length,
+        scanComplete: allocations.length < STATEMENT_RUN_LIMIT,
+        runs: allocatedRuns,
+        costCentres: store.costCentres().map((c) => ({ costCentreId: c.costCentreId, name: c.name })),
+      },
+      realized: {
+        standing: 'not_computed_per_month',
+        reason: 'Realized value is read on the Value page; it is not computed per calendar month.',
+      },
+      close: {
+        status: closeStatus.status,
+        activeFinalizationId: closeStatus.activeFinalizationId,
+        eventCount: closeStatus.eventCount,
+      },
+    });
+  } catch (error) {
+    return json(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 /**
  * Provider billing evidence has a different truth contract from the local
  * request ledger: an operator supplied it, Segreant has not verified it with
@@ -1642,6 +1803,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('scan', handleScan),
   apiRoute('overview', handleOverview),
   apiRoute('billing', handleBilling),
+  apiRoute('statement', handleStatement),
   apiRoute('allocation', handleAllocation),
   apiRoute('allocation-write', handleAllocationWrite),
   apiRoute('billing-write', handleBillingWrite),

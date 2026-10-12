@@ -946,6 +946,24 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
   .step > .facts, .step > .form-hint { margin-left: 0; }
 }
 
+/* ---------- Statement ------------------------------------------------------ */
+.month-bar { display: flex; align-items: center; gap: var(--s3); margin: var(--s4) 0 var(--s5); flex-wrap: wrap; }
+.month-bar .btn-ghost { padding: var(--s1) var(--s3); font-size: 16px; line-height: 1; }
+.month-label { font-family: var(--serif); font-size: 20px; min-width: 10ch; text-align: center; }
+.month-state { color: var(--muted); font-size: 13px; }
+.statement-grid { display: grid; gap: var(--s4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 820px) { .statement-grid { grid-template-columns: minmax(0, 1fr); } }
+.statement-card .pill { white-space: nowrap; }
+.statement-card { display: flex; flex-direction: column; gap: var(--s2); }
+.statement-card .stat { margin: var(--s1) 0; }
+.statement-none { color: var(--muted); }
+.statement-run { display: grid; gap: 2px; padding: var(--s2) 0; border-bottom: 1px solid var(--line-soft); }
+.statement-run:last-of-type { border-bottom: 0; }
+.statement-shares { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.statement-shares li { display: flex; justify-content: space-between; gap: var(--s3); font-size: 14px; }
+.statement-link { margin-top: auto; padding-top: var(--s2); color: var(--gold-text); font-size: 13px; text-underline-offset: 3px; }
+.statement-rule { margin-top: var(--s4); max-width: 80ch; }
+
 /* ---------- Folds (long evidence, closed by default) ------------------------ */
 .fold { margin-top: var(--s3); border-top: 1px solid var(--line-soft); }
 .fold:last-of-type { border-bottom: 1px solid var(--line-soft); }
