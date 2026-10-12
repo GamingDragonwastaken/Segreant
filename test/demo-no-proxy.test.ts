@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { connect } from 'node:net';
+import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,10 +16,26 @@ const listening = (port: number): Promise<boolean> => new Promise((resolve) => {
   socket.once('error', () => resolve(false));
 });
 
+/** A port nothing is listening on right now, chosen by the OS. */
+const freePort = (): Promise<number> => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => {
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    server.close(() => resolve(port));
+  });
+});
+
+const until = async (check: () => boolean | Promise<boolean>, ms: number): Promise<void> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline && !(await check())) await new Promise((r) => setTimeout(r, 200));
+};
+
 test('demo mode serves the dashboard and starts no proxy', async () => {
   const home = mkdtempSync(join(tmpdir(), 'segreant-demo-noproxy-'));
-  const proxyPort = 8291;
-  const dashboardPort = 8292;
+  const proxyPort = await freePort();
+  const dashboardPort = await freePort();
   const child = spawn(process.execPath, ['bin/segreant.mjs', 'demo', '--serve', '--port', String(proxyPort), '--dashboard-port', String(dashboardPort)], {
     cwd: process.cwd(),
     env: { ...process.env, SEGREANT_HOME: home, NO_COLOR: '1' },
@@ -27,11 +43,13 @@ test('demo mode serves the dashboard and starts no proxy', async () => {
   });
   let out = '';
   child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+  child.stderr.on('data', (d: Buffer) => { out += d.toString(); });
   try {
-    for (let i = 0; i < 300 && !(await listening(dashboardPort)); i++) await new Promise((r) => setTimeout(r, 200));
-    assert.equal(await listening(dashboardPort), true, 'the dashboard answers');
-    assert.equal(await listening(proxyPort), false, 'no proxy listens in demo mode');
-    for (let i = 0; i < 50 && !/Real metering is untouched/.test(out); i++) await new Promise((r) => setTimeout(r, 100));
+    // Seeding the demo store comes first and is slow under a loaded runner.
+    await until(() => /Real metering is untouched/.test(out) && /sample-data dashboard/.test(out), 120_000);
+    await until(() => listening(dashboardPort), 30_000);
+    assert.equal(await listening(dashboardPort), true, `the dashboard answers\n${out}`);
+    assert.equal(await listening(proxyPort), false, `no proxy listens in demo mode\n${out}`);
     assert.match(out, /No proxy runs in demo mode/);
     assert.doesNotMatch(out, /Start your tools through Segreant/);
   } finally {
