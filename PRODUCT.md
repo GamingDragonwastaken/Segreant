@@ -94,7 +94,7 @@ enabled, and the declared egress mode/rule records the Segreant-process decision
 
 ## Capabilities and Constraints
 
-- Roughly forty CLI verbs today: metering, budgets and alerts, project
+- About sixty CLI commands today (72 names in `src/cli.ts`, including aliases and help/version flags): metering, budgets and alerts, project
   attribution, imports, provider billing evidence and reconciliation, cost-centre
   allocation, pricing and repricing, value/RoI measurement, judging, evidence
   records, export, team rollups, doctor/audit/guide.
@@ -134,9 +134,11 @@ Seal" set) are in the repository.
   capabilities, intended direction, and claims the evidence does not establish.
 - `docs/RELIABILITY-PERFORMANCE.md` — reproducible local performance and
   reliability observations with their measurement limits.
+- **Published:** `segreant` 0.1.0 on npm (2026-10-08). Version 0.2.0 is
+  unreleased and not on npm.
 - **Absent, and never to be fabricated:** no completed reconciliation against a
-  real provider bill; no npm publication; no production team deployment; no
-  customers, testimonials, benchmarks, or pricing.
+  real provider bill; no production team deployment; no customers,
+  testimonials, benchmarks, or pricing.
 
 ## Product Principles
 
