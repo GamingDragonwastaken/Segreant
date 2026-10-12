@@ -641,6 +641,25 @@ export function isDemo(): boolean {
   return envOverride('DEMO') === '1';
 }
 
+/**
+ * Raised when a command would write real usage into the sample store. In demo
+ * mode the open store is demo.db, so an import there would sit inside totals
+ * labelled as synthetic data while claiming to be isolated.
+ */
+export class DemoWriteBlockedError extends Error {
+  readonly code = 'DEMO_WRITE_BLOCKED';
+
+  constructor(what: string) {
+    super(`Demo mode holds sample data only, so ${what} was not written. Run it without --demo to bring in your own usage; the sample data stays in demo.db.`);
+    this.name = 'DemoWriteBlockedError';
+  }
+}
+
+/** Fail closed before any import writes into a store that is demo data. */
+export function refuseDemoWrite(what: string): void {
+  if (isDemo()) throw new DemoWriteBlockedError(what);
+}
+
 /** Remove the demo database (and its WAL/SHM sidecars) for a clean re-seed. */
 export function unlinkDemoDb(): void {
   for (const suffix of ['', '-wal', '-shm']) {
