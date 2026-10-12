@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Allocation can be done in the dashboard, start to finish.**
+  - The Allocate page was a description with a list of terminal commands. It is now three steps: add cost centres, write rules (all to one centre, fixed shares, or shared in proportion to direct spend), then preview a month's split and record it. Nothing is recorded until you press Record this run, the dashboard's form of `--apply`. Sample data allows the preview and refuses every change.
+  - A new local-only `POST /api/allocation/write` uses the same store calls and validation as `segreant alloc`.
+  - Fixed: the dashboard declared cost centres and rules with fields the server never sends (`id` instead of `costCentreId` and `ruleId`). The browser checks every payload against those declarations, so the Allocate page failed with a contract violation as soon as one real cost centre existed. Sample data has none, so no test saw it. A new test reads a populated ledger.
+  - The figures bar at the top re-reads the allocation claim after a change, so it no longer says "no cost centres" under a page that just saved one.
+
 - **The dashboard is organised around jobs, not internal layers.**
   - The bar reads Spend, Protect, Close, Allocate and Value, with Data and Settings set apart as setup. Each page title matches its tab.
   - First run asks what you do ("I look after the money" or "I build with AI tools") instead of asking you to pick a wording register before you have seen anything.

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "757c98b579c6d3df12a7b42aa5c34481b7a3747e101bc916b048420857207a63";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1636,24 +1636,46 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
   ],
   "CostCentre": [
     {
-      "name": "id",
+      "name": "costCentreId",
       "optional": false,
       "type": "string"
     },
     {
-      "name": "label",
-      "optional": true,
+      "name": "name",
+      "optional": false,
       "type": "string"
     },
     {
-      "name": "name",
-      "optional": true,
+      "name": "owner",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "createdAtMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "archivedAtMs",
+      "optional": false,
+      "type": "number | null"
+    }
+  ],
+  "AllocationTarget": [
+    {
+      "name": "costCentreId",
+      "optional": false,
       "type": "string"
+    },
+    {
+      "name": "ratio",
+      "optional": false,
+      "type": "number"
     }
   ],
   "AllocationRule": [
     {
-      "name": "id",
+      "name": "ruleId",
       "optional": false,
       "type": "string"
     },
@@ -1665,22 +1687,153 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "method",
       "optional": false,
-      "type": "string"
+      "type": "'direct' | 'fixed_split' | 'proportional_to_direct'"
+    },
+    {
+      "name": "match",
+      "optional": false,
+      "type": "Record<string, string | null>"
     },
     {
       "name": "targets",
-      "optional": true,
-      "type": "string[] | null"
+      "optional": false,
+      "type": "AllocationTarget[]"
     },
     {
-      "name": "revokedAtMs",
-      "optional": true,
-      "type": "number | null"
+      "name": "priority",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "effectiveFromMs",
+      "optional": false,
+      "type": "number"
     },
     {
       "name": "effectiveToMs",
-      "optional": true,
+      "optional": false,
       "type": "number | null"
+    },
+    {
+      "name": "revokedAtMs",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "owner",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "note",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "createdAtMs",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "AllocationCentreShare": [
+    {
+      "name": "costCentreId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "allocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requestCount",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "sourceBasis",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "AllocationUnallocated": [
+    {
+      "name": "reason",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "micros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requestCount",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "sourceBasis",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "topProjects",
+      "optional": false,
+      "type": "Array<{ project: string; micros: number }>"
+    }
+  ],
+  "AllocationRunResultPayload": [
+    {
+      "name": "periodStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "totalMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "allocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unallocatedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "byCostCentre",
+      "optional": false,
+      "type": "AllocationCentreShare[]"
+    },
+    {
+      "name": "unallocated",
+      "optional": false,
+      "type": "AllocationUnallocated[]"
+    },
+    {
+      "name": "sourceBases",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "conserves",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "retention",
+      "optional": true,
+      "type": "{ truncated: boolean; prunedBeforeMs: number | null }"
     }
   ],
   "AllocationPayload": [
@@ -1748,8 +1901,55 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "result",
+      "optional": false,
+      "type": "AllocationRunResultPayload"
+    }
+  ],
+  "AllocationWritePayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "op",
+      "optional": false,
+      "type": "'centre' | 'archive' | 'rule' | 'revoke' | 'run'"
+    },
+    {
+      "name": "applied",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "message",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "costCentre",
       "optional": true,
-      "type": "Record<string, unknown>"
+      "type": "CostCentre"
+    },
+    {
+      "name": "rule",
+      "optional": true,
+      "type": "AllocationRule"
+    },
+    {
+      "name": "revoked",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "allocationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "result",
+      "optional": true,
+      "type": "AllocationRunResultPayload"
     }
   ],
   "Matured": [

@@ -106,12 +106,16 @@ test('defect 3: notyet blocks do not skip from h1 to h3', () => {
     assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
   }
 
+  // The Allocate view replaced its notyet block with numbered steps, each of
+  // which is the empty state for its own stage. The rule is unchanged: under
+  // the page h1, every section heading is an h2, and nothing skips a level.
   const allocation = readFileSync(join(APP, 'views', 'allocation.ts'), 'utf8');
   const allocationBlocks = allocation.match(/class: 'notyet'[\s\S]{0,160}?h\('h(\d)'/g) ?? [];
-  assert.ok(allocationBlocks.length > 0, 'expected a notyet block in the Allocated view');
   for (const block of allocationBlocks) {
     assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
   }
+  assert.match(allocation, /h\('h2', \{ class: 'step-title' \}/, 'each Allocate step opens with an h2');
+  assert.doesNotMatch(allocation, /h\('h[3-6]'/, 'nothing in the Allocate view skips below h2');
 });
 
 /**
