@@ -27,7 +27,7 @@ export function systemView(): Node {
 
   return h('div', null,
     h('div', { class: 'view-head' },
-      h('h1', { class: 'view-title', text: 'System' }),
+      h('h1', { class: 'view-title', text: 'Settings' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Local configuration, rate cards, maintenance, and the CLI/GUI parity map rendered from the same registry the GUI routes through.'
         : 'Settings for this machine, plus an honest list of everything Segreant can do and whether this web interface can do it yet.' })),

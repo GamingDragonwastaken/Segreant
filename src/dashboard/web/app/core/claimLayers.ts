@@ -83,6 +83,14 @@ export function meteredBasisLine(basis: Basis | undefined): string {
         : "API list price: each model's own rate on the rate card";
     default: {
       const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+      // With no weak part above a cent, the "estimated" headline comes from the
+      // mix itself (sample rows beside priced ones, or unpriced requests). It
+      // used to print "0% priced without the model's own rate ()".
+      if (weak.length === 0) {
+        if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the rate card';
+        if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'API list price; some requests could not be priced';
+        return "API list price from the rate card";
+      }
       const share = basis.totalUsd > 0 ? Math.round((weak.reduce((s, c) => s + c.costUsd, 0) / basis.totalUsd) * 100) : 0;
       return `estimated: ${share}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`;
     }
