@@ -304,6 +304,11 @@ const MAX_DATE_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
  * Merge a few new ids into an already sorted list, in the same order
  * `Array.prototype.sort()` gives strings. Re-sorting the whole list on every
  * extension made each proxied request cost O(n log n) in the day's events.
+ *
+ * Cost note: the merge still copies the whole cached id list on every extension,
+ * so the memory copied per append grows with the events a projection retains.
+ * That growth is not O(1) and is not asserted as such; it is measured separately.
+ * The work counters in exactSpendWorkCounters() count rows read, not bytes copied.
  */
 function mergeSortedIds(sorted: readonly string[], added: readonly string[]): string[] {
   if (added.length === 0) return [...sorted];
@@ -639,6 +644,8 @@ export class Store {
   private epistemicLedger!: EpistemicLedger;
   private economicLedger!: EconomicLedger;
   private readonly exactSpendCache = new Map<string, ExactSpendCacheEntry>();
+  /** Diagnostic work counters for the exact-spend readers; see exactSpendWorkCounters(). */
+  private readonly exactSpendWork = { fullProjections: 0, incrementalRowsVisited: 0 };
   private requestMarks: AppendMark | null = null;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
@@ -1397,12 +1404,14 @@ export class Store {
     const appendedIds = prepared(this.db, 'SELECT request_id AS requestId FROM requests WHERE rowid > ?')
       .all(cached.requestMark.rowid) as Array<{ requestId: string }>;
     if (requestMark.count - cached.requestMark.count !== appendedIds.length) return null;
+    this.exactSpendWork.incrementalRowsVisited += appendedIds.length;
     const newRequestIds = new Set(appendedIds.map((row) => row.requestId));
     // A window projection reads events occurring inside the window; a session
     // has no fixed window, so every appended event is read. That is at least
     // as inclusive as the full session projection, and only new events are read.
     const [startMs, endMs] = scope.kind === 'window' ? [scope.startMs, scope.endMs] : [0, MAX_DATE_MS];
     const events = this.economicLedger.eventsAppendedAfterInOccurrenceRange(cached.eventMark.rowid, startMs, endMs);
+    this.exactSpendWork.incrementalRowsVisited += events.length;
     for (const event of events) {
       const metadata = event.metadata;
       const requestId = metadata !== null && typeof metadata === 'object' && !Array.isArray(metadata)
@@ -1423,6 +1432,7 @@ export class Store {
            FROM requests WHERE rowid > ? AND session_id = ?` + this.viaClause(liveOnly) + `
            ORDER BY ts_epoch_ms ASC, request_id ASC`,
       ).all(cached.requestMark.rowid, scope.sessionId)) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    this.exactSpendWork.incrementalRowsVisited += rows.length;
     const delta = this.exactSpendFromRows(rows, startMs, endMs, liveOnly, events);
     const sourceBases = new Set<EconomicBasis>([...cached.projection.sourceBases, ...delta.sourceBases]);
     return Object.freeze({
@@ -1434,8 +1444,26 @@ export class Store {
     });
   }
 
+  /**
+   * Diagnostic seam for tests, not an input to any figure. `fullProjections`
+   * counts whole-window or whole-session re-projections (cache misses, expiry,
+   * invalidation, and short sliding windows). `incrementalRowsVisited` counts
+   * the request ids, request rows and charge events that cache extensions read.
+   * Returns a copy; pair with resetExactSpendWorkCounters().
+   */
+  exactSpendWorkCounters(): { fullProjections: number; incrementalRowsVisited: number } {
+    return { ...this.exactSpendWork };
+  }
+
+  /** Diagnostic seam for tests: zero the exact-spend work counters. */
+  resetExactSpendWorkCounters(): void {
+    this.exactSpendWork.fullProjections = 0;
+    this.exactSpendWork.incrementalRowsVisited = 0;
+  }
+
   private exactSpendBetweenFull(startMs: number, endMs: number, liveOnly: boolean): ExactSpendProjection {
-    const rows = prepared(this.db, 
+    this.exactSpendWork.fullProjections += 1;
+    const rows = prepared(this.db,
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
@@ -1477,7 +1505,8 @@ export class Store {
   }
 
   private exactSpendForSessionFull(sessionId: string, liveOnly: boolean): ExactSpendProjection {
-    const rows = prepared(this.db, 
+    this.exactSpendWork.fullProjections += 1;
+    const rows = prepared(this.db,
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
          FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
