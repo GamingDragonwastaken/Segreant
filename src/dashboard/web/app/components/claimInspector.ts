@@ -29,6 +29,8 @@ import {
   claimIsSupported,
   claimProfileRows,
   claimShowsFigure,
+  claimCompletionLine,
+  claimStrongerClaimLine,
   type Layer,
 } from '../core/claimTypes.ts';
 
@@ -119,6 +121,7 @@ function panel(layer: Layer): Node {
 
   const scrim = h('div', { class: 'claim-scrim', onclick: () => closeClaimInspector() });
 
+  const stronger = claimStrongerClaimLine(layer);
   const body = h('aside', {
     class: `claim-panel${claimIsSupported(layer) ? '' : ' claim-panel-open'}`,
     role: 'dialog',
@@ -156,9 +159,11 @@ function panel(layer: Layer): Node {
 
     i.missingEvidence.length
       ? list(isPrecise() ? 'Missing evidence' : 'What we do not have', i.missingEvidence, 'claim-missing')
-      : h('p', { class: 'claim-complete', text: isPrecise()
-          ? 'No missing evidence is named for this claim.'
-          : 'Nothing is missing for this one.' }),
+      : h('p', { class: 'claim-complete', text: claimCompletionLine(layer, isPrecise()) }),
+
+    stronger
+      ? h('p', { class: 'claim-basis', text: stronger })
+      : null,
 
     layer.nextStep
       ? h('p', { class: 'claim-next', text: `Next action: ${layer.nextStep}` })

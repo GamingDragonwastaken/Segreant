@@ -11,6 +11,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Kept means one thing everywhere.**
+  - The website defines Kept as work that passed every check you track. The CLI counted survival alone, so work that failed its tests and its ship check but stayed in the tree was reported as Kept (H015). Kept now requires that no tracked check failed. The `scan`, `home` and `value` glosses say so.
+  - Two dashboard lines described realized spend as "kept outcomes"; they now say realized.
+  - The Realized inspector said "Nothing is missing for this one" under its own list of what it takes on trust (H018). It now says nothing more is needed for the claim as stated, an estimated manual-equivalent value of work that shipped and survived. It also names what a causal or business-value claim would additionally need.
+
 - **A mistyped or unused option is no longer silent.** `segreant budget --dayly 5` used to exit 0 having set nothing (H014). Every option a finished command never read is now named on stderr, with the nearest real option when one is close ("Did you mean --daily?"), and the exit code is 2. A typed `--aply` is caught after the default preview, which writes nothing. `doctor` and `budget` now print JSON for `--json` instead of prose (H013), and `doctor`'s pricing line names the spend priced without the model's own rate rather than calling everything "priced from the rate card".
 
 - **The status-line setup works however Segreant was installed.** `segreant statusline --setup` used to name `segreant-statusline`, which is on PATH only after a global install (H012). It now prints a `node "<installed file>"` command for this install, checked under bash and cmd with a path containing `&`. When Segreant runs from npx's temporary cache, it asks for a lasting install first.

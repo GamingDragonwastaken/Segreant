@@ -246,6 +246,37 @@ export function claimShowsFigure(layer: Layer): boolean {
 }
 
 /**
+ * What is complete when a claim names no missing evidence. Scoped to THIS
+ * claim's own standard. An empty `missingEvidence` list means the claim is
+ * complete as stated, not that the claim family is complete or that the figure
+ * is a measured outcome: "Nothing is missing" read as blanket completeness on
+ * a Realized claim that also says "impact uninstrumented" (H018).
+ */
+export function claimCompletionLine(layer: Layer, precise: boolean): string {
+  if (layer.id === 'realized') {
+    return precise
+      ? 'No further evidence is required for this claim as stated: an estimated manual-equivalent value of work that shipped and survived.'
+      : 'Nothing more is needed for this claim as stated: an estimated manual-equivalent value of work that shipped and survived.';
+  }
+  return precise
+    ? 'No further evidence is required for this claim at its stated basis.'
+    : 'Nothing more is needed for this claim at its stated basis.';
+}
+
+/**
+ * The Realized claim is shown with its basis, and that basis is a value
+ * estimate. A causal or business-value claim needs evidence this layer does
+ * not carry, so the inspector names that gap whether or not `missingEvidence`
+ * is empty. The payload has no structured impact-instrumentation flag (impact
+ * appears only as free-text `roi.notes`), so the line is shown for every
+ * Realized claim rather than conditioned on a flag that does not exist.
+ */
+export function claimStrongerClaimLine(layer: Layer): string | null {
+  if (layer.id !== 'realized') return null;
+  return 'A causal or business-value claim would also need independent outcome evidence (impact instrumentation), which this claim does not establish.';
+}
+
+/**
  * Supported, but no figure because something needed to price it is missing.
  * The case the old boolean reported as "not established", which reads to an
  * operator as "your work produced nothing".
