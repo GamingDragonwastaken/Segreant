@@ -1076,8 +1076,9 @@ export async function loadRealization(
   }
   // With no request recorded there is no spend for git work to attribute, and
   // the dashboard's value read spent 17-22 s per load proving that on an empty
-  // ledger. Its server answers one request at a time, so every other read, a
-  // drawer's preview included, waited behind it.
+  // ledger. The Realized claim and the budget drawer's recommendation waited
+  // on it. (Other reads do not queue behind it: settings answered in 6-16 ms
+  // while a 25 s value read ran.)
   if (opts.preferStored && store.earliestRequestMs() === null) return null;
   if (!isDemo() && repo && (await isGitRepo(repo))) {
     return {
