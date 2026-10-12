@@ -50,9 +50,6 @@
     "market",
     "baselines",
     "docs/*.md",
-    "!docs/RELEASE-GATE.md",
-    "!docs/RELEASE-PROCESS.md",
-    "!docs/RELIABILITY-PERFORMANCE.md",
     "web/assets/brand/mark-256.png",
     "LICENSING.md"
   ],
