@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65 */
+/** Source SHA-256: 742ab7d53faab4c549cfba6df300210b0936cea50a08069cc170d5ee9d52888c */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -856,6 +856,34 @@ export interface AllocationWritePayload {
 }
 
 /**
+ * `POST /api/billing/write`: provider-billing evidence, from the GUI. Each op
+ * mirrors one `segreant billing` command and its refusal. Preview payloads are
+ * loosely typed here because they are the CLI's own report shapes.
+ */
+export interface BillingWritePayload {
+  ok: boolean;
+  op: 'import' | 'reconcile' | 'adopt' | 'scope';
+  applied: boolean;
+  message?: string;
+  error?: string;
+  status?: string;
+  preview?: Record<string, unknown>;
+  duplicateFile?: boolean;
+  run?: Record<string, unknown>;
+  kernel?: Record<string, unknown>;
+  readiness?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  fragility?: Record<string, unknown>;
+  reconciliationRunId?: string | null;
+  plan?: Record<string, unknown>;
+  observationRunId?: string | null;
+  networkAttempted?: boolean;
+  credentialRead?: boolean;
+  declaration?: Record<string, unknown>;
+  reconciliationStatus?: string;
+}
+
+/**
  * The realized-value payload.
  *
  * Every field here was read off an actual /api/value response, not inferred from
@@ -1519,6 +1547,7 @@ export interface DashboardResponseMap {
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
   'allocation-write': AllocationWritePayload;
+  'billing-write': BillingWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
