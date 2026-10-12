@@ -592,7 +592,7 @@ export function valueView(): Node {
           ? h('section', { class: 'section' },
               h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Where value is lost' : 'Where the work fell over') }),
               h('p', { class: 'view-plain', text: () => (isPrecise()
-                ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.spendOnRealizedUnitsUsd)} reached a kept outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
+                ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.spendOnRealizedUnitsUsd)} reached a realized outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
                 : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.spendOnRealizedUnitsUsd)} went on work that stuck and ${usd(wasteCost)} went on work that did not.`) }),
               h('div', { class: 'ledger', role: 'table', 'aria-label': 'Where value was lost, by stopping stage' },
                 h('div', { class: 'ledger-head', role: 'row' },

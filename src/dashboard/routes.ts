@@ -27,7 +27,7 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from './claim-support.ts';
-import { isDemo, DemoWriteBlockedError, type SegreantConfig } from '../config.ts';
+import { isDemo, DemoReadOnlyError, DemoWriteBlockedError, type SegreantConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
@@ -39,7 +39,8 @@ import { loadRealization, realizeDiscoveredProjects } from '../value/realization
 import { valueReport } from '../value/report.ts';
 import { recordReportedOutcome, type OutcomeInput } from '../value/selfReported.ts';
 import { buildMarketReport, loadMarket } from '../market/market.ts';
-import { projectName } from '../git/correlate.ts';
+import { projectName, resolveCommit } from '../git/correlate.ts';
+import { ValueReadCache, valueCacheKey, type ValueReadCacheOptions } from './value-cache.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { buildGuide } from '../guide.ts';
@@ -858,105 +859,147 @@ export function handleJudge({ req, res, store, config }: RouteContext): void {
   })();
 }
 
+/** The payload the value route serves, as computed (before JSON encoding). */
+type ValueRoutePayload = Awaited<ReturnType<typeof computeValuePayload>>;
+
+const valueReadCaches = new WeakMap<Store, ValueReadCache<ValueRoutePayload>>();
+
+/**
+ * The value read cache of one Store, created on first use. Scoped per Store so
+ * two dashboards (or two tests, each with a fresh Store) never share answers.
+ * `opts` applies only when the cache is created; tests use it to inject a clock.
+ */
+export function valueReadCacheFor(store: Store, opts?: ValueReadCacheOptions): ValueReadCache<ValueRoutePayload> {
+  let cache = valueReadCaches.get(store);
+  if (cache === undefined) {
+    cache = new ValueReadCache<ValueRoutePayload>(opts);
+    valueReadCaches.set(store, cache);
+  }
+  return cache;
+}
+
 export function handleValue({ res, url, store, config }: RouteContext): void {
   const repo = safeRepo(url.searchParams.get('repo'));
   const windowDays = Number(url.searchParams.get('window') || '14') || 14;
+  const explicitRepo = url.searchParams.has('repo');
   void (async () => {
     try {
-      // The whole composition — realization, baseline, Lift, money, RoI,
-      // drift, time reclaimed, frontier, per-project value, usage, cohort and
-      // budget advice — lives in src/value/report.ts, which the CLI's `roi` /
-      // `saved` commands call too. The two surfaces used to sequence these
-      // primitives independently, held in step only by comments claiming they
-      // matched. Now there is one sequence, so they cannot drift apart.
-      //
-      // `repo` is never empty — `safeRepo` falls back to the dashboard's
-      // launch directory when no `?repo=` is given, the same
-      // `flags.repo ?? process.cwd()` convention every CLI command uses — so
-      // the baseline mines that directory's git history exactly as
-      // `segreant roi` (no `--repo`) would.
-      //
-      // `discloseLiftSource: false` keeps this payload's strings exactly as
-      // they have always been: the CLI names its Lift source in
-      // `roi.lenses.lift.how` and labels the demo's synthetic TSF in
-      // `roi.notes`; this endpoint never has. It is a disclosure difference
-      // only — every value, interval and dollar is computed identically.
-      const value = await store.withReadSnapshot(() => valueReport(store, config, {
+      // Answered from memory when nothing the report reads has changed (see
+      // src/dashboard/value-cache.ts for the key). Nothing here persists.
+      const head = await resolveCommit(repo, 'HEAD');
+      const key = valueCacheKey({
+        params: url.searchParams,
         repo,
-        windowDays,
-        limit: 40,
-        persist: false,
-        discloseLiftSource: false,
-        // Without an explicit ?repo=, answer from what `scan` measured and
-        // stored (every project, as the CLI home view does) rather than
-        // re-reading the launch folder's git on every load.
-        preferStored: !url.searchParams.has('repo'),
-      }));
-      const spine = value.spine;
-      const rep = spine?.loaded.report ?? null;
-      // The payload's realization slice is deliberately narrower than the
-      // full report: the fields the GUI declares, and no more.
-      const realization = rep
-        ? {
-            matured: rep.matured,
-            firstPassAcceptance: rep.firstPassAcceptance,
-            proposalCoverage: rep.proposalCoverage,
-            projectScoped: rep.projectScoped,
-            costStaleUnits: rep.costStaleUnits,
-            units: rep.units,
-          }
-        : null;
-      // Raw frontier cells may be unlike tasks. The dashboard exposes only
-      // the separately gated, within-task model trials from `frontier`.
-      const allocation = null;
-      // Cross-project allocation is not comparable/reliable enough to
-      // recommend from raw RoI alone; per-project value stays descriptive.
-      const projectAllocation = null;
-      // The money claim is `returnRatio.manualEquivalentValueUsd`, and only when
-      // the payload's own `basis` says it is priced. A dollar figure is never
-      // invented from a bare ratio.
-      const ratio = spine?.roi?.returnRatio ?? null;
-      const roiCoverage = spine?.roi?.coverage;
-      return json(res, 200, {
-        demo: value.demo,
-        // Contradicted gate evidence lands on COVERAGE here rather than on the
-        // epistemic axis, because mature units are different propositions and a
-        // population of contradictions is not a contradiction in the aggregate.
-        // See `src/dashboard/claim-support.ts`.
-        claimSupport: realizedClaimSupport({
-          maturedUnits: rep?.matured?.units ?? 0,
-          realizedUnits: rep?.matured?.realizedUnits ?? 0,
-          gateConflicts: rep?.matured?.gateConflicts ?? null,
-          roiCoverage: typeof roiCoverage === 'number' ? roiCoverage : null,
-          valued: ratio?.basis === 'usd' && typeof ratio.manualEquivalentValueUsd === 'number',
-        }),
-        gitRepo: spine?.loaded.source === 'git',
-        valueSource: spine?.loaded.source ?? null,
-        // Whether the realized-value dollars came from spend SCOPED to this
-        // project (imports / tagged proxy) vs the project-blind window sum —
-        // disclosed so the number's basis is never silent.
-        projectScoped: rep?.projectScoped ?? null,
-        repo,
-        generatedAt: new Date(value.generatedAtMs).toISOString(),
-        realization,
-        roi: spine?.roi ?? null,
-        frontier: spine?.frontier ?? null,
-        budget: value.budget,
-        allocation,
-        projects: value.projects,
-        projectAllocation,
-        usage: value.usage,
-        selfReported: value.selfReported,
-        team: value.team,
-        drift: spine?.drift === null || spine?.drift === undefined
-          ? null
-          : { ...spine.drift, ...driftDetectability(spine.drift) },
-        reclaimed: spine?.reclaimed ?? null,
+        head,
+        config,
+        marks: store.valueChangeMarks(),
       });
+      const payload = await valueReadCacheFor(store).get(key, () =>
+        computeValuePayload(store, config, repo, windowDays, explicitRepo));
+      return json(res, 200, payload);
     } catch (err) {
       return json(res, 500, { error: String(err) });
     }
   })();
+}
+
+async function computeValuePayload(
+  store: Store,
+  config: RouteContext['config'],
+  repo: string,
+  windowDays: number,
+  explicitRepo: boolean,
+) {
+  // The whole composition — realization, baseline, Lift, money, RoI,
+  // drift, time reclaimed, frontier, per-project value, usage, cohort and
+  // budget advice — lives in src/value/report.ts, which the CLI's `roi` /
+  // `saved` commands call too. The two surfaces used to sequence these
+  // primitives independently, held in step only by comments claiming they
+  // matched. Now there is one sequence, so they cannot drift apart.
+  //
+  // `repo` is never empty — `safeRepo` falls back to the dashboard's
+  // launch directory when no `?repo=` is given, the same
+  // `flags.repo ?? process.cwd()` convention every CLI command uses — so
+  // the baseline mines that directory's git history exactly as
+  // `segreant roi` (no `--repo`) would.
+  //
+  // `discloseLiftSource: false` keeps this payload's strings exactly as
+  // they have always been: the CLI names its Lift source in
+  // `roi.lenses.lift.how` and labels the demo's synthetic TSF in
+  // `roi.notes`; this endpoint never has. It is a disclosure difference
+  // only — every value, interval and dollar is computed identically.
+  const value = await store.withReadSnapshot(() => valueReport(store, config, {
+    repo,
+    windowDays,
+    limit: 40,
+    persist: false,
+    discloseLiftSource: false,
+    // Without an explicit ?repo=, answer from what `scan` measured and
+    // stored (every project, as the CLI home view does) rather than
+    // re-reading the launch folder's git on every load.
+    preferStored: !explicitRepo,
+  }));
+  const spine = value.spine;
+  const rep = spine?.loaded.report ?? null;
+  // The payload's realization slice is deliberately narrower than the
+  // full report: the fields the GUI declares, and no more.
+  const realization = rep
+    ? {
+        matured: rep.matured,
+        firstPassAcceptance: rep.firstPassAcceptance,
+        proposalCoverage: rep.proposalCoverage,
+        projectScoped: rep.projectScoped,
+        costStaleUnits: rep.costStaleUnits,
+        units: rep.units,
+      }
+    : null;
+  // Raw frontier cells may be unlike tasks. The dashboard exposes only
+  // the separately gated, within-task model trials from `frontier`.
+  const allocation = null;
+  // Cross-project allocation is not comparable/reliable enough to
+  // recommend from raw RoI alone; per-project value stays descriptive.
+  const projectAllocation = null;
+  // The money claim is `returnRatio.manualEquivalentValueUsd`, and only when
+  // the payload's own `basis` says it is priced. A dollar figure is never
+  // invented from a bare ratio.
+  const ratio = spine?.roi?.returnRatio ?? null;
+  const roiCoverage = spine?.roi?.coverage;
+  return {
+    demo: value.demo,
+    // Contradicted gate evidence lands on COVERAGE here rather than on the
+    // epistemic axis, because mature units are different propositions and a
+    // population of contradictions is not a contradiction in the aggregate.
+    // See `src/dashboard/claim-support.ts`.
+    claimSupport: realizedClaimSupport({
+      maturedUnits: rep?.matured?.units ?? 0,
+      realizedUnits: rep?.matured?.realizedUnits ?? 0,
+      gateConflicts: rep?.matured?.gateConflicts ?? null,
+      roiCoverage: typeof roiCoverage === 'number' ? roiCoverage : null,
+      valued: ratio?.basis === 'usd' && typeof ratio.manualEquivalentValueUsd === 'number',
+    }),
+    gitRepo: spine?.loaded.source === 'git',
+    valueSource: spine?.loaded.source ?? null,
+    // Whether the realized-value dollars came from spend SCOPED to this
+    // project (imports / tagged proxy) vs the project-blind window sum —
+    // disclosed so the number's basis is never silent.
+    projectScoped: rep?.projectScoped ?? null,
+    repo,
+    generatedAt: new Date(value.generatedAtMs).toISOString(),
+    realization,
+    roi: spine?.roi ?? null,
+    frontier: spine?.frontier ?? null,
+    budget: value.budget,
+    allocation,
+    projects: value.projects,
+    projectAllocation,
+    usage: value.usage,
+    selfReported: value.selfReported,
+    team: value.team,
+    drift: spine?.drift === null || spine?.drift === undefined
+      ? null
+      : { ...spine.drift, ...driftDetectability(spine.drift) },
+    reclaimed: spine?.reclaimed ?? null,
+  };
 }
 
 /** Public market, read-only: the bundled snapshot plus any refresh already on disk. Never fetches. */
@@ -1154,6 +1197,14 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       }
       if (err instanceof SyntaxError) {
         return json(res, 400, { error: { code: 'SETTINGS_INVALID_JSON', message: 'settings request body must be valid JSON' } });
+      }
+      if (err instanceof DemoReadOnlyError || (err instanceof Error && err.name === 'DemoReadOnlyError')) {
+        return json(res, 409, {
+          error: {
+            code: 'SETTINGS_DEMO_READ_ONLY',
+            message: "This dashboard is showing sample data, so settings can't be changed here. Start Segreant without --demo to change your own settings.",
+          },
+        });
       }
       return json(res, 500, { error: { code: 'SETTINGS_UPDATE_FAILED', message: 'settings could not be persisted' } });
     }
