@@ -32,61 +32,69 @@ export function systemView(): Node {
         ? 'Local configuration, rate cards, maintenance, and the CLI/GUI parity map rendered from the same registry the GUI routes through.'
         : 'Settings for this machine, plus an honest list of everything Segreant can do and whether this web interface can do it yet.' })),
 
-    h('div', { class: 'grid' },
-      h('div', { class: 'card' },
-        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'In the GUI' })),
-        h('div', { class: 'stat', text: String(parity.full) }),
-        h('span', { class: 'basis', text: `of ${parity.total} capabilities` })),
-      h('div', { class: 'card' },
-        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Partly' })),
-        h('div', { class: 'stat', text: String(parity.partial) }),
-        h('span', { class: 'basis', text: 'usable, with options only on the CLI' })),
-      h('div', { class: 'card' },
-        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Command line only' })),
-        h('div', { class: 'stat', text: String(parity.planned) }),
-        h('span', { class: 'basis', text: 'no screen yet — the command is listed' })),
-      // The fourth state gets its own card rather than being folded into
-      // "command line only". A capability the GUI cannot offer is not a gap in
-      // the GUI, and counting it as one would make the parity fraction read
-      // worse than the truth -- while leaving it out of `total` altogether was
-      // the error this card exists to correct.
-      h('div', { class: 'card' },
-        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Cannot have a screen' })),
-        h('div', { class: 'stat', text: String(parity.notApplicable) }),
-        h('span', { class: 'basis', text: 'structurally unavailable here — each row says why' }))),
+    // The settings come first: this is the page someone opens to change one.
+    // The parity map used to lead, a 60-row table that made this the longest page
+    // in the product (10,140 px) with the settings at the very bottom.
+    h('div', { class: 'actions', style: 'margin-top: var(--s5)' },
+      actionCard('settings'),
+      actionCard('features'),
+      actionCard('doctor'),
+      actionCard('clear-proposals'),
+      actionCard('prune')),
 
-    h('div', { class: 'card', style: 'margin-top: var(--s4)' },
-      h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Parity map' })),
-      h('p', { class: 'view-plain', style: 'margin-bottom: var(--s4)', text: 'Every capability Segreant has, where it lives, what it costs you to run it, and whether this interface covers it. Generated from the same registry the navigation uses, and checked against the command line\u2019s own dispatch, so it cannot drift from what the GUI does or quietly leave a command out.' }),
-      h('div', { class: 'table-wrap' },
-        h('table', { 'aria-label': 'CLI/GUI parity map' },
-          h('thead', null, h('tr', null,
-            h('th', { scope: 'col', text: 'Capability' }),
-            h('th', { scope: 'col', text: 'Section' }),
-            h('th', { scope: 'col', text: 'Consequence' }),
-            h('th', { scope: 'col', text: 'Here' }),
-            h('th', { scope: 'col', text: 'Command' }))),
-          h('tbody', null, ...CAPABILITY_SPECS.map((c) => h('tr', null,
-            h('td', null, h('strong', { text: c.label }), h('br'), h('span', { class: 'action-plain', text: c.plain })),
-            h('td', { text: TERRITORIES.find((t) => t.id === c.territory)?.label ?? c.territory }),
-            h('td', null, h('span', { class: `tag tag-${c.consequence}`, text: c.consequence === 'read' ? 'reads only' : c.consequence })),
-            h('td', null,
-              h('span', {
-                class: c.coverage === 'planned' || c.coverage === 'not_applicable' ? 'tag tag-planned' : 'tag',
-                text: COVERAGE_WORDS[c.coverage] ?? c.coverage,
-              }),
-              // The reason travels with the state, in the same cell. A row that
-              // says the GUI cannot do something and does not say why is the
-              // assertion without its basis.
-              ...(c.coverageNote ? [h('br'), h('span', { class: 'action-plain', text: c.coverageNote })] : [])),
-            h('td', null, h('code', { class: 'cmd', style: 'white-space: nowrap', text: c.command })))))))),
+    // Kept, and kept complete: the map is a claim the product makes about itself.
+    // Closed by default, with its counts in the summary so the answer to "how
+    // much can the GUI do" is readable without opening it.
+    h('details', { class: 'section parity-details' },
+      h('summary', { class: 'parity-summary' },
+        h('span', { class: 'section-title', text: () => (isPrecise() ? 'CLI/GUI parity' : 'What this dashboard can and cannot do') }),
+        h('span', { class: 'parity-counts', text: `${parity.full} in the GUI · ${parity.partial} partly · ${parity.planned} command line only · ${parity.notApplicable} cannot have a screen · of ${parity.total}` })),
+      h('div', { class: 'grid' },
+        h('div', { class: 'card' },
+          h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'In the GUI' })),
+          h('div', { class: 'stat', text: String(parity.full) }),
+          h('span', { class: 'basis', text: `of ${parity.total} capabilities` })),
+        h('div', { class: 'card' },
+          h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Partly' })),
+          h('div', { class: 'stat', text: String(parity.partial) }),
+          h('span', { class: 'basis', text: 'usable, with options only on the CLI' })),
+        h('div', { class: 'card' },
+          h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Command line only' })),
+          h('div', { class: 'stat', text: String(parity.planned) }),
+          h('span', { class: 'basis', text: 'no screen yet — the command is listed' })),
+        // The fourth state gets its own card rather than being folded into
+        // "command line only". A capability the GUI cannot offer is not a gap in
+        // the GUI, and counting it as one would make the parity fraction read
+        // worse than the truth -- while leaving it out of `total` altogether was
+        // the error this card exists to correct.
+        h('div', { class: 'card' },
+          h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Cannot have a screen' })),
+          h('div', { class: 'stat', text: String(parity.notApplicable) }),
+          h('span', { class: 'basis', text: 'structurally unavailable here — each row says why' }))),
 
-    h('div', { style: 'margin-top: var(--s6)' },
-      h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Maintenance' }),
-      h('div', { class: 'actions' },
-        actionCard('settings'),
-        actionCard('features'),
-        actionCard('doctor'),
-        actionCard('clear-proposals'),
-        actionCard('prune'))));
+      h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Parity map' })),
+        h('p', { class: 'view-plain', style: 'margin-bottom: var(--s4)', text: 'Every capability Segreant has, where it lives, what it costs you to run it, and whether this interface covers it. Generated from the same registry the navigation uses, and checked against the command line\u2019s own dispatch, so it cannot drift from what the GUI does or quietly leave a command out.' }),
+        h('div', { class: 'table-wrap' },
+          h('table', { 'aria-label': 'CLI/GUI parity map' },
+            h('thead', null, h('tr', null,
+              h('th', { scope: 'col', text: 'Capability' }),
+              h('th', { scope: 'col', text: 'Section' }),
+              h('th', { scope: 'col', text: 'Consequence' }),
+              h('th', { scope: 'col', text: 'Here' }),
+              h('th', { scope: 'col', text: 'Command' }))),
+            h('tbody', null, ...CAPABILITY_SPECS.map((c) => h('tr', null,
+              h('td', null, h('strong', { text: c.label }), h('br'), h('span', { class: 'action-plain', text: c.plain })),
+              h('td', { text: TERRITORIES.find((t) => t.id === c.territory)?.label ?? c.territory }),
+              h('td', null, h('span', { class: `tag tag-${c.consequence}`, text: c.consequence === 'read' ? 'reads only' : c.consequence })),
+              h('td', null,
+                h('span', {
+                  class: c.coverage === 'planned' || c.coverage === 'not_applicable' ? 'tag tag-planned' : 'tag',
+                  text: COVERAGE_WORDS[c.coverage] ?? c.coverage,
+                }),
+                // The reason travels with the state, in the same cell. A row that
+                // says the GUI cannot do something and does not say why is the
+                // assertion without its basis.
+                ...(c.coverageNote ? [h('br'), h('span', { class: 'action-plain', text: c.coverageNote })] : [])),
+              h('td', null, h('code', { class: 'cmd', style: 'white-space: nowrap', text: c.command }))))))))));
 }

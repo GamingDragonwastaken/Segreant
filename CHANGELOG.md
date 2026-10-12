@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Settings and Value open on what you came for.**
+  - Settings led with a 60-row table of what the dashboard can and cannot do, with the actual settings at the bottom of a 10,140 px page. The settings now come first. The table is kept in full, in a closed section whose summary line gives the counts. The page is now 900 px.
+  - Value put a causal-study card above the answer, and the public model market and other supporting evidence below it ran at full length (7,557 px; 13,223 on a phone). The answer now comes first: basis, value and cost, the share of work that stuck, and where work fell over. The supporting evidence sits in named sections that open on demand. The page is now 3,360 px; 5,157 on a phone. Nothing was removed.
+
 - **A month can be closed in the dashboard.**
   - The Close page used to describe reconciliation and point to the terminal. It is now three steps:
     - Say which OpenAI project this machine meters.
