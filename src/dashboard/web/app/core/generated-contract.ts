@@ -33,7 +33,7 @@ export const DASHBOARD_API_CONTRACTS = [
   { id: 'scan', path: '/api/scan', methods: ['GET', 'POST'], localOnly: ['POST'], responseType: 'ScanPayload', browserBinding: ['modern-api', 'classic'] },
   { id: 'overview', path: '/api/overview', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'Overview', browserBinding: ['modern-api', 'classic'] },
   { id: 'billing', path: '/api/billing', methods: ['GET'], localOnly: [], responseType: 'BillingPayload', browserBinding: ['modern-api', 'classic'] },
-  { id: 'statement', path: '/api/statement', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'StatementPayload', browserBinding: [] },
+  { id: 'statement', path: '/api/statement', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'StatementPayload', browserBinding: ['modern-api'] },
   { id: 'allocation', path: '/api/allocation', methods: ['GET'], localOnly: [], responseType: 'AllocationPayload', browserBinding: ['modern-api', 'classic'] },
   { id: 'allocation-write', path: '/api/allocation/write', methods: ['POST'], localOnly: ['POST'], responseType: 'AllocationWritePayload', browserBinding: ['modern-api'] },
   { id: 'billing-write', path: '/api/billing/write', methods: ['POST'], localOnly: ['POST'], responseType: 'BillingWritePayload', browserBinding: ['modern-api'] },

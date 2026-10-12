@@ -37,6 +37,9 @@ import type {
   BillingMappingCoveragePayload,
   BillingKernelClaimSummary,
   BillingPayload,
+  StatementPayload,
+  StatementBilledRun,
+  StatementAllocatedRun,
   BillingImportSummary,
   BillingWritePayload,
   BillingImportPreviewPayload,
@@ -108,6 +111,9 @@ export type {
   BillingMappingCoveragePayload,
   BillingKernelClaimSummary,
   BillingPayload,
+  StatementPayload,
+  StatementBilledRun,
+  StatementAllocatedRun,
   BillingImportSummary,
   BillingWritePayload,
   BillingImportPreviewPayload,
@@ -274,6 +280,8 @@ export const api = {
   ),
   billing: () => request<BillingPayload>(routePath('billing')),
   allocation: () => request<AllocationPayload>(routePath('allocation')),
+  /** One calendar month, `YYYY-MM`; the four claims side by side, never summed. */
+  statement: (month?: string) => request<StatementPayload>(month ? `${routePath('statement')}?month=${encodeURIComponent(month)}` : routePath('statement')),
   economic: (range: '30d' | 'all' = '30d', options: EconomicQueryOptions = {}) => {
     const params = new URLSearchParams(range === 'all' ? { all: '1' } : { days: '30' });
     if (options.targetCurrency !== undefined) params.set('targetCurrency', options.targetCurrency);
