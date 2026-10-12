@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Dashboard actions recover from a wrong entry, and sample data says it is read-only before Apply.**
+  - Typing -1 as a budget used to fail at Apply and leave Apply disabled, even after the amount was corrected (H004). The preview now runs again whenever a field changes. It names an unusable amount before Apply, and a corrected amount re-enables it. The command shown beside it follows the field (`segreant budget --daily 25`).
+  - On Optional features, the preview kept describing the first switch while Apply wrote the one now selected. It now follows the selection.
+  - With sample data, Budgets and Optional features used to offer Apply and then show a raw `SETTINGS_UPDATE_FAILED` error (H005). The preview now says the dashboard is showing sample data before Apply is offered. The server answers a demo write with 409 and a sentence, and the dashboard shows a server's message instead of its JSON.
+  - On a ledger with no requests, the dashboard's value read no longer runs git work for its start folder. It took 17-22 s per load and, because the server answers one request at a time, held up every other read, including the budget preview. The budget recommendation is read once per drawer and never holds validation or Apply.
+
 - **A mistyped or unused option is no longer silent.** `segreant budget --dayly 5` used to exit 0 having set nothing (H014). Every option a finished command never read is now named on stderr, with the nearest real option when one is close ("Did you mean --daily?"), and the exit code is 2. A typed `--aply` is caught after the default preview, which writes nothing. `doctor` and `budget` now print JSON for `--json` instead of prose (H013), and `doctor`'s pricing line names the spend priced without the model's own rate rather than calling everything "priced from the rate card".
 
 - **The status-line setup works however Segreant was installed.** `segreant statusline --setup` used to name `segreant-statusline`, which is on PATH only after a global install (H012). It now prints a `node "<installed file>"` command for this install, checked under bash and cmd with a path containing `&`. When Segreant runs from npx's temporary cache, it asks for a lasting install first.
