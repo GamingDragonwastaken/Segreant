@@ -84,7 +84,7 @@ Data arrives by three routes, and the route determines what may be claimed:
 proxy traffic (can carry a declared project label), native tool-log import
 (records model and cost but nothing that ties it to a declared provider project),
 and operator-supplied provider exports. Reconciliation counts only proxy traffic
-carrying the declared scope — a real ledger on the owner's machine holds $832 of
+carrying the declared scope — a maintainer's real ledger holds hundreds of dollars of
 imported OpenAI spend that therefore cannot reconcile, and the product says so
 before the operator goes and mints a credential.
 
@@ -126,8 +126,8 @@ Seal" set) are in the repository.
 
 ## Evidence on Hand
 
-- A real local ledger: 18,422 requests / $1,574.42, of which $832.33 across
-  9,499 requests is OpenAI arriving by native import.
+- A maintainer's real local ledger (figures not published): several thousand
+  requests, about half of the list cost OpenAI arriving by native import.
 - A labelled demo seed (`segreant demo`) depicting five acquisition routes, which
   self-identifies as demo in every payload.
 - `docs/CAPABILITY-EVIDENCE-CONTRACT.md` — the public boundary between current
