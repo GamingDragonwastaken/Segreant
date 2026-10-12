@@ -6,7 +6,7 @@
 // path that a userland process.emitWarning override can't intercept, so we
 // re-exec ourselves once with --disable-warning to keep output clean. This is
 // the only knob that reliably suppresses it for `npx segreant`.
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { acquirePublicationLock } from './publication-lock.mjs';
 import { createRuntimeSnapshot, reapOrphanRuntimeSnapshots } from './runtime-snapshot.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -27,18 +27,29 @@ if (major < 24) {
 const self = fileURLToPath(import.meta.url);
 
 if (!process.env.__SEGREANT_CHILD) {
-  const result = spawnSync(
+  // Asynchronous, so the launcher can forward signals. With spawnSync it could
+  // not: a SIGTERM to `segreant` (a supervisor, `kill <pid>`) ended the
+  // launcher and left a running `start` or dashboard behind as an orphan.
+  // Ctrl+C in a terminal worked only because it signals the whole group.
+  const child = spawn(
     process.execPath,
     ['--disable-warning=ExperimentalWarning', self, ...process.argv.slice(2)],
     { stdio: 'inherit', env: { ...process.env, __SEGREANT_CHILD: '1' } },
   );
-  if (result.error) {
-    console.error(`Segreant could not start its runtime: ${result.error.message}`);
-    process.exit(1);
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => { if (child.exitCode === null && child.signalCode === null) child.kill(signal); });
   }
-  if (typeof result.status === 'number') process.exit(result.status);
-  console.error(`Segreant runtime terminated by signal ${result.signal ?? 'unknown'}`);
-  process.exit(1);
+  child.on('error', (error) => {
+    console.error(`Segreant could not start its runtime: ${error.message}`);
+    process.exit(1);
+  });
+  child.on('exit', (code, signal) => {
+    if (typeof code === 'number') process.exit(code);
+    // A child ended by a forwarded SIGINT/SIGTERM is the requested stop.
+    if (signal === 'SIGINT' || signal === 'SIGTERM' || signal === 'SIGHUP') process.exit(signal === 'SIGINT' ? 130 : 143);
+    console.error(`Segreant runtime terminated by signal ${signal ?? 'unknown'}`);
+    process.exit(1);
+  });
 } else {
   const here = dirname(self);
   // Collect snapshots whose owning process is gone before adding another one,
