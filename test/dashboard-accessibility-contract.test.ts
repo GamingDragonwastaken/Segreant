@@ -45,7 +45,7 @@ test('the skip link moves focus without going through the hash router', () => {
 
   // The counterexample, asserted rather than described: '#main' is not a route,
   // so letting the browser apply the href cannot leave the route alone.
-  const routes = /const ALL_ROUTES: Territory\[\] = \[([^\]]*)\]/.exec(main)?.[1] ?? '';
+  const routes = /const ALL_ROUTES: (?:Territory|Route)\[\] = \[([^\]]*)\]/.exec(main)?.[1] ?? '';
   assert.ok(routes.length > 0, 'ALL_ROUTES is still the route whitelist');
   assert.doesNotMatch(routes, /'main'/);
 
