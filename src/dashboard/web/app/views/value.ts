@@ -390,7 +390,7 @@ export function valueView(): Node {
 
   return h('div', null,
     h('div', { class: 'view-head' },
-      h('h1', { class: 'view-title', text: 'Realized' }),
+      h('h1', { class: 'view-title', text: 'Value' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Realized value over matured work units, rework-discounted. Acceptance is not an outcome and is never counted as one.'
         : 'What the AI spend actually produced — counting only work that shipped and stayed shipped, not work that merely got accepted.' })),

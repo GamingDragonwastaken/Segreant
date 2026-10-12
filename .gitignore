@@ -36,3 +36,6 @@ docs/planning/
 
 # Local SBOM output (`npm run sbom > segreant-runtime.cdx.json`); CI uploads its own copy as an artifact.
 *.cdx.json
+
+# Impeccable design tooling state (local)
+.impeccable/

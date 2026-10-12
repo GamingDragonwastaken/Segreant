@@ -45,11 +45,24 @@ const ROUTE_LAYER: Partial<Record<Territory, LayerId>> = {
   value: 'realized',
 };
 
-/** Everything that is not a money claim: how you feed and configure the tool. */
-const OPERATIONS: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
-  { id: 'data', label: 'Data', plain: 'Getting your usage in, from tools and providers.' },
-  { id: 'control', label: 'Control', plain: 'Budgets and alerts, so nothing surprises you.' },
-  { id: 'system', label: 'System', plain: 'Pricing, settings, maintenance, and what this GUI covers.' },
+/**
+ * The navigation names the jobs people come to do, in the order they meet them.
+ * It used to list only Data, Control and System: the four money views were
+ * reachable through the spine alone, and Billed, Allocated and Realized had no
+ * name a finance reader would look for (critique 2026-10-12).
+ */
+const JOBS: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
+  { id: 'spend', label: 'Spend', plain: 'What AI cost, and where it went.' },
+  { id: 'control', label: 'Protect', plain: 'Limits and alerts that stop spend before it happens.' },
+  { id: 'evidence', label: 'Close', plain: 'Check what was measured against the provider bill.' },
+  { id: 'allocation', label: 'Allocate', plain: 'Assign cost to the teams and projects that carry it.' },
+  { id: 'value', label: 'Value', plain: 'What the spend produced.' },
+];
+
+/** How you feed and configure the tool: needed, but not why anyone opens it. */
+const UTILITIES: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
+  { id: 'data', label: 'Data', plain: 'Bring usage in from your tools and providers.' },
+  { id: 'system', label: 'Settings', plain: 'Pricing, settings, maintenance, and what this GUI covers.' },
 ];
 
 const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
@@ -138,16 +151,21 @@ function firstRun(): Node {
   const body = h('div', { class: 'firstrun', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fr-title', tabindex: '-1' },
     h('div', { class: 'firstrun-card' },
       h('div', { class: 'firstrun-mark' }, brandMark()),
-      h('h1', { id: 'fr-title', text: 'How should Segreant talk to you?' }),
-      h('p', { class: 'lede', text: 'The numbers are identical either way. This only changes how precisely they are worded and how much detail shows by default — and you can switch whenever you like.' }),
+      // The product has two audiences on one set of screens, and the first run
+      // is where it learns which one is here. It used to ask only how figures
+      // should be worded, so a finance reader and a developer landed on the
+      // same screen with different decimals. The answer now also picks where
+      // each starts: the money, or getting usage in.
+      h('h1', { id: 'fr-title', text: 'What brings you to Segreant?' }),
+      h('p', { class: 'lede', text: 'Pick the closer one. It decides where you start and how figures are worded. The numbers are the same either way, and you can switch at any time with Plain and Precise at the top right.' }),
       h('div', { class: 'choice-grid' },
-        h('button', { class: 'choice', onclick: () => setRegister('plain') },
-          h('strong', { text: 'Plain language' }),
-          h('span', { text: 'Rounded figures, concepts explained where they appear, no command line assumed.' }),
+        h('button', { class: 'choice', onclick: () => { setRegister('plain'); go('spend'); } },
+          h('strong', { text: 'I look after the money' }),
+          h('span', { text: 'See what AI cost, set limits, check it against the bill and assign it to budgets. Plain wording; no terminal needed.' }),
           h('code', { class: 'choice-eg', text: '$59.16 · measured from metered requests' })),
-        h('button', { class: 'choice', onclick: () => setRegister('precise') },
-          h('strong', { text: 'Precise' }),
-          h('span', { text: 'Exact microdollar figures, provenance labels shown, equivalent commands surfaced.' }),
+        h('button', { class: 'choice', onclick: () => { setRegister('precise'); go('data'); } },
+          h('strong', { text: 'I build with AI tools' }),
+          h('span', { text: 'Bring in usage from Claude Code, Codex and others, then see it by project and model. Exact figures and the matching commands.' }),
           h('code', { class: 'choice-eg', text: '$59.163468 · local_list_price' }))),
       h('p', { class: 'fine', text: 'Runs entirely on this machine. This page loads nothing from the internet — no fonts, no analytics, no third parties.' })));
 
@@ -187,9 +205,18 @@ function topbar(): Node {
         })
       : null),
 
-    h('nav', { class: 'ops', 'aria-label': 'Operations' },
-      ...OPERATIONS.map((op) => h('button', {
+    h('nav', { class: 'ops', 'aria-label': 'Jobs' },
+      ...JOBS.map((op) => h('button', {
         class: 'op',
+        'aria-current': () => (current() === op.id ? 'page' : false),
+        title: op.plain,
+        onclick: () => go(op.id),
+        text: op.label,
+      }))),
+
+    h('nav', { class: 'ops ops-util', 'aria-label': 'Setup' },
+      ...UTILITIES.map((op) => h('button', {
+        class: 'op op-util',
         'aria-current': () => (current() === op.id ? 'page' : false),
         title: op.plain,
         onclick: () => go(op.id),
@@ -244,9 +271,10 @@ function boot(): void {
   // Billing, allocation and value do not depend on the period, so they are read
   // once; the overview is re-read whenever the period changes.
   //
-  // Order matters as much as independence: the server answers one request at a
-  // time, and the value read holds it for seconds. Fired together, it pushed
-  // the overview (0.5 s alone) to 10 s. So the cheap reads go first and the
+  // Order matters as much as independence: fired together, the value read
+  // pushed the overview from 0.5 s alone to 10 s. (Other reads are not queued
+  // behind it in general: settings answered in 6-16 ms during a 25 s value
+  // read; the overview shares the work the value read is doing.) So the cheap reads go first and the
   // value read starts only once the overview has answered.
   let restStarted = false;
   const readTheRest = (): void => {
@@ -317,6 +345,10 @@ function boot(): void {
       // as current as before. While stale, the sheet is dimmed as well.
       h('div', { class: () => (figuresStale() && lastReadAt() !== null ? 'sheet is-stale' : 'sheet') },
         () => {
+          // The four claims head the four money views only. On Protect, Data
+          // and Settings they pushed the screen's own content below the fold
+          // and asserted nothing about it.
+          if (!ROUTE_LAYER[current()]) return null;
           const layers = chain();
           if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
           return spine({
@@ -329,7 +361,7 @@ function boot(): void {
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
-        h('span', { text: 'Dashboard runs locally; provider traffic follows your configured egress boundary.' }),
+        h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider and the other routes you set up.' }),
         h('a', { href: '/classic', text: 'Classic dashboard' })));
 
   });

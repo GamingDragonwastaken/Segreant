@@ -98,6 +98,11 @@ function bandValue(layer: Layer): string {
   }
 }
 
+/** A shown figure whose money is an estimate rather than metered, billed or allocated. */
+function estimated(layer: Layer): boolean {
+  return layer.support.figure === 'shown' && layer.support.profile.monetaryBasis === 'estimated';
+}
+
 function band(layer: Layer, state: SpineState): Node {
   const active = state.active === layer.id;
   if (state.pending?.has(layer.id)) {
@@ -130,8 +135,16 @@ function band(layer: Layer, state: SpineState): Node {
       // "not established" for all of them, including a Billed band that had
       // been reconciled (no dollar by design, so `usd(null)` rendered a bare
       // em dash) and a Realized band whose units shipped but were never priced.
-      h('span', { class: `band-value${claimShowsFigure(layer) ? '' : ' band-unset'}`,
-        text: bandValue(layer) }),
+      // An estimated figure must not look like a measured one. Realized carried
+      // the largest number on the page at the same size as Metered, so the
+      // least-evidenced claim read as the headline (critique 2026-10-12). It
+      // keeps its figure, smaller, with the word "estimate" on the band itself.
+      estimated(layer)
+        ? h('span', { class: 'band-value band-estimate' },
+            h('span', { class: 'band-chip', text: () => (isPrecise() ? 'estimate' : 'estimate, not a measurement') }),
+            h('span', { text: bandValue(layer) }))
+        : h('span', { class: `band-value${claimShowsFigure(layer) ? '' : ' band-unset'}`,
+            text: bandValue(layer) }),
 
       h('span', { class: 'band-basis', text: layer.basis }),
 
