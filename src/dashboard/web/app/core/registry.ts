@@ -151,7 +151,7 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'segreant project --coverage' },
   { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'planned', command: 'segreant project alias' },
   {
-    id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'segreant alloc centre',
+    id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc centre',
     guiEvidence: { file: 'views/allocation.ts', token: "op: 'centre'", note: 'Allocate step 1 lists, adds and archives cost centres through /api/allocation/write' },
   },
   {
