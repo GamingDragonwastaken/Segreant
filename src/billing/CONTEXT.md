@@ -59,7 +59,7 @@
   carrying the declared scope id. **Imported rows are excluded and must stay
   excluded** — an imported row has the model and the cost but nothing tying it to
   the declared provider project. Counting it would invent the attribution this
-  module exists to refuse. On the owner's real ledger this excludes 100% of
+  module exists to refuse. On a maintainer's real ledger this excludes 100% of
   OpenAI spend, which is why readiness reports coverage *before* the credential
   step.
 
