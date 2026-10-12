@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The dashboard's value read answers repeat loads from memory.** With spend recorded but no `scan` yet, `/api/value` re-ran git realization for its start folder on every load (13-30 s). It is now cached in the dashboard process for up to 10 minutes. The cache key covers the query, the repository and its HEAD, the whole config, and change marks on every ledger table the report reads, so any change recomputes. The payload keeps its original `generatedAt`, and nothing is written to the ledger. Measured: 30.2 s, then 0.16 s and 0.16 s.
+
 - **Kept means one thing everywhere.**
   - The website defines Kept as work that passed every check you track. The CLI counted survival alone, so work that failed its tests and its ship check but stayed in the tree was reported as Kept (H015). Kept now requires that no tracked check failed. The `scan`, `home` and `value` glosses say so.
   - Two dashboard lines described realized spend as "kept outcomes"; they now say realized.
