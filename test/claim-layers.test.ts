@@ -325,3 +325,46 @@ test('every claim names the window it covers, and only Metered follows the chose
   assert.equal(buildClaimLayers(NOTHING, 'today')[0]!.period, 'today');
   assert.equal(buildClaimLayers(NOTHING, 'all')[0]!.period, 'all recorded time');
 });
+
+test('a complete Realized claim is scoped to its own standard and names what a stronger claim needs (H018)', async () => {
+  const { claimCompletionLine, claimStrongerClaimLine } = await import('../src/dashboard/web/app/core/claimTypes.ts');
+  const value = {
+    demo: false,
+    allocation: null,
+    valueSource: 'git',
+    gitRepo: true,
+    projectScoped: true,
+    realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, spendOnRealizedUnitsUsd: 2 } },
+    roi: { coverage: 0.5, notes: ['Impact uninstrumented: needs an outcome signal independent of the Realization funnel.'], returnRatio: { basis: 'usd', manualEquivalentValueUsd: 40 } },
+    claimSupport: realizedClaimSupport({
+      maturedUnits: 4, realizedUnits: 2, gateConflicts: null, roiCoverage: 0.5, valued: true,
+    }),
+  } as unknown as ValuePayload;
+
+  const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
+  assert.deepEqual(realized.inspection.missingEvidence, [], 'the fixture must be a complete Realized claim');
+
+  for (const precise of [false, true]) {
+    const line = claimCompletionLine(realized, precise);
+    assert.doesNotMatch(line, /Nothing is missing/, 'a blanket completeness sentence must not appear on Realized');
+    assert.match(line, /for this claim as stated/);
+    assert.match(line, /estimated manual-equivalent value of work that shipped and survived/);
+    assert.doesNotMatch(line, /measured|causal outcome|business outcome/i, 'the complete line must not imply a measured outcome');
+  }
+
+  const stronger = claimStrongerClaimLine(realized);
+  assert.ok(stronger, 'Realized always names what a stronger claim would need, even when missingEvidence is empty');
+  assert.match(stronger, /causal or business-value claim/);
+  assert.match(stronger, /impact instrumentation/);
+
+  const billed = buildClaimLayers(NOTHING, '30d')[1]!;
+  assert.equal(claimStrongerClaimLine(billed), null, 'the stronger-claim line is specific to Realized');
+  assert.doesNotMatch(claimCompletionLine(billed, false), /Nothing is missing|manual-equivalent/);
+});
+
+test('the claim inspector no longer renders the blanket "Nothing is missing" footer', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/dashboard/web/app/components/claimInspector.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Nothing is missing/);
+  assert.doesNotMatch(source, /No missing evidence is named/);
+});
