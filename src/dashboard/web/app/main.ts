@@ -14,7 +14,7 @@
 import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from './core/dom.ts';
 import { signal, effect, computed, onCleanup } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
-import { api, type Overview, type BillingPayload, type AllocationPayload, type ValuePayload } from './core/api.ts';
+import { api, ApiError, type Overview, type BillingPayload, type AllocationPayload, type ValuePayload } from './core/api.ts';
 import { buildClaimLayers, chainIsSampleData } from './core/claimLayers.ts';
 import { period } from './core/period.ts';
 import { spine, type LayerId } from './components/spine.ts';
@@ -75,6 +75,36 @@ const pendingClaims = computed<ReadonlySet<LayerId>>(() => new Set<LayerId>([
   ...(valueIn() === undefined ? ['realized' as const] : []),
 ]));
 const sampleData = computed(() => chainIsSampleData(chainInputs()));
+
+/**
+ * The figures on screen were read from a server that has since stopped answering.
+ * Set by a failed read or by the timed re-check; cleared only by a fresh page load,
+ * because nothing re-reads the payloads in place.
+ */
+const figuresStale = signal(false);
+/** When the last successful read landed, so the age of the figures can be stated. */
+const lastReadAt = signal<number | null>(null);
+/** Advances on each re-check, so the stated age keeps moving while the page sits. */
+const clock = signal(Date.now());
+const STALE_RECHECK_MS = 15_000;
+
+const unreachable = (e: unknown): boolean => e instanceof ApiError && e.status === 0;
+
+function ageText(readAt: number | null, now: number): string {
+  if (readAt === null) return 'at an unknown time';
+  const minutes = Math.floor((now - readAt) / 60_000);
+  if (minutes < 1) return 'less than a minute ago';
+  return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+}
+
+/** Stated on the page, above the figures, so a stale number is never read as current. */
+function staleBanner(): Node {
+  return h('div', { class: 'banner banner-stale', role: 'status', 'aria-live': 'polite' },
+    h('p', null,
+      h('strong', { text: 'Segreant stopped responding. ' }),
+      h('span', { text: () => `The figures below were read ${ageText(lastReadAt(), clock())} and are not current.` })),
+    h('button', { type: 'button', class: 'chip', onclick: () => window.location.reload(), text: 'Retry' }));
+}
 
 /**
  * Whether the operator has chosen a register at all — NOT which one they chose.
@@ -223,20 +253,28 @@ function boot(): void {
     if (restStarted) return;
     restStarted = true;
     void Promise.allSettled([
-      api.billing().then((b) => billingIn.set(b), () => billingIn.set(null)),
-      api.allocation().then((a) => allocationIn.set(a), () => allocationIn.set(null)),
-    ]).then(() => api.value().then((v) => valueIn.set(v), () => valueIn.set(null)));
+      api.billing().then((b) => { billingIn.set(b); lastReadAt.set(Date.now()); }, (e: unknown) => { billingIn.set(null); if (unreachable(e)) figuresStale.set(true); }),
+      api.allocation().then((a) => { allocationIn.set(a); lastReadAt.set(Date.now()); }, (e: unknown) => { allocationIn.set(null); if (unreachable(e)) figuresStale.set(true); }),
+    ]).then(() => api.value().then((v) => { valueIn.set(v); lastReadAt.set(Date.now()); }, (e: unknown) => { valueIn.set(null); if (unreachable(e)) figuresStale.set(true); }));
   };
   effect(() => {
     const r = period();
     const controller = new AbortController();
     overviewIn.set(undefined);
     void api.overview(r, controller.signal).then(
-      (o) => { if (!controller.signal.aborted) overviewIn.set(o); },
-      () => { if (!controller.signal.aborted) overviewIn.set(null); },
+      (o) => { if (!controller.signal.aborted) { overviewIn.set(o); lastReadAt.set(Date.now()); } },
+      (e: unknown) => { if (!controller.signal.aborted) { overviewIn.set(null); if (unreachable(e)) figuresStale.set(true); } },
     ).finally(readTheRest);
     onCleanup(() => controller.abort());
   });
+
+  // A stopped server is noticed without a click. While any figure is on screen the
+  // shell re-checks the server; a dead one marks what is shown as not current.
+  setInterval(() => {
+    clock.set(Date.now());
+    if (lastReadAt() === null || figuresStale()) return;
+    void api.health().then(() => undefined, (e: unknown) => { if (unreachable(e)) figuresStale.set(true); });
+  }, STALE_RECHECK_MS);
 
   effect(() => {
     // `registerChosen()`, never `register()`. Reading the register itself made
@@ -274,6 +312,7 @@ function boot(): void {
         },
       }),
       topbar(),
+      () => (figuresStale() && lastReadAt() !== null ? staleBanner() : null),
       h('div', { class: 'sheet' },
         () => {
           const layers = chain();
