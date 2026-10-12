@@ -232,7 +232,7 @@ surface could not. It does **not** make any reconciliation succeed.
 **Still true, and unchanged by any of this:** no reconciliation has completed
 against a real provider bill on this machine, and the negative real-data result
 recorded under `205fbcc` was re-confirmed at this candidate rather than
-softened. On the owner's real ledger all 9,499 OpenAI rows arrived by native
+softened. On the maintainer's real ledger every OpenAI row arrived by native
 import; **all 115 Codex rollout logs were scanned and carry no OpenAI account,
 project, or organization identifier at all** — the 18 files that matched such a
 pattern contain MCP tool-schema definitions quoted inside conversation text, not
@@ -265,10 +265,10 @@ retained for history.
 | Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #34** (`.../actions/runs/32091103510`): status **Success**, 1m 3s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `c1912f5`; `git diff --stat 205fbcc c1912f5` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass, and the previously stated gap is closed.** Packaged dashboard at 375×812: Overview, Billing, Allocation, Value and Settings all report `scrollWidth 375` on a `clientWidth 375` document — **no view overflows**, including Value, which was 483px at `916e1c3`. Desktop 1280 re-checked on the same packaged artifact: `.ihelp` still computes `position: relative`, the popover is 270px with its `::after` arrow shown, `.grid` is still two-column (`1.5fr 1fr`), and the allocation view renders its 3 cards. No console errors. Screenshots remain unavailable in this environment — the browser pane is not displayed, so the page composites no frames and `computer{action:"screenshot"}` times out — so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
 
-**The reconciliation was run against this machine's real ledger, and it
-failed — which is the finding.** `segreant import all` produced 18,422 real
-requests totalling `$1,574.42`, of which `$832.33` across 9,499 requests is
-OpenAI. None of it can reconcile. Every OpenAI row arrived by **native import**,
+**The reconciliation was run against a maintainer's real ledger, and it
+failed — which is the finding.** `segreant import all` produced several
+thousand real requests, about half of their list cost OpenAI (figures from a
+personal ledger are not published). None of it can reconcile. Every OpenAI row arrived by **native import**,
 and reconciliation counts only proxy traffic carrying the declared scope. It has
 to: an imported row records the model and the cost but nothing that ties it to
 the declared provider project, so counting it would invent exactly the
