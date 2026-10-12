@@ -416,6 +416,19 @@ export interface KernelNodePayload {
   graphSize: { nodes: number; edges: number };
 }
 
+export interface BillingImportSummary {
+  importId: string;
+  importedAtMs: number;
+  fileName: string;
+  billingAccountRef: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  coverage: 'complete' | 'partial' | 'unknown';
+  recordsSeen: number;
+  recordsInserted: number;
+  recordsDuplicate: number;
+}
+
 export interface BillingPayload {
   demo: boolean;
   /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */
@@ -425,6 +438,12 @@ export interface BillingPayload {
 
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
+  /**
+   * The newest operator-export imports (`store.billingImportRuns(25)`), on the
+   * wire since billing evidence v1 but undeclared until the Close view needed an
+   * import id to adopt. Fields mirror `BillingImportRun` in src/store/billing.ts.
+   */
+  imports: BillingImportSummary[];
   /** Bounded canonical billed Claims issued by the explicit billing adapter. */
   kernel?: {
     kind: string;
