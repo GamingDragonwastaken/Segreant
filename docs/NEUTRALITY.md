@@ -47,7 +47,7 @@ collects nothing centrally.
   payment; offering it as a hosted service and selling Segreant itself are
   not allowed; each version becomes Apache 2.0 two years after publication
   (`LICENSING.md`). No function behaves differently for anyone: the license
-  is a legal term, not a feature gate. Earlier commits carried MIT, copyright "Segreant contributors".
+  is a legal term, not a feature gate. Commits up to `28dc6dd` carried the MIT license under the project's earlier name, with the copyright line recorded in that commit's LICENSE.
 - `docs/RELEASE-GATE.md`'s "Product claims allowed at this stage" section
   fixes the precise language this project may use about itself and forbids
   overclaiming (not "AI financial advice," not "zero egress," not a verified
