@@ -11,7 +11,7 @@ Every dollar your agents spend is metered, capped, checked against the
 provider's bill, assigned to the budget it belongs to, and traced to the work
 it produced. And every number tells you exactly how much it can be trusted.
 
-`local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free for personal use`
+`local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free to use, including at work (BUSL-1.1)`
 
 [![CI](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml)
 
@@ -106,9 +106,10 @@ npm's generated `.cmd` shim does not quote that path. The global install above
 and `npx segreant` from any folder are not affected. For a local install there,
 run `node node_modules/segreant/bin/segreant.mjs` instead.
 
-**Option A: no wiring at all.** If you use Claude Code, Codex, opencode or Antigravity,
+**Option A: no wiring at all.** If you use Claude Code, Codex or opencode,
 Segreant reads the usage those tools already log on your machine, including
-subscription usage a proxy never sees:
+subscription usage a proxy never sees. Antigravity is read from 0.2.0, which is
+unreleased and not yet on npm:
 
 ```bash
 segreant scan            # finds your AI tools and git repos; changes nothing
@@ -176,7 +177,7 @@ Every command, flag and design detail is in the **[Segreant guide](docs/GUIDE.md
 
 ## For teams and enterprises
 
-The same local tool scales up without sending prompts or code anywhere:
+The same local tool scales up without sending prompts or code to any Segreant-run service:
 
 - **Team rollups.** Each machine signs and pushes per-project value and spend
   summaries to a team server *you* run. Per-developer views are opt-in,
@@ -246,7 +247,7 @@ The full index is in [docs/README.md](docs/README.md).
 
 | | |
 |---|---|
-| Product code | ~88,000 lines of strict TypeScript |
+| Product code | ~96,000 lines of strict TypeScript |
 | Tests | ~70,000 lines, 2,300+ test cases across the CLI, dashboard and team server |
 | Runtime dependencies | 0 |
 | CI | 11 jobs on every pull request: three operating systems, the team server against real PostgreSQL, a packaged install, supply chain, accessibility, and exact-head verification |
