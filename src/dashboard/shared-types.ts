@@ -873,6 +873,34 @@ export interface AllocationWritePayload {
 }
 
 /**
+ * `POST /api/billing/write`: provider-billing evidence, from the GUI. Each op
+ * mirrors one `segreant billing` command and its refusal. Preview payloads are
+ * loosely typed here because they are the CLI's own report shapes.
+ */
+export interface BillingWritePayload {
+  ok: boolean;
+  op: 'import' | 'reconcile' | 'adopt' | 'scope';
+  applied: boolean;
+  message?: string;
+  error?: string;
+  status?: string;
+  preview?: Record<string, unknown>;
+  duplicateFile?: boolean;
+  run?: Record<string, unknown>;
+  kernel?: Record<string, unknown>;
+  readiness?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  fragility?: Record<string, unknown>;
+  reconciliationRunId?: string | null;
+  plan?: Record<string, unknown>;
+  observationRunId?: string | null;
+  networkAttempted?: boolean;
+  credentialRead?: boolean;
+  declaration?: Record<string, unknown>;
+  reconciliationStatus?: string;
+}
+
+/**
  * The realized-value payload.
  *
  * Every field here was read off an actual /api/value response, not inferred from
@@ -1536,6 +1564,7 @@ export interface DashboardResponseMap {
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
   'allocation-write': AllocationWritePayload;
+  'billing-write': BillingWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
