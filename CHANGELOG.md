@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **`start --demo` no longer meters real traffic into the sample store.** Demo mode opened `demo.db` for the whole process, so its proxy recorded real provider traffic among the synthetic rows, while the banner said "Real metering is untouched" and told you to point your tools at it. Demo mode now serves the dashboard only and says so. A tool started with `segreant launch` finds no proxy, warns that it is unmetered and goes direct.
+
 - **Public documents agree with the licence and with what shipped.**
   - README, LICENSING, PRODUCT, the release gate, the website and the price-card notes now agree on several points: 0.1.0 is on npm and 0.2.0 is not; the BUSL-1.1 grant allows use at work (the badge said "free for personal use"); billed cost also comes from the OpenAI Costs API; and the Gemini 3.x rates and read dates are the ones the card lists. No price changed.
   - The lockfile's `license` field said MIT and now says BUSL-1.1.
