@@ -736,19 +736,70 @@ export interface ReconciliationRunRecord {
   };
 }
 
+/**
+ * Mirrors `CostCentre` in src/alloc/rules.ts, as `store.costCentres()` sends it.
+ * This was declared `{ id, label?, name? }` and nothing on the wire is called
+ * `id`: the deep payload check failed the whole Allocate page as soon as one
+ * real cost centre existed, and demo data has none, so no test saw it.
+ */
 export interface CostCentre {
-  id: string;
-  label?: string;
-  name?: string;
+  costCentreId: string;
+  name: string;
+  owner: string | null;
+  createdAtMs: number;
+  archivedAtMs: number | null;
 }
 
+export interface AllocationTarget {
+  costCentreId: string;
+  ratio: number;
+}
+
+/** Mirrors `AllocationRule` in src/alloc/rules.ts; same history as CostCentre above. */
 export interface AllocationRule {
-  id: string;
+  ruleId: string;
   version: number;
-  method: string;
-  targets?: string[] | null;
-  revokedAtMs?: number | null;
-  effectiveToMs?: number | null;
+  method: 'direct' | 'fixed_split' | 'proportional_to_direct';
+  match: Record<string, string | null>;
+  targets: AllocationTarget[];
+  priority: number;
+  effectiveFromMs: number;
+  effectiveToMs: number | null;
+  revokedAtMs: number | null;
+  owner: string | null;
+  note: string | null;
+  createdAtMs: number;
+}
+
+/** One centre's share of a run (`AllocationRunResult.byCostCentre`). */
+export interface AllocationCentreShare {
+  costCentreId: string;
+  allocatedMicros: number;
+  requestCount: number;
+  sourceBasis: string;
+}
+
+/** Spend that reached no cost centre, with its reason (`UnallocatedLine`). */
+export interface AllocationUnallocated {
+  reason: string;
+  micros: number;
+  requestCount: number;
+  sourceBasis: string;
+  topProjects: Array<{ project: string; micros: number }>;
+}
+
+/** The parts of `AllocationRunResult` (src/alloc/apply.ts) a screen reads. */
+export interface AllocationRunResultPayload {
+  periodStartMs: number;
+  periodEndMs: number;
+  totalMicros: number;
+  allocatedMicros: number;
+  unallocatedMicros: number;
+  byCostCentre: AllocationCentreShare[];
+  unallocated: AllocationUnallocated[];
+  sourceBases: string[];
+  conserves: boolean;
+  retention?: { truncated: boolean; prunedBeforeMs: number | null };
 }
 
 export interface AllocationPayload {
@@ -782,7 +833,24 @@ export interface AllocationPayload {
 export interface AllocationRunRecord {
   allocationRunId: string;
   computedAtMs: number;
-  result?: Record<string, unknown>;
+  result: AllocationRunResultPayload;
+}
+
+/**
+ * `POST /api/allocation/write`. One deliberate allocation change per request;
+ * the same Store methods and validation as `segreant alloc`. Preview runs
+ * (`op: 'run'` with `applied: false`) record nothing.
+ */
+export interface AllocationWritePayload {
+  ok: boolean;
+  op: 'centre' | 'archive' | 'rule' | 'revoke' | 'run';
+  applied: boolean;
+  message: string;
+  costCentre?: CostCentre;
+  rule?: AllocationRule;
+  revoked?: number;
+  allocationRunId?: string | null;
+  result?: AllocationRunResultPayload;
 }
 
 /**
@@ -1448,6 +1516,7 @@ export interface DashboardResponseMap {
   judge: JudgePayload;
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
+  'allocation-write': AllocationWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;

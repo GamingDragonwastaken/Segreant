@@ -296,6 +296,15 @@ function boot(): void {
     onCleanup(() => controller.abort());
   });
 
+  // A screen that changed the ledger says so, and the claim it touched is
+  // re-read, so the spine never contradicts the page beneath it.
+  window.addEventListener('segreant:ledger-changed', (event) => {
+    const claim = (event as CustomEvent<{ claim?: string }>).detail?.claim;
+    if (claim === 'allocation') {
+      void api.allocation().then((a) => { allocationIn.set(a); lastReadAt.set(Date.now()); }, () => undefined);
+    }
+  });
+
   // A stopped server is noticed without a click. While any figure is on screen the
   // shell re-checks the server; a dead one marks what is shown as not current.
   setInterval(() => {
