@@ -11,7 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
-- **The npm package no longer carries a maintainer's own usage figures.** 0.1.0 shipped `docs/RELEASE-GATE.md`, which quoted a personal ledger's request counts and dollar totals. Maintainer records (the release gate, release process and performance log) now stay in the repository and out of the package. The public docs keep each finding without the personal figures. A test packs the tarball and fails if either returns.
+- **The npm package no longer carries a maintainer's own usage figures.** 0.1.0 shipped `docs/RELEASE-GATE.md`, which quoted a personal ledger's request counts and dollar totals. The release records still ship as public evidence, but every finding is now stated without personal figures, in the package and on GitHub. A test packs the tarball and fails if a known personal figure appears in any shipped file.
 
 - **Public documents agree with the licence and with what shipped.**
   - README, LICENSING, PRODUCT, the release gate, the website and the price-card notes now agree on several points: 0.1.0 is on npm and 0.2.0 is not; the BUSL-1.1 grant allows use at work (the badge said "free for personal use"); billed cost also comes from the OpenAI Costs API; and the Gemini 3.x rates and read dates are the ones the card lists. No price changed.
