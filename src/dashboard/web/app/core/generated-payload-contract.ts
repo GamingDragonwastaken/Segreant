@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "742ab7d53faab4c549cfba6df300210b0936cea50a08069cc170d5ee9d52888c";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1950,6 +1950,108 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "result",
       "optional": true,
       "type": "AllocationRunResultPayload"
+    }
+  ],
+  "BillingWritePayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "op",
+      "optional": false,
+      "type": "'import' | 'reconcile' | 'adopt' | 'scope'"
+    },
+    {
+      "name": "applied",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "message",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "error",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "preview",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "duplicateFile",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "run",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "kernel",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "readiness",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "result",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "fragility",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "reconciliationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "plan",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "observationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "networkAttempted",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "credentialRead",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "declaration",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "reconciliationStatus",
+      "optional": true,
+      "type": "string"
     }
   ],
   "Matured": [
