@@ -37,6 +37,20 @@ test('kept, not kept, unknown and maturing are separate, and a revert is never k
   assert.equal(k.maturing.nextVerdictMs, 3 * DAY + 14 * DAY, 'the earliest verdict date');
 });
 
+test('kept means every tracked check passed: survival alone is not enough (H015)', () => {
+  const failedElsewhere = {
+    ...unit({ cost: 10, survived: 'pass' }),
+    funnel: { results: [{ gate: 'tested', verdict: 'fail' }, { gate: 'shipped', verdict: 'fail' }, { gate: 'survived', verdict: 'pass' }] },
+  } as unknown as RealizationReport['units'][number];
+  const reportedOnly = {
+    ...unit({ cost: 5, survived: 'pass' }),
+    funnel: { results: [{ gate: 'merged', verdict: 'reported' }, { gate: 'survived', verdict: 'pass' }] },
+  } as unknown as RealizationReport['units'][number];
+  const k = keptSummary({ windowDays: 14, units: [failedElsewhere, reportedOnly] });
+  assert.deepEqual(k.notKept, { units: 1, costUsd: 10 }, 'a failed test or ship check is not kept, though the code survived');
+  assert.deepEqual(k.kept, { units: 1, costUsd: 5 }, 'a check that is reported, not failed, does not block Kept');
+});
+
 test('period spend splits into on-a-commit, before the oldest commit, no commit followed, and not committed yet', () => {
   const units = [
     { windowStartMs: 10, windowEndMs: 20 },
