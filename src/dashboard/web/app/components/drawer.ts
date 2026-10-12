@@ -40,12 +40,22 @@ export interface PreviewResult {
 
 export interface ActionSpec {
   capability: Capability;
-  /** Compute the preview. Must not write. Runs when the drawer opens. */
+  /**
+   * Compute the preview. Must not write. Runs when the drawer opens and again
+   * after any field changes, so it may read the field signals and must say
+   * whether THAT input can be applied (validation lives here, not in commit).
+   */
   preview: () => Promise<PreviewResult>;
   /** Persist. Only reachable after a preview reported `applicable`. */
   commit?: () => Promise<{ ok: boolean; message: string }>;
   /** Extra fields rendered above the preview (a period picker, a file choice). */
   fields?: () => Node;
+  /**
+   * The CLI command for what the fields currently say, when it differs from the
+   * capability's bare command (the budget drawer adds `--daily N`). Read
+   * reactively; falls back to the capability's command.
+   */
+  command?: () => string | null;
   /** A same-origin path the operator can download instead of committing. */
   download?: string;
 }
@@ -100,10 +110,34 @@ function panel(spec: ActionSpec): Node {
   const result = signal<{ ok: boolean; message: string } | null>(null);
   const typed = signal('');
 
-  void spec.preview()
-    .then((p) => preview.set(p))
-    .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)))
-    .finally(() => busy.set(false));
+  // The preview is re-run whenever a field changes (H004). Before, it ran once
+  // at open: a budget of -1 failed at commit, the failure disabled Apply, and
+  // correcting the field to 25 changed nothing on screen; on Optional features
+  // the preview kept describing the first switch while Apply wrote the one now
+  // selected. `refreshing` keeps the last preview on screen, marked stale, and
+  // holds Apply until the preview matches the fields again. Only the newest
+  // run may land.
+  const refreshing = signal(false);
+  let run = 0;
+  const runPreview = (): void => {
+    const mine = ++run;
+    if (preview.peek() !== null || error.peek() !== null) refreshing.set(true);
+    void spec.preview()
+      .then((p) => { if (mine === run) { preview.set(p); error.set(null); } })
+      .catch((e: unknown) => { if (mine === run) error.set(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (mine === run) { busy.set(false); refreshing.set(false); } });
+  };
+  runPreview();
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  const fieldsChanged = (): void => {
+    // An outcome described the input as it was; once the input changes it is
+    // history, and keeping it would also keep Apply disabled.
+    if (!committing.peek()) result.set(null);
+    refreshing.set(true);
+    if (pending !== null) clearTimeout(pending);
+    pending = setTimeout(() => { pending = null; runPreview(); }, 250);
+  };
+  onCleanup(() => { if (pending !== null) clearTimeout(pending); });
 
   const confirmPhrase = cap.id;
   const confirmed = (): boolean => cap.consequence !== 'destructive' || typed().trim() === confirmPhrase;
@@ -135,11 +169,11 @@ function panel(spec: ActionSpec): Node {
 
     cap.warning ? h('div', { class: 'drawer-warning', role: 'note' }, h('strong', { text: 'Before you do this' }), h('p', { text: cap.warning })) : null,
 
-    spec.fields ? h('div', { class: 'drawer-fields' }, spec.fields()) : null,
+    spec.fields ? h('div', { class: 'drawer-fields', oninput: fieldsChanged, onchange: fieldsChanged }, spec.fields()) : null,
 
     h(
       'section',
-      { class: 'drawer-preview' },
+      { class: () => `drawer-preview${refreshing() ? ' is-refreshing' : ''}`, 'aria-busy': () => (refreshing() ? 'true' : 'false') },
       h('h3', { class: 'drawer-h3', text: 'Preview' }),
       () => {
         if (busy()) return h('p', { class: 'drawer-muted', text: 'Working it out…' });
@@ -178,12 +212,12 @@ function panel(spec: ActionSpec): Node {
       h(
         'div',
         { class: 'cmd-row' },
-        h('code', { class: 'cmd', text: cap.command }),
+        h('code', { class: 'cmd', text: () => spec.command?.() ?? cap.command }),
         h('button', {
           class: 'cmd-copy',
           text: 'Copy',
           onclick: (event: Event) => {
-            void navigator.clipboard?.writeText(cap.command);
+            void navigator.clipboard?.writeText(spec.command?.() ?? cap.command);
             const button = event.currentTarget as HTMLButtonElement;
             button.textContent = 'Copied';
             setTimeout(() => { button.textContent = 'Copy'; }, 1400);
@@ -245,6 +279,13 @@ function panel(spec: ActionSpec): Node {
           }
           return null;
         }),
+      // Why Apply is unavailable gets its own line. Squeezed between the two
+      // buttons it wrapped mid-word ("--" / "demo") on a phone-width drawer.
+      () => {
+        const p = preview();
+        if (!spec.commit || !p || p.applicable) return null;
+        return h('p', { id: 'drawer-blocked-reason', class: 'drawer-note drawer-blocked', text: p.blockedReason ?? 'Nothing to apply' });
+      },
       h('div', { class: 'drawer-actions' },
         h('button', { class: 'btn-ghost', text: 'Close', onclick: () => closeAction() }),
         spec.download
@@ -253,7 +294,9 @@ function panel(spec: ActionSpec): Node {
         () => {
           if (!spec.commit) return null;
           const p = preview();
-          const ready = !busy() && p !== null && p.applicable && confirmed() && !committing() && result() === null;
+          // A failed outcome does not block a retry; a successful one does,
+          // until a field changes and the preview is recomputed.
+          const ready = !busy() && !refreshing() && p !== null && p.applicable && confirmed() && !committing() && result()?.ok !== true;
           // `title` is not exposed to keyboard or screen-reader users on a
           // `disabled` control — browsers do not run hover/focus tooltip
           // logic for it, and a disabled element cannot receive focus at
@@ -263,9 +306,6 @@ function panel(spec: ActionSpec): Node {
           // field uses for its own consequence text (`actions.ts`).
           const blocked = p && !p.applicable ? (p.blockedReason ?? 'Nothing to apply') : null;
           return [
-            blocked
-              ? h('p', { id: 'drawer-blocked-reason', class: 'drawer-note', text: blocked })
-              : null,
             h('button', {
               class: `btn-commit tone-${consequence.tone}`,
               disabled: !ready,

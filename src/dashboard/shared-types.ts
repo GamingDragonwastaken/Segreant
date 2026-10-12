@@ -1143,6 +1143,8 @@ export interface SettingsSnapshot {
   retentionDays: number;
   proposalRetentionDays: number;
   metadataOnly: boolean;
+  /** True when the dashboard runs in demo mode: settings are shown but cannot be changed. */
+  demo: boolean;
   /** Optional-subsystem switches, keyed as in `segreant features`. */
   features: Record<string, boolean>;
   budget: BudgetConfig;
