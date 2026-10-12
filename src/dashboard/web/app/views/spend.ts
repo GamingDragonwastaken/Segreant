@@ -60,7 +60,7 @@ export function spendView(): Node {
   return h('div', null,
     h('div', { class: 'view-head' },
       h('div', { class: 'view-head-row' },
-        h('h1', { class: 'view-title', text: 'Metered' }),
+        h('h1', { class: 'view-title', text: 'Spend' }),
         h('div', { class: 'rangebar', role: 'group', 'aria-label': 'Time range' },
           ...RANGES.map((r) => h('button', {
             class: 'chip',
@@ -134,8 +134,10 @@ function demoBanner(): Node {
 /**
  * The breakdown, drawn as a ledger rather than a table of numbers: each row
  * carries its own proportion as a rule beneath it, so the shape of the spend is
- * legible before any figure is read. The bar is a proportion of the LARGEST row,
- * not of the total, because the question this answers is "what dominates".
+ * legible before any figure is read. The bar is the row's share of the TOTAL,
+ * the same number as the Share column beside it. It used to be scaled to the
+ * largest row, so a 57% row drew full width beside "57%" and readers took the
+ * bar and the column to disagree (critique 2026-10-12).
  */
 function ledger(rows: GroupRow[], totalUsd: number): Node {
   if (rows.length === 0) {
@@ -143,7 +145,6 @@ function ledger(rows: GroupRow[], totalUsd: number): Node {
   }
 
   const sorted = [...rows].sort((a, b) => b.costUsd - a.costUsd);
-  const max = sorted[0]?.costUsd ?? 0;
   const total = totalUsd > 0 ? totalUsd : sorted.reduce((s, r) => s + r.costUsd, 0);
 
   return h('div', { class: 'ledger', role: 'table', 'aria-label': 'Metered spend breakdown' },
@@ -157,12 +158,17 @@ function ledger(rows: GroupRow[], totalUsd: number): Node {
       h('span', { class: 'ledger-key', role: 'cell', text: row.label }),
       h('span', { class: 'num cell-calls', role: 'cell', text: count(row.requests) }),
       h('span', { class: 'num cell-cost ledger-cost', role: 'cell', text: usd(row.costUsd) }),
-      h('span', { class: 'num cell-share', role: 'cell', text: total > 0 ? pct(row.costUsd / total, 0) : '—' }),
+      h('span', { class: 'num cell-share', role: 'cell', text: total > 0 ? share(row.costUsd / total) : '—' }),
       h('span', {
         class: 'ledger-bar',
         'aria-hidden': 'true',
-        style: `--fill: ${max > 0 ? Math.max(0.5, (row.costUsd / max) * 100) : 0}%`,
+        style: `--fill: ${total > 0 ? Math.max(0.5, (row.costUsd / total) * 100) : 0}%`,
       }))));
+}
+
+/** A share that is not zero never prints as 0%. */
+function share(fraction: number): string {
+  return fraction > 0 && fraction < 0.005 ? '<1%' : pct(fraction, 0);
 }
 
 /**
@@ -184,6 +190,8 @@ export function actionCard(id: string): Node | null {
       cap.consequence !== 'read'
         ? h('span', { class: `tag tag-${cap.consequence}`, text: cap.consequence })
         : null,
-      !hasRunner(cap) ? h('span', { class: 'tag tag-planned', text: 'CLI only' }) : null,
+      // "CLI only" read as a dead end to a reader who never opens a terminal.
+      // The drawer still shows what this does and the exact command.
+      !hasRunner(cap) ? h('span', { class: 'tag tag-planned', text: () => (isPrecise() ? 'CLI only' : 'runs in the terminal for now') }) : null,
       () => (register() === 'precise' ? h('span', { class: 'tag', text: cap.command.replace(/^segreant /, '') }) : null)));
 }
