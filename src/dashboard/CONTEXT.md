@@ -15,6 +15,9 @@
 ```
 server.ts            entry + guards: loopback Host, route matching, method/CSRF
 routes.ts            one named handler per endpoint, plus the ROUTES table
+value-cache.ts       in-memory /api/value payload cache (per Store, 8 entries, 10 min TTL,
+                     keyed on query, repo HEAD, config hash and ledger change marks).
+                     Memory only: it never persists a realization.
 static.ts            asset serving and the two HTML entry points
 settings.ts          settings snapshot / patch
 web/

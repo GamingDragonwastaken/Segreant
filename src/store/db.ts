@@ -1385,6 +1385,31 @@ export class Store {
   }
 
   /**
+   * Change marks for every ledger table the value report reads: the highest
+   * rowid and the exact row count. Any append, removal or in-place replacement
+   * (a replaced row takes a new rowid) moves a mark, so a cached value report
+   * keyed on these marks cannot survive a change to what it was computed from.
+   * Exact counts, not AppendMark's bounded estimate, because a cache hit must
+   * never be served across a deletion; the cost is a few milliseconds, against
+   * the realization work it avoids.
+   */
+  valueChangeMarks(): Record<string, { rowid: number; count: number }> {
+    const mark = (table: string): { rowid: number; count: number } => {
+      const row = prepared(this.db, `SELECT COALESCE(MAX(rowid), 0) AS rowid, COUNT(*) AS count FROM ${table}`)
+        .get() as { rowid: number; count: number };
+      return { rowid: Number(row.rowid), count: Number(row.count) };
+    };
+    return {
+      requests: mark('requests'),
+      request_price_events: mark('request_price_events'),
+      gate_signals: mark('gate_signals'),
+      realization_units: mark('realization_units'),
+      economic_events: mark('economic_events'),
+      project_aliases: mark('project_aliases'),
+    };
+  }
+
+  /**
    * Add the rows and charge events appended since `cached` to its projection,
    * or return null when that would not equal a full re-projection: rows removed
    * or renumbered, any appended event that is not a plain request charge (a
