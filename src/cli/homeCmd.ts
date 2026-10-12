@@ -102,7 +102,7 @@ export function cmdHome(flags: Flags): void {
       if (b.units === 0) return;
       console.log(`    ${label.padEnd(10)} ${color(tty, tone, usd(b.costUsd).padStart(10))}  ${String(b.units).padStart(4)} commits  ${color(tty, C.gray, what)}`);
     };
-    row('Kept', kept.kept, C.green, 'still in the code after 14 days');
+    row('Kept', kept.kept, C.green, 'still in the code after 14 days, no tracked check failed');
     row('Not kept', kept.notKept, C.yellow, 'rewritten, removed or reverted');
     row('Unknown', kept.unknown, C.gray, 'not measured');
     row('Maturing', kept.maturing, C.gray, 'younger than 14 days when measured');
