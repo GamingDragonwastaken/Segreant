@@ -71,6 +71,12 @@ export function allocationView(): Node {
   // Outside the data region on purpose: a save reloads the payload, which
   // rebuilds every form, and a message held by the form would vanish with it.
   const notice = signal<{ ok: boolean; text: string } | null>(null);
+  const reloadAll = (): void => {
+    reload();
+    // The spine above this page reads /api/allocation once. Without this it kept
+    // saying "no cost centres and no rules yet" under a page that had just saved both.
+    window.dispatchEvent(new CustomEvent('segreant:ledger-changed', { detail: { claim: 'allocation' } }));
+  };
   const say: Say = (ok, text) => {
     const shown = { ok, text };
     notice.set(shown);
@@ -112,6 +118,9 @@ export function allocationView(): Node {
 
       const open = d.costCentres.filter((c) => c.archivedAtMs == null);
       const live = d.rules.filter((r) => r.revokedAtMs == null && r.effectiveToMs == null);
+      // People type names; the engine keys on ids. Show what they typed.
+      const names = new Map(d.costCentres.map((c) => [c.costCentreId, c.name]));
+      const nameOf = (id: string): string => names.get(id) ?? id;
 
       return h('div', null,
         basisStrip(d),
@@ -120,18 +129,18 @@ export function allocationView(): Node {
           : null,
         step(1, () => (isPrecise() ? 'Cost centres' : 'Who carries the cost'),
           () => (isPrecise() ? 'Accounting positions that receive allocated spend.' : 'The teams, clients or budgets spend can be attributed to.'),
-          centreList(d.costCentres, d.demo, reload, say),
-          d.demo ? null : centreForm(reload, say)),
+          centreList(d.costCentres, d.demo, reloadAll, say),
+          d.demo ? null : centreForm(reloadAll, say)),
         step(2, () => (isPrecise() ? 'Rules' : 'What goes where'),
           () => (isPrecise() ? 'Priority-ordered; lower wins. Edits create a new version; old versions stay for past periods.' : 'Each rule picks some spend and says which centre it belongs to. Changing a rule keeps the old version, so past months still add up the same.'),
-          ruleList(d.rules, d.demo, reload, say),
+          ruleList(d.rules, d.demo, reloadAll, say, nameOf),
           d.demo ? null : open.length > 0
-            ? ruleForm(open, projects, reload, say)
+            ? ruleForm(open, projects, reloadAll, say)
             : h('p', { class: 'drawer-muted', text: 'Add a cost centre first. A rule needs somewhere to send spend.' })),
         step(3, () => (isPrecise() ? 'Run' : 'Work out the split'),
           () => (isPrecise() ? 'Preview computes; Record persists an immutable run.' : 'Preview the split for a month. Nothing is saved until you record it.'),
           live.length > 0 || d.demo
-            ? runPanel(d.demo, reload, say)
+            ? runPanel(d.demo, reloadAll, say, nameOf)
             : h('p', { class: 'drawer-muted', text: 'Add a rule first. Without one, every dollar would show as unallocated.' })),
         history(d.runs));
     });
@@ -216,15 +225,15 @@ function field(id: string, label: string, control: Node): Node {
   return h('div', { class: 'form-field' }, h('label', { for: id, text: label }), control);
 }
 
-function describeRule(r: AllocationRule): string {
+function describeRule(r: AllocationRule, nameOf: (id: string) => string): string {
   const match = Object.entries(r.match ?? {}).filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(', ');
   const what = match ? `Spend where ${match}` : 'All spend';
   if (r.method === 'proportional_to_direct') return `${what}: shared across centres in proportion to their direct spend`;
-  if (r.method === 'fixed_split') return `${what}: ${r.targets.map((t) => `${Math.round(t.ratio * 1000) / 10}% to ${t.costCentreId}`).join(', ')}`;
-  return `${what}: to ${r.targets[0]?.costCentreId ?? '—'}`;
+  if (r.method === 'fixed_split') return `${what}: ${r.targets.map((t) => `${Math.round(t.ratio * 1000) / 10}% to ${nameOf(t.costCentreId)}`).join(', ')}`;
+  return `${what} goes to ${r.targets[0] ? nameOf(r.targets[0].costCentreId) : '—'}`;
 }
 
-function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, say: Say): Node {
+function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, say: Say, nameOf: (id: string) => string): Node {
   if (rules.length === 0) return h('p', { class: 'drawer-muted', text: 'No rules yet.' });
   return h('div', { class: 'facts' },
     // A revoked or superseded version is shown, not hidden: a past run was
@@ -234,7 +243,7 @@ function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, sa
       const state = r.revokedAtMs != null ? 'revoked' : r.effectiveToMs != null ? 'superseded' : null;
       return h('div', { class: `fact${state ? ' fact-off' : ''}` },
         h('span', { class: 'fact-key' },
-          h('span', { text: describeRule(r) })),
+          h('span', { text: describeRule(r, nameOf) })),
         h('span', { class: 'fact-val' },
           h('span', { text: `${r.ruleId} v${r.version}${state ? ` · ${state}` : ` · p${r.priority}`}` }),
           !state && !demo
@@ -310,7 +319,7 @@ function ruleForm(centres: CostCentre[], projects: () => string[], reload: () =>
   );
 }
 
-function runPanel(demo: boolean, reload: () => void, say: Say): Node {
+function runPanel(demo: boolean, reload: () => void, say: Say, nameOf: (id: string) => string): Node {
   const ranges = [monthRange(-1), monthRange(0)];
   const chosen = signal(0);
   const preview = signal<AllocationRunResultPayload | null>(null);
@@ -322,13 +331,15 @@ function runPanel(demo: boolean, reload: () => void, say: Say): Node {
     try {
       const res = await api.write.allocation({ op: 'run', from: r.from, to: r.to, apply });
       if (res.result) preview.set(res.result);
-      say(true, res.message);
+      say(true, apply
+        ? 'Recorded. The split is saved and listed under Saved splits.'
+        : 'Preview only. Nothing is saved until you press Record this run.');
       if (apply) { preview.set(null); reload(); }
     } catch (e) { say(false, errorText(e)); } finally { busy.set(false); }
   };
 
   return h('div', { class: 'run-panel' },
-    h('div', { class: 'form-row' },
+    h('div', { class: 'form-row run-row' },
       field('run-period', 'Period', h('select', {
         id: 'run-period', class: 'drawer-input',
         onchange: (e: Event) => { chosen.set(Number((e.target as HTMLSelectElement).value)); preview.set(null); },
@@ -338,7 +349,7 @@ function runPanel(demo: boolean, reload: () => void, say: Say): Node {
       const p = preview();
       if (!p) return null;
       return h('div', { class: 'run-result' },
-        runTable(p),
+        runTable(p, nameOf),
         p.retention?.truncated
           ? h('p', { class: 'section-note', role: 'note', text: 'Some records in this period were deleted by retention. The split covers what remains, so the unallocated part may be understated.' })
           : null,
@@ -350,7 +361,7 @@ function runPanel(demo: boolean, reload: () => void, say: Say): Node {
   );
 }
 
-function runTable(p: AllocationRunResultPayload): Node {
+function runTable(p: AllocationRunResultPayload, nameOf: (id: string) => string): Node {
   const share = (m: number): string => (p.totalMicros > 0 ? pct(m / p.totalMicros) : '—');
   return h('div', { class: 'table-wrap' },
     h('table', null,
@@ -359,7 +370,7 @@ function runTable(p: AllocationRunResultPayload): Node {
         h('th', { text: 'Cost centre' }), h('th', { class: 'num', text: 'Amount' }), h('th', { class: 'num', text: 'Share' }), h('th', { class: 'num', text: 'Requests' }))),
       h('tbody', null,
         ...p.byCostCentre.map((c) => h('tr', null,
-          h('td', { text: c.costCentreId }), h('td', { class: 'num', text: usdFromMicros(c.allocatedMicros) }),
+          h('td', { text: nameOf(c.costCentreId) }), h('td', { class: 'num', text: usdFromMicros(c.allocatedMicros) }),
           h('td', { class: 'num', text: share(c.allocatedMicros) }), h('td', { class: 'num', text: count(c.requestCount) }))),
         ...p.unallocated.map((u) => h('tr', { class: 'row-unalloc' },
           h('td', null,

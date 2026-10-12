@@ -837,6 +837,23 @@ export interface AllocationRunRecord {
 }
 
 /**
+ * `POST /api/allocation/write`. One deliberate allocation change per request;
+ * the same Store methods and validation as `segreant alloc`. Preview runs
+ * (`op: 'run'` with `applied: false`) record nothing.
+ */
+export interface AllocationWritePayload {
+  ok: boolean;
+  op: 'centre' | 'archive' | 'rule' | 'revoke' | 'run';
+  applied: boolean;
+  message: string;
+  costCentre?: CostCentre;
+  rule?: AllocationRule;
+  revoked?: number;
+  allocationRunId?: string | null;
+  result?: AllocationRunResultPayload;
+}
+
+/**
  * The realized-value payload.
  *
  * Every field here was read off an actual /api/value response, not inferred from
@@ -1499,6 +1516,7 @@ export interface DashboardResponseMap {
   judge: JudgePayload;
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
+  'allocation-write': AllocationWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
