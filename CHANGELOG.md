@@ -11,6 +11,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A monthly statement, as the finance home.**
+  - A new Statement page shows one calendar month: what Segreant measured, what the provider billed, how it was split across cost centres, and what the work produced. The four sit side by side, each with its own basis, and are never added together.
+  - A billed comparison or a split is labelled with its own dates ("covers part of the month only", "covers the month so far"). It is never prorated into the month.
+  - A claim the ledger does not establish for the month says so, and links to the page that establishes it. Previous and next buttons step through months.
+  - "I look after the money" on first run now opens the Statement.
+  - A new read-only `GET /api/statement?month=YYYY-MM` serves it, with month bounds at local midnight.
+- **The capability list no longer promises a summary that did not exist.** `segreant report` was listed as "Period report: a summary you can hand to someone". The command records an outcome by hand (tested, merged, shipped, redone), and the list now says so.
+
 - **Settings and Value open on what you came for.**
   - Settings led with a 60-row table of what the dashboard can and cannot do, with the actual settings at the bottom of a 10,140 px page. The settings now come first. The table is kept in full, in a closed section whose summary line gives the counts. The page is now 900 px.
   - Value put a causal-study card above the answer, and the public model market and other supporting evidence below it ran at full length (7,557 px; 13,223 on a phone). The answer now comes first: basis, value and cost, the share of work that stuck, and where work fell over. The supporting evidence sits in named sections that open on demand. The page is now 3,360 px; 5,157 on a phone. Nothing was removed.
