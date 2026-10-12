@@ -27,7 +27,7 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from './claim-support.ts';
-import { isDemo, type SegreantConfig } from '../config.ts';
+import { isDemo, DemoWriteBlockedError, type SegreantConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
@@ -308,6 +308,14 @@ export function handleImporters({ res }: RouteContext): void {
   });
 }
 
+/** Demo mode writes nothing real: refuse with a conflict and drain the body. */
+function refuseDemoImport(req: http.IncomingMessage, res: http.ServerResponse, what: string): boolean {
+  if (!isDemo()) return false;
+  req.resume();
+  json(res, 409, { error: new DemoWriteBlockedError(what).message });
+  return true;
+}
+
 /**
  * Trigger a native import from the dashboard. POST-only + a custom header the
  * browser only sets same-origin (declared in the route table): a cross-site form
@@ -315,6 +323,7 @@ export function handleImporters({ res }: RouteContext): void {
  * mutating the local DB.
  */
 export function handleImport({ req, res, url, store }: RouteContext): void {
+  if (refuseDemoImport(req, res, 'the import')) return;
   const tool = url.searchParams.get('tool') ?? 'all';
   const targets = tool === 'all' ? DASH_IMPORTERS : DASH_IMPORTERS.filter((i) => i.id === tool);
   if (targets.length === 0) return json(res, 400, { error: `unknown tool: ${tool}` });
@@ -373,6 +382,7 @@ export function handleDiscover({ req, res, url, store }: RouteContext): void {
 export function handleScan({ req, res, url, store }: RouteContext): void {
   const path = url.searchParams.get('path') || undefined;
   if (req.method === 'POST') {
+    if (refuseDemoImport(req, res, 'the import and setup')) return;
     req.resume();
     void (async () => {
       try {

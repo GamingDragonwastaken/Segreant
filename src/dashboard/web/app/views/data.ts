@@ -75,7 +75,7 @@ export function dataView(): Node {
               h('span', { class: 'pill pill-demo', text: 'demo' }),
               h('p', null,
                 h('strong', { text: 'You are looking at sample data. ' }),
-                'Importing below replaces it with your own usage.'))
+                'Imports are off while this is sample data, and nothing here writes into it. To bring in your own usage, run the dashboard without --demo.'))
           : empty
             ? h('div', { class: 'banner' },
                 h('p', null, h('strong', { text: 'Nothing imported yet. ' }),
