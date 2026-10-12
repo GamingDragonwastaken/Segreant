@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -53,8 +53,17 @@ test('demo mode serves the dashboard and starts no proxy', async () => {
     assert.match(out, /No proxy runs in demo mode/);
     assert.doesNotMatch(out, /Start your tools through Segreant/);
   } finally {
-    child.kill();
-    await new Promise((r) => child.once('exit', r));
+    // Stop the whole tree: the launcher runs the runtime as its own child.
+    // POSIX: the launcher forwards SIGTERM. Windows has no signal to forward,
+    // so taskkill /T ends the tree.
+    const exited = child.exitCode !== null || child.signalCode !== null
+      ? Promise.resolve()
+      : new Promise((r) => child.once('exit', r));
+    if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    else child.kill('SIGTERM');
+    await exited;
+    await until(async () => !(await listening(dashboardPort)), 10_000);
+    assert.equal(await listening(dashboardPort), false, 'stopping segreant stops its dashboard too');
     rmSync(home, { recursive: true, force: true });
   }
 });
