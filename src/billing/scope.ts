@@ -38,6 +38,13 @@ function safeRef(value: string, label: string, required: boolean): string | null
   if (!trimmed && !required) return null;
   if (!trimmed) throw new Error(`${label} is required`);
   if (trimmed.length > MAX_REF || CONTROL.test(trimmed)) throw new Error(`${label} must be a short, single-line reference`);
+  // A reference is stored for good and issued to the kernel, so a key typed into
+  // this field would become durable ledger content. OpenAI keys start `sk-`
+  // (sk-proj-, sk-admin-, sk-svcacct-); restricted keys `rk-`. Refuse the shape
+  // outright rather than store it and hope nobody exports the ledger.
+  if (/^(sk|rk)-/i.test(trimmed) || /^bearer\s/i.test(trimmed)) {
+    throw new Error(`${label} looks like an API key. Use the organisation id (org_…) or project id (proj_…) from your OpenAI settings; never a key.`);
+  }
   return trimmed;
 }
 

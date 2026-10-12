@@ -69,7 +69,7 @@ function post(base: string, payload: unknown, headers: Record<string, string> = 
 test('POST /api/billing/write without x-segreant-local is refused and writes nothing', async () => {
   const store = new Store(':memory:');
   await withDashboard(store, false, async (base) => {
-    const res = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, apply: true }, {});
+    const res = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), apply: true }, {});
     assert.equal(res.status, 403);
     assert.equal(store.billingImportRuns().length, 0);
   });
@@ -79,7 +79,7 @@ test('POST /api/billing/write without x-segreant-local is refused and writes not
 test('billing import: a preview writes nothing; apply records the file and is idempotent on replay', async () => {
   const store = new Store(':memory:');
   await withDashboard(store, false, async (base) => {
-    const preview = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT });
+    const preview = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64') });
     assert.equal(preview.status, 200);
     const previewBody = await preview.json() as { applied: boolean; preview: { recordsSeen: number; fileSha256: string; reconciliationStatus: string }; message: string };
     assert.equal(previewBody.applied, false);
@@ -88,7 +88,7 @@ test('billing import: a preview writes nothing; apply records the file and is id
     assert.equal(previewBody.preview.reconciliationStatus, 'not_reconciled');
     assert.equal(store.billingImportRuns().length, 0, 'a preview must not record an import');
 
-    const applied = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, apply: true });
+    const applied = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), apply: true });
     assert.equal(applied.status, 200);
     const appliedBody = await applied.json() as {
       applied: boolean; duplicateFile: boolean; message: string;
@@ -102,7 +102,7 @@ test('billing import: a preview writes nothing; apply records the file and is id
     assert.match(appliedBody.message, /Status remains not_reconciled/);
     assert.equal(store.billingImportRuns().length, 1);
 
-    const replay = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, apply: true });
+    const replay = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), apply: true });
     const replayBody = await replay.json() as { duplicateFile: boolean };
     assert.equal(replayBody.duplicateFile, true);
     assert.equal(store.billingImportRuns().length, 1, 'an identical file must not record a second import');
@@ -128,14 +128,14 @@ test('billing reconcile on an empty store is 409 not_ready with the readiness re
 test('billing write: an unknown field and an unknown op are refused with 400', async () => {
   const store = new Store(':memory:');
   await withDashboard(store, false, async (base) => {
-    const unknownField = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, colour: 'red' });
+    const unknownField = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), colour: 'red' });
     assert.equal(unknownField.status, 400);
     assert.match(((await unknownField.json()) as { error: string }).error, /unknown field/);
 
     const unknownOp = await post(base, { op: 'delete_everything' });
     assert.equal(unknownOp.status, 400);
 
-    const dirtyName = await post(base, { op: 'import', fileName: '../secrets/export.json', content: FIXTURE_TEXT });
+    const dirtyName = await post(base, { op: 'import', fileName: '../secrets/export.json', contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64') });
     assert.equal(dirtyName.status, 400);
     assert.match(((await dirtyName.json()) as { error: string }).error, /basename/);
     assert.equal(store.billingImportRuns().length, 0);
@@ -146,11 +146,11 @@ test('billing write: an unknown field and an unknown op are refused with 400', a
 test('demo mode: every apply is refused with 409 and a preview is allowed', async () => {
   const store = new Store(':memory:');
   await withDashboard(store, true, async (base) => {
-    const preview = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT });
+    const preview = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64') });
     assert.equal(preview.status, 200);
     assert.equal(((await preview.json()) as { applied: boolean }).applied, false);
 
-    const importApply = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, apply: true });
+    const importApply = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), apply: true });
     assert.equal(importApply.status, 409);
     assert.match(((await importApply.json()) as { error: string }).error, /Demo mode holds sample data only/);
 
@@ -195,7 +195,7 @@ test('billing scope and adopt: scope is required before adoption, and adoption i
     assert.equal(noImport.status, 409);
     assert.match(((await noImport.json()) as { error: string }).error, /No OpenAI billing export has been imported/);
 
-    const imported = await post(base, { op: 'import', fileName: FIXTURE_NAME, content: FIXTURE_TEXT, apply: true });
+    const imported = await post(base, { op: 'import', fileName: FIXTURE_NAME, contentBase64: Buffer.from(FIXTURE_TEXT, 'utf8').toString('base64'), apply: true });
     assert.equal(imported.status, 200);
     const importId = store.billingImportRuns()[0]!.importId;
 

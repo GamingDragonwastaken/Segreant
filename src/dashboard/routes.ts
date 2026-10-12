@@ -1173,16 +1173,19 @@ export function handleAllocationWrite({ req, res, store }: RouteContext): void {
   })();
 }
 
-const BILLING_WRITE_FIELDS = new Set(['op', 'apply', 'fileName', 'content', 'materialityUsd', 'importId', 'accountRef', 'projectRef']);
+const BILLING_WRITE_FIELDS = new Set(['op', 'apply', 'fileName', 'contentBase64', 'materialityUsd', 'importId', 'accountRef', 'projectRef']);
 const BILLING_WRITE_OPS = new Set(['import', 'reconcile', 'adopt', 'scope']);
 /**
- * Import content travels as a JSON string inside the body, so the bound is the
- * import limit with room for escaping (at most 2x for quotes and backslashes)
- * plus the envelope. The import itself is still held to MAX_BILLING_IMPORT_BYTES
- * by parseBillingImportText. The shared 16 KiB dashboard cap would refuse every
- * realistic export.
+ * Import content travels as the file's raw bytes in base64, never as decoded
+ * text. The CLI hashes the bytes on disk; a browser that sent `file.text()`
+ * would have the server hash a UTF-8 re-encoding instead, so the same export
+ * (a BOM, a non-UTF-8 byte) could get two digests and import twice, once per
+ * surface. Base64 makes the digest identical and bounds the body exactly: the
+ * import limit at 4/3, plus the envelope. The shared 16 KiB dashboard cap would
+ * refuse every realistic export.
  */
-const BILLING_WRITE_BODY_BYTES = MAX_BILLING_IMPORT_BYTES * 2 + 64 * 1024;
+const BILLING_WRITE_BODY_BYTES = Math.ceil(MAX_BILLING_IMPORT_BYTES / 3) * 4 + 64 * 1024;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /** Serialize before the status line is written, so a payload that cannot be JSON-encoded fails as a 400 rather than a broken response. */
 function billingJson(res: http.ServerResponse, status: number, payload: unknown): void {
@@ -1310,7 +1313,7 @@ function billingScope(store: Store, body: Record<string, unknown>, apply: boolea
         op: 'scope',
         applied: false,
         message: 'No data written. Apply to declare this scope.',
-        preview: {
+        scopePreview: {
           ...preview,
           capture: 'future OpenAI proxy rows only when the resolved configured endpoint exactly matches',
           trust: 'operator_declared_unverified',
@@ -1367,9 +1370,10 @@ export function handleBillingWrite({ req, res, store }: RouteContext): void {
       if (op === 'import') {
         const fileName = billingText(body.fileName, 'fileName', 200);
         if (basename(fileName) !== fileName) throw new Error('fileName must be a basename, without directories');
-        const content = billingText(body.content, 'content', BILLING_WRITE_BODY_BYTES);
-        // The bytes the client sent are the bytes that are hashed, as the file is in the CLI.
-        const parsed = parseBillingImportText(Buffer.from(content, 'utf8'), fileName);
+        const encoded = billingText(body.contentBase64, 'contentBase64', BILLING_WRITE_BODY_BYTES);
+        if (encoded.length % 4 !== 0 || !BASE64.test(encoded)) throw new Error('contentBase64 must be the file\'s bytes in standard base64');
+        // The file's own bytes are what is hashed, exactly as the CLI hashes the file on disk.
+        const parsed = parseBillingImportText(Buffer.from(encoded, 'base64'), fileName);
         if (!apply) {
           return billingJson(res, 200, {
             ok: true, op, applied: false, preview: parsed.preview,

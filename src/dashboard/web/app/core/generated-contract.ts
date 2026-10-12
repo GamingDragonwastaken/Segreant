@@ -35,7 +35,7 @@ export const DASHBOARD_API_CONTRACTS = [
   { id: 'billing', path: '/api/billing', methods: ['GET'], localOnly: [], responseType: 'BillingPayload', browserBinding: ['modern-api', 'classic'] },
   { id: 'allocation', path: '/api/allocation', methods: ['GET'], localOnly: [], responseType: 'AllocationPayload', browserBinding: ['modern-api', 'classic'] },
   { id: 'allocation-write', path: '/api/allocation/write', methods: ['POST'], localOnly: ['POST'], responseType: 'AllocationWritePayload', browserBinding: ['modern-api'] },
-  { id: 'billing-write', path: '/api/billing/write', methods: ['POST'], localOnly: ['POST'], responseType: 'BillingWritePayload', browserBinding: [] },
+  { id: 'billing-write', path: '/api/billing/write', methods: ['POST'], localOnly: ['POST'], responseType: 'BillingWritePayload', browserBinding: ['modern-api'] },
   { id: 'economic', path: '/api/economic', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'EconomicPayload', browserBinding: ['modern-api'] },
   { id: 'pricing', path: '/api/pricing', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'PricingPayload', browserBinding: [] },
   { id: 'export-csv', path: '/api/export.csv', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'text/csv', browserBinding: ['classic', 'actions'] },
