@@ -150,6 +150,7 @@ const HISTORICAL_ALLOW: Record<string, string> = {
   // New write route, not inherited: pinned here because it is POST-only.
   '/api/outcome/record': 'POST',
   '/api/allocation/write': 'POST',
+  '/api/billing/write': 'POST',
 };
 
 /**

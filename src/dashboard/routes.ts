@@ -21,6 +21,7 @@ import { CLAIM_USES } from '../epistemic/claim-uses.ts';
 import { EXACT_ALLOCATION_EXCLUDED_FLOOR } from '../alloc/exact.ts';
 import { ALLOCATION_METHODS, MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type AllocationTarget, type MatchField } from '../alloc/rules.ts';
 import { existsSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 import type { Store } from '../store/db.ts';
 import {
   allocatedClaimSupport,
@@ -28,7 +29,12 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from './claim-support.ts';
-import { isDemo, DemoReadOnlyError, DemoWriteBlockedError, type SegreantConfig } from '../config.ts';
+import { isDemo, loadConfig, DemoReadOnlyError, DemoWriteBlockedError, type SegreantConfig } from '../config.ts';
+import { MAX_BILLING_IMPORT_BYTES, parseBillingImportText } from '../billing/importer.ts';
+import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
+import { reconciliationCountermodels } from '../billing/countermodels.ts';
+import { assessAssumptionFragility } from '../epistemic/countermodel.ts';
+import { moneyToJson } from '../economics/money.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
@@ -1167,6 +1173,233 @@ export function handleAllocationWrite({ req, res, store }: RouteContext): void {
   })();
 }
 
+const BILLING_WRITE_FIELDS = new Set(['op', 'apply', 'fileName', 'content', 'materialityUsd', 'importId', 'accountRef', 'projectRef']);
+const BILLING_WRITE_OPS = new Set(['import', 'reconcile', 'adopt', 'scope']);
+/**
+ * Import content travels as a JSON string inside the body, so the bound is the
+ * import limit with room for escaping (at most 2x for quotes and backslashes)
+ * plus the envelope. The import itself is still held to MAX_BILLING_IMPORT_BYTES
+ * by parseBillingImportText. The shared 16 KiB dashboard cap would refuse every
+ * realistic export.
+ */
+const BILLING_WRITE_BODY_BYTES = MAX_BILLING_IMPORT_BYTES * 2 + 64 * 1024;
+
+/** Serialize before the status line is written, so a payload that cannot be JSON-encoded fails as a 400 rather than a broken response. */
+function billingJson(res: http.ServerResponse, status: number, payload: unknown): void {
+  const text = stringifyJson(payload, 0);
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(text);
+}
+
+function billingText(value: unknown, label: string, max: number): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > max) throw new Error(`${label} must be a non-empty string of at most ${max} characters`);
+  return value;
+}
+
+function billingOptionalText(value: unknown, label: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`);
+  return value;
+}
+
+/** Same reconciliation mapping as cmdReconcile in src/cli/billingCmd.ts. */
+function billingReconcile(store: Store, body: Record<string, unknown>, apply: boolean): { status: number; payload: Record<string, unknown> } {
+  let materialityUsd: number | undefined;
+  if (body.materialityUsd !== undefined) {
+    if (typeof body.materialityUsd !== 'number' || !Number.isFinite(body.materialityUsd) || body.materialityUsd < 0) {
+      throw new Error('materialityUsd must be a non-negative dollar amount');
+    }
+    materialityUsd = body.materialityUsd;
+  }
+  const readiness = reconciliationReadiness(store);
+  const notReady = {
+    status: 409,
+    payload: {
+      ok: false, op: 'reconcile', applied: false, status: 'not_ready', readiness,
+      message: 'Reconciliation is not possible yet. Complete the steps listed in readiness first.',
+      error: 'Reconciliation is not possible yet. Complete the steps listed in readiness first.',
+    },
+  };
+  if (!readiness.ready) return notReady;
+  const result = store.reconcileOpenAiCosts({ materialityUsd });
+  if (!result) return notReady;
+  if (result.status === 'refused') {
+    return {
+      status: 409,
+      payload: { ok: false, op: 'reconcile', applied: false, status: 'refused', refusal: result.refusal, detail: result.detail, error: result.detail, message: result.detail },
+    };
+  }
+  const reconciliationRunId = apply ? store.saveReconciliationRun(result) : null;
+  // A provider-day comparison crosses the kernel only after the immutable run is
+  // recorded. Local-only periods have no provider Evidence and stay a non-claim.
+  const kernel = apply && reconciliationRunId !== null && result.coverage.providerDays > 0
+    ? store.issueOpenAiReconciliationToKernel(reconciliationRunId)
+    : null;
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      op: 'reconcile',
+      applied: apply,
+      message: apply ? 'Recorded as an immutable derived run.' : 'Not recorded. Apply to record this run.',
+      reconciliationRunId,
+      result,
+      kernel,
+      fragility: assessAssumptionFragility([...result.conditions], reconciliationCountermodels(result)),
+    },
+  };
+}
+
+/** Same adoption preconditions and refusals as cmdAdoptCosts in src/cli/billingCmd.ts. */
+function billingAdopt(store: Store, body: Record<string, unknown>, apply: boolean): { status: number; payload: Record<string, unknown> } {
+  const scope = store.activeOpenAiScope();
+  if (!scope || !scope.providerProjectRef) {
+    const error = 'Declare the route scope first, so the adopted lines are bound to a project: use op "scope" with accountRef and projectRef, then retry.';
+    return { status: 409, payload: { ok: false, op: 'adopt', applied: false, error, message: error } };
+  }
+  const imports = store.billingImportRuns(50).filter((r) => r.provider === 'openai');
+  if (imports.length === 0) {
+    const error = 'No OpenAI billing export has been imported. Import one first with op "import".';
+    return { status: 409, payload: { ok: false, op: 'adopt', applied: false, error, message: error } };
+  }
+  const importId = billingText(body.importId, 'importId', 200);
+  const plan = store.planOpenAiCostsAdoption({
+    importId,
+    declaredScopeId: scope.declarationId,
+    providerProjectRef: scope.providerProjectRef,
+  });
+  if (!plan.adoptable) {
+    const error = `Cannot adopt: ${plan.refusal.replaceAll('_', ' ')}. ${plan.detail}`;
+    return { status: 409, payload: { ok: false, op: 'adopt', applied: false, plan, error, message: error } };
+  }
+  const run = apply ? store.adoptOpenAiCostsFromImport(plan) : null;
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      op: 'adopt',
+      applied: apply,
+      observationRunId: run?.observationRunId ?? null,
+      plan,
+      networkAttempted: false,
+      credentialRead: false,
+      message: apply
+        ? 'Recorded as an immutable observation. Stamped operator_supplied_export; reconciliations built on it carry a fifth condition.'
+        : 'Not recorded. Apply to record this adoption.',
+    },
+  };
+}
+
+/** Same declaration, preview and refusal as `billing scope set` in src/cli/billingCmd.ts. */
+function billingScope(store: Store, body: Record<string, unknown>, apply: boolean): { status: number; payload: Record<string, unknown> } {
+  const accountRef = billingText(body.accountRef, 'accountRef', 200);
+  const projectRef = billingOptionalText(body.projectRef, 'projectRef');
+  let upstreamBase: string;
+  let preview: ReturnType<typeof newOpenAiScopeDeclaration>;
+  try {
+    upstreamBase = loadConfig().upstreams.openai;
+    preview = newOpenAiScopeDeclaration({ billingAccountRef: accountRef, providerProjectRef: projectRef, upstreamBase });
+  } catch (error) {
+    throw new Error(`Billing scope failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!apply) {
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        op: 'scope',
+        applied: false,
+        message: 'No data written. Apply to declare this scope.',
+        preview: {
+          ...preview,
+          capture: 'future OpenAI proxy rows only when the resolved configured endpoint exactly matches',
+          trust: 'operator_declared_unverified',
+          reconciliationStatus: 'not_reconciled',
+        },
+      },
+    };
+  }
+  const declaration = store.setOpenAiScope({ billingAccountRef: accountRef, providerProjectRef: projectRef, upstreamBase });
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      op: 'scope',
+      applied: true,
+      declaration,
+      reconciliationStatus: 'not_reconciled',
+      message: `Active local OpenAI scope ${declaration.declarationId} declared. Future matching proxy rows are declared_unverified; historical and imported rows are unchanged.`,
+    },
+  };
+}
+
+/**
+ * Billing evidence from the GUI: the same parsing, store calls and refusals as
+ * `segreant billing import|reconcile|openai-costs adopt|scope set`. Preview
+ * never writes; apply:true writes, and demo mode refuses every apply.
+ */
+export function handleBillingWrite({ req, res, store }: RouteContext): void {
+  void (async () => {
+    try {
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      for await (const part of req) {
+        const chunk = part as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > BILLING_WRITE_BODY_BYTES) {
+          req.resume();
+          return billingJson(res, 413, { error: 'billing request exceeds bounded dashboard limit' });
+        }
+        chunks.push(chunk);
+      }
+      const raw: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('billing request must be an object');
+      const body = raw as Record<string, unknown>;
+      if (Object.keys(body).some((key) => !BILLING_WRITE_FIELDS.has(key))) throw new Error('billing request has an unknown field');
+      if (typeof body.op !== 'string' || !BILLING_WRITE_OPS.has(body.op)) throw new Error('op must be one of import, reconcile, adopt, scope');
+      const op = body.op;
+      if (body.apply !== undefined && typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
+      const apply = body.apply === true;
+      if (apply && isDemo()) {
+        return billingJson(res, 409, { error: new DemoWriteBlockedError('the billing change').message });
+      }
+
+      if (op === 'import') {
+        const fileName = billingText(body.fileName, 'fileName', 200);
+        if (basename(fileName) !== fileName) throw new Error('fileName must be a basename, without directories');
+        const content = billingText(body.content, 'content', BILLING_WRITE_BODY_BYTES);
+        // The bytes the client sent are the bytes that are hashed, as the file is in the CLI.
+        const parsed = parseBillingImportText(Buffer.from(content, 'utf8'), fileName);
+        if (!apply) {
+          return billingJson(res, 200, {
+            ok: true, op, applied: false, preview: parsed.preview,
+            message: 'Not recorded. Apply to import this file.',
+          });
+        }
+        const result = store.applyBillingImport(parsed.input);
+        // Canonical kernel issue after the legacy compatibility write, as in the CLI.
+        const kernel = store.issueBillingImportToKernel(result.run.importId);
+        // BigInt coefficient converted to its canonical string form for the envelope only.
+        const kernelJson = { ...kernel, total: { ...moneyToJson(kernel.total) } };
+        const message = result.duplicateFile
+          ? `Identical billing evidence was already imported as ${result.run.importId}; no duplicate provider records written.`
+          : `Imported ${result.run.recordsInserted} provider-declared charge line(s); ${result.run.recordsDuplicate} already existed. Status remains not_reconciled. Provider-reported totals are stored separately from local metered estimates.`;
+        return billingJson(res, 200, {
+          ok: true, op, applied: true, message, preview: parsed.preview,
+          duplicateFile: result.duplicateFile, run: result.run, kernel: kernelJson,
+        });
+      }
+
+      const outcome = op === 'reconcile' ? billingReconcile(store, body, apply)
+        : op === 'adopt' ? billingAdopt(store, body, apply)
+        : billingScope(store, body, apply);
+      return billingJson(res, outcome.status, outcome.payload);
+    } catch (error) {
+      return billingJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+    }
+  })();
+}
+
 /** Same local-only POST guard as other mutations. A POST with apply:false is
  * the preview; only a second deliberate POST with apply:true appends evidence. */
 export function handleOutcomeRecord({ req, res, store, config }: RouteContext): void {
@@ -1407,6 +1640,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('billing', handleBilling),
   apiRoute('allocation', handleAllocation),
   apiRoute('allocation-write', handleAllocationWrite),
+  apiRoute('billing-write', handleBillingWrite),
   apiRoute('economic', handleEconomic),
   apiRoute('pricing', handlePricing),
   apiRoute('export-csv', handleExportCsv),

@@ -58,14 +58,26 @@ function preview(document: NormalizedBillingImport, fileName: string, fileSha256
   };
 }
 
+function sizeLimitError(): Error {
+  return new Error(`billing evidence exceeds the ${MAX_BILLING_IMPORT_BYTES / (1024 * 1024)} MiB v1 import limit`);
+}
+
 /** Read, size-gate, hash, and strictly validate a Segreant billing-evidence v1 JSON file. */
 export function readBillingImportFile(path: string): { input: BillingImportInput; preview: BillingImportPreview } {
   const stat = statSync(path);
   if (!stat.isFile()) throw new Error('billing import --file must point to a regular local file');
-  if (stat.size > MAX_BILLING_IMPORT_BYTES) {
-    throw new Error(`billing evidence exceeds the ${MAX_BILLING_IMPORT_BYTES / (1024 * 1024)} MiB v1 import limit`);
-  }
-  const raw = readFileSync(path);
+  // Refuse before reading: a multi-gigabyte file must never be pulled into memory.
+  if (stat.size > MAX_BILLING_IMPORT_BYTES) throw sizeLimitError();
+  return parseBillingImportText(readFileSync(path), basename(path));
+}
+
+/**
+ * The validation readBillingImportFile applies, over bytes already in hand. The
+ * dashboard import route calls this directly; the CLI reaches it through
+ * readBillingImportFile, so the two surfaces give the same preview for the same bytes.
+ */
+export function parseBillingImportText(raw: Buffer, fileName: string): { input: BillingImportInput; preview: BillingImportPreview } {
+  if (raw.byteLength > MAX_BILLING_IMPORT_BYTES) throw sizeLimitError();
   let value: unknown;
   try {
     value = JSON.parse(raw.toString('utf8')) as unknown;
@@ -73,8 +85,8 @@ export function readBillingImportFile(path: string): { input: BillingImportInput
     throw new Error(`billing evidence is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
   const document = parseBillingImportDocument(value);
-  const fileName = basename(path);
   const fileSha256 = createHash('sha256').update(raw).digest('hex');
-  const input: BillingImportInput = { document, fileName, fileSha256, fileSizeBytes: stat.size, format: 'json' };
-  return { input, preview: preview(document, fileName, fileSha256, stat.size) };
+  const fileSizeBytes = raw.byteLength;
+  const input: BillingImportInput = { document, fileName, fileSha256, fileSizeBytes, format: 'json' };
+  return { input, preview: preview(document, fileName, fileSha256, fileSizeBytes) };
 }
