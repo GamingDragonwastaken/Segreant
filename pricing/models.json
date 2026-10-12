@@ -8,11 +8,11 @@
     "cache_write_5m / cache_write_1h: cost to WRITE tokens into the prompt cache (Anthropic charges 1.25x input for 5-min TTL, 2x for 1-hour TTL).",
     "cache_read: cost to READ tokens already in cache (Anthropic ~0.1x input; OpenAI ~0.5x input).",
     "Anthropic bills extended-thinking ('reasoning') tokens as ordinary OUTPUT tokens. OpenAI bills o-series reasoning tokens inside completion_tokens. There is NO separate reasoning multiplier in current provider pricing.",
-    "Anthropic and OpenAI values verified against each provider's own pricing page on 2026-09-29 (see each provider's source). They are list prices: negotiated discounts, credits and taxes are not in this card.",
-    "Google/Gemini values verified against ai.google.dev/gemini-api/docs/pricing (2026-06). Gemini 2.5 Pro lists the <=200k-token base rate; prompts over 200k bill at input 2.50 / output 15.0 / cache_read 0.25.",
+    "Anthropic and OpenAI values verified against each provider's own pricing page on 2026-09-29 (see each provider's source), except gpt-6.1-sol, read from its OpenAI model page on 2026-10-10. They are list prices: negotiated discounts, credits and taxes are not in this card.",
+    "Google/Gemini values verified against ai.google.dev/gemini-api/docs/pricing: the 2.5 models were read in 2026-06, and the 3.x models on 2026-10-09 from the same page (updated 2026-10-07). Gemini 2.5 Pro lists the <=200k-token base rate; prompts over 200k bill at input 2.50 / output 15.0 / cache_read 0.25.",
     "Gemini is metered through Segreant's OpenAI-compatible path (Google's .../v1beta/openai/ base URL). The cost engine resolves a rate by model family ACROSS providers, so the price follows the model id regardless of which wire protocol carried it.",
     "Not modelled. These make a request cost MORE than this card shows: OpenAI long-context rates (the page's 'Long context' column), OpenAI cache-write rates, Fast mode on either provider, and the 1.1x data-residency uplift (Anthropic inference_geo, OpenAI regional processing). Batch and Flex discounts make it cost LESS.",
-    "Google's Gemini 3.x models are not listed: their published rates are promotional through 2026-12-31 and double on 2027-01-01, and this card cannot express a rate that expires. They fall back to a flagged family or unknown estimate."
+    "Gemini 3.6, 3.7 and 3.8 Flash carry Google's rates through 2026-12-31; the page lists higher rates from 2027-01-01. This card cannot express a rate that expires, so it keeps the current rates, and those rows read low from 2027-01-01 until the card is updated. Gemini models not listed here fall back to a flagged family or unknown estimate."
   ],
   "providers": {
     "anthropic": {
