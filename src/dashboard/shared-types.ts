@@ -429,6 +429,134 @@ export interface BillingImportSummary {
   recordsDuplicate: number;
 }
 
+export interface StatementPeriod {
+  startMs: number;
+  endMs: number;
+  label: string;
+  complete: boolean;
+}
+
+export interface StatementProject {
+  label: string;
+  costUsd: number;
+  requests: number;
+}
+
+export interface StatementModel {
+  label: string;
+  provider: string;
+  costUsd: number;
+  requests: number;
+}
+
+/** The request ledger's spend for the month. Local estimate or tool-reported, per `basis`. */
+export interface StatementMetered {
+  costUsd: number;
+  requests: number;
+  claimSupport: ClaimSupportPayload;
+  basis: BasisSummaryPayload;
+  retention: WindowRetentionCoveragePayload;
+  /** Top ten projects by cost. The totals above are the whole month, not the sum of these rows. */
+  byProject: StatementProject[];
+  /** Top ten models by cost. */
+  byModel: StatementModel[];
+}
+
+/** A reconciliation run whose period overlaps the month. It keeps its own period and figures; none is prorated. */
+export interface StatementBilledRun {
+  reconciliationRunId: string;
+  computedAtMs: number;
+  periodStartMs: number;
+  periodEndMs: number;
+  providerReportedMicros: number;
+  localCapturedMicros: number;
+  unexplainedVarianceMicros: number;
+  providerSourceKind: 'provider_api_pull' | 'operator_supplied_export' | 'legacy_unknown';
+  offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention';
+  coversWholeMonth: boolean;
+}
+
+/**
+ * How far the recorded runs reach into the month. Three states, never one bit
+ * (AII-014): `not_established` when no run overlaps, `partial` when runs overlap
+ * but none covers the whole month, `whole` when one covers it. Nothing is
+ * prorated into a month total either way.
+ */
+export type StatementMonthCoverage = 'not_established' | 'partial' | 'whole';
+
+export interface StatementBilled {
+  monthCoverage: StatementMonthCoverage;
+  overlappingRuns: number;
+  /** False when the read returned as many runs as it asked for, so an older run may exist beyond it. */
+  scanComplete: boolean;
+  runs: StatementBilledRun[];
+}
+
+export interface StatementCostCentreShare {
+  costCentreId: string;
+  allocatedMicros: number;
+  requestCount: number;
+  sourceBasis: string;
+}
+
+/** An allocation run whose period overlaps the month. */
+export interface StatementAllocatedRun {
+  allocationRunId: string;
+  computedAtMs: number;
+  periodStartMs: number;
+  periodEndMs: number;
+  totalMicros: number;
+  allocatedMicros: number;
+  unallocatedMicros: number;
+  conserves: boolean;
+  byCostCentre: StatementCostCentreShare[];
+  coversWholeMonth: boolean;
+}
+
+export interface StatementCostCentreName {
+  costCentreId: string;
+  name: string;
+}
+
+export interface StatementAllocated {
+  monthCoverage: StatementMonthCoverage;
+  overlappingRuns: number;
+  scanComplete: boolean;
+  runs: StatementAllocatedRun[];
+  /** Every cost centre, so the GUI can label a run's centre ids. */
+  costCentres: StatementCostCentreName[];
+}
+
+export interface StatementRealized {
+  /** Not computed per calendar month. Realized value is read on the Value page. */
+  standing: 'not_computed_per_month';
+  reason: string;
+}
+
+export interface StatementClose {
+  status: string;
+  activeFinalizationId: string | null;
+  eventCount: number | null;
+}
+
+/**
+ * `GET /api/statement?month=YYYY-MM`: one calendar month, read as a finance
+ * reader would. The four claims sit side by side, each with its own basis and
+ * evidence. They are never summed, and a figure the month does not establish is
+ * reported as not established rather than filled in.
+ */
+export interface StatementPayload {
+  demo: boolean;
+  generatedAt: string;
+  month: string;
+  period: StatementPeriod;
+  metered: StatementMetered;
+  billed: StatementBilled;
+  allocated: StatementAllocated;
+  realized: StatementRealized;
+  close: StatementClose;
+}
+
 export interface BillingPayload {
   demo: boolean;
   /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */
@@ -1610,6 +1738,7 @@ export interface DashboardResponseMap {
   scan: ScanPayload | ScanSetupPayload;
   overview: Overview;
   billing: BillingPayload;
+  statement: StatementPayload;
   allocation: AllocationPayload;
   economic: EconomicPayload;
   pricing: PricingPayload;
