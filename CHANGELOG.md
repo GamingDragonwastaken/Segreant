@@ -19,6 +19,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - Spend bars are each model's share of the total, not of the largest model, and shares under 1% print as "<1%".
   - Protect shows "limit reached · blocking" when today's spend is at or over the cap, instead of a calm "enforced" badge over an overspend. The limit card has its own "Change limit" button.
 
+- **The npm package no longer carries a maintainer's own usage figures.** 0.1.0 shipped `docs/RELEASE-GATE.md`, which quoted a personal ledger's request counts and dollar totals. The release records still ship as public evidence, but every finding is now stated without personal figures, in the package and on GitHub. A test packs the tarball and fails if a known personal figure appears in any shipped file.
+
 - **Stopping `segreant` stops what it started.** The launcher ran the runtime with a blocking call that could not forward signals, so a `SIGTERM` from a supervisor or `kill <pid>` ended the launcher and left a running `start` (proxy and dashboard) behind as an orphan. It now forwards SIGINT, SIGTERM and SIGHUP to the runtime and exits with its status.
 
 - **`start --demo` no longer meters real traffic into the sample store.** Demo mode opened `demo.db` for the whole process, so its proxy recorded real provider traffic among the synthetic rows, while the banner said "Real metering is untouched" and told you to point your tools at it. Demo mode now serves the dashboard only and says so. A tool started with `segreant launch` finds no proxy, warns that it is unmetered and goes direct.
@@ -55,8 +57,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - **The dashboard's value read uses what `scan` measured.** Without `?repo=`, `/api/value` reads the stored realization for every project, the same one the home view shows, instead of re-running git for the folder the dashboard was started in. Identical row reads inside one report are served once, and proxy-only rows are derived from the full read. On the owner's ledger the read went from 17–21 s to 6.5–8.9 s, with the same answer.
 
 - **The first-run answer accounts for every dollar, and stops double-counting.**
-  - Under each project, `scan --setup` now names the spend that is on no measured commit and why: no commit followed within 8 hours, before the oldest commit measured, or not committed yet. The buckets plus that line add up to the project's total. Before, $222 of one real project's $567 had no line (H009).
-  - Commit windows are now built in time order. `git log` order is not time order after a rebase, cherry-pick or merge, and windows built from log neighbours overlapped. On one real repository, 40 windows overlapped and the Kept answer counted $99 of spend twice.
+  - Under each project, `scan --setup` now names the spend that is on no measured commit and why: no commit followed within 8 hours, before the oldest commit measured, or not committed yet. The buckets plus that line add up to the project's total. Before, about two-fifths of one real project's spend had no line (H009).
+  - Commit windows are now built in time order. `git log` order is not time order after a rebase, cherry-pick or merge, and windows built from log neighbours overlapped. On one real repository, 40 windows overlapped and the Kept answer counted some spend twice.
 - **The value stage keeps its time budget.** Its deadline now starts before discovery, and every repository's git work stops by it. Repositories are found and scoped in parallel, from one read of the commit observations. Attribution and model reads take each window's rows from one scoped read instead of three queries per commit, and the verified-event cache now holds a whole ledger.
   - On the owner's logs the stage took 162 s against a 120 s budget; it now takes 119 s.
   - Per repository, the measurement floor fell from 23 s to 11 s.
@@ -81,7 +83,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
   Its headline word follows the weakest part: "List cost" only when every dollar is at a model's own rate, otherwise "Estimated cost". The dashboard inspector no longer calls matched rows "not estimated", since every local amount is an estimate of a bill. The overview API and the `--json` outputs carry the same parts.
 - **The rate card prices gpt-6.1-sol**, from OpenAI's model page read 2026-10-10: $2 input, $0.10 cached, $10 output per million. It also maps Antigravity's `gemini-3.1-pro-low` and `-high` to Gemini 3.1 Pro.
-  - On the owner's month, gpt-6.1-sol had read $305 at the fallback rate. `segreant reprice` previews it at $137 under the new card.
+  - Calls that had been priced at the fallback rate read about twice their list cost; `segreant reprice` previews the correction under the new card.
   - Rows already imported keep their price until `reprice --apply`, and a fallback part now says so.
 
 - **`scan --setup` asks what you pay.**
@@ -100,8 +102,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - **The rate card carries Gemini 3.x.** It adds 3.8, 3.7, 3.6 and 3.5 Flash,
   3.5 and 3.1 Flash-Lite, 3.1 Pro Preview and 3 Flash Preview, read from
   Google's pricing page (updated 2026-10-07) on 2026-10-09. Without them these
-  calls fell to the $3/$15 fallback, about ten times Flash's real rate: the
-  owner's Antigravity month read $675.61 instead of $180.42. Rates Google has
+  calls fell to the $3/$15 fallback, about ten times Flash's real rate, so a
+  month of Antigravity use read several times its list cost. Rates Google has
   announced for 2027 are noted on the card, not applied.
 
 - **`segreant` on its own opens the home view.**
@@ -135,7 +137,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   what you enter (`segreant plan set claude-code 20`), because App Store
   billing, tax and annual plans change it; public prices are offered as a
   hint, with their date. `month` then shows, for example, "Your $20.00/month
-  Claude Pro plan did $1789.24 of list-price work in the last 30 days, 89.5×
+  Claude Pro plan did $412.60 of list-price work in the last 30 days, 20.6×
   its price", naming both bases.
 
 - **`scan --setup` shows the month first, then what stayed in the code.** It
