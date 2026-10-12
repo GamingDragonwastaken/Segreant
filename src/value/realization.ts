@@ -357,12 +357,16 @@ export interface PeriodCoverage {
 }
 
 /**
- * The plain answer to "did my AI spend stay in the code?", from git alone.
- * Kept: the Survived gate passed and the commit was not reverted. Not kept:
- * survival failed or a revert names it. Unknown: matured but survival was not
- * measured. Maturing: younger than the window, verdict due later. Dollars are
- * the units' attributed list cost; this is not realized value (that needs
- * every gate) and not a bill.
+ * The plain answer to "did my AI spend stay in the code?".
+ * Kept: every check tracked for the unit passed, survival included, and the
+ * commit was not reverted. This is the definition the website publishes
+ * ("passed every check you track"). Survival alone used to be enough, so work
+ * that failed its tests and its ship check but stayed in the tree counted as
+ * Kept (H015). Not kept: any tracked check failed, or a revert names it.
+ * Unknown: matured, nothing failed, but survival was not measured. Maturing:
+ * younger than the window, verdict due later. Dollars are the units'
+ * attributed list cost; this is not realized value (the Standard's predicate)
+ * and not a bill.
  */
 export interface KeptSummary {
   kept: { units: number; costUsd: number };
@@ -389,7 +393,8 @@ export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDay
       continue;
     }
     const survived = u.funnel.results.find((r) => r.gate === 'survived')?.verdict;
-    const bucket = u.reverted || survived === 'fail'
+    const anyFailed = u.funnel.results.some((r) => r.verdict === 'fail');
+    const bucket = u.reverted || anyFailed
       ? out.notKept
       : survived === 'pass'
         ? out.kept
