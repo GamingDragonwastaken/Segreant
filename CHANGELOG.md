@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Public documents agree with the licence and with what shipped.**
+  - README, LICENSING, PRODUCT, the release gate, the website and the price-card notes now agree on several points: 0.1.0 is on npm and 0.2.0 is not; the BUSL-1.1 grant allows use at work (the badge said "free for personal use"); billed cost also comes from the OpenAI Costs API; and the Gemini 3.x rates and read dates are the ones the card lists. No price changed.
+  - The lockfile's `license` field said MIT and now says BUSL-1.1.
+
 - **The dashboard's value read answers repeat loads from memory.** With spend recorded but no `scan` yet, `/api/value` re-ran git realization for its start folder on every load (13-30 s). It is now cached in the dashboard process for up to 10 minutes. The cache key covers the query, the repository and its HEAD, the whole config, and change marks on every ledger table the report reads, so any change recomputes. The payload keeps its original `generatedAt`, and nothing is written to the ledger. Measured: 30.2 s, then 0.16 s and 0.16 s.
 
 - **Kept means one thing everywhere.**
