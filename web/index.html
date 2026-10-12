@@ -140,7 +140,7 @@
             <div class="line"><span class="no">Line 1</span><span class="label">List cost (estimate)</span><span class="val" data-roll>$412.60</span>
               <details><summary>Why?</summary><p>Tokens from 25,730 requests, priced at each provider's published list price as of 29 Sep. Discounts, credits and taxes are not included, which is why it is marked as an estimate.</p></details></div>
             <div class="line"><span class="no">Line 2</span><span class="label">Billed cost</span><span class="val none">No invoice imported</span>
-              <details><summary>Why?</summary><p>Billed cost comes only from your provider's invoice or cost export. Import one and Segreant sets it beside list cost, by project and day.</p></details></div>
+              <details><summary>Why?</summary><p>Billed cost comes only from your provider's invoice, its cost export, or (for OpenAI) its read-only Costs API. Import one and Segreant sets it beside list cost, by project and day.</p></details></div>
             <div class="line"><span class="no">Line 3</span><span class="label">Allocated cost</span><span class="val none">No cost split yet</span>
               <details><summary>Why?</summary><p>Allocated cost divides spend between teams, projects or cost centres by rules you write. This sample has none.</p></details></div>
             <div class="line group"><span></span><span class="label">What it went into</span></div>
@@ -174,7 +174,7 @@
 
       <div class="kinds">
         <div><h3>List cost (estimate)</h3><p>What the tokens cost at each provider's published prices. Available from the first request.</p><span class="src">Source: the price list</span></div>
-        <div><h3>Billed cost</h3><p>What your provider actually charged. Shown only once you import an invoice or cost export.</p><span class="src">Source: your invoice</span></div>
+        <div><h3>Billed cost</h3><p>What your provider actually charged. Shown only once you import an invoice or cost export, or pull OpenAI's Costs API.</p><span class="src">Source: your invoice</span></div>
         <div><h3>Allocated cost</h3><p>Spend divided between teams, projects or cost centres by rules you write.</p><span class="src">Source: your rules</span></div>
         <div><h3>Value (kept work)</h3><p>The share of spend that went into work you kept. It counts outcomes, not money earned.</p><span class="src">Source: git, tests and deploys</span></div>
       </div>
@@ -306,7 +306,7 @@
       </div>
       <dl class="facts">
         <div><dt>Value score</dt><dd>Combines four measures so that one strong result can't hide a weak one. A measure you don't track stays open and is shown as missing; it is never scored as a pass.</dd></div>
-        <div><dt>95% range</dt><dd>The share of spend that went into kept work comes with a range that stays valid however often you check it. The cost is a slightly wider range.</dd></div>
+        <div><dt>95% range</dt><dd>The share of spend that went into kept work comes with a range that stays valid however often you check it. The cost is a wider range, about 1.5 to 2 times an ordinary interval.</dd></div>
         <div><dt>Change alert</dt><dd>Fires when your kept-work rate shifts. It can't say why: a new model and a gamed number both set it off, and telling them apart takes evidence the rate doesn't carry.</dd></div>
         <div><dt>Savings</dt><dd>Segreant doesn't promise a percentage. What you save depends on how much waste there was to find; its job is to show you where it is.</dd></div>
       </dl>

@@ -20,9 +20,9 @@ No account, key, payment or permission is needed for any of that.
 1. **Offer Segreant as a service.** You may not run it, or a modified version
    of it, as a hosted or managed service for other people or other companies.
    Running it for your own organization is fine.
-2. **Sell Segreant itself.** You may not sell, rent or charge a licence fee for
-   Segreant or a modified version of it, including a copy relabelled under
-   another name.
+2. **Sell Segreant itself.** You may not sell, rent, sublicense or otherwise
+   charge a fee for Segreant or a modified version of it, including a copy
+   relabelled under another name.
 
 ## Every version becomes fully open source
 
@@ -50,11 +50,14 @@ terms, open a
 
 ## Earlier versions
 
-- Commits up to `28dc6dd` on `main` were published under the MIT license and
-  remain available under it.
-- Commits after that and before the change to this license were published
-  under the PolyForm Noncommercial License 1.0.0 (from 2026-10-08 with an
-  individual use permission). Those copies keep the terms they were published
-  with; every later version is under the terms above.
+- Commits up to `28dc6dd` on `main` carry the MIT license and remain available
+  under it.
+- Commits `2b09f3a` (PolyForm Noncommercial License 1.0.0) and `3efa37e`
+  (this license) were both made on 2026-10-08. No copy under PolyForm was
+  published to npm.
+- The only published version, `segreant` 0.1.0 on npm (2026-10-08), carries
+  this license (`BUSL-1.1` in its package metadata and LICENSE file). Its
+  Change Date is two years after that publication. Later versions follow their
+  own two-year clock.
 
 *This page explains the license; it is not legal advice.*
