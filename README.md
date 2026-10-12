@@ -11,7 +11,7 @@ Every dollar your agents spend is metered, capped, checked against the
 provider's bill, assigned to the budget it belongs to, and traced to the work
 it produced. And every number tells you exactly how much it can be trusted.
 
-`local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free to use, including at work`
+`local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free to use, including at work (BUSL-1.1)`
 
 [![CI](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml)
 
