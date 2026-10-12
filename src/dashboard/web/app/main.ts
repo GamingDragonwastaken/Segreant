@@ -29,6 +29,10 @@ import { valueView } from './views/value.ts';
 import { controlView } from './views/control.ts';
 import { dataView } from './views/data.ts';
 import type { Territory } from './core/registry.ts';
+import { statementView } from './views/statement.ts';
+
+/** A page the shell can show: the registry's territories, plus the monthly statement, which reads all four claims. */
+type Route = Territory | 'statement';
 
 /** The four spine bands map onto the territories that answer their question. */
 const LAYER_ROUTE: Record<LayerId, Territory> = {
@@ -38,7 +42,7 @@ const LAYER_ROUTE: Record<LayerId, Territory> = {
   realized: 'value',
 };
 
-const ROUTE_LAYER: Partial<Record<Territory, LayerId>> = {
+const ROUTE_LAYER: Partial<Record<Route, LayerId>> = {
   spend: 'metered',
   evidence: 'billed',
   allocation: 'allocated',
@@ -51,7 +55,8 @@ const ROUTE_LAYER: Partial<Record<Territory, LayerId>> = {
  * reachable through the spine alone, and Billed, Allocated and Realized had no
  * name a finance reader would look for (critique 2026-10-12).
  */
-const JOBS: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
+const JOBS: ReadonlyArray<{ id: Route; label: string; plain: string }> = [
+  { id: 'statement', label: 'Statement', plain: 'One month: measured, billed, split and produced, side by side.' },
   { id: 'spend', label: 'Spend', plain: 'What AI cost, and where it went.' },
   { id: 'control', label: 'Protect', plain: 'Limits and alerts that stop spend before it happens.' },
   { id: 'evidence', label: 'Close', plain: 'Check what was measured against the provider bill.' },
@@ -60,14 +65,14 @@ const JOBS: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
 ];
 
 /** How you feed and configure the tool: needed, but not why anyone opens it. */
-const UTILITIES: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
+const UTILITIES: ReadonlyArray<{ id: Route; label: string; plain: string }> = [
   { id: 'data', label: 'Data', plain: 'Bring usage in from your tools and providers.' },
   { id: 'system', label: 'Settings', plain: 'Pricing, settings, maintenance, and what this GUI covers.' },
 ];
 
-const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
+const ALL_ROUTES: Route[] = ['statement', 'spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
 
-const current = signal<Territory>(readRoute());
+const current = signal<Route>(readRoute());
 // The four payloads behind the claims. `undefined` = still on its way; `null` =
 // the read failed, which the derivation already treats as missing evidence.
 const overviewIn = signal<Overview | null | undefined>(undefined);
@@ -128,14 +133,14 @@ function staleBanner(): Node {
  */
 const registerChosen = computed(() => register() !== null);
 
-function readRoute(): Territory {
+function readRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, '');
-  return (ALL_ROUTES as string[]).includes(hash) ? (hash as Territory) : 'spend';
+  return (ALL_ROUTES as string[]).includes(hash) ? (hash as Route) : 'spend';
 }
 
 window.addEventListener('hashchange', () => current.set(readRoute()));
 
-function go(route: Territory): void {
+function go(route: Route): void {
   location.hash = `/${route}`;
   current.set(route);
 }
@@ -159,7 +164,7 @@ function firstRun(): Node {
       h('h1', { id: 'fr-title', text: 'What brings you to Segreant?' }),
       h('p', { class: 'lede', text: 'Pick the closer one. It decides where you start and how figures are worded. The numbers are the same either way, and you can switch at any time with Plain and Precise at the top right.' }),
       h('div', { class: 'choice-grid' },
-        h('button', { class: 'choice', onclick: () => { setRegister('plain'); go('spend'); } },
+        h('button', { class: 'choice', onclick: () => { setRegister('plain'); go('statement'); } },
           h('strong', { text: 'I look after the money' }),
           h('span', { text: 'See what AI cost, set limits, check it against the bill and assign it to budgets. Plain wording; no terminal needed.' }),
           h('code', { class: 'choice-eg', text: '$59.16 · measured from metered requests' })),
@@ -232,8 +237,9 @@ function topbar(): Node {
         }))));
 }
 
-function viewFor(route: Territory): Node {
+function viewFor(route: Route): Node {
   switch (route) {
+    case 'statement': return statementView();
     case 'spend': return spendView();
     case 'evidence': return evidenceView();
     case 'allocation': return allocationView();
