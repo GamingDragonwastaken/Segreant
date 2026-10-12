@@ -341,6 +341,10 @@ export function cmdBudget(flags: Flags): void {
     return updated;
   });
 
+  if (flags.json) {
+    printJson({ updated: changing, budget: next.budget });
+    return;
+  }
   console.log('');
   console.log(changing ? '  Budget updated:' : '  Current caps (change one with, for example, segreant budget --daily 20):');
   console.log(`    Daily hard cap:   ${next.budget.dailyUsd === null ? 'off' : usd(next.budget.dailyUsd)}`);

@@ -40,7 +40,8 @@ function usage(): void {
 function emit(payload: unknown, flags: Flags): void {
   // Keep the JSON path canonical; --json is accepted for parity with other
   // review commands and the human form remains machine-readable by design.
-  void flags;
+  // Reading it marks it as used, so the dispatcher does not report it.
+  void flags.json;
   printJson(payload);
 }
 

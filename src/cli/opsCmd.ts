@@ -12,6 +12,7 @@ import { buildGuide, type GuideFacts } from '../guide.ts';
 import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
+import { summarizeBasis } from '../cost/basis.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { C, color, usd, num, printNotAGitRepo, printJson } from './ui.ts';
@@ -110,7 +111,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   if (alerts.some((a) => a.severity === 'critical')) process.exitCode = 1;
   store.close();
 }
-export async function cmdDoctor(): Promise<void> {
+export async function cmdDoctor(flags: Flags = { _: [] }): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const cfg = loadConfig();
   const store = new Store(dbPath());
@@ -124,6 +125,26 @@ export async function cmdDoctor(): Promise<void> {
 
   const proxyStatus = await probeProxyState(cfg);
   const proxyUp = proxyStatus.kind === 'up';
+  const basis = summarizeBasis(store.pricingEvidenceByModel(now - 30 * day, now + 1000));
+
+  if (flags.json) {
+    // The same checks as the text below, as data. `doctor --json` used to print
+    // the text (H013).
+    const price = pricingStatus(cfg.pricing.maxAgeDays);
+    const base = baselineManifestStatus();
+    const coverage = computeAlertCoverage(store, cfg);
+    printJson({
+      config: { path: configPath() },
+      database: { path: dbPath(), last30Days: { requests: sum30.requests, costUsd: sum30.costUsd } },
+      proxy: { port: cfg.port, state: proxyStatus.kind },
+      budget: { dailyUsd: cfg.budget.dailyUsd },
+      pricing: { basis, rateCard: price },
+      baseline: base,
+      alerts: { active: alerts.length, critical: criticals, coverage },
+    });
+    store.close();
+    return;
+  }
 
   const mark = (good: boolean) => (good ? color(tty, C.green, '✓') : color(tty, C.yellow, '!'));
   console.log('');
@@ -138,7 +159,13 @@ export async function cmdDoctor(): Promise<void> {
       : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "segreant start"`);
   console.log(`  ${mark(proxyUp)} Proxy       ${proxyMessage}`);
   console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "segreant budget --daily N")')}`);
-  console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
+  const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+  const weakUsd = weak.reduce((s, c) => s + c.costUsd, 0);
+  console.log(`  ${mark(estShare <= 0.2)} Pricing     ${basis.cohorts.length === 0
+    ? 'no priced requests in 30d'
+    : weak.length === 0
+      ? "30d spend priced at each model's own list rate (an estimate, not a bill)"
+      : `${usd(weakUsd)} of 30d spend priced without the model's own rate (${weak.map((c) => c.label).join(', ')}) — see "segreant month"`}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
   const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
   const priceEvidence = price.source === 'cache'

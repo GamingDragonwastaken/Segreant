@@ -45,6 +45,8 @@ function cmdUx(flags: Flags): void {
     throw new Error('epistemic UX options must be a JSON object');
   }
   const bundle = buildEpistemicUxBundle(supplied as EpistemicUxBundleInput);
+  // Always JSON; reading --json marks it as used so the dispatcher does not report it.
+  void flags.json;
   process.stdout.write(JSON.stringify({
     operation: 'epistemic_ux_bundle',
     bundle,
