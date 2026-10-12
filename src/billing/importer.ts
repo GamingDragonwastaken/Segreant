@@ -80,7 +80,12 @@ export function parseBillingImportText(raw: Buffer, fileName: string): { input: 
   if (raw.byteLength > MAX_BILLING_IMPORT_BYTES) throw sizeLimitError();
   let value: unknown;
   try {
-    value = JSON.parse(raw.toString('utf8')) as unknown;
+    // A UTF-8 byte-order mark is not JSON, and Windows tools write one by
+    // default, so an export saved from Notepad was refused as "not valid JSON".
+    // It is skipped for parsing only: the digest below is over the file's own
+    // bytes, mark included, so the same file still has one identity.
+    const text = raw.toString('utf8');
+    value = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown;
   } catch (error) {
     throw new Error(`billing evidence is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }

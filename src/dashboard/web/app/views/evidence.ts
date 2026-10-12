@@ -10,8 +10,9 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
-import { api, type BillingPayload, type KernelNodePayload } from '../core/api.ts';
-import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
+import { api, type BillingPayload, type KernelNodePayload, type BillingImportSummary, type BillingImportPreviewPayload, type BillingAdoptionPlanPayload, type BillingReconcileResultPayload } from '../core/api.ts';
+import { isPrecise, relative, basisWords, usd, usdFromMicros, count, date, pct } from '../core/fmt.ts';
+import { pageNotice, step, field, errorText, type Say } from '../components/workflow.ts';
 import { actionCard } from './spend.ts';
 import { projectRenderedAxes } from '../core/claimTypes.ts';
 
@@ -316,100 +317,298 @@ function mappingPanel(d: BillingPayload): Node | null {
       : 'Provider scope authority is present for this payload; review the recorded reconciliation before consuming the result.') }));
 }
 
+/** A step is done when readiness no longer lists anything that starts with these words. */
+function readinessHas(d: BillingPayload, prefix: string): boolean {
+  return (d.readiness?.missing ?? []).some((m) => m.step.startsWith(prefix));
+}
+
+/** The file's own bytes, base64, so the server hashes exactly what the CLI would. */
+async function fileBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+function dayRange(startMs: number | undefined, endMs: number | undefined): string {
+  if (startMs === undefined || endMs === undefined) return '—';
+  // Provider periods end at an exclusive midnight; show the last day included.
+  return `${date(startMs)} – ${date(endMs - 1)}`;
+}
+
+function rows(pairs: Array<[string, string]>): Node {
+  return h('dl', { class: 'preview-rows' },
+    ...pairs.map(([k, v]) => h('div', { class: 'preview-row' }, h('dt', { text: k }), h('dd', { text: v }))));
+}
+
 export function evidenceView(): Node {
   const data = signal<BillingPayload | null>(null);
   const error = signal<string | null>(null);
+  const reloads = signal(0);
+  const { node: noticeNode, say } = pageNotice();
+  const reload = (): void => {
+    reloads.set(reloads() + 1);
+    // The spine's Billed band reads /api/billing once; a recorded run must reach it.
+    window.dispatchEvent(new CustomEvent('segreant:ledger-changed', { detail: { claim: 'billing' } }));
+  };
 
   scopedEffect(() => {
+    reloads();
     void api.billing()
-      .then((payload) => data.set(payload))
-      .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
+      .then((payload) => { error.set(null); data.set(payload); })
+      .catch((e: unknown) => error.set(errorText(e)));
   });
 
   return h('div', null,
     h('div', { class: 'view-head' },
       h('h1', { class: 'view-title', text: 'Close' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
-        ? 'Provider-side billing evidence and its reconciliation against the local ledger, at project-day grain. Status is never "reconciled" — only "reconciled with residual".'
-        : 'Everything in Spend is our own measurement. This is where we check it against what your provider actually billed you — and tell you honestly how much of it can be checked at all.' })),
+        ? 'Provider-side billing evidence and its reconciliation against the local ledger, at project-day grain. Status is never "reconciled", only "reconciled with residual".'
+        : 'Spend is our own measurement. Here you check it against what your provider actually billed, and see how much of it could be checked at all.' })),
+    noticeNode,
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
+      if (!d && err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', text: err }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-busy': 'true', text: 'Loading…' }));
 
-      // A payload with no stated support is a payload that said nothing, which
-      // is `unknown` — not a licence to fall back to the records' label.
-      const claimState = d.claimSupport ? projectRenderedAxes(d.claimSupport.profile).epistemic : 'unknown';
-      const status = CLAIM_WORDS[claimState] ?? CLAIM_WORDS.unknown!;
-      // Newest recorded run, read from the immutable collection the server
-      // sends. This used to read `reconciliation.latest`, a field that has
-      // never been on the wire — so it was always null and this screen reported
-      // "no check has been run" no matter how many reconciliations existed.
-      const latest = d.reconciliation?.runs?.[0] ?? null;
-
+      const scopeDone = !readinessHas(d, 'declare the route scope') && !readinessHas(d, 'the active scope cannot');
+      const observed = !readinessHas(d, 'observe a closed period');
       return h('div', null,
-        h('div', { class: 'card' },
-          h('div', { class: 'card-head' },
-            h('span', { class: 'card-title', text: 'Reconciliation status' }),
-            h('span', { class: `pill ${status.pill}`, text: claimState })),
-          h('p', { text: () => (isPrecise() ? status.precise : status.plain) }),
-          // The server's own one-line reason, where it has one the payload does
-          // not otherwise show. Rendering it beats restating the axes here in
-          // different words, which is how two descriptions of one judgement come
-          // apart.
-          d.claimSupport?.note
-            ? h('p', { class: 'basis', text: d.claimSupport.note })
-            : null,
-          latest
-            ? h('div', null,
-                // What the residual bounds is a property of THIS run, not of the
-                // status word, and it is the sentence an operator acts on.
-                h('p', { class: residualBoundIsError(latest.result.offPathBound) ? 'drawer-error' : 'basis',
-                  text: () => residualBoundWords(latest.result.offPathBound, isPrecise()) }),
-                h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.result.providerSourceKind)}` }),
-                latest.result.snapshotStability === 'changed_across_observations'
-                  ? h('span', { class: 'drawer-error', text: () => (isPrecise()
-                      ? `snapshot stability: changed across observations on ${(latest.result.unstableDayStartMs ?? []).length} day(s) — this reconciliation is contradicted, not established`
-                      : 'Careful: the provider reported different figures for the same days at different times. This check disagrees with itself.') })
-                  : null,
-                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs)}` }),
-                // The constant the headline used to be built from, restored to
-                // its actual subject: the held import records, not the run.
-                h('span', { class: 'basis', text: () => (isPrecise()
-                  ? `held provider records: ${d.evidence.reconciliationStatus.replace(/_/g, ' ')}`
-                  : 'The provider records themselves are still operator-supplied and unverified.') }))
-            : h('span', { class: 'basis', text: () => (isPrecise()
-                ? 'zero recorded observation runs'
-                : 'no check has been run on this machine yet') }),
-          latest?.result.conditions?.length
-            ? h('ul', { class: 'drawer-notes' }, ...latest.result.conditions!.map((c: string) => h('li', { text: c.replace(/_/g, ' ') })))
-            : null),
+        statusCard(d),
+        d.demo
+          ? h('p', { class: 'section-note', role: 'note', text: 'This is sample data, so nothing can be recorded here. Every step still previews. Start Segreant without --demo to close your own month.' })
+          : null,
+        step({ n: 1, done: scopeDone }, () => (isPrecise() ? 'Declare the provider project' : 'Say which OpenAI project this machine uses'),
+          () => (isPrecise()
+            ? 'An operator declaration bound to future proxy rows. Unverified by the provider; historical and imported rows are unchanged.'
+            : 'Only spend that goes through Segreant after this, to that project, can be matched against the bill. These are the ids from your OpenAI settings, not keys.'),
+          scopeForm(d.demo, reload, say, scopeDone)),
+        step({ n: 2, done: observed }, () => (isPrecise() ? 'Observe the provider side' : 'Bring in the bill'),
+          () => (isPrecise()
+            ? 'Import an operator export, then adopt it as the Costs observation. Stamped operator-supplied; a direct read-only pull is stronger evidence.'
+            : 'Give Segreant the cost export from your OpenAI account, then use it for the comparison. No key or password is needed for this.'),
+          importForm(d.demo, reload, say),
+          importList(d, reload, say, scopeDone),
+          // The stronger route needs an Admin credential, so it stays a card whose
+          // drawer states the consequence before any key is involved.
+          h('div', { class: 'actions step-aside' }, actionCard('billing-pull'))),
+        step({ n: 3, done: (d.reconciliation?.runs?.length ?? 0) > 0 }, () => (isPrecise() ? 'Reconcile' : 'Compare and record'),
+          () => (isPrecise()
+            ? 'Preview computes the comparison; Record persists an immutable run and issues it to the kernel.'
+            : 'See how our measurement compares with the bill. Nothing is saved until you record it.'),
+          readinessPanel(d),
+          reconcilePanel(d, reload, say)),
+        h('details', { class: 'section close-details' },
+          h('summary', { class: 'section-title', text: () => (isPrecise() ? 'Evidence detail' : 'The evidence behind this') }),
+          kernelPanel(d),
+          mappingPanel(d)));
+    });
+}
 
-        h('div', { class: 'card', style: 'margin-top: var(--s4)' },
-          h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Provider records held' })),
-          h('div', { class: 'stat', text: String(d.summary.recordCount) }),
-          h('span', { class: 'basis', text: () => (isPrecise()
-            ? 'imported provider line items, unverified against the provider'
-            : 'billing lines you have given us from your provider') })),
+function statusCard(d: BillingPayload): Node {
+  // A payload with no stated support said nothing, which is `unknown`.
+  const claimState = d.claimSupport ? projectRenderedAxes(d.claimSupport.profile).epistemic : 'unknown';
+  const status = CLAIM_WORDS[claimState] ?? CLAIM_WORDS.unknown!;
+  // Newest recorded run, from the immutable collection the server sends.
+  const latest = d.reconciliation?.runs?.[0] ?? null;
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: 'Where this stands' }),
+      h('span', { class: `pill ${status.pill}`, text: claimState })),
+    h('p', { text: () => (isPrecise() ? status.precise : status.plain) }),
+    d.claimSupport?.note ? h('p', { class: 'basis', text: d.claimSupport.note }) : null,
+    latest
+      ? h('div', null,
+          h('p', { class: residualBoundIsError(latest.result.offPathBound) ? 'drawer-error' : 'basis',
+            text: () => residualBoundWords(latest.result.offPathBound, isPrecise()) }),
+          h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.result.providerSourceKind)} · last run ${relative(latest.computedAtMs)}` }),
+          latest.result.snapshotStability === 'changed_across_observations'
+            ? h('span', { class: 'drawer-error', text: () => (isPrecise()
+                ? `snapshot stability: changed across observations on ${(latest.result.unstableDayStartMs ?? []).length} day(s); this reconciliation is contradicted, not established`
+                : 'Careful: the provider reported different figures for the same days at different times. This check disagrees with itself.') })
+            : null)
+      : h('span', { class: 'basis', text: () => `${count(d.summary.recordCount)} provider line(s) held · no comparison recorded yet` }));
+}
 
-        readinessPanel(d),
-        mappingPanel(d),
-        kernelPanel(d),
+function scopeForm(demo: boolean, reload: () => void, say: Say, scopeDone: boolean): Node {
+  const account = signal('');
+  const project = signal('');
+  const checked = signal<Record<string, unknown> | null>(null);
+  const body = (): Record<string, unknown> => ({ op: 'scope', accountRef: account().trim(), ...(project().trim() ? { projectRef: project().trim() } : {}) });
+  return h('form', {
+    class: 'inline-form',
+    onsubmit: async (event: Event) => {
+      event.preventDefault();
+      try {
+        const r = await api.write.billing(body());
+        checked.set(r.scopePreview ?? {});
+      } catch (e) { checked.set(null); say(false, errorText(e)); }
+    },
+  },
+    scopeDone ? h('p', { class: 'form-hint', text: 'A project is declared. Declaring another replaces it for future traffic.' }) : null,
+    h('div', { class: 'form-row' },
+      field('scope-account', 'Organisation id', h('input', { id: 'scope-account', class: 'drawer-input', required: true, placeholder: 'org_…', autocomplete: 'off', spellcheck: 'false',
+        oninput: (e: Event) => { account.set((e.target as HTMLInputElement).value); checked.set(null); } })),
+      field('scope-project', 'Project id', h('input', { id: 'scope-project', class: 'drawer-input', required: true, placeholder: 'proj_…', autocomplete: 'off', spellcheck: 'false',
+        oninput: (e: Event) => { project.set((e.target as HTMLInputElement).value); checked.set(null); } })),
+      h('button', { class: 'btn-ghost', type: 'submit', text: 'Check' })),
+    () => {
+      if (!checked()) return null;
+      return h('div', { class: 'run-result' },
+        rows([
+          ['Organisation', account().trim()],
+          ['Project', project().trim()],
+          ['Applies to', 'OpenAI requests that go through Segreant from now on'],
+          ['Past and imported spend', 'unchanged; it cannot be matched to the bill'],
+        ]),
+        h('div', { class: 'form-actions' },
+          demo
+            ? h('p', { class: 'drawer-muted', text: 'Sample data: a project cannot be declared here.' })
+            : h('button', { class: 'btn-commit', type: 'button', text: 'Declare this project', onclick: async () => {
+                try { const r = await api.write.billing({ ...body(), apply: true }); say(true, r.message ?? 'Declared.'); reload(); } catch (e) { say(false, errorText(e)); }
+              } })));
+    });
+}
 
-        h('div', { style: 'margin-top: var(--s6)' },
-          h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Start here' }),
-          h('div', { class: 'actions' },
-            actionCard('billing-readiness'),
-            actionCard('billing-scope'),
-            actionCard('billing-adopt'))),
+function importForm(demo: boolean, reload: () => void, say: Say): Node {
+  const chosen = signal<{ name: string; base64: string } | null>(null);
+  const preview = signal<BillingImportPreviewPayload | null>(null);
+  const busy = signal(false);
+  return h('div', { class: 'inline-form' },
+    h('div', { class: 'form-row' },
+      field('import-file', 'Cost export (.json)', h('input', {
+        id: 'import-file', class: 'drawer-input', type: 'file', accept: '.json,application/json',
+        onchange: async (e: Event) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          preview.set(null);
+          if (!file) { chosen.set(null); return; }
+          busy.set(true);
+          try {
+            const picked = { name: file.name, base64: await fileBase64(file) };
+            chosen.set(picked);
+            const r = await api.write.billing({ op: 'import', fileName: picked.name, contentBase64: picked.base64 });
+            preview.set(r.preview ?? null);
+          } catch (err) { say(false, errorText(err)); } finally { busy.set(false); }
+        },
+      }))),
+    h('p', { class: 'form-hint', text: () => (busy() ? 'Reading the file…' : 'The file is checked here first. Nothing is saved until you import it.') }),
+    () => {
+      const p = preview();
+      const c = chosen();
+      if (!p || !c) return null;
+      const charges = Object.entries(p.byChargeType).map(([k, n]) => `${count(n)} ${k.replace(/_/g, ' ')}`).join(', ');
+      return h('div', { class: 'run-result' },
+        rows([
+          ['File', p.fileName],
+          ['Period', dayRange(p.source.periodStartMs, p.source.periodEndMs)],
+          ['Lines', `${count(p.recordsSeen)}${charges ? ` (${charges})` : ''}`],
+          ['Provider total', usdFromMicros(p.providerReportedUsdMicros)],
+          ['Complete?', p.source.coverage === 'complete' ? 'the export says it is complete (not verified)' : `the export says: ${p.source.coverage}`],
+        ]),
+        h('div', { class: 'form-actions' },
+          demo
+            ? h('p', { class: 'drawer-muted', text: 'Sample data: an export cannot be imported here.' })
+            : h('button', { class: 'btn-commit', type: 'button', text: () => `Import ${count(p.recordsSeen)} line${p.recordsSeen === 1 ? '' : 's'}`, onclick: async () => {
+                try {
+                  const r = await api.write.billing({ op: 'import', fileName: c.name, contentBase64: c.base64, apply: true });
+                  const inserted = typeof r.run?.recordsInserted === 'number' ? r.run.recordsInserted : p.recordsSeen;
+                  say(true, r.duplicateFile
+                    ? 'This file was already imported. Nothing new was written.'
+                    : `Imported ${count(inserted)} line${inserted === 1 ? '' : 's'}. They are kept as the provider's figures, apart from our own measurement. Next: use this export for the comparison.`);
+                  reload();
+                } catch (e) { say(false, errorText(e)); }
+              } })));
+    });
+}
 
-        h('div', { style: 'margin-top: var(--s5)' },
-          h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Only after readiness says it is worth it' }),
-          h('div', { class: 'actions' },
-            actionCard('billing-pull'),
-            actionCard('billing-reconcile'))),
-      );
+function importList(d: BillingPayload, reload: () => void, say: Say, scopeDone: boolean): Node | null {
+  const imports = d.imports ?? [];
+  if (imports.length === 0) return null;
+  return h('div', { class: 'facts' },
+    ...imports.slice(0, 6).map((imp) => adoptRow(imp, d.demo, reload, say, scopeDone)));
+}
+
+function adoptRow(imp: BillingImportSummary, demo: boolean, reload: () => void, say: Say, scopeDone: boolean): Node {
+  const plan = signal<BillingAdoptionPlanPayload | null>(null);
+  return h('div', { class: 'fact fact-stack' },
+    h('div', { class: 'fact-line' },
+      h('span', { class: 'fact-key' },
+        h('span', { text: imp.fileName }),
+        h('span', { class: 'fact-sub', text: `${dayRange(imp.periodStartMs, imp.periodEndMs)} · ${count(imp.recordsSeen)} lines · imported ${relative(imp.importedAtMs)}` })),
+      h('span', { class: 'fact-val' },
+        scopeDone
+          ? h('button', { class: 'link-btn', type: 'button', text: 'Use for the comparison', 'aria-label': `Use ${imp.fileName} for the comparison`, onclick: async () => {
+              try { const r = await api.write.billing({ op: 'adopt', importId: imp.importId }); plan.set(r.plan ?? null); } catch (e) { say(false, errorText(e)); }
+            } })
+          : h('span', { text: 'declare the project first' }))),
+    () => {
+      const p = plan();
+      if (!p) return null;
+      if (!p.adoptable) return h('p', { class: 'drawer-error', text: p.detail ?? p.refusal ?? 'This export cannot be used.' });
+      const left = p.excluded && p.excluded.otherOrNoProjectRecordCount > 0
+        ? `${count(p.excluded.otherOrNoProjectRecordCount)} line(s), ${usdFromMicros(p.excluded.otherOrNoProjectMicros)}, belong to no project or another one and are left out`
+        : 'none';
+      return h('div', { class: 'run-result' },
+        rows([
+          ['Matched to your project', `${count(p.matchedRecordCount)} line(s), ${usdFromMicros(p.matchedMicros)}`],
+          ['Left out', left],
+          ['Days', dayRange(p.periodStartMs, p.periodEndMs)],
+          ['Evidence class', 'supplied by you, not read from the provider; every comparison built on it says so'],
+        ]),
+        h('div', { class: 'form-actions' },
+          demo
+            ? h('p', { class: 'drawer-muted', text: 'Sample data: nothing can be recorded here.' })
+            : h('button', { class: 'btn-commit', type: 'button', text: 'Use this export', onclick: async () => {
+                try { await api.write.billing({ op: 'adopt', importId: imp.importId, apply: true }); say(true, 'Recorded as the provider side for these days.'); reload(); } catch (e) { say(false, errorText(e)); }
+              } })));
+    });
+}
+
+function reconcilePanel(d: BillingPayload, reload: () => void, say: Say): Node {
+  const result = signal<BillingReconcileResultPayload | null>(null);
+  const busy = signal(false);
+  const remaining = (d.readiness?.missing ?? []).filter((m) => !m.step.startsWith('observe a closed period — route A'));
+  const run = async (apply: boolean): Promise<void> => {
+    busy.set(true);
+    try {
+      const r = await api.write.billing({ op: 'reconcile', ...(apply ? { apply: true } : {}) });
+      if (apply) { result.set(null); say(true, 'Recorded. The comparison is saved, and the Billed claim above now rests on it.'); reload(); }
+      else result.set(r.result ?? null);
+    } catch (e) { say(false, errorText(e)); } finally { busy.set(false); }
+  };
+  if (d.readiness && !d.readiness.ready) {
+    return h('div', { class: 'run-panel' },
+      h('p', { class: 'drawer-muted', text: 'Not ready to compare. Still to do:' }),
+      h('ul', { class: 'drawer-notes' }, ...remaining.map((m) => h('li', { text: m.step.replace(/^observe a closed period — route B, /, '') }))));
+  }
+  return h('div', { class: 'run-panel' },
+    h('div', { class: 'form-row' },
+      h('button', { class: 'btn-ghost', type: 'button', disabled: () => busy(), text: () => (busy() ? 'Working…' : 'Preview the comparison'), onclick: () => void run(false) })),
+    () => {
+      const r = result();
+      if (!r) return null;
+      const residual = r.unexplainedVarianceMicros;
+      return h('div', { class: 'run-result' },
+        rows([
+          ['Period', dayRange(r.periodStartMs, r.periodEndMs)],
+          ['Billed by the provider', usdFromMicros(r.providerReportedMicros)],
+          ['Measured by Segreant', usdFromMicros(r.localCapturedMicros)],
+          ['Not explained', `${usdFromMicros(residual)}${r.providerReportedMicros > 0 ? ` (${pct(residual / r.providerReportedMicros)} of the bill)` : ''}`],
+          ['Days compared', `${count(r.coverage.daysWithBoth)} with both · ${count(r.coverage.providerOnlyDays)} bill only · ${count(r.coverage.localOnlyDays)} ours only`],
+          ['Provider side', basisWords(r.providerSourceKind)],
+        ]),
+        h('p', { class: residualBoundIsError(r.offPathBound) ? 'drawer-error' : 'basis', text: () => residualBoundWords(r.offPathBound, isPrecise()) }),
+        r.snapshotStability === 'changed_across_observations'
+          ? h('p', { class: 'drawer-error', text: 'The provider reported different figures for the same days at different times. This comparison would be contradicted.' })
+          : null,
+        r.conditions.length > 0
+          ? h('ul', { class: 'drawer-notes' }, ...r.conditions.map((c) => h('li', { text: c.replace(/_/g, ' ') })))
+          : null,
+        h('div', { class: 'form-actions' },
+          d.demo
+            ? h('p', { class: 'drawer-muted', text: 'Sample data: a comparison cannot be recorded here.' })
+            : h('button', { class: 'btn-commit', type: 'button', disabled: () => busy(), text: 'Record this comparison', onclick: () => void run(true) })));
     });
 }

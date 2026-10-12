@@ -114,7 +114,10 @@ test('defect 3: notyet blocks do not skip from h1 to h3', () => {
   for (const block of allocationBlocks) {
     assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
   }
-  assert.match(allocation, /h\('h2', \{ class: 'step-title' \}/, 'each Allocate step opens with an h2');
+  assert.match(allocation, /\bstep\(/, 'the Allocate view is built from workflow steps');
+  const workflow = readFileSync(join(APP, 'components', 'workflow.ts'), 'utf8');
+  assert.match(workflow, /h\('h2', \{ class: 'step-title' \}/, 'each workflow step opens with an h2');
+  assert.doesNotMatch(workflow, /h\('h[3-6]'/, 'nothing in a workflow step skips below h2');
   assert.doesNotMatch(allocation, /h\('h[3-6]'/, 'nothing in the Allocate view skips below h2');
 });
 

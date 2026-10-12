@@ -164,15 +164,27 @@ export const CAPABILITIES: readonly Capability[] = [
   },
 
   // ---- Evidence -----------------------------------------------------------
-  { id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set' },
-  { id: 'billing-readiness', label: 'Reconciliation readiness', plain: 'Whether a provider check would actually match anything.', territory: 'evidence', consequence: 'read', coverage: 'full', command: 'segreant billing reconcile' },
-  { id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a costs file you exported, with no credential.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing openai-costs adopt --apply' },
+  {
+    id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 previews and declares; clearing a scope stays on the CLI' },
+  },
+  {
+    id: 'billing-readiness', label: 'Reconciliation readiness', plain: 'Whether a provider check would actually match anything.', territory: 'evidence', consequence: 'read', coverage: 'full', command: 'segreant billing reconcile',
+    guiEvidence: { file: 'views/evidence.ts', token: 'readinessPanel(d)', note: 'Close step 3 shows readiness and the steps still missing before it offers a comparison' },
+  },
+  {
+    id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a costs file you exported, with no credential.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing openai-costs adopt --apply',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'adopt'", note: 'Close step 2 imports an export and adopts it, each with a preview first' },
+  },
   {
     id: 'billing-pull', label: 'Pull provider costs', plain: 'Read your bill directly from the provider.',
     territory: 'evidence', consequence: 'credential', coverage: 'partial', command: 'segreant billing openai-costs pull',
     warning: 'Reads an OpenAI Admin credential from your environment and makes a network request to OpenAI. Segreant never stores it. Check readiness first — on a ledger with no proxy traffic on the declared route, a pull reports your entire bill as unexplained.',
   },
-  { id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply' },
+  {
+    id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews and records; the materiality threshold stays on the CLI' },
+  },
   { id: 'receipt', label: 'Receipts', plain: 'The evidence behind a single claim.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant receipt' },
   { id: 'evidence', label: 'Evidence records', plain: 'Signed CI artifacts and verified outcomes.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant evidence' },
   { id: 'audit', label: 'Audit', plain: 'Check the ledger against itself for inconsistencies.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant audit' },

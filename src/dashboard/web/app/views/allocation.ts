@@ -20,6 +20,7 @@ import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload, type AllocationRunResultPayload, type AllocationRule, type CostCentre } from '../core/api.ts';
 import { isPrecise, relative, count, usdFromMicros, date, pct } from '../core/fmt.ts';
+import { pageNotice, step, field, errorText, type Say } from '../components/workflow.ts';
 
 /** The payload's `excludedFrom` ids, said in words an operator can act on. */
 const EXCLUSION_WORDS: Record<string, string> = {
@@ -46,9 +47,6 @@ function slug(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').replace(/-+$/, '').slice(0, 64);
 }
 
-function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 /** Month boundaries in local time, as ISO strings the server parses. */
 function monthRange(offset: number): { from: string; to: string; label: string } {
@@ -68,20 +66,12 @@ export function allocationView(): Node {
   const projects = signal<string[]>([]);
   const reloads = signal(0);
   const reload = (): void => reloads.set(reloads() + 1);
-  // Outside the data region on purpose: a save reloads the payload, which
-  // rebuilds every form, and a message held by the form would vanish with it.
-  const notice = signal<{ ok: boolean; text: string } | null>(null);
+  const { node: noticeNode, say } = pageNotice();
   const reloadAll = (): void => {
     reload();
     // The spine above this page reads /api/allocation once. Without this it kept
     // saying "no cost centres and no rules yet" under a page that had just saved both.
     window.dispatchEvent(new CustomEvent('segreant:ledger-changed', { detail: { claim: 'allocation' } }));
-  };
-  const say: Say = (ok, text) => {
-    const shown = { ok, text };
-    notice.set(shown);
-    // A confirmation can go; a refusal stays until the next action replaces it.
-    if (ok) setTimeout(() => { if (notice() === shown) notice.set(null); }, 6000);
   };
 
   scopedEffect(() => {
@@ -103,12 +93,7 @@ export function allocationView(): Node {
         ? 'A derived split of locally estimated cost across cost centres, by recorded rule. Showback only: no settlement, no chargeback.'
         : 'Decide which team or budget each dollar of AI spend is attributed to. This splits our own estimate. It is not a bill, and nobody is charged.' })),
 
-    h('p', {
-      class: () => `form-msg page-notice${notice()?.ok === false ? ' drawer-error' : ''}`,
-      role: 'status', 'aria-live': 'polite',
-      hidden: () => notice() === null,
-      text: () => notice()?.text ?? '',
-    }),
+    noticeNode,
 
     () => {
       const err = error();
@@ -159,17 +144,7 @@ function basisStrip(d: AllocationPayload): Node {
     h('p', { class: 'basis', text: () => `Never feeds ${(d.excludedFrom ?? []).map((id) => EXCLUSION_WORDS[id] ?? id.replace(/_/g, ' ')).join(', ')}.` }));
 }
 
-function step(n: number, title: () => string, lede: () => string, ...body: Array<Node | null>): Node {
-  return h('section', { class: 'section step' },
-    h('h2', { class: 'step-title' },
-      h('span', { class: 'step-n', 'aria-hidden': 'true', text: String(n) }),
-      h('span', { text: title })),
-    h('p', { class: 'step-lede', text: lede }),
-    ...body);
-}
 
-/** Report what the server said, in its words, on the page-level notice. */
-type Say = (ok: boolean, text: string) => void;
 
 function centreList(centres: CostCentre[], demo: boolean, reload: () => void, say: Say): Node {
   if (centres.length === 0) return h('p', { class: 'drawer-muted', text: 'No cost centres yet.' });
@@ -221,9 +196,6 @@ function centreForm(reload: () => void, say: Say): Node {
   );
 }
 
-function field(id: string, label: string, control: Node): Node {
-  return h('div', { class: 'form-field' }, h('label', { for: id, text: label }), control);
-}
 
 function describeRule(r: AllocationRule, nameOf: (id: string) => string): string {
   const match = Object.entries(r.match ?? {}).filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(', ');
@@ -331,9 +303,9 @@ function runPanel(demo: boolean, reload: () => void, say: Say, nameOf: (id: stri
     try {
       const res = await api.write.allocation({ op: 'run', from: r.from, to: r.to, apply });
       if (res.result) preview.set(res.result);
-      say(true, apply
-        ? 'Recorded. The split is saved and listed under Saved splits.'
-        : 'Preview only. Nothing is saved until you press Record this run.');
+      // The preview panel is its own answer; a toast over it would cover the
+      // figures it announces. Only a write is confirmed.
+      if (apply) say(true, 'Recorded. The split is saved and listed under Saved splits.');
       if (apply) { preview.set(null); reload(); }
     } catch (e) { say(false, errorText(e)); } finally { busy.set(false); }
   };

@@ -11,6 +11,19 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A month can be closed in the dashboard.**
+  - The Close page used to describe reconciliation and point to the terminal. It is now three steps:
+    - Say which OpenAI project this machine meters.
+    - Bring in the bill: upload the cost export, see its lines and total, import it, then use it for the comparison. No key is needed.
+    - Preview the comparison of billed against measured, with the unexplained remainder and what it can and cannot bound, then record it.
+  - Each step shows a check once the ledger satisfies it. Nothing is written before a separate confirm. Sample data previews every step and records nothing.
+  - The figures bar re-reads the Billed claim after a recorded comparison.
+  - A new local-only `POST /api/billing/write` uses the same parsing, store calls and refusals as `segreant billing`.
+- **The dashboard and the CLI recognise the same export as one file.** An export uploaded in the browser travels as its raw bytes and is hashed exactly as the CLI hashes the file. Importing it once from each surface is detected as a duplicate.
+- **An export saved with a byte-order mark imports.** Windows tools add one by default, and `billing import` refused such files as "not valid JSON". The mark is skipped for parsing; the file's digest still covers it.
+- **A key typed where a reference belongs is refused.** `billing scope set`, and the dashboard's Close page, accepted an API key (`sk-…`, `rk-…`) as the organisation or project reference and would have stored it in the ledger for good. Such values are now refused with a message saying which id to use instead.
+- **Dashboard errors are sentences.** Every dashboard route answers `{ "error": "…" }`, but the dashboard only unwrapped another shape, so each refusal from a dashboard route (an allocation, an import, a budget) appeared as raw JSON. It now shows the message.
+
 - **Allocation can be done in the dashboard, start to finish.**
   - The Allocate page was a description with a list of terminal commands. It is now three steps: add cost centres, write rules (all to one centre, fixed shares, or shared in proportion to direct spend), then preview a month's split and record it. Nothing is recorded until you press Record this run, the dashboard's form of `--apply`. Sample data allows the preview and refuses every change.
   - A new local-only `POST /api/allocation/write` uses the same store calls and validation as `segreant alloc`.

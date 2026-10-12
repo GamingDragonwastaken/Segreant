@@ -877,6 +877,58 @@ export interface AllocationWritePayload {
  * mirrors one `segreant billing` command and its refusal. Preview payloads are
  * loosely typed here because they are the CLI's own report shapes.
  */
+/** `BillingImportPreview` (src/billing/importer.ts), as the import preview sends it. */
+export interface BillingImportPreviewPayload {
+  fileName: string;
+  fileSha256: string;
+  fileSizeBytes: number;
+  source: {
+    exportId: string;
+    billingAccountRef: string;
+    periodStartMs: number;
+    periodEndMs: number;
+    coverage: 'complete' | 'partial' | 'unknown';
+  };
+  recordsSeen: number;
+  providerReportedUsdMicros: number;
+  byChargeType: Record<string, number>;
+}
+
+/**
+ * `OpenAiCostsAdoptionPlan` (src/store/billing.ts). A union on the wire: the
+ * adoptable branch carries the figures, the refused branch a reason. Fields of
+ * one branch are optional here so either validates.
+ */
+export interface BillingAdoptionPlanPayload {
+  adoptable: boolean;
+  importId?: string;
+  providerProjectRef?: string;
+  periodStartMs?: number;
+  periodEndMs?: number;
+  declaredCoverage?: string;
+  matchedRecordCount?: number;
+  matchedMicros?: number;
+  excluded?: { otherOrNoProjectRecordCount: number; otherOrNoProjectMicros: number };
+  refusal?: string;
+  detail?: string;
+}
+
+/** The fields of `ReconciliationRun` (src/billing/reconcile.ts) a preview is judged on. */
+export interface BillingReconcileResultPayload {
+  status: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  materialityUsd: number;
+  providerReportedMicros: number;
+  localCapturedMicros: number;
+  unexplainedVarianceMicros: number;
+  coverage: { providerDays: number; localDays: number; daysWithBoth: number; providerOnlyDays: number; localOnlyDays: number; materialDays: number };
+  offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention';
+  snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+  providerSourceKind: string;
+  conditions: string[];
+}
+
 export interface BillingWritePayload {
   ok: boolean;
   op: 'import' | 'reconcile' | 'adopt' | 'scope';
@@ -884,15 +936,18 @@ export interface BillingWritePayload {
   message?: string;
   error?: string;
   status?: string;
-  preview?: Record<string, unknown>;
+  preview?: BillingImportPreviewPayload;
+  /** The `scope` op's preview: what would be declared. */
+  scopePreview?: Record<string, unknown>;
   duplicateFile?: boolean;
   run?: Record<string, unknown>;
-  kernel?: Record<string, unknown>;
-  readiness?: Record<string, unknown>;
-  result?: Record<string, unknown>;
+  /** Null on a preview, and on a recorded run with no provider day to issue. */
+  kernel?: Record<string, unknown> | null;
+  readiness?: ReconciliationReadiness;
+  result?: BillingReconcileResultPayload;
   fragility?: Record<string, unknown>;
   reconciliationRunId?: string | null;
-  plan?: Record<string, unknown>;
+  plan?: BillingAdoptionPlanPayload;
   observationRunId?: string | null;
   networkAttempted?: boolean;
   credentialRead?: boolean;
