@@ -220,8 +220,8 @@ function consensusTable(c: MarketConsensusPayload): Node {
 }
 
 /** Public evidence only. It never reads the ledger and never enters a figure above it. */
-function marketCard(payload: MarketPayload | null, failure: string | null): Node {
-  const title = h('h2', { class: 'section-title', text: 'Public model market — public evidence, not your results' });
+function marketCard(payload: MarketPayload | null, failure: string | null, titled = true): Node {
+  const title = titled ? h('h2', { class: 'section-title', text: 'Public model market — public evidence, not your results' }) : null;
   if (failure) return h('section', { class: 'section' }, title, h('p', { class: 'drawer-error', role: 'alert', text: failure }));
   if (!payload) return h('section', { class: 'section' }, title, h('p', { class: 'basis', text: 'Loading the bundled public snapshot…' }));
   if (payload.status === 'disabled') return h('section', { class: 'section' }, title, h('p', { class: 'basis', text: 'Switched off in Features — nothing was computed.' }));
@@ -414,10 +414,10 @@ export function valueView(): Node {
             h('p', { class: 'basis', text: () => (isPrecise()
               ? 'Maturation requires observable outcomes: a repository whose history can be read, or imported units with recorded gate results.'
               : 'Segreant needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
-          causalStudyCard(causal(), causalError()),
-          usageCoverageCard(d.usage),
           selfReportedCard(d.selfReported, refresh),
-          marketCard(market(), marketError()),
+          fold(() => (isPrecise() ? 'Usage without code signals' : 'Chat, research and drafting'), usageCoverageCard(d.usage)),
+          fold(() => (isPrecise() ? 'Causal study evidence' : 'Is any of this proven to be caused by AI?'), causalStudyCard(causal(), causalError())),
+          fold(() => 'Public model market: public evidence, not your results', marketCard(market(), marketError(), false)),
           actions());
       }
 
@@ -438,8 +438,6 @@ export function valueView(): Node {
         d.demo ? h('div', { class: 'banner banner-demo' },
           h('span', { class: 'pill pill-demo', text: 'demo' }),
           h('p', null, h('strong', { text: 'Sample data. ' }), 'These outcomes were seeded, not observed on your machine.')) : null,
-
-        causalStudyCard(causal(), causalError()),
 
         // Basis before figure. Which of the two sources produced this, and whether
         // the dollars are scoped to the project or merely summed over a window,
@@ -663,14 +661,21 @@ export function valueView(): Node {
                 : null)
           : null,
 
-        modelSwitchCoverageCard(d.frontier),
-        usageCoverageCard(d.usage),
         selfReportedCard(d.selfReported, refresh),
-        marketCard(market(), marketError()),
+
+        // Supporting evidence, folded. It used to run at full length after the
+        // answer, which made this a 7,500 px page (13,000 on a phone) with the
+        // public market tables alone longer than everything above them. Each
+        // fold says what it holds; nothing is removed.
+        h('h2', { class: 'section-title fold-head', text: () => (isPrecise() ? 'Supporting evidence' : 'More detail, if you want it') }),
+        fold(() => (isPrecise() ? 'Model-switch trials' : 'Cheaper model trials'), modelSwitchCoverageCard(d.frontier)),
+        fold(() => (isPrecise() ? 'Usage without code signals' : 'Chat, research and drafting'), usageCoverageCard(d.usage)),
+        fold(() => (isPrecise() ? 'Causal study evidence' : 'Is any of this proven to be caused by AI?'), causalStudyCard(causal(), causalError())),
+        fold(() => 'Public model market: public evidence, not your results', marketCard(market(), marketError(), false)),
 
         // Per-user. The guardrail state is the content when the cohort is suppressed.
         team
-          ? h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+          ? fold(() => (isPrecise() ? 'Cohort distribution' : 'Across the people using it'), h('div', { class: 'card', style: 'margin-top: var(--s4)' },
               h('div', { class: 'card-head' },
                 h('span', { class: 'card-title', text: () => (isPrecise() ? 'Cohort distribution' : 'Across the people using it') }),
                 h('span', {
@@ -700,20 +705,27 @@ export function valueView(): Node {
                             : (isPrecise() ? `${team.distribution.dispersion.toFixed(2)} — concentrated` : 'concentrated in a few') })),
                         h('div', { class: 'fact' },
                           h('span', { class: 'fact-key', text: () => (isPrecise() ? 'coaching headroom' : 'possible if everyone matched the middle') }),
-                          h('span', { class: 'fact-val', text: usd(team.distribution.coachingHeadroomUsd) })))))
+                          h('span', { class: 'fact-val', text: usd(team.distribution.coachingHeadroomUsd) }))))))
           : null,
 
         (d.roi?.notes?.length ?? 0) > 0
-          ? h('section', { class: 'section' },
-              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Method notes' : 'How this was worked out') }),
+          ? fold(() => (isPrecise() ? 'Method notes' : 'How this was worked out'), h('section', null,
               h('p', { class: 'scope-note', text: () => (isPrecise()
                 ? 'These notes are stated on the manual-equivalent value basis (the figures in Realized value and Honest cost above), not on the attributed-spend basis used in the waste breakdown.'
                 : 'These notes talk about what the work was worth and what your time cost — not the smaller AI-spend figures further down the page.') }),
-              h('ul', { class: 'drawer-notes' }, ...(d.roi?.notes ?? []).slice(0, 8).map((n) => h('li', { text: n }))))
+              h('ul', { class: 'drawer-notes' }, ...(d.roi?.notes ?? []).slice(0, 8).map((n) => h('li', { text: n })))))
           : null,
 
         actions());
     });
+}
+
+/** A closed section whose summary names what it holds. Nothing in it is hidden from the DOM. */
+function fold(title: () => string, body: Node | null): Node | null {
+  if (body === null) return null;
+  return h('details', { class: 'fold' },
+    h('summary', { class: 'fold-summary', text: title }),
+    body);
 }
 
 function actions(): Node {
