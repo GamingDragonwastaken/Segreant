@@ -19,6 +19,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - Spend bars are each model's share of the total, not of the largest model, and shares under 1% print as "<1%".
   - Protect shows "limit reached · blocking" when today's spend is at or over the cap, instead of a calm "enforced" badge over an overspend. The limit card has its own "Change limit" button.
 
+- **Stopping `segreant` stops what it started.** The launcher ran the runtime with a blocking call that could not forward signals, so a `SIGTERM` from a supervisor or `kill <pid>` ended the launcher and left a running `start` (proxy and dashboard) behind as an orphan. It now forwards SIGINT, SIGTERM and SIGHUP to the runtime and exits with its status.
+
+- **`start --demo` no longer meters real traffic into the sample store.** Demo mode opened `demo.db` for the whole process, so its proxy recorded real provider traffic among the synthetic rows, while the banner said "Real metering is untouched" and told you to point your tools at it. Demo mode now serves the dashboard only and says so. A tool started with `segreant launch` finds no proxy, warns that it is unmetered and goes direct.
+
 - **Sample data and real data stay apart, and stale or unknown figures say so.**
   - `import --demo` appended real usage into `demo.db`, where it was summed with synthetic rows under the sample-data label. A month read $89.71, made of $0.05 real and $89.66 sample. Imports and the dashboard's import and scan actions now refuse in demo mode and say how to bring in your own usage. The dashboard copy no longer promises that importing replaces the sample.
   - When the local server stopped, the dashboard kept showing its last figures as current, with no timer to notice. It now re-checks every 15 seconds while figures are shown. When the server is gone, a banner states that the figures are not current and how old they are, the figures dim, and Retry reloads the page.
