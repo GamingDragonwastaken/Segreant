@@ -785,6 +785,69 @@ export interface AllocationRunRecord {
   result?: Record<string, unknown>;
 }
 
+/** A cost centre as the store returns it (`segreant alloc centres --json`). */
+export interface AllocationWriteCostCentre {
+  costCentreId: string;
+  name: string;
+  owner: string | null;
+  createdAtMs: number;
+  archivedAtMs: number | null;
+}
+
+/** A rule version as the store returns it (`segreant alloc rules --json`). */
+export interface AllocationWriteRule {
+  ruleId: string;
+  version: number;
+  method: string;
+  match: { project?: string | null; provider?: string | null; model?: string | null; source?: string | null; user?: string | null };
+  targets: Array<{ costCentreId: string; ratio: number }>;
+  priority: number;
+  effectiveFromMs: number;
+  effectiveToMs: number | null;
+  revokedAtMs: number | null;
+  owner: string | null;
+  note: string | null;
+  createdAtMs: number;
+}
+
+/**
+ * JSON projection of a preview or applied run (`AllocationRunResult` in
+ * src/alloc/apply.ts). Every figure is a plain integer of microdollars, so the
+ * projection is the result itself; the type is declared here because this file
+ * carries no runtime imports for the browser copy.
+ */
+export interface AllocationWriteRunResult {
+  periodStartMs: number;
+  periodEndMs: number;
+  totalMicros: number;
+  allocatedMicros: number;
+  unallocatedMicros: number;
+  byCostCentre: Array<{ costCentreId: string; allocatedMicros: number; requestCount: number; sourceBasis: string }>;
+  lines: unknown[];
+  unallocated: unknown[];
+  sourceBases: string[];
+  conserves: boolean;
+  retention?: unknown;
+  excludedFrom: string[];
+}
+
+/**
+ * `POST /api/allocation/write`. One deliberate allocation change per request;
+ * the same Store methods and validation as `segreant alloc`. Preview runs
+ * (`op: 'run'` with `applied: false`) record nothing.
+ */
+export interface AllocationWritePayload {
+  ok: boolean;
+  op: 'centre' | 'archive' | 'rule' | 'revoke' | 'run';
+  applied: boolean;
+  message: string;
+  costCentre?: AllocationWriteCostCentre;
+  rule?: AllocationWriteRule;
+  revoked?: number;
+  allocationRunId?: string | null;
+  result?: AllocationWriteRunResult;
+}
+
 /**
  * The realized-value payload.
  *
@@ -1448,6 +1511,7 @@ export interface DashboardResponseMap {
   judge: JudgePayload;
   value: ValuePayload;
   'outcome-record': OutcomeRecordPayload;
+  'allocation-write': AllocationWritePayload;
   market: MarketPayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
