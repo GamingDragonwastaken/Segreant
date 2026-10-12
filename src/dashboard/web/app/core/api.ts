@@ -37,6 +37,11 @@ import type {
   BillingMappingCoveragePayload,
   BillingKernelClaimSummary,
   BillingPayload,
+  BillingImportSummary,
+  BillingWritePayload,
+  BillingImportPreviewPayload,
+  BillingAdoptionPlanPayload,
+  BillingReconcileResultPayload,
   EconomicMoney,
   EconomicCoverage,
   EconomicTranslationCoverage,
@@ -103,6 +108,11 @@ export type {
   BillingMappingCoveragePayload,
   BillingKernelClaimSummary,
   BillingPayload,
+  BillingImportSummary,
+  BillingWritePayload,
+  BillingImportPreviewPayload,
+  BillingAdoptionPlanPayload,
+  BillingReconcileResultPayload,
   EconomicMoney,
   EconomicCoverage,
   EconomicTranslationCoverage,
@@ -194,17 +204,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    // Servers answer errors as { error: { code, message } }. Show the human message,
-    // never the raw JSON envelope; fall back to the text for anything else.
+    // Show the human message, never the raw JSON envelope. The dashboard's own
+    // routes answer `{ error: "sentence" }`; some answer `{ error: { message } }`.
+    // Only the second was read, so every refusal from a dashboard route, an
+    // allocation or billing write included, reached the screen as raw JSON.
     let human: string | null = null;
     try {
       const parsed: unknown = JSON.parse(detail);
-      if (
-        typeof parsed === 'object' && parsed !== null && 'error' in parsed &&
-        typeof (parsed as { error: unknown }).error === 'object' && (parsed as { error: unknown }).error !== null &&
-        typeof (parsed as { error: { message?: unknown } }).error.message === 'string'
-      ) {
-        human = (parsed as { error: { message: string } }).error.message;
+      const error = typeof parsed === 'object' && parsed !== null && 'error' in parsed ? (parsed as { error: unknown }).error : undefined;
+      if (typeof error === 'string' && error.trim()) human = error;
+      else if (typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string') {
+        human = (error as { message: string }).message;
       }
     } catch {
       // Not JSON: keep the text fallback below.
@@ -289,6 +299,13 @@ export const api = {
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
+    /**
+     * Month close: `scope`, `import`, `adopt`, `reconcile`. Without `apply: true`
+     * every op is a preview and writes nothing. An import carries the file's raw
+     * bytes in base64, so its digest is the one the CLI computes for the file.
+     */
+    billing: (body: Record<string, unknown>) =>
+      request<BillingWritePayload>(routePath('billing-write'), { method: 'POST', body: JSON.stringify(body) }),
     /** Cost centres, rules and runs. A run with `apply: false` is a preview and records nothing. */
     allocation: (body: Record<string, unknown>) =>
       request<AllocationWritePayload>(routePath('allocation-write'), { method: 'POST', body: JSON.stringify(body) }),

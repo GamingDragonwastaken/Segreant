@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ce9c268f8bc251833c0539c617095e86e531b6dc490669a6d5983a857314dd65";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "c2761ed82f3b347eddb39976c48325cf70843b653430370cf0f2f620b1abcc36";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -661,6 +661,58 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "{ nodes: number; edges: number }"
     }
   ],
+  "BillingImportSummary": [
+    {
+      "name": "importId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "importedAtMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "fileName",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "billingAccountRef",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "periodStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "coverage",
+      "optional": false,
+      "type": "'complete' | 'partial' | 'unknown'"
+    },
+    {
+      "name": "recordsSeen",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "recordsInserted",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "recordsDuplicate",
+      "optional": false,
+      "type": "number"
+    }
+  ],
   "BillingPayload": [
     {
       "name": "demo",
@@ -686,6 +738,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "summary",
       "optional": false,
       "type": "{ recordCount: number }"
+    },
+    {
+      "name": "imports",
+      "optional": false,
+      "type": "BillingImportSummary[]"
     },
     {
       "name": "kernel",
@@ -1950,6 +2007,269 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "result",
       "optional": true,
       "type": "AllocationRunResultPayload"
+    }
+  ],
+  "BillingImportPreviewPayload": [
+    {
+      "name": "fileName",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "fileSha256",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "fileSizeBytes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "source",
+      "optional": false,
+      "type": "{"
+    },
+    {
+      "name": "recordsSeen",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "providerReportedUsdMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "byChargeType",
+      "optional": false,
+      "type": "Record<string, number>"
+    }
+  ],
+  "BillingAdoptionPlanPayload": [
+    {
+      "name": "adoptable",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "importId",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "providerProjectRef",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "periodStartMs",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "declaredCoverage",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "matchedRecordCount",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "matchedMicros",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "excluded",
+      "optional": true,
+      "type": "{ otherOrNoProjectRecordCount: number; otherOrNoProjectMicros: number }"
+    },
+    {
+      "name": "refusal",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "detail",
+      "optional": true,
+      "type": "string"
+    }
+  ],
+  "BillingReconcileResultPayload": [
+    {
+      "name": "status",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "periodStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "periodEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "materialityUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "providerReportedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "localCapturedMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unexplainedVarianceMicros",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "coverage",
+      "optional": false,
+      "type": "{ providerDays: number; localDays: number; daysWithBoth: number; providerOnlyDays: number; localOnlyDays: number; materialDays: number }"
+    },
+    {
+      "name": "offPathBound",
+      "optional": false,
+      "type": "'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention'"
+    },
+    {
+      "name": "snapshotStability",
+      "optional": false,
+      "type": "'single_observation' | 'stable_across_observations' | 'changed_across_observations'"
+    },
+    {
+      "name": "providerSourceKind",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "conditions",
+      "optional": false,
+      "type": "string[]"
+    }
+  ],
+  "BillingWritePayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "op",
+      "optional": false,
+      "type": "'import' | 'reconcile' | 'adopt' | 'scope'"
+    },
+    {
+      "name": "applied",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "message",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "error",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "preview",
+      "optional": true,
+      "type": "BillingImportPreviewPayload"
+    },
+    {
+      "name": "scopePreview",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "duplicateFile",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "run",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "kernel",
+      "optional": true,
+      "type": "Record<string, unknown> | null"
+    },
+    {
+      "name": "readiness",
+      "optional": true,
+      "type": "ReconciliationReadiness"
+    },
+    {
+      "name": "result",
+      "optional": true,
+      "type": "BillingReconcileResultPayload"
+    },
+    {
+      "name": "fragility",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "reconciliationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "plan",
+      "optional": true,
+      "type": "BillingAdoptionPlanPayload"
+    },
+    {
+      "name": "observationRunId",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "networkAttempted",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "credentialRead",
+      "optional": true,
+      "type": "boolean"
+    },
+    {
+      "name": "declaration",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "reconciliationStatus",
+      "optional": true,
+      "type": "string"
     }
   ],
   "Matured": [
