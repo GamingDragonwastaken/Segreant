@@ -50,7 +50,13 @@ export async function cmdStart(flags: Flags): Promise<void> {
     );
   }
 
-  const proxy = createProxyServer({
+  // With --demo the open store is demo.db. A proxy started here recorded
+  // real provider traffic into the sample store while the banner said "Real
+  // metering is untouched", so demo mode serves the dashboard only. A tool
+  // started with `segreant launch` then finds no proxy, warns that it is
+  // unmetered and goes direct, as it does whenever Segreant is not running.
+  const demo = isDemo();
+  const proxy = demo ? null : createProxyServer({
     store,
     config: cfg,
     onLog: (row) => {
@@ -70,20 +76,36 @@ export async function cmdStart(flags: Flags): Promise<void> {
   });
   const dashboard = createDashboardServer({ store, config: cfg, version: packageVersion() });
 
-  await new Promise<void>((resolve) => proxy.listen(cfg.port, '127.0.0.1', resolve));
+  if (proxy) await new Promise<void>((resolve) => proxy.listen(cfg.port, '127.0.0.1', resolve));
   await new Promise<void>((resolve) => dashboard.listen(cfg.dashboardPort, '127.0.0.1', resolve));
 
-  printBanner(cfg, tty);
+  if (demo) printDemoBanner(cfg, tty);
+  else printBanner(cfg, tty);
 
   const shutdown = () => {
     console.log('\n  Shutting down…');
-    proxy.close();
+    proxy?.close();
     dashboard.close();
     store.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+function printDemoBanner(cfg: SegreantConfig, tty: boolean): void {
+  const line = (s: string) => console.log('  ' + s);
+  console.log('');
+  line(color(tty, C.bold, 'Segreant  ·  sample-data dashboard'));
+  console.log('');
+  line(`Dashboard  ${color(tty, C.cyan, `http://localhost:${cfg.dashboardPort}`)}`);
+  console.log('');
+  line(color(tty, C.yellow, '● DEMO DATA — synthetic, isolated in demo.db. No proxy runs in demo mode,'));
+  line(color(tty, C.yellow, '  so nothing you send to a provider is recorded here. Real metering is untouched.'));
+  line(color(tty, C.gray, '  To meter your own tools, run "segreant start" without --demo.'));
+  console.log('');
+  line(color(tty, C.gray, 'Press Ctrl+C to stop.'));
+  console.log('');
 }
 
 function printBanner(cfg: SegreantConfig, tty: boolean): void {
