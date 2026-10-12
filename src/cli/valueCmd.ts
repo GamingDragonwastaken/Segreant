@@ -112,7 +112,7 @@ function printKeptAnswer(tty: boolean, report: RealizationReport): void {
   };
   console.log('');
   console.log(color(tty, C.bold, '  Did the AI work stay in the code?') + color(tty, C.gray, '   from git history · list cost (estimate), not your bill'));
-  row('Kept', k.kept, `most of its lines are still in the code after ${days} days`, C.green);
+  row('Kept', k.kept, `most of its lines are still in the code after ${days} days, and no tracked check failed`, C.green);
   row('Not kept', k.notKept, 'most of its lines were rewritten or removed, or it was reverted', C.yellow);
   row('Unknown', k.unknown, 'not measured in this run (the git time budget ran out)', C.gray);
   const due = k.maturing.nextVerdictMs === null ? '' : `; first verdict ${new Date(k.maturing.nextVerdictMs).toISOString().slice(0, 10)}`;

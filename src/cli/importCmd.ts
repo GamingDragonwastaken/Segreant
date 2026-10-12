@@ -640,7 +640,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     if (idle > 0) console.log(color(tty, C.gray, `    ${idle} more repositor${idle === 1 ? 'y has' : 'ies have'} no priced AI spend in the last ${CLI_PERIOD_DAYS} days.`));
     printUnmeasured(tty, discovered);
     console.log('');
-    console.log(color(tty, C.gray, '  Kept: most of a commit\'s lines are still in the code after 14 days. Not kept: rewritten, removed or reverted.'));
+    console.log(color(tty, C.gray, '  Kept: most of a commit\'s lines are still in the code after 14 days and no check you track failed. Not kept: a tracked check failed, or the lines were rewritten, removed or reverted.'));
     console.log(color(tty, C.gray, '  The full picture for one project: segreant realize --repo <path> · value against your time: segreant roi'));
     console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: segreant today · month · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
