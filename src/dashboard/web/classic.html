@@ -1052,8 +1052,11 @@ $('#viewnav').addEventListener('click', (e) => {
 // an operator-imported provider report, not verified provider API data or a
 // reconciled mapping to the local request ledger.
 const billingTime = (ms) => {
+  // An absent instant is null/undefined/'' and Number() turns each of them into 0,
+  // which is a finite number: the 1970 epoch. Only a positive instant is a time.
+  if (ms === null || ms === undefined || ms === '') return '—';
   const n = Number(ms);
-  return Number.isFinite(n) ? new Date(n).toLocaleString() : '—';
+  return Number.isFinite(n) && n > 0 ? new Date(n).toLocaleString() : '—';
 };
 const billingUsd = (micros) => {
   const n = Number(micros);
