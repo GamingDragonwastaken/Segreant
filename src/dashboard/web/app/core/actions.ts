@@ -17,6 +17,21 @@ import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
 type Builder = (cap: Capability) => ActionSpec;
 
+/**
+ * Sample data runs against a read-only configuration: the server refuses every
+ * settings write. The preview says so before Apply is offered, instead of
+ * enabling a button whose only outcome is a refusal (H005).
+ */
+const DEMO_SETTINGS_BLOCKED = 'This dashboard is showing sample data, so settings can\'t be changed here. Start Segreant without --demo to change your own.';
+
+/** Read a typed dollar amount: null for empty, NaN for anything unusable. */
+function enteredUsd(raw: string): number | null {
+  const t = raw.trim();
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : Number.NaN;
+}
+
 const BUILDERS: Record<string, Builder> = {
   'clear-proposals': (cap) => ({
     capability: cap,
@@ -137,9 +152,25 @@ const BUILDERS: Record<string, Builder> = {
    */
   budget: (cap) => {
     const entered = signal<string>('');
+    // The recommendation comes from the value read, which can take tens of
+    // seconds on a cold ledger (27.8 s measured on a fresh home). It is fetched
+    // once per drawer, and the preview waits for it only briefly: the preview
+    // re-runs on every edit, and checking an amount must not queue behind it.
+    type Advice = Awaited<ReturnType<typeof api.value>>['budget'];
+    let adviceRead: Promise<Advice | null> | null = null;
+    let advice: Advice | null | undefined;
+    const adviceSoon = (): Promise<Advice | null | undefined> => {
+      adviceRead ??= api.value().then((v) => (advice = v.budget ?? null), () => (advice = null));
+      if (advice !== undefined) return Promise.resolve(advice);
+      return Promise.race([adviceRead, new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1200))]);
+    };
 
     return {
       capability: cap,
+      command: () => {
+        const amount = enteredUsd(entered());
+        return amount === null || Number.isNaN(amount) ? null : `segreant budget --daily ${amount}`;
+      },
       fields: () => h('div', null,
         h('label', { class: 'drawer-h3', for: 'budget-cap-input' },
           isPrecise() ? 'New daily cap (USD)' : 'New daily limit, in dollars'),
@@ -165,23 +196,40 @@ const BUILDERS: Record<string, Builder> = {
         h('p', { id: 'budget-cap-note', class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
 
       preview: async (): Promise<PreviewResult> => {
-        const [settings, value] = await Promise.all([api.settings(), api.value()]);
+        const [settings, advice] = await Promise.all([api.settings(), adviceSoon()]);
         const current = settings.budget?.dailyUsd ?? null;
-        const advice = value.budget ?? null;
+        // Validation is part of the preview, so a wrong amount is named before
+        // Apply and a corrected one re-enables it (H004).
+        const amount = enteredUsd(entered());
+        const blockedReason = settings.demo
+          ? DEMO_SETTINGS_BLOCKED
+          : amount === null
+            ? 'Enter an amount to see the change. An empty field changes nothing.'
+            : Number.isNaN(amount)
+              ? 'That is not a usable amount. Enter a number of dollars, or 0 to block everything.'
+              : amount === current
+                ? 'The cap is already that amount, so nothing would change.'
+                : undefined;
         return {
-          applicable: true,
+          applicable: blockedReason === undefined,
+          blockedReason,
           summary: isPrecise()
             ? 'Writes the daily cap to the local config file. Enforcement happens at the proxy, so only spend routed through it can be blocked.'
             : 'Saves a new daily limit on this machine. Segreant can only actually block spend that goes through it.',
           rows: [
             { label: 'Current cap', value: current === null ? 'unlimited' : usd(current) },
-            {
-              label: 'Recommended',
-              value: advice?.recommendedDailyUsd != null ? usd(advice.recommendedDailyUsd) : 'not established',
-              note: advice?.canApply
-                ? `from ${count(advice.basisDays)} days of observed spend`
-                : 'not enough observed history to recommend acting on',
-            },
+            ...(amount !== null && !Number.isNaN(amount)
+              ? [{ label: 'New cap', value: usd(amount), note: amount === 0 ? 'blocks every proxied request' : undefined }]
+              : []),
+            advice === undefined
+              ? { label: 'Recommended', value: 'still being worked out', note: 'it comes from the value read; edit the amount or reopen to see it' }
+              : {
+                  label: 'Recommended',
+                  value: advice?.recommendedDailyUsd != null ? usd(advice.recommendedDailyUsd) : 'not established',
+                  note: advice?.canApply
+                    ? `from ${count(advice.basisDays)} days of observed spend`
+                    : 'not enough observed history to recommend acting on',
+                },
             {
               label: 'Counts toward the cap',
               value: settings.budget?.capIncludesImported ? 'all observed spend' : 'live proxy spend only',
@@ -202,10 +250,11 @@ const BUILDERS: Record<string, Builder> = {
       },
 
       commit: async () => {
-        const raw = entered().trim();
-        if (raw === '') return { ok: false, message: 'No value entered, so nothing was changed.' };
-        const parsed = Number(raw);
-        if (!Number.isFinite(parsed) || parsed < 0) {
+        // The preview already refused these; this guards a commit that races
+        // a field edit.
+        const parsed = enteredUsd(entered());
+        if (parsed === null) return { ok: false, message: 'No value entered, so nothing was changed.' };
+        if (Number.isNaN(parsed)) {
           return { ok: false, message: 'That is not a usable amount. Enter a number of dollars, or 0 to block everything.' };
         }
         // `dailyUsd`, not `dailyCapUsd`. applySettingsPatch only copies keys it
@@ -261,9 +310,12 @@ const BUILDERS: Record<string, Builder> = {
         const settings = await api.settings();
         const current = settings.features ?? {};
         const target = turnOn() === 'on';
+        const blockedReason = settings.demo
+          ? DEMO_SETTINGS_BLOCKED
+          : current[key()] === target ? 'That switch is already set that way, so nothing would change.' : undefined;
         return {
-          applicable: current[key()] !== target,
-          blockedReason: current[key()] === target ? 'That switch is already set that way, so nothing would change.' : undefined,
+          applicable: blockedReason === undefined,
+          blockedReason,
           summary: isPrecise()
             ? 'Writes one features.<key> boolean to the local config. A switched-off subsystem reports itself disabled wherever its output would appear.'
             : 'Turns one optional part of Segreant on or off on this machine. Anything switched off says so instead of showing empty results.',

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 4002816fcead40144b66e2529203cd3e2f1bbbaea4ebdff8b75904984627fba0 */
+/** Source SHA-256: 757c98b579c6d3df12a7b42aa5c34481b7a3747e101bc916b048420857207a63 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1145,6 +1145,8 @@ export interface SettingsSnapshot {
   retentionDays: number;
   proposalRetentionDays: number;
   metadataOnly: boolean;
+  /** True when the dashboard runs in demo mode: settings are shown but cannot be changed. */
+  demo: boolean;
   /** Optional-subsystem switches, keyed as in `segreant features`. */
   features: Record<string, boolean>;
   budget: BudgetConfig;

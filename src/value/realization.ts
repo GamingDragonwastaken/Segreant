@@ -1074,6 +1074,11 @@ export async function loadRealization(
   if (opts.preferStored && store.countRealizationUnits() > 0) {
     return { source: 'store', report: realizationFromStore(store, { windowDays: opts.windowDays }) };
   }
+  // With no request recorded there is no spend for git work to attribute, and
+  // the dashboard's value read spent 17-22 s per load proving that on an empty
+  // ledger. Its server answers one request at a time, so every other read, a
+  // drawer's preview included, waited behind it.
+  if (opts.preferStored && store.earliestRequestMs() === null) return null;
   if (!isDemo() && repo && (await isGitRepo(repo))) {
     return {
       source: 'git',

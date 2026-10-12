@@ -42,3 +42,17 @@ test('preferStored reads the stored realization without touching git', async () 
   assert.equal(await loadRealization(store, join(tmpdir(), 'not-a-repo-segreant'), { preferStored: true }), null);
   store.close();
 });
+
+test('preferStored on a ledger with no requests answers at once instead of reading git', async () => {
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'empty-')), 'segreant.db'));
+  // process.cwd() is this repository: without the short-circuit this ran the
+  // full git realization (17-22 s on the dashboard) to attribute no spend.
+  // The git route would return { source: 'git', ... } for this repository, so
+  // null proves it was not taken.
+  const loaded = await loadRealization(store, process.cwd(), { preferStored: true });
+  assert.equal(loaded, null);
+  // With a request recorded, the git route is still taken (not exercised here):
+  store.insertRequest(row('x', Date.now() - 1_000, 'proxy'));
+  assert.notEqual(store.earliestRequestMs(), null);
+  store.close();
+});
