@@ -303,6 +303,9 @@ function boot(): void {
     if (claim === 'allocation') {
       void api.allocation().then((a) => { allocationIn.set(a); lastReadAt.set(Date.now()); }, () => undefined);
     }
+    if (claim === 'billing') {
+      void api.billing().then((b) => { billingIn.set(b); lastReadAt.set(Date.now()); }, () => undefined);
+    }
   });
 
   // A stopped server is noticed without a click. While any figure is on screen the

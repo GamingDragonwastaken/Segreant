@@ -864,7 +864,8 @@ body.claim-open { overflow: hidden; }
   font-family: var(--mono); font-size: 12px;
 }
 .step-lede { color: var(--muted); max-width: 70ch; margin: var(--s1) 0 var(--s3) calc(26px + var(--s3)); }
-.step > .facts, .step > .inline-form, .step > .run-panel, .step > p.drawer-muted { margin-left: calc(26px + var(--s3)); }
+.step > .facts, .step > .inline-form, .step > .run-panel, .step > p.drawer-muted, .step > .form-hint, .step > .drawer-warning, .step > .step-aside { margin-left: calc(26px + var(--s3)); }
+.step-aside { margin-top: var(--s3); max-width: 420px; }
 
 .basis-strip .card-head { flex-wrap: wrap; gap: var(--s2); }
 .basis-strip .card-title { margin-right: auto; }
@@ -908,9 +909,29 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
   padding: var(--s3) var(--s5); border-radius: var(--r-sm);
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
   box-shadow: 0 8px 28px rgb(0 0 0 / 0.28);
+  width: max-content; overflow-wrap: anywhere;
 }
 .page-notice.drawer-error { border-color: var(--coral); color: var(--coral); }
 .page-notice[hidden] { display: none; }
+
+/* A step the ledger already satisfies: its number becomes a check in mint. */
+.step-done .step-n { border-color: var(--mint); color: var(--mint); }
+
+/* Label and value pairs in a preview: what will be written, before it is. */
+.preview-rows { display: grid; gap: var(--s1); margin: 0; }
+.preview-row { display: grid; grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr); gap: var(--s3); padding: var(--s1) 0; border-bottom: 1px solid var(--line-soft); }
+.preview-row:last-child { border-bottom: 0; }
+.preview-row dt { color: var(--muted); font-size: 13px; }
+.preview-row dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+.fact-stack { flex-direction: column; align-items: stretch; gap: var(--s2); }
+.fact-line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
+.fact-stack .fact-sub { display: block; margin: 2px 0 0; }
+.fact-stack .fact-key { flex-direction: column; align-items: flex-start; gap: 0; }
+
+.close-details { margin-top: var(--s10); }
+.close-details > summary { cursor: pointer; list-style: revert; }
+.close-details[open] > summary { margin-bottom: var(--s2); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -920,4 +941,7 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 @media (max-width: 820px) {
   .step-lede, .step > .facts, .step > .inline-form, .step > .run-panel, .step > p.drawer-muted { margin-left: 0; }
   .form-row > .btn-commit, .form-row > .btn-ghost, .form-actions > .btn-commit { width: 100%; }
+  .preview-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .fact-line { flex-direction: column; gap: var(--s1); }
+  .step > .facts, .step > .form-hint { margin-left: 0; }
 }
