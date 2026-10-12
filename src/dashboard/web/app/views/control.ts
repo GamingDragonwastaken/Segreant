@@ -33,6 +33,9 @@ import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type SettingsSnapshot, type Overview, type ValuePayload, type AlertRow } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
+import { capability } from '../core/registry.ts';
+import { openAction } from '../components/drawer.ts';
+import { actionSpec } from '../core/actions.ts';
 
 export function controlView(): Node {
   const settings = signal<SettingsSnapshot | null>(null);
@@ -54,7 +57,7 @@ export function controlView(): Node {
 
   return h('div', null,
     h('div', { class: 'view-head' },
-      h('h1', { class: 'view-title', text: 'Control' }),
+      h('h1', { class: 'view-title', text: 'Protect' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Enforcement caps applied at the proxy, and the advisory recommendation derived from observed spend.'
         : 'The limits that stop AI spend before it happens — and how much of your spend they can actually reach.' })),
@@ -96,9 +99,15 @@ export function controlView(): Node {
         h('div', { class: 'card card-basis' },
           h('div', { class: 'card-head' },
             h('span', { class: 'card-title', text: () => (isPrecise() ? 'Daily cap' : 'Your daily limit') }),
+            // The action that changes this number sits on it. It was a card at
+            // the foot of a 2,200 px page (critique 2026-10-12).
+            budgetButton(),
+            // Green "enforced" over a day already past its limit read as a
+            // contradiction (critique 2026-10-12). Past the limit, the badge
+            // says what the proxy is doing now.
             h('span', {
-              class: `pill ${cap === null ? 'pill-unverified' : 'pill-ok'}`,
-              text: cap === null ? 'unlimited' : 'enforced in path',
+              class: `pill ${cap === null ? 'pill-unverified' : spentToday !== null && spentToday >= cap ? 'pill-warn' : 'pill-ok'}`,
+              text: cap === null ? 'unlimited' : spentToday !== null && spentToday >= cap ? 'limit reached · blocking' : 'enforced in path',
             })),
           cap === null
             ? h('div', null,
@@ -118,6 +127,11 @@ export function controlView(): Node {
                       h('span', { class: 'basis', text: () => (isPrecise()
                         ? `${usd(spentToday)} counted toward the cap today — ${pct(cap > 0 ? spentToday / cap : 0, 0)} of the cap`
                         : `${usd(spentToday)} spent today, which is ${pct(cap > 0 ? spentToday / cap : 0, 0)} of your limit`) }),
+                      spentToday >= cap
+                        ? h('span', { class: 'basis', text: () => (isPrecise()
+                          ? 'The guard blocks once the day\'s enforced total is at or over the cap. The request that crossed it and any already in flight complete, so a day can close above the cap.'
+                          : 'A limit stops new requests once the day\'s total reaches it. The request that crossed it, and any already running, still finish, so a day can end above its limit.') })
+                        : null,
                       importedOutsideCap > 0
                         ? h('span', { class: 'basis', text: () => (isPrecise()
                           ? `${usd(importedOutsideCap)} imported today is excluded from the cap (it cannot be blocked).`
@@ -236,6 +250,16 @@ function alertCoveragePanel(
  * with the figure that triggered it rather than as a bare warning. A warning an
  * operator cannot check is a warning they learn to dismiss.
  */
+function budgetButton(): Node | null {
+  const cap = capability('budget');
+  if (!cap) return null;
+  return h('button', {
+    class: 'btn-ghost card-action',
+    onclick: () => openAction(actionSpec(cap)),
+    text: () => (isPrecise() ? 'Set cap' : 'Change limit'),
+  });
+}
+
 function alertList(alerts: AlertRow[]): Node {
   const order: Record<string, number> = { critical: 0, warn: 1, info: 2 };
   const sorted = [...alerts].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
@@ -305,7 +329,7 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
           h('span', { class: 'waste-fig', text: `${usd(rec.projectedMonthlyWasteUsd)}/mo` }),
           h('span', { class: 'waste-say', text: () => (isPrecise()
             ? `projected spend not converting to realized outcomes, at the current realized-value rate (${pct(rec.realizedSpendShare, 0)})`
-            : `is heading for work that never gets used, if things carry on as they are`) }))
+            : `a month, at the current rate, goes to work that is not kept — a projection, not a measurement`) }))
       : null,
 
     rec.rationale?.length

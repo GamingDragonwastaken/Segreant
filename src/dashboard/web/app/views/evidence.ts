@@ -328,7 +328,7 @@ export function evidenceView(): Node {
 
   return h('div', null,
     h('div', { class: 'view-head' },
-      h('h1', { class: 'view-title', text: 'Evidence' }),
+      h('h1', { class: 'view-title', text: 'Close' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Provider-side billing evidence and its reconciliation against the local ledger, at project-day grain. Status is never "reconciled" — only "reconciled with residual".'
         : 'Everything in Spend is our own measurement. This is where we check it against what your provider actually billed you — and tell you honestly how much of it can be checked at all.' })),

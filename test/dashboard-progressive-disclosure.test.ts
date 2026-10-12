@@ -71,7 +71,9 @@ test('the consequence axis is rendered on every non-read action and the command 
 
 test('the territory axis builds the operations bar and the System table', () => {
   const main = read('main.ts');
-  assert.match(main, /OPERATIONS\.map\(\(op\) => h\('button'/);
+  // The bar is split by job (Spend, Protect, Close, Allocate, Value) and setup (Data, Settings).
+  assert.match(main, /JOBS\.map\(\(op\) => h\('button'/);
+  assert.match(main, /UTILITIES\.map\(\(op\) => h\('button'/);
   const system = read('views/system.ts');
   assert.match(system, /TERRITORIES\.find\(\(t\) => t\.id === c\.territory\)\?\.label/);
   const territories = new Set(TERRITORIES.map((t) => t.id));

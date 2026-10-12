@@ -11,6 +11,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The dashboard is organised around jobs, not internal layers.**
+  - The bar reads Spend, Protect, Close, Allocate and Value, with Data and Settings set apart as setup. Each page title matches its tab.
+  - First run asks what you do ("I look after the money" or "I build with AI tools") instead of asking you to pick a wording register before you have seen anything.
+  - The basis line under the metered figure no longer prints "0% … ()" when nothing is weak. It says the figure is priced from the API rate card, or that it is mostly sample data.
+  - Realized value carries an "estimate, not a measurement" chip wherever it is shown, so it no longer reads with the same weight as metered spend.
+  - Spend bars are each model's share of the total, not of the largest model, and shares under 1% print as "<1%".
+  - Protect shows "limit reached · blocking" when today's spend is at or over the cap, instead of a calm "enforced" badge over an overspend. The limit card has its own "Change limit" button.
+
 - **The npm package no longer carries a maintainer's own usage figures.** 0.1.0 shipped `docs/RELEASE-GATE.md`, which quoted a personal ledger's request counts and dollar totals. The release records still ship as public evidence, but every finding is now stated without personal figures, in the package and on GitHub. A test packs the tarball and fails if a known personal figure appears in any shipped file.
 
 - **Stopping `segreant` stops what it started.** The launcher ran the runtime with a blocking call that could not forward signals, so a `SIGTERM` from a supervisor or `kill <pid>` ended the launcher and left a running `start` (proxy and dashboard) behind as an orphan. It now forwards SIGINT, SIGTERM and SIGHUP to the runtime and exits with its status.

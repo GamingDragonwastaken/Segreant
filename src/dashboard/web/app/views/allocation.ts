@@ -41,7 +41,7 @@ export function allocationView(): Node {
 
   return h('div', null,
     h('div', { class: 'view-head' },
-      h('h1', { class: 'view-title', text: 'Allocated' }),
+      h('h1', { class: 'view-title', text: 'Allocate' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'A derived split of locally estimated cost across cost centres, by recorded rule. Showback only — no settlement, no chargeback.'
         : 'Which team or project each pound of AI spend gets attributed to. This is a split of our own estimate — not a bill, and not something anyone is charged.' })),
