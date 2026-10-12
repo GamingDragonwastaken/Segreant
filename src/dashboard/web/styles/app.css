@@ -581,6 +581,12 @@ body.claim-open { overflow: hidden; }
   padding: var(--s3) var(--s4); margin-bottom: var(--s5); background: var(--panel-2);
 }
 .banner-demo { border-color: var(--violet); }
+.banner-stale { border-color: var(--coral); align-items: center; justify-content: space-between; }
+.banner.banner-stale strong { color: var(--coral); }
+.banner-retry { flex: none; padding: var(--s2) var(--s4); border-radius: var(--r-sm); font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+.banner-retry:hover { border-color: var(--muted); }
+/* Figures read before the server stopped: still legible, visibly not current. */
+.sheet.is-stale { opacity: 0.55; filter: saturate(0.35); transition: opacity var(--t) var(--ease); }
 .banner p { font-size: 13px; color: var(--muted); max-width: 70ch; }
 .banner strong { color: var(--text); }
 

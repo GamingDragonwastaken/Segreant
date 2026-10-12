@@ -103,7 +103,7 @@ function staleBanner(): Node {
     h('p', null,
       h('strong', { text: 'Segreant stopped responding. ' }),
       h('span', { text: () => `The figures below were read ${ageText(lastReadAt(), clock())} and are not current.` })),
-    h('button', { type: 'button', class: 'chip', onclick: () => window.location.reload(), text: 'Retry' }));
+    h('button', { type: 'button', class: 'btn-ghost banner-retry', onclick: () => window.location.reload(), text: 'Retry' }));
 }
 
 /**
@@ -313,7 +313,9 @@ function boot(): void {
       }),
       topbar(),
       () => (figuresStale() && lastReadAt() !== null ? staleBanner() : null),
-      h('div', { class: 'sheet' },
+      // The banner alone was easy to miss: the figures under it looked exactly
+      // as current as before. While stale, the sheet is dimmed as well.
+      h('div', { class: () => (figuresStale() && lastReadAt() !== null ? 'sheet is-stale' : 'sheet') },
         () => {
           const layers = chain();
           if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
