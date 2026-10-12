@@ -128,7 +128,7 @@ function demoBanner(): Node {
     h('span', { class: 'pill pill-demo', text: 'demo' }),
     h('p', null,
       h('strong', { text: 'Sample data. ' }),
-      'None of this was measured from your machine — import your real usage from Data to replace it.'));
+      'None of this was measured from your machine. To see your own usage, run the dashboard without --demo and import from Data.'));
 }
 
 /**
