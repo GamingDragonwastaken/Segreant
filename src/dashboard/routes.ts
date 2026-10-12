@@ -19,6 +19,7 @@ import type http from 'node:http';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { CLAIM_USES } from '../epistemic/claim-uses.ts';
 import { EXACT_ALLOCATION_EXCLUDED_FLOOR } from '../alloc/exact.ts';
+import { ALLOCATION_METHODS, MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type AllocationTarget, type MatchField } from '../alloc/rules.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import {
@@ -1011,6 +1012,161 @@ export function handleMarket({ res, config }: RouteContext): void {
   }
 }
 
+const ALLOCATION_WRITE_FIELDS = new Set(['op', 'apply', 'id', 'name', 'owner', 'method', 'targets', 'match', 'priority', 'from', 'to', 'until', 'note']);
+const ALLOCATION_WRITE_OPS = new Set(['centre', 'archive', 'rule', 'revoke', 'run']);
+
+function allocationId(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 64) throw new Error('id must be a non-empty string of at most 64 characters');
+  return value;
+}
+
+function allocationText(value: unknown, label: string, max: number): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > max) throw new Error(`${label} must be a non-empty string of at most ${max} characters`);
+  return value;
+}
+
+function allocationOptionalText(value: unknown, label: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`);
+  return value;
+}
+
+/** An ISO date or date-time, or null when absent. Mirrors parseTs in src/cli/allocCmd.ts. */
+function allocationTs(value: unknown, label: string): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new Error(`${label} must be an ISO date or date-time`);
+  if (!value.trim()) return null;
+  const ms = Date.parse(value.trim());
+  if (!Number.isFinite(ms)) throw new Error(`${label} must be an ISO date or date-time`);
+  return ms;
+}
+
+/** Same rules as parseTargets in src/cli/allocCmd.ts; the store validates ids and ratio ranges. */
+function allocationTargets(value: unknown): AllocationTarget[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('targets must name at least one cost centre');
+  return value.map((entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('each target must be { costCentreId, ratio }');
+    const target = entry as Record<string, unknown>;
+    const costCentreId = allocationId(target.costCentreId);
+    if (typeof target.ratio !== 'number' || !Number.isFinite(target.ratio)) throw new Error(`target ${costCentreId}: ratio must be a number`);
+    return { costCentreId, ratio: target.ratio };
+  });
+}
+
+/** Same rules as parseMatch in src/cli/allocCmd.ts: known fields only, empty values are a wildcard. */
+function allocationMatch(value: unknown): AllocationMatch {
+  const match: AllocationMatch = {};
+  if (value === undefined || value === null) return match;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('match must be an object');
+  for (const [key, field] of Object.entries(value as Record<string, unknown>)) {
+    if (!(MATCH_FIELDS as readonly string[]).includes(key)) throw new Error(`match.${key} is not a match field`);
+    if (typeof field !== 'string') throw new Error(`match.${key} must be a string`);
+    if (field.trim()) match[key as MatchField] = field.trim();
+  }
+  return match;
+}
+
+/**
+ * Allocation changes from the GUI: the same Store calls, validation and
+ * semantics as `segreant alloc`. Preview never writes; `run` with apply:true
+ * records the run. Demo mode refuses every write, and allows only the preview.
+ */
+export function handleAllocationWrite({ req, res, store }: RouteContext): void {
+  void (async () => {
+    try {
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      for await (const part of req) {
+        const chunk = part as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
+          req.resume();
+          return json(res, 413, { error: 'allocation request exceeds bounded dashboard limit' });
+        }
+        chunks.push(chunk);
+      }
+      const raw: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('allocation request must be an object');
+      const body = raw as Record<string, unknown>;
+      if (Object.keys(body).some((key) => !ALLOCATION_WRITE_FIELDS.has(key))) throw new Error('allocation request has an unknown field');
+      if (typeof body.op !== 'string' || !ALLOCATION_WRITE_OPS.has(body.op)) throw new Error('op must be one of centre, archive, rule, revoke, run');
+      const op = body.op as 'centre' | 'archive' | 'rule' | 'revoke' | 'run';
+      if (body.apply !== undefined && typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
+      const apply = body.apply === true;
+      // The one allocation request demo mode answers: a preview, which records nothing.
+      if (isDemo() && !(op === 'run' && !apply)) {
+        return json(res, 409, { error: new DemoWriteBlockedError('the allocation change').message });
+      }
+
+      if (op === 'centre') {
+        const costCentre = store.upsertCostCentre({
+          costCentreId: allocationId(body.id),
+          name: allocationText(body.name, 'name', 120),
+          owner: allocationOptionalText(body.owner, 'owner'),
+        });
+        return json(res, 200, { ok: true, op, applied: true, message: `Cost centre "${costCentre.costCentreId}" saved.`, costCentre });
+      }
+
+      if (op === 'archive') {
+        const id = allocationId(body.id);
+        if (!store.archiveCostCentre(id)) return json(res, 404, { error: `No open cost centre "${id}".` });
+        return json(res, 200, { ok: true, op, applied: true, message: `Archived "${id}". Past runs keep it; new spend will not reach it.` });
+      }
+
+      if (op === 'rule') {
+        const method = body.method;
+        if (typeof method !== 'string' || !(ALLOCATION_METHODS as readonly string[]).includes(method)) {
+          throw new Error(`method must be one of ${ALLOCATION_METHODS.join(', ')}`);
+        }
+        const priority = body.priority === undefined ? 100 : body.priority;
+        if (typeof priority !== 'number' || !Number.isFinite(priority)) throw new Error('priority must be a number');
+        const rule = store.saveAllocationRule({
+          ruleId: allocationId(body.id),
+          method: method as AllocationMethod,
+          match: allocationMatch(body.match),
+          targets: allocationTargets(body.targets),
+          priority,
+          // Default to the epoch so a first rule covers existing history, as the CLI does.
+          effectiveFromMs: allocationTs(body.from, 'from') ?? 0,
+          effectiveToMs: allocationTs(body.until, 'until'),
+          revokedAtMs: null,
+          owner: allocationOptionalText(body.owner, 'owner'),
+          note: allocationOptionalText(body.note, 'note'),
+        });
+        const superseded = rule.version > 1
+          ? ` v${rule.version - 1} closed at ${new Date(rule.effectiveFromMs).toISOString()} and retained — past periods still re-run under it.`
+          : '';
+        return json(res, 200, { ok: true, op, applied: true, rule, message: `Rule "${rule.ruleId}" v${rule.version} (${rule.method}) saved.${superseded}` });
+      }
+
+      if (op === 'revoke') {
+        const id = allocationId(body.id);
+        const revoked = store.revokeAllocationRule(id);
+        if (revoked === 0) return json(res, 404, { error: `No open rule "${id}".` });
+        return json(res, 200, { ok: true, op, applied: true, revoked, message: `Revoked ${revoked} open version(s) of "${id}". Rows retained.` });
+      }
+
+      const from = allocationTs(body.from, 'from');
+      const to = allocationTs(body.to, 'to');
+      if (from === null || to === null) throw new Error('from and to are required ISO dates or date-times');
+      if (to <= from) throw new Error('to must be after from');
+      const result = store.allocatePeriod(from, to);
+      if (!result.conserves) return json(res, 500, { error: 'Allocation did not conserve its input. Refusing to show or record it.' });
+      const allocationRunId = apply ? store.saveAllocationRun(result) : null;
+      return json(res, 200, {
+        ok: true,
+        op,
+        applied: apply,
+        allocationRunId,
+        message: apply ? 'Recorded as an immutable derived run.' : 'Not recorded. Apply to record this run.',
+        result,
+      });
+    } catch (error) {
+      return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+    }
+  })();
+}
+
 /** Same local-only POST guard as other mutations. A POST with apply:false is
  * the preview; only a second deliberate POST with apply:true appends evidence. */
 export function handleOutcomeRecord({ req, res, store, config }: RouteContext): void {
@@ -1250,6 +1406,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('overview', handleOverview),
   apiRoute('billing', handleBilling),
   apiRoute('allocation', handleAllocation),
+  apiRoute('allocation-write', handleAllocationWrite),
   apiRoute('economic', handleEconomic),
   apiRoute('pricing', handlePricing),
   apiRoute('export-csv', handleExportCsv),
