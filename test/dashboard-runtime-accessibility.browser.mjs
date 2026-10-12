@@ -25,7 +25,7 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
   const store = new Store(':memory:');
   const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'browser-a11y-test' });
   const base = await listen(server);
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   const consoleErrors = [];
@@ -40,15 +40,15 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
   try {
     await page.goto(base + '/', { waitUntil: 'networkidle' });
 
-    const firstRun = page.getByRole('dialog', { name: 'How should Segreant talk to you?' });
+    const firstRun = page.getByRole('dialog', { name: 'What brings you to Segreant?' });
     await firstRun.waitFor({ state: 'visible' });
-    const plain = firstRun.getByRole('button', { name: /Plain language/ });
-    const precise = firstRun.getByRole('button', { name: /Precise/ });
+    const plain = firstRun.getByRole('button', { name: /look after the money/ });
+    const precise = firstRun.getByRole('button', { name: /build with AI tools/ });
     await plain.focus();
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('Plain language')), true, 'first-run focus must land on the first choice');
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('look after the money')), true, 'first-run focus must land on the first choice');
     await page.keyboard.press('Escape');
     assert.equal(await firstRun.isVisible(), true, 'Escape must not dismiss the required first-run choice');
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('Plain language')), true, 'Escape must return focus to the first choice');
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('look after the money')), true, 'Escape must return focus to the first choice');
     await precise.click();
     await page.locator('#main').waitFor({ state: 'visible' });
 

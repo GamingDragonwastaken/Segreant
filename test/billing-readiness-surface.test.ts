@@ -2,7 +2,7 @@
  * Reconciliation readiness has to reach the GUI, not just the terminal.
  *
  * On the owner's real ledger every OpenAI row arrived by native import, so a
- * reconciliation would match $0 of $832.33. The CLI says so, at length, before
+ * reconciliation would match $0 of the imported OpenAI spend. The CLI says so, at length, before
  * the credential step — minting an OpenAI Admin key is a real permission
  * decision, and discovering afterwards that nothing would have counted is
  * discovering it too late.
