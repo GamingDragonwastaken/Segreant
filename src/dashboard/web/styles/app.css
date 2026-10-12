@@ -945,3 +945,20 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
   .fact-line { flex-direction: column; gap: var(--s1); }
   .step > .facts, .step > .form-hint { margin-left: 0; }
 }
+
+/* ---------- Folds (long evidence, closed by default) ------------------------ */
+.fold { margin-top: var(--s3); border-top: 1px solid var(--line-soft); }
+.fold:last-of-type { border-bottom: 1px solid var(--line-soft); }
+.fold-summary, .parity-summary { cursor: pointer; padding: var(--s3) 0; list-style: revert; color: var(--text); font-size: 14px; }
+.fold-summary:hover, .parity-summary:hover { color: var(--gold-text); }
+.fold[open] > .fold-summary { margin-bottom: var(--s2); }
+.fold-head { margin-top: var(--s10); }
+.parity-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); }
+.parity-summary .section-title { margin: 0; }
+/* A flex summary loses the native disclosure triangle; without one, nothing says
+   this line opens. */
+.parity-summary { list-style: none; }
+.parity-summary::-webkit-details-marker { display: none; }
+.parity-summary::before { content: 'B8'; color: var(--muted); }
+.parity-details[open] > .parity-summary::before { content: 'BE'; }
+.parity-counts { color: var(--muted); font-size: 13px; }
