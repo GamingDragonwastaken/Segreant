@@ -184,7 +184,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new ApiError(detail.slice(0, 400) || `${response.status} ${response.statusText}`, response.status, path);
+    // Servers answer errors as { error: { code, message } }. Show the human message,
+    // never the raw JSON envelope; fall back to the text for anything else.
+    let human: string | null = null;
+    try {
+      const parsed: unknown = JSON.parse(detail);
+      if (
+        typeof parsed === 'object' && parsed !== null && 'error' in parsed &&
+        typeof (parsed as { error: unknown }).error === 'object' && (parsed as { error: unknown }).error !== null &&
+        typeof (parsed as { error: { message?: unknown } }).error.message === 'string'
+      ) {
+        human = (parsed as { error: { message: string } }).error.message;
+      }
+    } catch {
+      // Not JSON: keep the text fallback below.
+    }
+    throw new ApiError(human ?? (detail.slice(0, 400) || `${response.status} ${response.statusText}`), response.status, path);
   }
 
   const payload: unknown = await response.json();

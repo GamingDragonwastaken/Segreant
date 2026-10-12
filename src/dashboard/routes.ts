@@ -27,7 +27,7 @@ import {
   meteredClaimSupport,
   realizedClaimSupport,
 } from './claim-support.ts';
-import { isDemo, type SegreantConfig } from '../config.ts';
+import { isDemo, DemoReadOnlyError, type SegreantConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
@@ -1144,6 +1144,14 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       }
       if (err instanceof SyntaxError) {
         return json(res, 400, { error: { code: 'SETTINGS_INVALID_JSON', message: 'settings request body must be valid JSON' } });
+      }
+      if (err instanceof DemoReadOnlyError || (err instanceof Error && err.name === 'DemoReadOnlyError')) {
+        return json(res, 409, {
+          error: {
+            code: 'SETTINGS_DEMO_READ_ONLY',
+            message: "This dashboard is showing sample data, so settings can't be changed here. Start Segreant without --demo to change your own settings.",
+          },
+        });
       }
       return json(res, 500, { error: { code: 'SETTINGS_UPDATE_FAILED', message: 'settings could not be persisted' } });
     }
