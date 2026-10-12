@@ -11,6 +11,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Sample data and real data stay apart, and stale or unknown figures say so.**
+  - `import --demo` appended real usage into `demo.db`, where it was summed with synthetic rows under the sample-data label. A month read $89.71, made of $0.05 real and $89.66 sample. Imports and the dashboard's import and scan actions now refuse in demo mode and say how to bring in your own usage. The dashboard copy no longer promises that importing replaces the sample.
+  - When the local server stopped, the dashboard kept showing its last figures as current, with no timer to notice. It now re-checks every 15 seconds while figures are shown. When the server is gone, a banner states that the figures are not current and how old they are, the figures dim, and Retry reloads the page.
+  - The classic dashboard showed "latest 01/01/1970" for billing imports that had never happened. A missing time now shows as "—".
+
 - **The dashboard's value read answers repeat loads from memory.** With spend recorded but no `scan` yet, `/api/value` re-ran git realization for its start folder on every load (13-30 s). It is now cached in the dashboard process for up to 10 minutes. The cache key covers the query, the repository and its HEAD, the whole config, and change marks on every ledger table the report reads, so any change recomputes. The payload keeps its original `generatedAt`, and nothing is written to the ledger. Measured: 30.2 s, then 0.16 s and 0.16 s.
 
 - **Kept means one thing everywhere.**
