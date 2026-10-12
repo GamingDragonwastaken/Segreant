@@ -7,7 +7,7 @@
 
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
-import { dbPath, loadConfig } from '../config.ts';
+import { dbPath, loadConfig, isDemo, DemoWriteBlockedError } from '../config.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import {
   realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS, SCAN_VALUE_BUDGET_MS,
@@ -280,6 +280,13 @@ export async function cmdImport(flags: Flags): Promise<void> {
   if (targets.length === 0) {
     console.error(`  Usage: segreant import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
     console.error('  Native metering — no base URL, no key. Reads what the tool already logs locally.');
+    process.exitCode = 1;
+    return;
+  }
+
+  // Demo mode opens demo.db. Real usage must not land there, under sample-data labels.
+  if (isDemo()) {
+    console.error(`  ${new DemoWriteBlockedError('the import').message}`);
     process.exitCode = 1;
     return;
   }
