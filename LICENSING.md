@@ -20,9 +20,9 @@ No account, key, payment or permission is needed for any of that.
 1. **Offer Segreant as a service.** You may not run it, or a modified version
    of it, as a hosted or managed service for other people or other companies.
    Running it for your own organization is fine.
-2. **Sell Segreant itself.** You may not sell, rent or charge a licence fee for
-   Segreant or a modified version of it, including a copy relabelled under
-   another name.
+2. **Sell Segreant itself.** You may not sell, rent, sublicense or otherwise
+   charge a fee for Segreant or a modified version of it, including a copy
+   relabelled under another name.
 
 ## Every version becomes fully open source
 
@@ -56,5 +56,7 @@ terms, open a
   under the PolyForm Noncommercial License 1.0.0 (from 2026-10-08 with an
   individual use permission). Those copies keep the terms they were published
   with; every later version is under the terms above.
+- The npm package `segreant` 0.1.0 (2026-10-08) is under this license
+  (`BUSL-1.1` in its package metadata and LICENSE file).
 
 *This page explains the license; it is not legal advice.*
