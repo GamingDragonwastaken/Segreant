@@ -7,7 +7,7 @@
 
 import type { Store, ProviderConnection } from '../store/db.ts';
 import type { SegreantConfig, BudgetConfig, FeaturesConfig, FeatureKey } from '../config.ts';
-import { segreantHome, configPath, dbPath, validateBudgetConfig, FEATURE_DEFAULTS } from '../config.ts';
+import { segreantHome, configPath, dbPath, validateBudgetConfig, FEATURE_DEFAULTS, isDemo } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 
@@ -21,6 +21,8 @@ export interface SettingsSnapshot {
   retentionDays: number;
   proposalRetentionDays: number;
   metadataOnly: boolean;
+  /** True in demo mode: the settings are sample data and every write is refused. */
+  demo: boolean;
   features: FeaturesConfig;
   budget: BudgetConfig;
   enforcement: BudgetEnforcementDescriptor;
@@ -50,6 +52,7 @@ export function buildSettingsSnapshot(
     retentionDays: config.retentionDays,
     proposalRetentionDays: config.proposalRetentionDays,
     metadataOnly: config.metadataOnly,
+    demo: isDemo(),
     features: { ...config.features },
     budget: config.budget,
     enforcement: describeBudgetEnforcement(config.budget),
