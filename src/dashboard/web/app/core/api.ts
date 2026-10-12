@@ -58,9 +58,14 @@ import type {
   MarketConsensusPayload,
   ReconciliationRunRecord,
   CostCentre,
+  AllocationTarget,
   AllocationRule,
+  AllocationCentreShare,
+  AllocationUnallocated,
+  AllocationRunResultPayload,
   AllocationPayload,
   AllocationRunRecord,
+  AllocationWritePayload,
   Matured,
   ValueProjectPayload,
   ValuePayload,
@@ -119,9 +124,14 @@ export type {
   MarketConsensusPayload,
   ReconciliationRunRecord,
   CostCentre,
+  AllocationTarget,
   AllocationRule,
+  AllocationCentreShare,
+  AllocationUnallocated,
+  AllocationRunResultPayload,
   AllocationPayload,
   AllocationRunRecord,
+  AllocationWritePayload,
   Matured,
   ValueProjectPayload,
   ValuePayload,
@@ -279,6 +289,9 @@ export const api = {
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
+    /** Cost centres, rules and runs. A run with `apply: false` is a preview and records nothing. */
+    allocation: (body: Record<string, unknown>) =>
+      request<AllocationWritePayload>(routePath('allocation-write'), { method: 'POST', body: JSON.stringify(body) }),
     outcome: (input: Record<string, unknown>, apply: boolean) =>
       request<OutcomeRecordPayload>(routePath('outcome-record'), { method: 'POST', body: JSON.stringify({ ...input, apply }) }),
     settings: (patch: Record<string, unknown>) =>

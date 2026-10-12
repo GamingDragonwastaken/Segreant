@@ -183,11 +183,18 @@ test('matured units with no labour rate are units, not dollars', () => {
   assert.deepEqual(realized.inspection.missingEvidence, ['a labour rate, so realized work can be priced']);
 });
 
+/** A recorded run as `store.allocationRuns()` sends it: the fixture carries a result. */
+const RUN_RESULT = {
+  periodStartMs: Date.UTC(2026, 6, 1), periodEndMs: Date.UTC(2026, 7, 1),
+  totalMicros: 0, allocatedMicros: 0, unallocatedMicros: 0,
+  byCostCentre: [], unallocated: [], sourceBases: [], conserves: true,
+};
+
 test('allocation and realized state the boundary of what they can enforce', () => {
   const allocation: AllocationPayload = {
     demo: false, kind: 'showback', trust: 'local_rule', basis: 'metered_request_cost',
-    excludedFrom: ['provider_invoice'], costCentres: [{ id: 'a' }], rules: [],
-    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    excludedFrom: ['provider_invoice'], costCentres: [{ costCentreId: 'a', name: 'A', owner: null, createdAtMs: 0, archivedAtMs: null }], rules: [],
+    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2), result: RUN_RESULT }],
     claimSupport: allocatedClaimSupport({ costCentreCount: 1, runCount: 1 }),
     reconciliation: { everRun: false, latestComputedAtMs: null },
   };
@@ -235,7 +242,7 @@ test('an unreconciled allocation says its inputs were never checked against a bi
   const allocation: AllocationPayload = {
     demo: false, kind: 'derived_cost_allocation', trust: 'derived_allocation_of_local_estimates',
     basis: 'showback_only', excludedFrom: [], costCentres: [], rules: [],
-    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2), result: RUN_RESULT }],
     claimSupport: allocatedClaimSupport({ costCentreCount: 0, runCount: 1 }),
     reconciliation: { everRun: false, latestComputedAtMs: null },
   };
