@@ -374,7 +374,7 @@ test('plain-register money never renders a real amount as zero', async () => {
   // Ordinary amounts are untouched.
   assert.equal(usd(0.01, { precise: false }), '$0.01');
   assert.equal(usd(12.5, { precise: false }), '$12.50');
-  assert.equal(usd(1574.42, { precise: false }), '$1,574.42');
+  assert.equal(usd(2468.13, { precise: false }), '$2,468.13');
 
   // The invariant, stated directly: no non-zero amount may format as all zeros.
   for (const value of [0.009, 0.005, 0.0011, 0.0002, 0.00001, 0.000001, 5e-7]) {
