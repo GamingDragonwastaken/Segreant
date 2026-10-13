@@ -29,6 +29,42 @@ The main package intentionally has zero runtime dependencies. Do not add one
 without an explicit architectural decision and an update to the product and data
 boundary documentation.
 
+### Browser tests with installed Chrome
+
+From a fresh clone, use Node.js 24 or newer and run `npm ci --ignore-scripts`.
+The lockfile installs the existing Playwright and axe development tooling; no
+manifest change or runtime dependency is needed. If Chrome is already installed,
+point `SEGREANT_CHROME` at its executable and run the suite:
+
+```powershell
+# PowerShell on Windows
+$env:SEGREANT_CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+npm run test:browser
+```
+
+```bash
+# macOS
+SEGREANT_CHROME='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:browser
+# Linux (adjust to the executable installed on your system)
+SEGREANT_CHROME=/usr/bin/google-chrome npm run test:browser
+```
+
+This uses installed Chrome without downloading Playwright's Chromium. When
+Chrome is unavailable, leave `SEGREANT_CHROME` unset, run
+`npx playwright install --with-deps chromium`, then `npm run test:browser`;
+that is the browser CI job's path. The suite rebuilds both dashboard domains,
+runs axe and the outage checks, and completes Allocate, Close and Statement
+against a disposable ordinary ledger. Its phone checks cover all eight routes
+at 375 × 812 and require primary buttons to be at least 44 px tall. No provider
+key, proxy server, or personal ledger is needed. Servers and browser contexts are
+closed in `finally`, including on assertion failure.
+
+The job fixture sets only the browser's date to the preceding month's 15th.
+That makes month navigation deterministic and keeps its provider days more than
+48 hours in the past for reconciliation on every calendar day. The server keeps
+its real clock. To save optional job screenshots, set
+`SEGREANT_BROWSER_ARTIFACTS` to a directory before running the suite.
+
 ### Three compilation domains, one command checks one
 
 `npm run typecheck` runs only the root Node pass. There are three, and green on

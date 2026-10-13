@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.
+
 - **A monthly statement, as the finance home.**
   - A new Statement page shows one calendar month: what Segreant measured, what the provider billed, how it was split across cost centres, and what the work produced. The four sit side by side, each with its own basis, and are never added together.
   - A billed comparison or a split is labelled with its own dates ("covers part of the month only", "covers the month so far"). It is never prorated into the month.
