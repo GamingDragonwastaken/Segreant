@@ -226,10 +226,12 @@ function readinessPanel(d: BillingPayload): Node | null {
   if (!c) {
     if (!truncated) return null;
     const before = r.localLedgerRetention.prunedBeforeMs;
+    const boundary = typeof before === 'number' && Number.isFinite(before) && before > 0 && before <= 8.64e15
+      ? new Date(before).toISOString().slice(0, 10) : 'an unrecorded boundary';
     return h('div', { class: 'drawer-warning', style: 'margin-top: var(--s4)' },
       h('strong', { text: 'This ledger was emptied by retention' }),
       h('p', { text: () => (isPrecise()
-        ? `No OpenAI rows survive, and retention deleted rows before ${before === null ? 'an unrecorded boundary' : new Date(before).toISOString().slice(0, 10)}. Whether any OpenAI spend was metered here cannot be read from the ledger, so nothing about what a reconciliation would match is stated.`
+        ? `No OpenAI rows survive, and retention deleted rows before ${boundary}. Whether any OpenAI spend was metered here cannot be read from the ledger, so nothing about what a reconciliation would match is stated.`
         : `Your older records were deleted, so there is no OpenAI spend left here to check. We cannot tell you whether there ever was any — only that it is gone.`) }));
   }
   const uncountable = c.importedUsd + c.proxyOffScopeUsd;

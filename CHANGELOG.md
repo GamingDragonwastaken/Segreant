@@ -17,6 +17,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - **Page names agree everywhere.** The capability table and the Allocate summary still said Evidence, Control, Allocation and System for pages the navigation calls Close, Protect, Allocate and Settings.
 - **The Settings disclosure marker renders.** A mangled CSS escape drew a missing-glyph box before "What this dashboard can and cannot do". A guard test now refuses stray control characters in source, which also restored three patterns a publication-lock test had silently stopped checking.
 
+- **Value opens when no value has been computed yet.** The browser rejected the server's `projects: null` response as a broken array and stopped loading the page. Its contracts now accept the uncomputed state as unknown, while checking populated project rows as before.
+
+- CLI JSON reads now include `schemaVersion: 1`. Array responses, including
+  request exports, place their records in `data` beside the version; object
+  responses keep their fields. The stability promise is in the CLI JSON contract.
+
 - **Financial evidence keeps its own scope and dates.** Allocate no longer calls the whole input ledger checked after one provider comparison; it states that the comparison covers its own project and dates. Statement and Close label provider periods in UTC, so local time cannot add or remove a day. Plain rule and project confirmations explain their consequences without raw status tokens. Rule messages distinguish unchanged recorded runs from a new preview, which follows effective dates and can differ for an earlier period.
 
 - Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.
@@ -78,6 +84,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - `import --demo` appended real usage into `demo.db`, where it was summed with synthetic rows under the sample-data label. A month read $89.71, made of $0.05 real and $89.66 sample. Imports and the dashboard's import and scan actions now refuse in demo mode and say how to bring in your own usage. The dashboard copy no longer promises that importing replaces the sample.
   - When the local server stopped, the dashboard kept showing its last figures as current, with no timer to notice. It now re-checks every 15 seconds while figures are shown. When the server is gone, a banner states that the figures are not current and how old they are, the figures dim, and Retry reloads the page.
   - The classic dashboard showed "latest 01/01/1970" for billing imports that had never happened. A missing time now shows as "—".
+
+- **Missing evidence no longer looks like a measured zero or a 1970 date.** The Spend, claim, and CLI retention notices now say "unknown" when the deletion boundary has no recorded time. An unavailable billing, allocation, or outcome report is identified as unavailable instead of described as empty. OpenCode rows without a valid time are left out of imported totals. A row with no reported cost keeps its usage and is priced from its tokens at the list rate, or as a labelled estimate when the model is not listed; a row from a provider with no list price is left out. An explicitly reported zero cost still counts. Data now calls its request total a metered cost estimate, and a public model without a price no longer displays $0.
 
 - **Public documents agree with the licence and with what shipped.**
   - README, LICENSING, PRODUCT, the release gate, the website and the price-card notes now agree on several points: 0.1.0 is on npm and 0.2.0 is not; the BUSL-1.1 grant allows use at work (the badge said "free for personal use"); billed cost also comes from the OpenAI Costs API; and the Gemini 3.x rates and read dates are the ones the card lists. No price changed.

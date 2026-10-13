@@ -43,7 +43,8 @@ export interface ClaimInputs {
  * the age of the screen as the age of the evidence.
  */
 const iso = (ms: number | null | undefined): string =>
-  typeof ms === 'number' ? new Date(ms).toISOString() : 'not established';
+  typeof ms === 'number' && Number.isFinite(ms) && ms > 0 && ms <= 8.64e15
+    ? new Date(ms).toISOString() : 'not established';
 
 /**
  * Whether any payload behind the spine is seeded sample data. The spine shows
@@ -180,7 +181,9 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // The band deliberately carries no dollar in any branch: this is an evidence
     // claim about whether a comparison happened, not a second cost figure.
     support: b?.claimSupport ?? unreachableSupport('not_a_money_claim'),
-    basis: billedNote
+    basis: b === null
+      ? 'could not read the billing report'
+      : billedNote
       // A reconciliation whose provider snapshots contradicted each other is not
       // a reconciliation that established anything, and saying "reconciled" here
       // while the axis says `conflicted` is the disagreement this line exists to
@@ -194,7 +197,9 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // A contradiction with no next action leaves an operator looking at a
     // problem they are not told how to work on. Resolving a disagreement is a
     // different task from collecting more evidence, so it gets its own sentence.
-    nextStep: b?.claimSupport && projectRenderedAxes(b.claimSupport.profile).epistemic === 'conflicted'
+    nextStep: b === null
+      ? 'Check that Segreant is running, then retry the billing report.'
+      : b?.claimSupport && projectRenderedAxes(b.claimSupport.profile).epistemic === 'conflicted'
       ? 'Re-observe the disagreeing days before relying on this reconciliation.'
       : runs > 0
         ? undefined
@@ -233,12 +238,16 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // Showback: the claim is whose cost it is, not how much, so the band never
     // carries a dollar.
     support: a?.claimSupport ?? unreachableSupport('not_a_money_claim'),
-    basis: allocRuns > 0
+    basis: a === null
+      ? 'could not read the allocation report'
+      : allocRuns > 0
       ? 'apportioned by recorded rules — showback only'
       : centres > 0
         ? `${centres} cost centre${centres === 1 ? '' : 's'} defined, no allocation recorded`
         : 'no cost centres and no rules yet',
-    nextStep: allocRuns > 0 ? undefined : 'Define a cost centre, then run an allocation.',
+    nextStep: a === null
+      ? 'Check that Segreant is running, then retry the allocation report.'
+      : allocRuns > 0 ? undefined : 'Define a cost centre, then run an allocation.',
     inspection: {
       provenance: a?.basis ?? 'no allocation basis recorded',
       scope: a
@@ -312,12 +321,16 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // produced nothing" — an inference from a missing input, in the band whose
     // entire job is to keep realized value distinct from the three cost claims.
     support: v?.claimSupport ?? unreachableSupport('withheld_unsupported'),
-    basis: realizedUnits === 0
+    basis: v === null
+      ? 'could not read the outcome report'
+      : realizedUnits === 0
       ? 'no work units have matured into verified outcomes'
       : valued
         ? `${realizedUnits} of ${matured?.units ?? 0} matured units shipped and survived; manual-equivalent value, net of rework`
         : `${realizedUnits} of ${matured?.units ?? 0} units matured, but no labour rate is set to price what they produced`,
-    nextStep: realizedUnits === 0
+    nextStep: v === null
+      ? 'Check that Segreant is running, then retry the outcome report.'
+      : realizedUnits === 0
       ? 'Connect a repository so outcomes can be observed.'
       : valued
         ? undefined
@@ -346,7 +359,9 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
         ? 'repository history + recorded outcome signals'
         : (v?.valueSource ?? 'none'),
       assumptions: v?.roi?.notes ? [...v.roi.notes] : [],
-      missingEvidence: realizedUnits === 0
+      missingEvidence: v === null
+        ? ['a readable outcome report']
+        : realizedUnits === 0
         ? ['matured outcome evidence']
         : valued
           ? []

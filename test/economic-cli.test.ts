@@ -211,7 +211,9 @@ test('economic CLI export preserves effective-at context and requires a target f
       '--effective-at', '2026-08-01T00:00:00.000Z', '--json',
     ], db);
     assert.equal(exported.code, 0, exported.stderr);
-    const rows = JSON.parse(exported.stdout) as Array<{ translatedAmount: string | null; translatedCurrency: string | null; fxRateSource: string | null; fxEffectiveAt: string | null; fxRateAsOf: string | null }>;
+    const envelope = JSON.parse(exported.stdout) as { schemaVersion: number; data: Array<{ translatedAmount: string | null; translatedCurrency: string | null; fxRateSource: string | null; fxEffectiveAt: string | null; fxRateAsOf: string | null }> };
+    assert.equal(envelope.schemaVersion, 1);
+    const rows = envelope.data;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.translatedAmount, '1');
     assert.equal(rows[0]?.translatedCurrency, 'EUR');
