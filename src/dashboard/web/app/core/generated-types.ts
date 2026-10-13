@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 0fed6abdd84adde9d31f06fd3a9517d8a78328510afb0e39826b0ba627202446 */
+/** Source SHA-256: 8a403a6bcf4d59f01a297d4d39bf765a3f593cc24f581f301a687dd53c114693 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1219,8 +1219,8 @@ export interface ValuePayload {
   claimSupport: ClaimSupportPayload;
 
   allocation: unknown;
-  /** Per-project value rows; classic rendering consumes this list directly. */
-  projects?: ValueProjectPayload[];
+  /** Null when no value spine was computed; populated rows otherwise. Unknown is never an empty measured list. */
+  projects: ValueProjectPayload[] | null;
   frontier?: FrontierPayload | null;
   /** 'git' | 'store' | null. Null means no matured outcomes could be observed. */
   valueSource?: string | null;
