@@ -21,7 +21,7 @@ import { CLAIM_USES } from '../epistemic/claim-uses.ts';
 import { EXACT_ALLOCATION_EXCLUDED_FLOOR } from '../alloc/exact.ts';
 import { ALLOCATION_METHODS, MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type AllocationTarget, type MatchField } from '../alloc/rules.ts';
 import { existsSync, statSync } from 'node:fs';
-import { basename } from 'node:path';
+import { posix, win32 } from 'node:path';
 import type { Store } from '../store/db.ts';
 import {
   allocatedClaimSupport,
@@ -1329,7 +1329,7 @@ export function handleAllocationWrite({ req, res, store }: RouteContext): void {
         result,
       });
     } catch (error) {
-      return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return json(res, 400, { error: error instanceof SyntaxError ? 'allocation request must contain valid JSON' : error instanceof Error ? error.message : String(error) });
     }
   })();
 }
@@ -1370,8 +1370,9 @@ function billingOptionalText(value: unknown, label: string): string | null {
 function billingReconcile(store: Store, body: Record<string, unknown>, apply: boolean): { status: number; payload: Record<string, unknown> } {
   let materialityUsd: number | undefined;
   if (body.materialityUsd !== undefined) {
-    if (typeof body.materialityUsd !== 'number' || !Number.isFinite(body.materialityUsd) || body.materialityUsd < 0) {
-      throw new Error('materialityUsd must be a non-negative dollar amount');
+    if (typeof body.materialityUsd !== 'number' || body.materialityUsd < 0
+      || !Number.isSafeInteger(Math.round(body.materialityUsd * 1_000_000))) {
+      throw new Error('materialityUsd must be a non-negative dollar amount within the safe integer microdollar range');
     }
     materialityUsd = body.materialityUsd;
   }
@@ -1530,7 +1531,9 @@ export function handleBillingWrite({ req, res, store }: RouteContext): void {
 
       if (op === 'import') {
         const fileName = billingText(body.fileName, 'fileName', 200);
-        if (basename(fileName) !== fileName) throw new Error('fileName must be a basename, without directories');
+        if (fileName === '.' || fileName === '..' || posix.basename(fileName) !== fileName || win32.basename(fileName) !== fileName) {
+          throw new Error('fileName must be an ordinary basename, without directories');
+        }
         const encoded = billingText(body.contentBase64, 'contentBase64', BILLING_WRITE_BODY_BYTES);
         if (encoded.length % 4 !== 0 || !BASE64.test(encoded)) throw new Error('contentBase64 must be the file\'s bytes in standard base64');
         // The file's own bytes are what is hashed, exactly as the CLI hashes the file on disk.
@@ -1560,7 +1563,7 @@ export function handleBillingWrite({ req, res, store }: RouteContext): void {
         : billingScope(store, body, apply);
       return billingJson(res, outcome.status, outcome.payload);
     } catch (error) {
-      return billingJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return billingJson(res, 400, { error: error instanceof SyntaxError ? 'billing request must contain valid JSON' : error instanceof Error ? error.message : String(error) });
     }
   })();
 }
