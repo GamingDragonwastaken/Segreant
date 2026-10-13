@@ -1301,7 +1301,7 @@ export function handleAllocationWrite({ req, res, store }: RouteContext): void {
           note: allocationOptionalText(body.note, 'note'),
         });
         const superseded = rule.version > 1
-          ? ` v${rule.version - 1} closed at ${new Date(rule.effectiveFromMs).toISOString()} and retained — past periods still re-run under it.`
+          ? ` v${rule.version - 1} closed at ${new Date(rule.effectiveFromMs).toISOString()} and retained — recorded runs are unchanged; new previews use effective dates.`
           : '';
         return json(res, 200, { ok: true, op, applied: true, rule, message: `Rule "${rule.ruleId}" v${rule.version} (${rule.method}) saved.${superseded}` });
       }

@@ -99,9 +99,9 @@ export function dateTime(ms: number | null | undefined): string {
   });
 }
 
-export function date(ms: number | null | undefined): string {
+export function date(ms: number | null | undefined, timeZone?: 'UTC'): string {
   if (!ms) return '—';
-  return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', ...(timeZone ? { timeZone } : {}) });
 }
 
 export function relative(ms: number | null | undefined): string {
