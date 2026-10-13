@@ -76,6 +76,9 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
     assert.equal(overflow, false, 'narrow dashboard viewport must not introduce horizontal overflow');
     const narrowAxe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
     assert.deepEqual(narrowAxe.violations, [], JSON.stringify(narrowAxe.violations, null, 2));
+    await page.getByRole('button', { name: 'Value', exact: true }).click();
+    await page.getByRole('heading', { name: 'Realized value is not established', exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').count(), 0, 'uncomputed Value must load as missing evidence, not a wire-contract error');
     assert.deepEqual(consoleErrors, [], `browser console errors/warnings: ${consoleErrors.join('; ')}`);
     assert.deepEqual(pageErrors, [], `browser page errors: ${pageErrors.join('; ')}`);
     assert.deepEqual(unexpectedRequests, [], `dashboard attempted non-loopback requests: ${unexpectedRequests.join('; ')}`);

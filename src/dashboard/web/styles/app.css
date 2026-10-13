@@ -940,6 +940,7 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 
 @media (max-width: 820px) {
   .step-lede, .step > .facts, .step > .inline-form, .step > .run-panel, .step > p.drawer-muted { margin-left: 0; }
+  .btn-commit, .btn-ghost { min-height: 44px; }
   .form-row > .btn-commit, .form-row > .btn-ghost, .form-actions > .btn-commit { width: 100%; }
   .preview-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .fact-line { flex-direction: column; gap: var(--s1); }
