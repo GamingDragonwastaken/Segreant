@@ -18,7 +18,8 @@ function requiredPath(flags: Flags, name: string): string | null {
 
 function emit(result: BackupResult, flags: Flags, action: string): void {
   if (flags.json) {
-    printJson({ action, ...result });
+    const { schemaVersion: ledgerSchemaVersion, ...details } = result;
+    printJson({ action, ...details, ledgerSchemaVersion });
     if (!result.ok) process.exitCode = 1;
     return;
   }
