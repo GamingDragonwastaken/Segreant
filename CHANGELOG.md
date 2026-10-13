@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- CLI JSON reads now include `schemaVersion: 1`. Array responses, including
+  request exports, place their records in `data` beside the version; object
+  responses keep their fields. The stability promise is in the CLI JSON contract.
+
 - **A monthly statement, as the finance home.**
   - A new Statement page shows one calendar month: what Segreant measured, what the provider billed, how it was split across cost centres, and what the work produced. The four sit side by side, each with its own basis, and are never added together.
   - A billed comparison or a split is labelled with its own dates ("covers part of the month only", "covers the month so far"). It is never prorated into the month.
