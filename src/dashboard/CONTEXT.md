@@ -26,11 +26,14 @@ web/
   styles/app.css     the Night Vault design system
   app/
     tsconfig.json    its own compiler config: DOM lib, no node types
-    main.ts          shell, rail, routing, first-run register choice
+    main.ts          shell, job bar, routing (`Route` = territories + 'statement'),
+                     first-run choice, `segreant:ledger-changed` listener
     core/
       signal.ts      reactive primitive (~80 lines, no framework)
       dom.ts         h() / render(); no HTML-parsing sink anywhere
       fmt.ts         money, dates, and the plain/precise REGISTER
+      theme.ts       appearance: follows the OS, or a light/dark choice kept in
+                     this browser; writes data-theme before the first render
       api.ts         typed client for this server; consumes generated-types.ts
       generated-types.ts  generated browser copy of shared-types.ts; never edit
       claimTypes.ts  Layer + ClaimInspection: the shape of a claim's evidence
@@ -42,14 +45,17 @@ web/
       spine.ts       the four bands and the ≠ between them
       drawer.ts      the action drawer: preview → consequence → command → commit
       claimInspector.ts  the long form of a band's basis. Reads; never acts.
-    views/           one per territory
+      workflow.ts    job-page parts: numbered steps, labelled fields, the page
+                     notice that survives a reload, and holdFocus
+    views/           one per job: statement, spend, control (Protect), evidence
+                     (Close), allocation (Allocate), value, data, system (Settings)
 ```
 
 ## Guarantees
 
 - **The GUI reaches for CLI parity, and says where it has not.** `registry.ts` is
   the single source for navigation, action cards, and the parity table rendered
-  in System. A capability with no screen is visible in the product as unbuilt.
+  in Settings. A capability with no screen is visible in the product as unbuilt.
   A row's `coverage` VALUE is checked against the app source, not taken as a
   claim (D-239, `test/dashboard-coverage-value.test.ts`): `full` or `partial`
   needs an action builder keyed by the id, the id in a view, or a `guiEvidence`
@@ -78,6 +84,32 @@ web/
   running tests because package-boundary checks inspect both browser and Node
   artifacts in `dist/`. The build script's `--web` mode remains a targeted GUI
   iteration tool, not the ordinary test contract.
+- **Allocate and Close are jobs completed in the GUI, through two write routes.**
+  `POST /api/allocation/write` (centre, archive, rule, revoke, run) and
+  `POST /api/billing/write` (import, adopt, scope, reconcile) are local-only:
+  they need `x-segreant-local: 1`, read a bounded body, accept only allow-listed
+  fields, and refuse in demo mode with `DemoWriteBlockedError` while previews
+  still answer. Every operation previews without `apply: true` and records with
+  it; the page shows the preview before offering the record button. A billing
+  import arrives as base64 raw bytes, so its digest matches the CLI's for the
+  same file. Neither route adds an egress path (`docs/DATA-BOUNDARIES.md`).
+- **A save tells the rest of the page.** A job page that records something
+  dispatches `segreant:ledger-changed` with the claim it changed; `main.ts`
+  re-reads that claim for the spine, so the bands above a page never contradict
+  what the page just saved. `holdFocus` keeps keyboard focus on the rebuilt
+  control, or moves it to the next step's first control
+  (`test/dashboard-workflow-focus.browser.mjs`).
+- **The Statement is one calendar month, four claims, never summed.**
+  `GET /api/statement?month=YYYY-MM` and `GET /api/statement.csv` come from one
+  `buildStatement`. Months are local midnight, half-open. A billed or allocated
+  run is reported with its own period and figures, never prorated, and
+  `monthCoverage` says `not_established`, `partial` or `whole` with
+  `scanComplete` stating whether an older run could exist past the read. The CSV
+  keeps the four claims as four sections with no total row and lists every
+  project and model (`test/dashboard-statement-csv.test.ts`).
+- **Both themes are tested.** `test/dashboard-theme.browser.mjs` runs axe on
+  every route in light and dark and checks that an explicit choice overrides
+  the system and survives a reload.
 - **Nothing happens without a preview.** Every action opens the drawer, which
   states the consequence in words, shows the computed preview, prints the
   equivalent command, and only then offers the commit.

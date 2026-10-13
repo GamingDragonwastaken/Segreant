@@ -85,6 +85,22 @@ provider session, or API key. The status is always
 `operator_declared_unverified`; it is not provider-account verification,
 reconciliation, or an instruction to change routing.
 
+The dashboard can do the same local writes: declare a scope, import and adopt a
+cost export, record a reconciliation, and set up cost centres, rules and
+allocation runs. It does them through `POST /api/billing/write` and
+`POST /api/allocation/write`. Neither route is one of the declared egress paths
+below, and neither opens an outbound connection. They store exactly
+what the matching CLI commands store, under the same rules. A billing import
+from the browser keeps the same basename, digest and allowlisted fields as
+`segreant billing import`, and not the raw file. Both routes answer only
+requests that carry the `x-segreant-local: 1` header. A page on another origin
+cannot send that header to the loopback dashboard without the browser's
+pre-flight, and the dashboard answers no `OPTIONS`. They read a bounded body,
+accept only allow-listed fields, and never quote a refused request or export
+back in an error. In demo mode they refuse every write, while previews still
+answer. The Statement's CSV download is a read of the same local ledger and
+leaves the machine only if you send the file on.
+
 When an operator runs `segreant billing openai-costs pull ... --apply`, Segreant
 may make exactly one additional outbound type: a read-only `GET` to the fixed
 OpenAI Organization Costs endpoint at `https://api.openai.com/v1/organization/costs`.
