@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "8a403a6bcf4d59f01a297d4d39bf765a3f593cc24f581f301a687dd53c114693";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "6e9141bf946ea5ceff9f3326e9a62c547444681dc9d683013510c252e9b414a6";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -855,7 +855,17 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "offPathBound",
       "optional": false,
-      "type": "'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention'"
+      "type": "'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention' | null"
+    },
+    {
+      "name": "snapshotStability",
+      "optional": false,
+      "type": "'single_observation' | 'stable_across_observations' | 'changed_across_observations' | null"
+    },
+    {
+      "name": "providerProjectRef",
+      "optional": false,
+      "type": "string | null"
     },
     {
       "name": "coversWholeMonth",
