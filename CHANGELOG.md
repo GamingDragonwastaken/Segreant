@@ -15,6 +15,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   misspelled cap cannot silently leave forwarding unlimited. The proxy also
   refuses invalid live budget values before forwarding, including oversized caps.
 
+- **Close refuses unsafe thresholds and filenames without exposing submitted text.** A very large materiality threshold could overflow to infinity and hide every discrepancy; the dashboard now refuses amounts outside the safe microdollar range. Billing uploads refuse directory names and paths in either platform's format. Malformed requests and exports show a concise JSON error without quoting their contents.
+
 - **A monthly statement, as the finance home.**
   - A new Statement page shows one calendar month: what Segreant measured, what the provider billed, how it was split across cost centres, and what the work produced. The four sit side by side, each with its own basis, and are never added together.
   - A billed comparison or a split is labelled with its own dates ("covers part of the month only", "covers the month so far"). It is never prorated into the month.
