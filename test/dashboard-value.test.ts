@@ -105,7 +105,9 @@ test('classic Value view discloses exact economic coverage for every value-beari
 test('browser Value contract includes project exact economic coverage', () => {
   const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
   assert.match(source, /export interface ValueProjectPayload/);
-  assert.match(source, /projects\?: ValueProjectPayload\[\]/);
+  // The wire always sends this field; null is an uncomputed report, not an
+  // omitted field or a measured empty list (also checked over live HTTP).
+  assert.match(source, /projects: ValueProjectPayload\[\] \| null/);
   assert.match(source, /economic\?: RealizationEconomicRollupPayload/);
 });
 

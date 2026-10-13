@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Value opens when no value has been computed yet.** The browser rejected the server's `projects: null` response as a broken array and stopped loading the page. Its contracts now accept the uncomputed state as unknown, while checking populated project rows as before.
+
 - Configuration now refuses unknown section and budget field names, so a
   misspelled cap cannot silently leave forwarding unlimited. The proxy also
   refuses invalid live budget values before forwarding, including oversized caps.
