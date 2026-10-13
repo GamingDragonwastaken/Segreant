@@ -78,6 +78,10 @@ function validNullableUsd(value: unknown): value is number | null {
 /** Validate the budget object before it can reach enforcement or persistence. */
 export function validateBudgetConfig(value: unknown): asserts value is BudgetConfig {
   if (!isRecord(value)) throw new ConfigValidationError('budget must be an object');
+  const allowed = ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayWindowSec', 'runawayMaxUsd', 'capIncludesImported'];
+  if (Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new ConfigValidationError('budget contains an unknown field; check the configured cap names');
+  }
   for (const key of ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayMaxUsd'] as const) {
     if (!validNullableUsd(value[key])) {
       throw new ConfigValidationError(`budget.${key} must be null or a finite non-negative USD value`);
@@ -198,6 +202,10 @@ interface CachedCaps {
 const CAP_CACHE = new WeakMap<BudgetConfig, CachedCaps>();
 
 export function exactBudgetCaps(cfg: BudgetConfig): ExactBudgetCaps {
+  // A caller can supply or mutate the live proxy config without loadConfig.
+  // Validate before consulting the cache: a new unknown key must never reuse
+  // previously valid, unlimited caps.
+  validateBudgetConfig(cfg);
   const source = CAP_KEYS.map((key) => cfg[key]);
   const cached = CAP_CACHE.get(cfg);
   if (cached && cached.source.length === source.length
@@ -768,6 +776,9 @@ export function loadConfig(): SegreantConfig {
       );
     }
     if (!isRecord(raw)) throw new ConfigValidationError(`configuration root in ${path} must be an object`);
+    if (Object.keys(raw).some((key) => !Object.hasOwn(DEFAULT_CONFIG, key))) {
+      throw new ConfigValidationError('configuration contains an unknown field; check the configured section names');
+    }
     if (Object.hasOwn(raw, 'features')) validateFeatureOverrides(raw.features);
     cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<SegreantConfig>);
     cfg = { ...cfg, egress: sanitizeEgressConfig(raw.egress) };
