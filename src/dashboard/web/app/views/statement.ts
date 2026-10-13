@@ -74,7 +74,11 @@ export function statementView(): Node {
         const d = data();
         if (!d) return '';
         return d.period.complete ? 'month complete' : 'month in progress, figures so far';
-      } })),
+      } }),
+      // A plain link the browser saves: the same four claims, every project and
+      // model, as four sections with no total row.
+      h('a', { class: 'statement-download', href: () => api.statementCsvHref(month()), download: '',
+        text: () => (isPrecise() ? 'Export CSV' : 'Download as CSV') })),
 
     () => {
       const err = error();
