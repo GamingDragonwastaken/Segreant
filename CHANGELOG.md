@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.
+
 - **Value opens when no value has been computed yet.** The browser rejected the server's `projects: null` response as a broken array and stopped loading the page. Its contracts now accept the uncomputed state as unknown, while checking populated project rows as before.
 
 - Configuration now refuses unknown section and budget field names, so a
