@@ -53,6 +53,7 @@ import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { buildGuide } from '../guide.ts';
 import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { statementToCsv } from '../export/statementCsv.ts';
 import { economicRequestsToCsv } from '../export/economic.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
@@ -480,10 +481,33 @@ function monthCoverageOf(runs: ReadonlyArray<{ coversWholeMonth: boolean }>): 'n
  * month). A figure the store cannot establish for the month is reported as not
  * established, never filled in.
  */
+type StatementResult =
+  | { status: 200; payload: DashboardResponseFor<'statement'> }
+  | { status: 400 | 500; error: string };
+
 export function handleStatement({ res, url, store }: RouteContext): void {
+  const r = buildStatement(store, url.searchParams.get('month'), STATEMENT_TOP);
+  return r.status === 200 ? json(res, 200, r.payload) : json(res, r.status, { error: r.error });
+}
+
+/**
+ * The same month as a spreadsheet: every project and model rather than the
+ * page's top ten, and the four claims kept as four sections with no total.
+ */
+export function handleStatementCsv({ res, url, store }: RouteContext): void {
+  const r = buildStatement(store, url.searchParams.get('month'), null);
+  if (r.status !== 200) return json(res, r.status, { error: r.error });
+  res.writeHead(200, {
+    'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': `attachment; filename="segreant-statement-${r.payload.month}${r.payload.demo ? '-sample' : ''}.csv"`,
+    'cache-control': 'no-store',
+  });
+  res.end(statementToCsv(r.payload));
+}
+
+function buildStatement(store: Store, raw: string | null, top: number | null): StatementResult {
   try {
     const now = Date.now();
-    const raw = url.searchParams.get('month');
     let year: number;
     let month: number;
     if (raw === null) {
@@ -492,13 +516,13 @@ export function handleStatement({ res, url, store }: RouteContext): void {
       month = current.getMonth() + 1;
     } else {
       const match = /^(\d{4})-(\d{2})$/.exec(raw);
-      if (!match) return json(res, 400, { error: 'month must be YYYY-MM, for example 2026-07' });
+      if (!match) return { status: 400, error: 'month must be YYYY-MM, for example 2026-07' };
       year = Number(match[1]);
       month = Number(match[2]);
-      if (year < 1970 || month < 1 || month > 12) return json(res, 400, { error: 'month must be a calendar month from 1970 onward' });
+      if (year < 1970 || month < 1 || month > 12) return { status: 400, error: 'month must be a calendar month from 1970 onward' };
     }
     const { startMs, endMs } = calendarMonthBounds(year, month);
-    if (startMs > now) return json(res, 400, { error: `month ${year}-${String(month).padStart(2, '0')} is entirely in the future` });
+    if (startMs > now) return { status: 400, error: `month ${year}-${String(month).padStart(2, '0')} is entirely in the future` };
     const overlaps = (periodStartMs: number, periodEndMs: number) => periodStartMs < endMs && periodEndMs > startMs;
     const covers = (periodStartMs: number, periodEndMs: number) => periodStartMs <= startMs && periodEndMs >= endMs;
 
@@ -552,13 +576,13 @@ export function handleStatement({ res, url, store }: RouteContext): void {
 
     const closeStatus = store.economicPeriodCloseStatus(startMs, endMs);
     const byProject = store.byProject(startMs, endMs)
-      .slice(0, STATEMENT_TOP)
+      .slice(0, top ?? undefined)
       .map((p) => ({ label: p.label, costUsd: p.costUsd, requests: p.requests }));
     const byModel = store.byModel(startMs, endMs)
-      .slice(0, STATEMENT_TOP)
+      .slice(0, top ?? undefined)
       .map((m) => ({ label: m.label, provider: m.provider, costUsd: m.costUsd, requests: m.requests }));
 
-    return json(res, 200, {
+    return { status: 200, payload: {
       demo: isDemo(),
       generatedAt: new Date(now).toISOString(),
       month: `${year}-${String(month).padStart(2, '0')}`,
@@ -606,9 +630,9 @@ export function handleStatement({ res, url, store }: RouteContext): void {
         activeFinalizationId: closeStatus.activeFinalizationId,
         eventCount: closeStatus.eventCount,
       },
-    });
+    } };
   } catch (error) {
-    return json(res, 500, { error: error instanceof Error ? error.message : String(error) });
+    return { status: 500, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -1809,6 +1833,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('overview', handleOverview),
   apiRoute('billing', handleBilling),
   apiRoute('statement', handleStatement),
+  apiRoute('statement-csv', handleStatementCsv),
   apiRoute('allocation', handleAllocation),
   apiRoute('allocation-write', handleAllocationWrite),
   apiRoute('billing-write', handleBillingWrite),
