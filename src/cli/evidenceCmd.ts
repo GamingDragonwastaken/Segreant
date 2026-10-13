@@ -6,6 +6,7 @@ import { dirname } from 'node:path';
 import { dbPath } from '../config.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
+import { printJson } from './ui.ts';
 import {
   buildGithubActionsOutcome,
   importGithubActionsOutcome,
@@ -47,11 +48,11 @@ function cmdUx(flags: Flags): void {
   const bundle = buildEpistemicUxBundle(supplied as EpistemicUxBundleInput);
   // Always JSON; reading --json marks it as used so the dispatcher does not report it.
   void flags.json;
-  process.stdout.write(JSON.stringify({
+  printJson({
     operation: 'epistemic_ux_bundle',
     bundle,
     boundary: 'Review-only epistemic UX bundle; no claim issuance, strengthening, authorization, routing, or external truth inference.',
-  }, null, 2) + '\n');
+  });
 }
 
 function readJsonArtifact(path: string): SignedGithubActionsOutcome {
@@ -132,7 +133,7 @@ async function cmdGithubImport(flags: Flags): Promise<void> {
     });
     if (!result.ok) throw new Error(`evidence rejected: ${result.reason}`);
     if (flags.json) {
-      process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+      printJson(result);
     } else {
       console.log(`  Imported verified signed-CI tested=${artifact.body.verdict} evidence for ${result.commit!.slice(0, 12)}.`);
       console.log(`  Event ${result.signalId} is replay-safe; conflicting re-use is rejected.`);
