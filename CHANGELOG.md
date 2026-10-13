@@ -11,6 +11,16 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:
+  - `exec` was "Run under a cap"; it records whether a command passed and sets no limit.
+  - `usage` was "requests and tokens"; it scores chat and research work.
+  - `saved` was "what routing avoided"; it is time reclaimed.
+  - `month`, `home` and `export` now say "last 30 days".
+  - `receipt` now writes, so its tier is local.
+  - Alerts, market, pricing and baseline name their network modes.
+  - `backup` says its copy is unencrypted, and `plugin` that it runs your program without a sandbox.
+- The capability table in Settings gives the descriptions room. `segreant scan` no longer calls itself read-only, since it remembers each scan.
+
 - **A light theme, following your computer.** The dashboard had a light palette that nothing ever switched on. It now follows the operating system's light or dark setting, live, and Settings has an Appearance choice (match this computer, light, dark) kept in this browser only. Every page passes the automated WCAG 2 AA checks in both themes; the selected range chip, which fell to about 3:1 on the light gold, now uses dark text. On phones the current page is outlined in gold so it stands out in the grid.
 
 - **The Statement downloads as a spreadsheet.** "Download as CSV" on the Statement saves the month as four labelled sections: what was measured, what the provider billed, how it was split, and what it produced. Every row carries its own basis, its own dates and whether it covers the whole month, and no row adds the claims together. The file lists every project and model rather than the page's top ten, and the project rows add up to the measured total. Provider and allocation amounts are exact to the microdollar. `GET /api/statement.csv?month=YYYY-MM` serves it from the same build as the page.

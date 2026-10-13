@@ -129,25 +129,25 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'core/api.ts', token: "{ id: '7d', label: '7 days'", note: 'the spend range picker; the Spend view reads the same overview for the same window' },
   },
   {
-    id: 'month', label: 'This month', plain: 'The current month of spend.', territory: 'spend', consequence: 'read', coverage: 'partial', command: 'segreant month',
-    guiEvidence: { file: 'core/api.ts', token: "{ id: '30d', label: '30 days'", note: 'the picker offers the last 30 days, not the calendar month the command reports; partial, not full' },
+    id: 'month', label: 'Last 30 days', plain: 'Spend over the last 30 days, rolling. The Statement shows a calendar month.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant month',
+    guiEvidence: { file: 'core/api.ts', token: "{ id: '30d', label: '30 days'", note: 'the spend range picker; `segreant month` is the same rolling 30 days, and the Spend view reads the same overview for that window' },
   },
-  { id: 'usage', label: 'Usage detail', plain: 'Requests and tokens broken down.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant usage' },
+  { id: 'usage', label: 'Chat and research value', plain: 'What chat and research sessions produced, from the outcomes you reported. No code needed.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant usage' },
   // Was listed as "Period report: a summary you can hand to someone". The command records an
   // outcome signal; the month summary is the Statement page.
   { id: 'report', label: 'Report an outcome by hand', plain: 'Mark a commit or session as tested, merged, shipped or redone, so realized value can count it.', territory: 'value', consequence: 'local', coverage: 'planned', command: 'segreant report --kind <kind>' },
-  { id: 'export', label: 'Export CSV', plain: 'Download the ledger as a spreadsheet.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant export' },
+  { id: 'export', label: 'Export CSV', plain: 'Download the last 30 days of requests as CSV; --all for everything.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'segreant export' },
   { id: 'quota', label: 'Quota', plain: "The vendors' usage meters, the pace to their reset, and whether they match what Segreant counted.", territory: 'spend', consequence: 'read', coverage: 'planned', command: 'segreant quota' },
   { id: 'statusline', label: 'Claude status line', plain: "Records Claude Code's live usage meter from its status line.", territory: 'spend', consequence: 'local', coverage: 'planned', command: 'segreant statusline' },
-  { id: 'home', label: 'Home', plain: 'The month, your plans, and how much of the AI work stayed in the code.', territory: 'spend', consequence: 'read', coverage: 'planned', command: 'segreant home' },
-  { id: 'plan', label: 'Plans', plain: 'Which plan each tool is on, what you pay, and the list-price work it did.', territory: 'spend', consequence: 'local', coverage: 'planned', command: 'segreant plan' },
+  { id: 'home', label: 'Home', plain: 'The last 30 days, your plans, and how much of the AI work stayed in the code.', territory: 'spend', consequence: 'read', coverage: 'planned', command: 'segreant home' },
+  { id: 'plan', label: 'Plans', plain: 'Which plan each tool is on, the monthly price you entered, and the list-price work it did.', territory: 'spend', consequence: 'local', coverage: 'planned', command: 'segreant plan' },
 
   // ---- Control ------------------------------------------------------------
   { id: 'budget', label: 'Budgets', plain: 'Set a spending cap and see how close you are.', territory: 'control', consequence: 'local', coverage: 'full', command: 'segreant budget' },
-  { id: 'budget-recommend', label: 'Suggest a budget', plain: 'Propose a cap from your actual history.', territory: 'control', consequence: 'read', coverage: 'partial', command: 'segreant budget --recommend' },
-  { id: 'alerts', label: 'Alerts', plain: 'Get told before a cap is hit, not after.', territory: 'control', consequence: 'local', coverage: 'partial', command: 'segreant alerts' },
-  { id: 'exec', label: 'Run under a cap', plain: 'Run a command with a hard spending limit around it.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant exec -- <command>' },
-  { id: 'launch', label: 'Start a tool metered', plain: 'Start an AI tool pointed at Segreant, only while Segreant is running.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant launch -- <command>' },
+  { id: 'budget-recommend', label: 'Suggest a budget', plain: 'Propose a daily cap from your history. With --apply it writes the cap to your config.', territory: 'control', consequence: 'read', coverage: 'partial', command: 'segreant budget --recommend' },
+  { id: 'alerts', label: 'Alerts', plain: 'Alerts as spend nears a cap. With --notify they are also posted to a webhook you set.', territory: 'control', consequence: 'local', coverage: 'partial', command: 'segreant alerts' },
+  { id: 'exec', label: 'Record a test run', plain: 'Run a command, such as your tests, and record whether it passed for that commit or session. It sets no spending limit.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant exec -- <command>' },
+  { id: 'launch', label: 'Start a tool metered', plain: 'Start an AI tool pointed at Segreant. If Segreant is down, it refuses when a cap is set and runs unmetered otherwise, and says so.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'segreant launch -- <command>' },
 
   // ---- Allocation ---------------------------------------------------------
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'segreant project --coverage' },
@@ -167,7 +167,7 @@ export const CAPABILITIES: readonly Capability[] = [
 
   // ---- Evidence -----------------------------------------------------------
   {
-    id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set',
+    id: 'billing-scope', label: 'Declare a provider scope', plain: 'Declare the OpenAI organisation and project your proxied traffic goes to from now on. Your declaration, not verified by the provider.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set',
     guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 previews and declares; clearing a scope stays on the CLI' },
   },
   {
@@ -175,21 +175,21 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'views/evidence.ts', token: 'readinessPanel(d)', note: 'Close step 3 shows readiness and the steps still missing before it offers a comparison' },
   },
   {
-    id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a costs file you exported, with no credential.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing openai-costs adopt --apply',
+    id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a cost export you already imported as the provider side of the comparison. No credential is used.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing openai-costs adopt --apply',
     guiEvidence: { file: 'views/evidence.ts', token: "op: 'adopt'", note: 'Close step 2 imports an export and adopts it, each with a preview first' },
   },
   {
-    id: 'billing-pull', label: 'Pull provider costs', plain: 'Read your bill directly from the provider.',
+    id: 'billing-pull', label: 'Pull provider costs', plain: 'Fetch the costs OpenAI reports for a period, using an Admin key. A provider observation, not yet reconciled.',
     territory: 'evidence', consequence: 'credential', coverage: 'partial', command: 'segreant billing openai-costs pull',
     warning: 'Reads an OpenAI Admin credential from your environment and makes a network request to OpenAI. Segreant never stores it. Check readiness first — on a ledger with no proxy traffic on the declared route, a pull reports your entire bill as unexplained.',
   },
   {
-    id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply',
+    id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what Segreant measured with the provider-reported total, project by day, for the declared scope only.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply',
     guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews and records; the materiality threshold stays on the CLI' },
   },
-  { id: 'receipt', label: 'Receipts', plain: 'The evidence behind a single claim.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant receipt' },
-  { id: 'evidence', label: 'Evidence records', plain: 'Signed CI artifacts and verified outcomes.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant evidence' },
-  { id: 'audit', label: 'Audit', plain: 'Check the ledger against itself for inconsistencies.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant audit' },
+  { id: 'receipt', label: 'Receipts', plain: 'Sign and store a receipt for each matured piece of work, creating the signing key on first use; --verify checks one.', territory: 'evidence', consequence: 'local', coverage: 'planned', command: 'segreant receipt' },
+  { id: 'evidence', label: 'Evidence records', plain: 'Signed CI test evidence: emit writes a signed artifact, import records it as a verified outcome.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant evidence' },
+  { id: 'audit', label: 'Audit', plain: 'Attribute recent spend to git commits by timing, a heuristic, and show cost per hundred lines.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant audit' },
 
   // ---- Value --------------------------------------------------------------
   { id: 'roi', label: 'Return on Intelligence', plain: 'What the spend produced, with the limits stated.', territory: 'value', consequence: 'read', coverage: 'full', command: 'segreant roi' },
@@ -202,28 +202,28 @@ export const CAPABILITIES: readonly Capability[] = [
     id: 'causal', label: 'Causal studies', plain: 'Registered randomized evidence and its qualification gates.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant causal status',
     guiEvidence: { file: 'views/value.ts', token: 'api.causal()', note: 'the Value view reads causal status; registration and gates stay on the CLI' },
   },
-  { id: 'realize', label: 'Realized value', plain: 'Work that actually shipped, not work that was proposed.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant realize' },
+  { id: 'realize', label: 'Realized value', plain: 'Work that passed every required step, from commit to surviving in the code, measured from git and the signals you report.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant realize' },
   {
-    id: 'market', label: 'Public model market', plain: 'Compare models on public evidence of quality per dollar, before you have your own.',
+    id: 'market', label: 'Public model market', plain: 'Compare models on public evidence of quality per dollar, before you have your own. --refresh fetches the public sources over the network.',
     territory: 'value', consequence: 'read', coverage: 'partial', command: 'segreant market',
     guiEvidence: { file: 'views/value.ts', token: 'marketCard(', note: 'the Value view shows the bundled public boards; refreshing a source stays on the CLI because it needs an egress grant' },
   },
-  { id: 'frontier', label: 'Model comparison', plain: 'Whether a cheaper model would have done the same job.', territory: 'value', consequence: 'read', coverage: 'full', command: 'segreant frontier' },
-  { id: 'saved', label: 'Savings', plain: 'What routing decisions have avoided so far.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'segreant saved' },
-  { id: 'yield', label: 'Yield', plain: 'Output per dollar across projects.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'segreant yield' },
-  { id: 'judge', label: 'Judge', plain: 'Score a change on quality, not just cost.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant judge' },
-  { id: 'team', label: 'Team view', plain: 'Per-person value on this machine, anonymized.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'segreant team' },
+  { id: 'frontier', label: 'Model comparison', plain: 'How models compare on realized return within similar work, with cheaper-model trials to review. Routing is never changed.', territory: 'value', consequence: 'read', coverage: 'full', command: 'segreant frontier' },
+  { id: 'saved', label: 'Time reclaimed', plain: 'The manual work-weeks your realized work would have taken, against the AI time measured.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'segreant saved' },
+  { id: 'yield', label: 'Yield', plain: 'Code lines still in one repository per AI dollar. Not a measure of quality.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'segreant yield' },
+  { id: 'judge', label: 'Judge', plain: 'Score one session\'s efficiency from its structure. A hosted judge, if you configure one, receives session data.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'segreant judge' },
+  { id: 'team', label: 'Team view', plain: 'Team value as a distribution. Per-person figures stay off unless you enable them.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'segreant team' },
 
   // ---- Data ---------------------------------------------------------------
   { id: 'sources', label: 'Sources', plain: 'Which tools are feeding data in.', territory: 'data', consequence: 'read', coverage: 'full', command: 'segreant sources' },
   // `core/api.ts` binds POST /api/discover and no view calls it (D-239): an
   // API binding is not a screen.
-  { id: 'discover', label: 'Find tools', plain: 'Look for AI tools installed on this machine.', territory: 'data', consequence: 'read', coverage: 'planned', command: 'segreant discover' },
+  { id: 'discover', label: 'Match projects to repositories', plain: 'Match imported projects to their git repositories and measure each one.', territory: 'data', consequence: 'read', coverage: 'planned', command: 'segreant discover' },
   { id: 'connect', label: 'Connect a tool', plain: 'Point a tool at Segreant so its spend is metered.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant connect <tool>' },
   { id: 'import', label: 'Import history', plain: 'Read past usage out of tool logs on this machine.', territory: 'data', consequence: 'local', coverage: 'full', command: 'segreant import all' },
-  { id: 'scan', label: 'Scan', plain: 'Check what is available to import before importing.', territory: 'data', consequence: 'read', coverage: 'full', command: 'segreant scan' },
-  { id: 'baseline', label: 'Baselines', plain: 'The before-AI reference this compares against.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant baseline' },
-  { id: 'demo', label: 'Demo data', plain: 'Load labelled sample data to see how it works.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant demo' },
+  { id: 'scan', label: 'Scan', plain: 'Find AI tools and repositories on this machine before importing. It remembers the scan to report changes; --setup also imports.', territory: 'data', consequence: 'read', coverage: 'full', command: 'segreant scan' },
+  { id: 'baseline', label: 'Baselines', plain: 'The before-AI reference this compares against. --refresh fetches a baseline from a URL you give.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant baseline' },
+  { id: 'demo', label: 'Demo data', plain: 'Load labelled sample data to see how it works, replacing any earlier sample data. Your own ledger is untouched.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant demo' },
 
   // ---- System -------------------------------------------------------------
   {
@@ -237,9 +237,9 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'core/actions.ts', token: 'settings.egress.receipts', note: 'the Settings drawer renders egress mode and receipt-chain health; plan/apply stay on the CLI' },
     warning: 'The dashboard shows Segreant-process status and receipt-chain health. Use the CLI to plan or apply an exact cloud permission. This is not a machine-wide firewall or a provider-retention guarantee.',
   },
-  { id: 'settings', label: 'Settings', plain: 'How Segreant behaves on this machine.', territory: 'system', consequence: 'local', coverage: 'partial', command: 'segreant config' },
+  { id: 'settings', label: 'Settings', plain: 'Show how Segreant is configured on this machine and where that is stored.', territory: 'system', consequence: 'local', coverage: 'partial', command: 'segreant config' },
   {
-    id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'segreant pricing --coverage',
+    id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost. --refresh fetches a price file over the network.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'segreant pricing --coverage',
     guiEvidence: { file: 'core/claimLayers.ts', token: 'pricing.estimatedSpendShare', note: 'the claim layers show the estimated-spend share the rate cards imply; the cards themselves are CLI only' },
   },
   {
@@ -277,13 +277,13 @@ export const CAPABILITIES: readonly Capability[] = [
   // compared this list with `src/cli.ts`'s dispatch, so a verb could be added
   // without a row and the parity denominator would simply not count it.
   {
-    id: 'start', label: 'Start Segreant', plain: 'Run the metering proxy and open this dashboard.',
+    id: 'start', label: 'Start Segreant', plain: 'Run the metering proxy and this dashboard. Each start also deletes proposals past retention, and refreshes prices if you turned that on.',
     territory: 'system', consequence: 'local', coverage: 'not_applicable', command: 'segreant start',
     coverageNote: 'this command is what serves the GUI, so there is no page to click until it has already run; '
       + 'a GUI surface for it is not planned because it cannot exist',
   },
   {
-    // `local` rather than `read` because `cmdInit` calls `saveConfig` and the
+    // `local` rather than `read` because `cmdInit` calls `mutateConfig` and the
     // file is on disk afterwards. Worth stating plainly: it persists with no
     // preview and no `--apply`, which is the one command in this list that does
     // -- the tier recorded here is what any future GUI surface must honour, not
@@ -292,16 +292,16 @@ export const CAPABILITIES: readonly Capability[] = [
     territory: 'system', consequence: 'local', coverage: 'planned', command: 'segreant init',
   },
   {
-    id: 'economic', label: 'Exact economic ledger', plain: 'The exact-money ledger behind the rounded figures, by period.',
+    id: 'economic', label: 'Exact economic ledger', plain: 'The exact-money ledger behind the rounded figures, by period. --finalize and --reopen record a period close.',
     territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant economic',
     guiEvidence: { file: 'views/value.ts', token: 'matured?.economic', note: 'the Value view renders exact/partial/legacy coverage of matured spend; the period ledger itself is CLI only' },
   },
   {
-    id: 'capital', label: 'AI-capital review', plain: 'Review committed capacity, consumption, showback, and declared gaps.',
+    id: 'capital', label: 'AI-capital review', plain: 'Review a JSON snapshot you supply: committed capacity, consumption, showback, and declared gaps.',
     territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'segreant capital evaluate --options <file>',
   },
   {
-    id: 'backup', label: 'Back up the ledger', plain: 'Copy the local ledger somewhere safe, with a manifest that proves the copy.',
+    id: 'backup', label: 'Back up the ledger', plain: 'Copy the whole ledger to a file, with a checksum manifest. The copy is not encrypted; keep it as private as the ledger.',
     territory: 'data', consequence: 'local', coverage: 'planned', command: 'segreant backup --out <file>',
   },
   {
@@ -315,11 +315,11 @@ export const CAPABILITIES: readonly Capability[] = [
     territory: 'system', consequence: 'read', coverage: 'planned', command: 'segreant diagnostics',
   },
   {
-    id: 'pack', label: 'Export a verifiable record bundle', plain: 'Write the kernel records as a signed, digest-bound file another machine can check without trusting this one. Truth is never evaluated.',
+    id: 'pack', label: 'Export a verifiable record bundle', plain: 'Write the kernel records as a digest-bound file another machine can check without trusting this one, signed with --sign. Truth is never evaluated.',
     territory: 'data', consequence: 'local', coverage: 'planned', command: 'segreant pack export --out <file>',
   },
   {
-    id: 'plugin', label: 'Run a plugin exchange', plain: 'One bounded exchange with a plugin process; what it reports is recorded as what it said, never as more.',
+    id: 'plugin', label: 'Run a plugin exchange', plain: 'Run a plugin program you name, with your permissions and no sandbox, for one bounded exchange. What it reports is recorded as what it said, never as more.',
     territory: 'data', consequence: 'local', coverage: 'planned', command: 'segreant plugin run --manifest <file> --request <file> --exec <path> --scope <key=value>',
   },
 ];
