@@ -14,6 +14,16 @@ choice.
 > installing, prefix a command with `npx`, for example
 > `npx segreant demo --serve`. From a clone of the repository, run
 > `npm install`, `npm run build` and `npm link` once instead.
+>
+> **Windows, in a folder whose path contains `&`** (for example
+> `Projects & Learning`): npm's `.cmd` launcher, and `npx` or `npm exec`, which
+> use it, break at the ampersand in Command Prompt before Segreant starts. A
+> global install lives under your user folder, so it is affected only if that
+> path contains `&`. For a local install in such a folder, use
+> PowerShell, where `segreant` runs npm's PowerShell launcher, or call Node
+> directly: `node node_modules/segreant/bin/segreant.mjs demo --serve`. CI
+> installs into a path with a space and an ampersand on Windows, macOS and
+> Linux and runs these routes.
 
 ---
 
