@@ -198,7 +198,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       ? 'Re-observe the disagreeing days before relying on this reconciliation.'
       : runs > 0
         ? undefined
-        : 'Check readiness in Evidence before spending a credential on it.',
+        : 'Check readiness in Close before spending a credential on it.',
     inspection: {
       provenance: latestRun?.result.providerSourceKind
         ?? (b && b.summary.recordCount > 0 ? 'operator-supplied provider evidence, unreconciled' : 'none'),
