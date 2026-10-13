@@ -25,6 +25,7 @@ import type { Flags } from './flags.ts';
 import { printJson, cliJsonResponse } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { moneyToJson } from '../economics/money.ts';
+import { recordedTime } from '../util/time.ts';
 
 function billingEgressRepairAction(failureCode: string): string | undefined {
   return failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
@@ -83,7 +84,7 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   // the conditions that hold always (D-185). A zero here is what an operator
   // uses to decide whether minting an Admin credential is worth it.
   if (coverage.localLedgerRetention.truncated) {
-    const before = new Date(coverage.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    const before = recordedTime(coverage.localLedgerRetention.prunedBeforeMs, true);
     console.log(`  Local ledger  TRUNCATED — retention deleted rows before ${before}, inside the period above.`);
     console.log('                Every local count on this screen is what SURVIVES, so an empty declared');
     console.log('                route here is not evidence that the route captured nothing.');
@@ -106,7 +107,7 @@ function printReadiness(readiness: ReconciliationReadiness): void {
   // null. A guard that goes quiet leaves nothing on the screen to be wrong,
   // which is why the silence itself has to be reported (D-186).
   if (readiness.localLedgerRetention.truncated) {
-    const before = new Date(readiness.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    const before = recordedTime(readiness.localLedgerRetention.prunedBeforeMs, true);
     console.log('');
     if (c === null) {
       console.log(`  NO OPENAI SPEND SURVIVES HERE, and retention deleted rows before ${before}.`);

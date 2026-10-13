@@ -7,6 +7,9 @@
 
 ## Guarantees
 
+- `recordedTime` renders absent, zero or invalid evidence instants as `unknown`;
+  it never fills missing evidence dates with the Unix epoch.
+
 - `stringifyJson` rounds only safe, finite `*Usd` numbers to six decimal places
   at serialization time.
 - Non-money numbers, object shapes, internal calculations, hashes, and canonical

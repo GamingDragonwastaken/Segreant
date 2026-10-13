@@ -148,6 +148,17 @@ function selfReportedCard(report: ValuePayload['selfReported'], refresh: () => v
 
 const MARKET_ROWS = 8;
 
+function publicPrice(price: MarketRatingRowPayload['price']): string {
+  if (price === null) return 'no public price';
+  const amount = typeof price.blendedUsdPerMillion === 'number'
+    ? `${usd(price.blendedUsdPerMillion)}/M tokens`
+    : typeof price.usdPerImage === 'number'
+      ? `${usd(price.usdPerImage)}/image`
+      : null;
+  if (amount === null) return 'no public price';
+  return amount + (price.match === 'normalized' ? ` (as ${price.pricedAs})` : '');
+}
+
 function marketBoard(b: MarketBoardPayload): Node {
   const head = h('div', { class: 'card-head' },
     h('span', { class: 'card-title', text: b.label }),
@@ -178,9 +189,7 @@ function marketBoard(b: MarketBoardPayload): Node {
             h('td', { text: x.frontier === null ? '—' : x.frontier ? 'yes' : '' }));
         }
         const x = r as MarketRatingRowPayload;
-        const price = x.price === null ? 'no public price'
-          : (x.price.blendedUsdPerMillion !== undefined ? `${usd(x.price.blendedUsdPerMillion)}/M tokens` : `${usd(x.price.usdPerImage ?? 0)}/image`)
-            + (x.price.match === 'normalized' ? ` (as ${x.price.pricedAs})` : '');
+        const price = publicPrice(x.price);
         return h('tr', null,
           h('td', { text: x.model }),
           h('td', { text: `${x.rating.toFixed(0)} (${x.ratingLower.toFixed(0)}–${x.ratingUpper.toFixed(0)})` }),
@@ -212,7 +221,7 @@ function consensusTable(c: MarketConsensusPayload): Node {
           h('td', { text: r.score.toFixed(0) }),
           h('td', { text: `${r.low.toFixed(0)}–${r.high.toFixed(0)}` }),
           h('td', { text: String(r.benchmarks.length), title: r.benchmarks.map((b) => `${b.benchmark}: ${(b.score * 100).toFixed(0)}`).join('\n') }),
-          h('td', { text: r.price === null ? 'no public price' : `${usd(r.price.blendedUsdPerMillion ?? 0)}/M tokens${r.price.match === 'normalized' ? ` (as ${r.price.pricedAs})` : ''}` }),
+          h('td', { text: publicPrice(r.price) }),
           h('td', { text: r.frontier === null ? '—' : r.frontier ? 'yes' : `beaten by ${r.beatenBy?.label ?? '—'}${r.beatenBy && !r.beatenBy.clear ? ' (within range)' : ''}` })))))),
     h('details', null, h('summary', { text: 'How each benchmark is weighted' }),
       ...c.weights.map((w) => h('p', { class: 'basis', text: `${w.benchmark}: weight ${w.weight.toFixed(2)} = independence ${w.independence} × contamination resistance ${w.contamination} × currency ${w.currency} (newest ${w.newest ?? 'undated'}, ${w.models} models). ${w.why}` }))),
@@ -295,6 +304,9 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
 function usageCoverageCard(usage: ValuePayload['usage']): Node | null {
   if (!usage) return null;
   const retention = usage.retention;
+  const before = retention.prunedBeforeMs;
+  const boundary = typeof before === 'number' && Number.isFinite(before) && before > 0 && before <= 8.64e15
+    ? new Date(before).toISOString() : 'an unrecorded boundary';
   return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
     h('div', { class: 'card-head' },
       h('span', { class: 'card-title', text: () => (isPrecise() ? 'Usage without code signals' : 'Chat, research, and drafting') })),
@@ -310,7 +322,7 @@ function usageCoverageCard(usage: ValuePayload['usage']): Node | null {
         h('span', { class: 'fact-val', text: usd(usage.totalCostUsd) }))),
     retention.truncated
       ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
-          ? `This usage window reaches behind retention: ${count(retention.rowsRemoved)} request row(s) were deleted before ${retention.prunedBeforeMs === null ? 'an unrecorded boundary' : new Date(retention.prunedBeforeMs).toISOString()}. Figures cover what survived, not everything metered.`
+          ? `This usage window reaches behind retention: ${count(retention.rowsRemoved)} request row(s) were deleted before ${boundary}. Figures cover what survived, not everything metered.`
           : 'Some requests in this usage window were deleted by retention, so these figures cover what remains rather than everything metered.') })
       : null,
     h('p', { class: 'basis', text: () => (isPrecise()
