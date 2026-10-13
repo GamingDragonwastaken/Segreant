@@ -100,8 +100,6 @@ test('Value usage coverage does not date a zero retention boundary to 1970', asy
       const payload = await response.json();
       assert.ok(payload.usage?.retention, 'the live usage payload must provide retention evidence');
       payload.usage.retention = { truncated: true, prunedBeforeMs: 0, rowsRemoved: 2 };
-      // Remove once the independent A4 Value declaration fix is in this branch.
-      payload.projects = [];
       await route.fulfill({ response, json: payload });
     });
     await page.goto(`${base}/#/value`, { waitUntil: 'networkidle' });
@@ -125,15 +123,6 @@ test('Value usage coverage does not date a zero retention boundary to 1970', asy
 
 for (const site of ['rating', 'consensus']) test(`public market ${site} prices with absent fields are unknown and explicit zero remains zero`, async () => {
   await fixture(async (page, base, viewport) => {
-    // Keep this fixture about market-price rendering. The empty value producer
-    // currently sends a projects wrapper where the payload contract expects an
-    // array; that separate wire mismatch must not prevent reaching this table.
-    await page.route('**/api/value**', async (route) => {
-      const response = await route.fetch();
-      const payload = await response.json();
-      payload.projects = [];
-      await route.fulfill({ response, json: payload });
-    });
     await page.route('**/api/market**', async (route) => {
       const response = await route.fetch();
       const payload = await response.json();

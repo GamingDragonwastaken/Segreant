@@ -235,8 +235,8 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
   // deleted by retention bounds nothing either, for a different reason -- the
   // local total is a known undercount by an unknown amount. Both are "this
   // residual establishes no bound", which is what this variable feeds.
-  const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider'
-    || input.latest?.offPathBound === 'unknown_local_total_truncated_by_retention';
+  const truncatedByRetention = input.latest?.offPathBound === 'unknown_local_total_truncated_by_retention';
+  const residualBoundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider';
 
   return claimSupportPayload(
     {
@@ -246,7 +246,7 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
       // immutable and identified by the digest of the result it describes, so it
       // cannot outlive a change to that result.
       integrity: 'verified',
-      coverage: boundsNothing ? 'partial' : 'complete',
+      coverage: truncatedByRetention || residualBoundsNothing ? 'partial' : 'complete',
       monetaryBasis: 'billed',
     },
     // An evidence claim about whether a comparison happened, not a second cost
@@ -254,7 +254,9 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
     'not_a_money_claim',
     unstable
       ? `provider snapshots disagreed on ${days.length} day(s) of this scope`
-      : boundsNothing
+      : truncatedByRetention
+        ? 'retention deleted local request rows in this period, so the residual bounds no off-path spend'
+        : residualBoundsNothing
         ? 'the local estimate exceeds the provider total, so the residual bounds no off-path spend'
         : undefined,
   );
