@@ -282,6 +282,8 @@ export const api = {
   allocation: () => request<AllocationPayload>(routePath('allocation')),
   /** One calendar month, `YYYY-MM`; the four claims side by side, never summed. */
   statement: (month?: string) => request<StatementPayload>(month ? `${routePath('statement')}?month=${encodeURIComponent(month)}` : routePath('statement')),
+  /** A download link, not a fetch: the browser saves the month's CSV. */
+  statementCsvHref: (month: string) => `${routePath('statement-csv')}?month=${encodeURIComponent(month)}`,
   economic: (range: '30d' | 'all' = '30d', options: EconomicQueryOptions = {}) => {
     const params = new URLSearchParams(range === 'all' ? { all: '1' } : { days: '30' });
     if (options.targetCurrency !== undefined) params.set('targetCurrency', options.targetCurrency);
