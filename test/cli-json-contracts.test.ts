@@ -6,12 +6,45 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Store } from '../src/store/db.ts';
+import { cliJsonResponse, CLI_JSON_SCHEMA_VERSION } from '../src/cli/ui.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const source = readFileSync(join(root, 'src/cli.ts'), 'utf8');
 const dispatch = source.slice(source.indexOf('  switch (cmd) {'), source.indexOf('  // Long-running commands'));
 const groups = [...dispatch.matchAll(/((?:\s*case '[^']+':\s*)+)([\s\S]*?)(?=\n\s*case |\n\s*default:)/g)]
   .map((match) => [...match[1]!.matchAll(/case '([^']+)'/g)].map((item) => item[1]!));
+
+function seedLargeLedger(dbPath: string): void {
+  const currentWindowTs = Date.now();
+  const db = new DatabaseSync(dbPath);
+  db.exec(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000)
+    INSERT INTO requests (request_id,ts_iso,ts_epoch_ms,provider,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,estimated,duration_ms,status_code,project,source)
+    SELECT 'fixture-'||x,'${new Date(currentWindowTs).toISOString()}',${currentWindowTs},'openai','fixture-model',1,1,0,0,0.000001,1,1,200,'fixture-project','proxy' FROM n`);
+  db.close();
+}
+
+test('10,000-row synthetic ledger is visible to month and all-time export', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'segreant-json-huge-proof-'));
+  const home = join(scratch, 'home');
+  const repo = join(scratch, 'repo');
+  mkdirSync(home);
+  mkdirSync(repo);
+  const dbPath = join(home, 'segreant.db');
+  new Store(dbPath).close();
+  seedLargeLedger(dbPath);
+  const env = { ...process.env, SEGREANT_HOME: home, SEGREANT_DB: dbPath, SEGREANT_DEMO: '', HOME: scratch, USERPROFILE: scratch, APPDATA: scratch, LOCALAPPDATA: scratch, XDG_CONFIG_HOME: scratch, NODE_OPTIONS: '', NO_COLOR: '1' };
+  const run = (args: string[]) => spawnSync(process.execPath, [join(root, 'dist/cli.js'), ...args], { cwd: repo, env, encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
+  try {
+    const month = run(['month', '--json']);
+    assert.equal(month.status, 0, month.stderr);
+    assert.equal(JSON.parse(month.stdout).summary.requests, 10000, 'current-month JSON read includes every synthetic request');
+    const exported = run(['export', '--all', '--json']);
+    assert.equal(exported.status, 0, exported.stderr);
+    assert.equal(JSON.parse(exported.stdout).data.length, 10000, 'all-time JSON export includes every synthetic request');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
 
 // Dispatch owns the command list. This table supplies safe read/preview modes;
 // a new dispatch group must be classified before the suite can pass.
@@ -40,6 +73,15 @@ const excluded: Record<string, string> = {
   backup: 'creates a ledger artifact; restore preview covers its read contract',
   help: 'help prose', version: 'version text',
 };
+
+test('the CLI envelope never overwrites a version that belongs to another schema', () => {
+  // A period-close record or signed artifact may own a schemaVersion with its own
+  // meaning. Rewriting it to the CLI's number would misdescribe that document.
+  const owned = cliJsonResponse({ kind: 'period_close', schemaVersion: CLI_JSON_SCHEMA_VERSION + 6, result: null });
+  assert.equal(owned.schemaVersion, CLI_JSON_SCHEMA_VERSION + 6);
+  assert.equal(cliJsonResponse({ ok: true }).schemaVersion, CLI_JSON_SCHEMA_VERSION);
+  assert.deepEqual(cliJsonResponse([1, 2]), { schemaVersion: CLI_JSON_SCHEMA_VERSION, data: [1, 2] });
+});
 
 test('every dispatch command and alias is classified for JSON read coverage', () => {
   assert.ok(groups.length > 40, 'dispatch extraction must see the actual switch');
@@ -78,11 +120,7 @@ test('dispatch-derived JSON reads preserve one versioned document across generat
       if (kind === 'huge') {
         // Large synthetic ledger plus long labels and many files. No owner data,
         // tool logs, credentials, or downloaded corpus is involved.
-        const db = new DatabaseSync(join(home, 'segreant.db'));
-        db.exec(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000)
-          INSERT INTO requests (request_id,ts_iso,ts_epoch_ms,provider,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,estimated,duration_ms,status_code,project,source)
-          SELECT 'fixture-'||x,'2026-01-01T12:00:00.000Z',1767268800000,'openai','fixture-model',1,1,0,0,0.000001,1,1,200,'fixture-project','proxy' FROM n`);
-        db.close();
+        seedLargeLedger(join(home, 'segreant.db'));
         for (let n = 0; n < 200; n++) writeFileSync(join(repo, `fixture-${n}.txt`), 'synthetic\n'.repeat(1000));
       }
       const options = join(folder, 'options.json');
@@ -113,6 +151,14 @@ test('dispatch-derived JSON reads preserve one versioned document across generat
             });
           }
         }
+      }
+      if (kind === 'huge') {
+        const month = spawnSync(process.execPath, [join(root, 'dist/cli.js'), 'month', '--json'], { cwd: repo, env, encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
+        assert.equal(month.status, 0, month.stderr);
+        assert.equal(JSON.parse(month.stdout).summary.requests, 10000, 'current-month JSON read includes every synthetic request');
+        const exported = spawnSync(process.execPath, [join(root, 'dist/cli.js'), 'export', '--economic', '--all', '--json'], { cwd: repo, env, encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
+        assert.equal(exported.status, 0, exported.stderr);
+        assert.equal(JSON.parse(exported.stdout).data.length, 10000, 'all-time economic JSON export includes every synthetic request');
       }
     }
   } finally {

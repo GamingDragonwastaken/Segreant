@@ -19,6 +19,10 @@ required field removal, a type change, a meaning change, or a different envelope
 requires a new schema version and a documented migration. This promise begins
 with the versioned 0.2.0 output; pre-versioned array consumers must read `data`.
 
+A response that is itself a versioned document, such as a period-close record,
+already carries `schemaVersion` with that document's meaning, and the CLI leaves
+it unchanged rather than overwriting it.
+
 The response version is separate from a ledger, billing evidence document,
 signed receipt or pack schema. Backup/refusal output exposes the database
 version as `ledgerSchemaVersion`; nested artifact versions and signed bodies

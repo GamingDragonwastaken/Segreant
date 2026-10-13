@@ -49,6 +49,9 @@ export const CLI_JSON_SCHEMA_VERSION = 1;
 
 export function cliJsonResponse(value: unknown): Record<string, unknown> {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    // A document that already names its own schema version keeps it: that
+    // number describes the document, and the CLI must not relabel it.
+    if (Object.hasOwn(value, 'schemaVersion')) return value as Record<string, unknown>;
     return { ...value as Record<string, unknown>, schemaVersion: CLI_JSON_SCHEMA_VERSION };
   }
   return { schemaVersion: CLI_JSON_SCHEMA_VERSION, data: value };
