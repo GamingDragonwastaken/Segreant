@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "0fed6abdd84adde9d31f06fd3a9517d8a78328510afb0e39826b0ba627202446";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "8a403a6bcf4d59f01a297d4d39bf765a3f593cc24f581f301a687dd53c114693";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -2949,8 +2949,8 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "projects",
-      "optional": true,
-      "type": "ValueProjectPayload[]"
+      "optional": false,
+      "type": "ValueProjectPayload[] | null"
     },
     {
       "name": "frontier",
