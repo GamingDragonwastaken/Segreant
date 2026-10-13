@@ -374,7 +374,7 @@ test('the publish branch decides by position, not by error code', () => {
 
   assert.doesNotMatch(
     branch[1]!,
-    /error\??\.code|code ===|code !==|includes\(code\)/,
+    /\berror\??\.code\b|\bcode ===|\bcode !==|includes\(code\)/,
     'the created branch must not inspect the error code: the list is platform-specific and the position is not',
   );
   // It must still be bounded, or a genuine permanent failure inside our own

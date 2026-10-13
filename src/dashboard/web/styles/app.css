@@ -798,9 +798,15 @@ body.claim-open { overflow: hidden; }
 .more summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 @media (max-width: 820px) {
-  .topbar { padding: var(--s3) var(--s4); gap: var(--s3); flex-wrap: wrap; }
-  .ops { margin-left: 0; order: 3; width: 100%; overflow-x: auto; }
-  .ops-util { order: 4; border-left: 0; padding-left: 0; }
+  /* On a phone the header wraps to several rows, and a sticky one that tall
+     would hold a quarter of the screen. A sideways-scrolling job strip hid
+     Value past the right edge with nothing saying it was there, so every job
+     sits in a grid instead, each a full-size target, all visible at once. */
+  .topbar { position: static; padding: var(--s3) var(--s4); gap: var(--s3); flex-wrap: wrap; }
+  .ops { margin-left: 0; order: 3; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); }
+  .ops-util { order: 4; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 0; padding-left: 0; }
+  .op { min-height: 44px; text-align: center; background: var(--panel); }
+  .register-switch button { min-height: 38px; }
   .register-switch { margin-left: auto; }
   .sheet { padding: 0 var(--s4); }
   .shellfoot { padding: var(--s5) var(--s4) var(--s8); }
@@ -978,6 +984,6 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
    this line opens. */
 .parity-summary { list-style: none; }
 .parity-summary::-webkit-details-marker { display: none; }
-.parity-summary::before { content: 'B8'; color: var(--muted); }
-.parity-details[open] > .parity-summary::before { content: 'BE'; }
+.parity-summary::before { content: '\25B8'; color: var(--muted); }
+.parity-details[open] > .parity-summary::before { content: '\25BE'; }
 .parity-counts { color: var(--muted); font-size: 13px; }

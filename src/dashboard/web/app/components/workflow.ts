@@ -51,6 +51,40 @@ export function step(at: number | { n: number; done: boolean }, title: () => str
     ...body);
 }
 
+const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
+
+function focusKey(el: Element): string {
+  return JSON.stringify([el.id, el.tagName, el.getAttribute('aria-label') ?? el.textContent?.trim() ?? '']);
+}
+
+function usable(el: Element): el is HTMLElement {
+  return el instanceof HTMLElement && !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0;
+}
+
+/**
+ * Call just before a job page swaps in reloaded data; call the result after.
+ *
+ * The swap rebuilds the forms, and the control that started the save goes with
+ * them, dropping keyboard focus to the top of the document. The returned
+ * function puts focus back on the rebuilt equivalent of that control, or, when
+ * the save made it disappear, on the first control of the first step still to
+ * do. Focus the operator moved elsewhere while the request ran is left alone.
+ */
+export function holdFocus(root: Element | null): () => void {
+  const active = document.activeElement;
+  if (!root || !active || !root.contains(active)) return () => {};
+  const key = focusKey(active);
+  return () => {
+    if (active.isConnected || (document.activeElement && document.activeElement !== document.body)) return;
+    const candidates = [...root.querySelectorAll(FOCUSABLE)].filter(usable);
+    const same = candidates.find((el) => focusKey(el) === key);
+    const next = same ?? [...root.querySelectorAll('.step:not(.step-done)')]
+      .map((s) => [...s.querySelectorAll(FOCUSABLE)].find(usable))
+      .find((el) => el !== undefined);
+    (next ?? candidates[0])?.focus();
+  };
+}
+
 export function field(id: string, label: string, control: Node): Node {
   return h('div', { class: 'form-field' }, h('label', { for: id, text: label }), control);
 }

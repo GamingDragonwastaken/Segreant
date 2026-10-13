@@ -120,10 +120,44 @@ function meteredCard(d: StatementPayload): Node {
     goLink('spend', 'See where it went'));
 }
 
+/** Whether one recorded comparison carries a problem the reader must see. */
+function runWarnings(r: StatementBilledRun): string[] {
+  const out: string[] = [];
+  if (r.snapshotStability === 'changed_across_observations') out.push('The provider reported different figures for the same days. This comparison is conflicted.');
+  else if (r.snapshotStability === null) out.push('Provider snapshot stability was not recorded.');
+  if (r.offPathBound === 'none_local_estimate_exceeds_provider') out.push('The local estimate exceeds the provider total. This remainder cannot bound spend outside Segreant.');
+  else if (r.offPathBound === 'unknown_local_total_truncated_by_retention') out.push('Retention deleted local request rows in this period. This remainder cannot bound spend outside Segreant.');
+  else if (r.offPathBound === null) out.push('The remainder bound was not recorded; what it establishes is unknown.');
+  return out;
+}
+
+/** The conditions a sound comparison still rests on, said once and quietly. */
+function runConditions(r: StatementBilledRun): string {
+  const parts: string[] = [];
+  if (r.snapshotStability === 'stable_across_observations') parts.push('Repeated provider observations agreed.');
+  else if (r.snapshotStability === 'single_observation') parts.push('One provider observation, so agreement across observations is not established.');
+  if (r.offPathBound === 'upper_bound_conditional') parts.push('The remainder bounds spend outside Segreant only if our pricing did not overstate the cost of requests through Segreant.');
+  return parts.join(' ');
+}
+
 function billedRunLine(r: StatementBilledRun, period: StatementPayload['period']): Node {
-  return h('div', { class: 'statement-run' },
+  const conditions = runConditions(r);
+  return h('div', { class: 'statement-run', role: 'group', 'aria-label': `Provider comparison for ${r.providerProjectRef ?? 'an unrecorded project'}` },
     h('p', { text: `Provider billed ${usdFromMicros(r.providerReportedMicros)}; we measured ${usdFromMicros(r.localCapturedMicros)}; ${usdFromMicros(r.unexplainedVarianceMicros)} not explained${r.providerReportedMicros > 0 ? ` (${pct(r.unexplainedVarianceMicros / r.providerReportedMicros)})` : ''}.` }),
-    h('span', { class: 'basis', text: `${coverWords(r.coversWholeMonth, r.periodStartMs, r.periodEndMs, period, r.computedAtMs, 'UTC')} · ${r.providerSourceKind === 'operator_supplied_export' ? 'from an export you supplied' : r.providerSourceKind === 'provider_api_pull' ? 'read from the provider' : 'source not recorded'} · recorded ${relative(r.computedAtMs)}` }));
+    ...runWarnings(r).map((w) => h('p', { class: 'drawer-error', text: w })),
+    h('span', { class: 'basis', text: `${coverWords(r.coversWholeMonth, r.periodStartMs, r.periodEndMs, period, r.computedAtMs, 'UTC')} · project ${r.providerProjectRef ?? 'not recorded'} · ${r.providerSourceKind === 'operator_supplied_export' ? 'from an export you supplied' : r.providerSourceKind === 'provider_api_pull' ? 'read from the provider' : 'source not recorded'} · recorded ${relative(r.computedAtMs)}` }),
+    conditions ? h('span', { class: 'basis', text: conditions }) : null);
+}
+
+/**
+ * The card's one-word summary. Calendar coverage alone never earns a green
+ * pill: a conflicted or unbounded comparison says so even when it spans the
+ * whole month.
+ */
+function billedPill(b: StatementPayload['billed']): { text: string; tone: string } {
+  if (b.runs.some((r) => r.snapshotStability === 'changed_across_observations')) return { text: 'conflicted', tone: 'pill-warn' };
+  if (b.runs.some((r) => runWarnings(r).length > 0)) return { text: 'compared, limits apply', tone: 'pill-unverified' };
+  return b.monthCoverage === 'whole' ? { text: 'compared', tone: 'pill-ok' } : { text: 'partly compared', tone: 'pill-unverified' };
 }
 
 function billedCard(d: StatementPayload): Node {
@@ -135,8 +169,7 @@ function billedCard(d: StatementPayload): Node {
         : 'No comparison found among the most recent ones; an older one may exist.' }),
       goLink('evidence', 'Close this month'));
   }
-  return card(() => (isPrecise() ? 'Provider-billed' : 'What the provider billed'),
-    { text: b.monthCoverage === 'whole' ? 'checked' : 'partly checked', tone: b.monthCoverage === 'whole' ? 'pill-ok' : 'pill-unverified' },
+  return card(() => (isPrecise() ? 'Provider-billed' : 'What the provider billed'), billedPill(b),
     ...b.runs.slice(0, 3).map((r) => billedRunLine(r, d.period)),
     b.runs.length > 3 ? h('span', { class: 'basis', text: `${b.runs.length - 3} more comparison(s) overlap this month.` }) : null,
     goLink('evidence', 'Open Close'));
