@@ -1217,8 +1217,8 @@ export interface ValuePayload {
   claimSupport: ClaimSupportPayload;
 
   allocation: unknown;
-  /** Per-project value rows; classic rendering consumes this list directly. */
-  projects?: ValueProjectPayload[];
+  /** Null when no value spine was computed; populated rows otherwise. Unknown is never an empty measured list. */
+  projects: ValueProjectPayload[] | null;
   frontier?: FrontierPayload | null;
   /** 'git' | 'store' | null. Null means no matured outcomes could be observed. */
   valueSource?: string | null;
