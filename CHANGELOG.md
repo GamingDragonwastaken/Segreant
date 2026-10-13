@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A light theme, following your computer.** The dashboard had a light palette that nothing ever switched on. It now follows the operating system's light or dark setting, live, and Settings has an Appearance choice (match this computer, light, dark) kept in this browser only. Every page passes the automated WCAG 2 AA checks in both themes; the selected range chip, which fell to about 3:1 on the light gold, now uses dark text. On phones the current page is outlined in gold so it stands out in the grid.
+
 - **The Statement downloads as a spreadsheet.** "Download as CSV" on the Statement saves the month as four labelled sections: what was measured, what the provider billed, how it was split, and what it produced. Every row carries its own basis, its own dates and whether it covers the whole month, and no row adds the claims together. The file lists every project and model rather than the page's top ten, and the project rows add up to the measured total. Provider and allocation amounts are exact to the microdollar. `GET /api/statement.csv?month=YYYY-MM` serves it from the same build as the page.
 
 - **Every job is reachable on a phone.** The job bar used to scroll sideways and hid Value past the right edge with nothing to say it was there. On narrow screens all six jobs now sit in a grid, with Data and Settings below, each a full-size target, and the taller header no longer sticks over the page. The Plain/Precise switch has a larger target too.
