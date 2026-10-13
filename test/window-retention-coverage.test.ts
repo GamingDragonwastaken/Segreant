@@ -190,9 +190,10 @@ test('segreant export --all discloses truncation without putting it in the data 
     const result = await runCli(['export', '--all', '--json'], db, dir);
     assert.equal(result.code, 0, result.stderr);
 
-    const rows = JSON.parse(result.stdout) as unknown[];
-    assert.ok(Array.isArray(rows), 'stdout must remain exactly the exported data');
-    assert.equal(rows.length, 1, 'one request survived the prune');
+    const document = JSON.parse(result.stdout) as { schemaVersion: number; data: unknown[] };
+    assert.equal(document.schemaVersion, 1, 'stdout must be one versioned export document');
+    assert.ok(Array.isArray(document.data), 'the export records remain in data');
+    assert.equal(document.data.length, 1, 'one request survived the prune');
     assert.match(result.stderr, /retention|deleted|prun/i, 'the truncation must be disclosed somewhere');
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -211,7 +212,9 @@ test('an untruncated export says nothing extra on either stream', async () => {
 
     const result = await runCli(['export', '--all', '--json'], db, dir);
     assert.equal(result.code, 0, result.stderr);
-    assert.equal((JSON.parse(result.stdout) as unknown[]).length, 1);
+    const document = JSON.parse(result.stdout) as { schemaVersion: number; data: unknown[] };
+    assert.equal(document.schemaVersion, 1);
+    assert.equal(document.data.length, 1);
     assert.doesNotMatch(result.stderr, /retention|deleted by/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });

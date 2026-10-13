@@ -54,8 +54,11 @@ export interface OpencodeUsageEvent {
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
-  /** opencode's own computed cost (USD); 0 is legitimate for free-tier models. */
-  reportedCostUsd: number;
+  /**
+   * opencode's own computed cost (USD); 0 is legitimate for free-tier models.
+   * Null when the message carries no usable cost: unknown, never zero.
+   */
+  reportedCostUsd: number | null;
 }
 
 interface OpencodeMessageData {
@@ -90,7 +93,13 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
   if (input === 0 && output === 0 && reasoning === 0 && cacheRead === 0 && cacheWrite === 0) return null;
 
   const ts = d.time?.created ?? fallbackTsMs;
-  if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
+  // Missing dates cannot be placed in a reporting period. Zero is OpenCode's
+  // unknown sentinel, not evidence that the request happened in January 1970.
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0 || ts > 8.64e15) return null;
+  // An explicit zero is a valid free-tier report. An absent or malformed price
+  // is not a reported zero: it stays unknown here, and the importer prices the
+  // tokens with a stated basis or leaves the row out.
+  const reportedCostUsd = typeof d.cost === 'number' && Number.isFinite(d.cost) && d.cost >= 0 ? d.cost : null;
   const cwd = d.path?.cwd ?? '';
   const { project, basis: attributionBasis } = projectKeyWithBasis(cwd, 'opencode');
 
@@ -108,7 +117,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
     reasoningTokens: reasoning,
     cacheReadTokens: cacheRead,
     cacheWriteTokens: cacheWrite,
-    reportedCostUsd: typeof d.cost === 'number' && d.cost >= 0 ? d.cost : 0,
+    reportedCostUsd,
   };
 }
 
@@ -168,21 +177,41 @@ function importOpencodeRows(store: Store, opts: ImportOptions): ImportSummary {
       // OpenCode supplies this number; Segreant records it as tool-reported rather
       // than calling it an invoice. Only a zero amount with an exact local match
       // is replaced by a local list-price calculation.
-      let costUsd = ev.reportedCostUsd;
+      let costUsd: number;
       let estimated = false;
       let pricing = toolReportedPricingEvidence();
       let economicAmount: RequestRow['economicAmount'];
-      if (costUsd === 0 && REPRICEABLE[ev.provider]) {
-        const c = computeCost(REPRICEABLE[ev.provider]!, ev.model, {
+      if (ev.reportedCostUsd === null) {
+        // No reported cost. The tokens are still real usage, so price them the
+        // way the proxy would: the list rate when the model is listed, otherwise
+        // a fallback marked estimated. A provider with no list price at all has
+        // nothing honest to price with, and the row stays out of the totals.
+        const provider = REPRICEABLE[ev.provider];
+        if (!provider) continue;
+        const c = computeCost(provider, ev.model, {
           inputTokens: ev.inputTokens,
           outputTokens: ev.outputTokens,
           cacheWriteTokens: ev.cacheWriteTokens,
           cacheReadTokens: ev.cacheReadTokens,
         });
-        if (!c.estimated) {
-          costUsd = c.costUsd; // only adopt an EXACT match; never the fallback rate
-          pricing = c.pricing;
-          economicAmount = c.exact?.total;
+        costUsd = c.costUsd;
+        estimated = c.estimated;
+        pricing = c.pricing;
+        economicAmount = c.exact?.total;
+      } else {
+        costUsd = ev.reportedCostUsd;
+        if (costUsd === 0 && REPRICEABLE[ev.provider]) {
+          const c = computeCost(REPRICEABLE[ev.provider]!, ev.model, {
+            inputTokens: ev.inputTokens,
+            outputTokens: ev.outputTokens,
+            cacheWriteTokens: ev.cacheWriteTokens,
+            cacheReadTokens: ev.cacheReadTokens,
+          });
+          if (!c.estimated) {
+            costUsd = c.costUsd; // only adopt an EXACT match; never the fallback rate
+            pricing = c.pricing;
+            economicAmount = c.exact?.total;
+          }
         }
       }
 

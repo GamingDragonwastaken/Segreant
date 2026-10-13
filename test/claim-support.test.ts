@@ -122,6 +122,16 @@ test('a residual that bounds nothing is not a reconciliation with complete cover
   assert.equal(unbounded.profile.coverage, 'partial');
   assert.equal(unbounded.profile.epistemic, 'supported', 'the comparison still happened; what it reaches is the open question');
   assert.match(unbounded.note ?? '', /bounds no off-path spend/);
+
+  const truncated = billedClaimSupport({
+    recordCount: 1, runCount: 1,
+    latest: { snapshotStability: 'single_observation', offPathBound: 'unknown_local_total_truncated_by_retention' },
+  });
+  assert.equal(truncated.profile.coverage, 'partial');
+  assert.equal(truncated.profile.epistemic, 'supported', 'retention limits what the comparison reaches, not whether it was recorded');
+  assert.match(truncated.note ?? '', /retention deleted local request rows in this period/);
+  assert.match(truncated.note ?? '', /bounds no off-path spend/);
+  assert.doesNotMatch(truncated.note ?? '', /local estimate exceeds the provider total/);
 });
 
 test('holding a provider bill is visible non-emptiness, not a billed claim', () => {
