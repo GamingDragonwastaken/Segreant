@@ -107,9 +107,16 @@ card into provider billing, or alter signed/canonical evidence bytes.
   and every other causal gate passes. Until a real protocol is registered,
   executed, and qualified, the product has no causal result to present.
   Neither path routes providers or changes budgets automatically.
-- The browser dashboard has no third-party assets or analytics and is intended
-  to expose a preview before consequential local changes. The CLI remains the
-  reference surface while GUI parity is completed.
+- The browser dashboard has no third-party assets or analytics and shows a
+  preview before every consequential local change. Two jobs can be completed in
+  it end to end: Allocate (cost centres, rules, a recorded run) and Close
+  (declare the scope, import and adopt an export, record a reconciliation),
+  through local-only write routes that store what the CLI stores. The Statement
+  shows one calendar month's four claims side by side and exports them as CSV
+  without a total. The CLI remains the reference surface: the parity map in
+  Settings is derived from the registry, and a row's `full` or `partial`
+  coverage is checked against app source by
+  `test/dashboard-coverage-value.test.ts` rather than asserted.
 
 ## Intended direction
 
