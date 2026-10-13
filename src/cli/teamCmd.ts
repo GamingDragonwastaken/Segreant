@@ -127,7 +127,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   if (flags.pubkey) {
     const keys = loadOrCreateKeyPair(join(segreantHome(), 'receipt-key.json'));
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ keyId: keys.keyId, publicKey: keys.publicPem }, null, 2) + '\n');
+      printJson({ keyId: keys.keyId, publicKey: keys.publicPem });
       return;
     }
     console.log('');
@@ -266,7 +266,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(receipts, null, 2) + '\n');
+    printJson(receipts);
     store.close();
     return;
   }
@@ -339,9 +339,7 @@ export async function cmdJudge(flags: Flags): Promise<void> {
   if (!picked) {
     store.close();
     if (flags.json) {
-      process.stdout.write(
-        JSON.stringify({ error: 'no-sessions-in-window', project, windowDays, sessions: 0 }, null, 2) + '\n',
-      );
+      printJson({ error: 'no-sessions-in-window', project, windowDays, sessions: 0 });
       return;
     }
     console.log('');
@@ -599,7 +597,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   if (flags.pubkey) {
     const keys = loadOrCreateKeyPair(keyPath);
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ keyId: keys.keyId, publicKey: keys.publicPem }, null, 2) + '\n');
+      printJson({ keyId: keys.keyId, publicKey: keys.publicPem });
       return;
     }
     console.log('');

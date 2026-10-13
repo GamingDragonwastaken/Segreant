@@ -13,7 +13,7 @@ import { economicRequestsToCsv, economicRequestsToJson } from '../export/economi
 import { computeAlerts, computeAlertCoverage, type Alert, type AlertCoverage } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
-import { C, color, usd, num, pct, printJson } from './ui.ts';
+import { C, color, usd, num, pct, printJson, cliJsonResponse } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { rangeFor, UserInputError, usdFlag, type Flags } from './flags.ts';
 import { retentionNotice } from './retention.ts';
@@ -287,8 +287,8 @@ export function cmdExport(flags: Flags): void {
   }
   const asJson = flags.json === true || flags.format === 'json';
   const out = economic
-    ? (asJson ? economicRequestsToJson(economicRows!) : economicRequestsToCsv(economicRows!))
-    : (asJson ? `${stringifyJson(rows)}\n` : requestsToCsv(rows));
+    ? (asJson ? `${stringifyJson(cliJsonResponse(JSON.parse(economicRequestsToJson(economicRows!))))}\n` : economicRequestsToCsv(economicRows!))
+    : (asJson ? `${stringifyJson(cliJsonResponse(rows))}\n` : requestsToCsv(rows));
 
   if (typeof flags.out === 'string') {
     writeFileSync(flags.out, out);
