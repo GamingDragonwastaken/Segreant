@@ -61,6 +61,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - When the local server stopped, the dashboard kept showing its last figures as current, with no timer to notice. It now re-checks every 15 seconds while figures are shown. When the server is gone, a banner states that the figures are not current and how old they are, the figures dim, and Retry reloads the page.
   - The classic dashboard showed "latest 01/01/1970" for billing imports that had never happened. A missing time now shows as "—".
 
+- **Missing evidence no longer looks like a measured zero or a 1970 date.** The Spend, claim, and CLI retention notices now say "unknown" when the deletion boundary has no recorded time. An unavailable billing, allocation, or outcome report is identified as unavailable instead of described as empty. OpenCode rows without a valid time or reported cost are left out of imported totals; an explicitly reported zero cost still counts. Data now calls its request total a metered cost estimate, and a public model without a price no longer displays $0.
+
 - **Public documents agree with the licence and with what shipped.**
   - README, LICENSING, PRODUCT, the release gate, the website and the price-card notes now agree on several points: 0.1.0 is on npm and 0.2.0 is not; the BUSL-1.1 grant allows use at work (the badge said "free for personal use"); billed cost also comes from the OpenAI Costs API; and the Gemini 3.x rates and read dates are the ones the card lists. No price changed.
   - The lockfile's `license` field said MIT and now says BUSL-1.1.

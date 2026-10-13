@@ -16,6 +16,7 @@ import { MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type Allocat
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import { color, C, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
+import { recordedTime } from '../util/time.ts';
 
 function usage(): void {
   console.error('  Usage: segreant alloc <centres|centre|rules|rule|revoke|run> [options]');
@@ -83,7 +84,7 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   if (result.byCostCentre.length === 0) {
     console.log(color(tty, C.gray, lost
       ? '  No spend that SURVIVES in this period reached a cost centre — rows before '
-        + `${day(lost.prunedBeforeMs ?? 0)} were deleted by retention, and whether they did cannot be read from here.`
+        + `${recordedTime(lost.prunedBeforeMs, true)} were deleted by retention, and whether they did cannot be read from here.`
       : '  No spend reached a cost centre in this period.'));
   } else {
     for (const centre of result.byCostCentre) {
@@ -105,7 +106,7 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
     // percentage moves for a reason that has nothing to do with the rules --
     // measured at 76.2% becoming 100.0% on a period 95% of whose spend went.
     console.log(color(tty, C.yellow, '  Retention deleted request rows from inside this period '
-      + `(before ${day(lost.prunedBeforeMs ?? 0)}), so the total above is what SURVIVES and the`));
+      + `(before ${recordedTime(lost.prunedBeforeMs, true)}), so the total above is what SURVIVES and the`));
     console.log(color(tty, C.yellow, '  percentages beside it are shares of that, not of what the period cost.'));
   }
 

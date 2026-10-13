@@ -98,7 +98,7 @@ export function spendView(): Node {
 
         lost
           ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
-              ? `retention deleted ${lost.rowsRemoved} request row(s) from before ${new Date(lost.prunedBeforeMs ?? 0).toISOString()}; this window covers what survived, not everything metered in it`
+              ? `retention deleted ${lost.rowsRemoved} request row(s) from before ${typeof lost.prunedBeforeMs === 'number' && Number.isFinite(lost.prunedBeforeMs) && lost.prunedBeforeMs > 0 && lost.prunedBeforeMs <= 8.64e15 ? new Date(lost.prunedBeforeMs).toISOString() : 'unknown'}; this window covers what survived, not everything metered in it`
               : 'Some requests in this range were deleted by your retention setting, so these totals cover what is left rather than everything we measured.') })
           : null,
 

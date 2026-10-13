@@ -90,7 +90,12 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
   if (input === 0 && output === 0 && reasoning === 0 && cacheRead === 0 && cacheWrite === 0) return null;
 
   const ts = d.time?.created ?? fallbackTsMs;
-  if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
+  // Missing dates cannot be placed in a reporting period. Zero is OpenCode's
+  // unknown sentinel, not evidence that the request happened in January 1970.
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0 || ts > 8.64e15) return null;
+  // An explicit zero is a valid free-tier report. An absent or malformed price
+  // is not a reported zero; refuse it rather than inventing cost or provenance.
+  if (typeof d.cost !== 'number' || !Number.isFinite(d.cost) || d.cost < 0) return null;
   const cwd = d.path?.cwd ?? '';
   const { project, basis: attributionBasis } = projectKeyWithBasis(cwd, 'opencode');
 
@@ -108,7 +113,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
     reasoningTokens: reasoning,
     cacheReadTokens: cacheRead,
     cacheWriteTokens: cacheWrite,
-    reportedCostUsd: typeof d.cost === 'number' && d.cost >= 0 ? d.cost : 0,
+    reportedCostUsd: d.cost,
   };
 }
 
