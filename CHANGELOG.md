@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Financial evidence keeps its own scope and dates.** Allocate no longer calls the whole input ledger checked after one provider comparison; it states that the comparison covers its own project and dates. Statement and Close label provider periods in UTC, so local time cannot add or remove a day. Plain rule and project confirmations explain their consequences without raw status tokens. Rule messages distinguish unchanged recorded runs from a new preview, which follows effective dates and can differ for an earlier period.
+
 - Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.
 
 - **Value opens when no value has been computed yet.** The browser rejected the server's `projects: null` response as a broken array and stopped loading the page. Its contracts now accept the uncomputed state as unknown, while checking populated project rows as before.
