@@ -117,11 +117,35 @@ test('OpenCode refuses a missing or zero timestamp instead of recording 1970', (
   assert.equal(parseOpencodeMessage('m', JSON.stringify(message()), NOW)!.tsEpochMs, NOW, 'the recorded database time remains usable when JSON omits it');
 });
 
-test('OpenCode refuses absent or invalid cost while preserving explicitly reported zero', () => {
+test('OpenCode marks absent or invalid cost unknown while preserving explicitly reported zero', () => {
   for (const cost of [undefined, null, -1, '0', Number.POSITIVE_INFINITY]) {
-    assert.equal(parseOpencodeMessage('m', JSON.stringify(message({ cost, time: { created: NOW } }))), null);
+    assert.equal(parseOpencodeMessage('m', JSON.stringify(message({ cost, time: { created: NOW } })))!.reportedCostUsd, null);
   }
   assert.equal(parseOpencodeMessage('m', JSON.stringify(message({ time: { created: NOW } })))!.reportedCostUsd, 0);
+});
+
+test('OpenCode rows without a reported cost keep their usage and are priced from tokens with that basis', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'segreant-opencode-unpriced-')), 'fixture.db');
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)');
+  const insert = db.prepare('INSERT INTO message VALUES (?, ?, ?, ?)');
+  const tokens = { input: 1_000_000, output: 0 };
+  // A listed model: the list price is the cost, not zero and not a dropped row.
+  insert.run('listed', 's', NOW, JSON.stringify(message({ providerID: 'openai', modelID: 'gpt-4o', cost: undefined, tokens })));
+  // An unlisted model: a fallback estimate, counted as estimated.
+  insert.run('unlisted', 's', NOW + 1, JSON.stringify(message({ providerID: 'openai', modelID: 'fixture-unlisted-model', cost: undefined, tokens })));
+  // A provider with no list price at all: nothing honest to price it with.
+  insert.run('unpriceable', 's', NOW + 2, JSON.stringify(message({ cost: undefined })));
+  db.close();
+  const store = new Store(':memory:');
+  try {
+    const summary = importOpencode(store, { root: file });
+    assert.equal(summary.inserted, 2, 'both OpenAI rows reach the ledger; the unpriceable one does not');
+    assert.equal(store.summary(0, NOW + 10).requests, 2);
+    assert.ok(summary.costUsd > 0, 'absent cost is never recorded as a measured zero');
+    assert.ok(summary.estimatedCostUsd > 0 && summary.estimatedCostUsd < summary.costUsd,
+      'only the unlisted model is a fallback estimate; the listed model is priced at its list rate');
+  } finally { store.close(); }
 });
 
 test('OpenCode database rows with zero time or absent cost cannot reach user ledger totals', () => {

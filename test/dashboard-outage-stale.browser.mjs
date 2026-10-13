@@ -49,7 +49,7 @@ test('dashboard outage: figures on screen are labelled not current, with age and
     assert.match(text, /stopped responding/i, 'says the server stopped responding');
     assert.match(text, /not current/i, 'says the figures are not current');
     assert.match(text, /read .*ago|less than a minute ago|read at/i, 'states when the figures were read, and how old they are');
-    await page.getByRole('button', { name: 'Retry' }).waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor({ state: 'visible', timeout: 5000 });
   } finally {
     await browser?.close();
     server.closeAllConnections();
