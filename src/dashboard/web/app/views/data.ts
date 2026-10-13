@@ -67,7 +67,7 @@ export function dataView(): Node {
       const missing = list.filter((i) => !i.available);
       const o = overview();
       const isDemo = o?.demo === true;
-      const empty = (o?.summary.requests ?? 0) === 0;
+      const empty = o !== null && o.summary.requests === 0;
 
       return h('div', null,
         isDemo
@@ -191,7 +191,7 @@ export function dataView(): Node {
               h('div', { class: 'stat', text: count(o.summary.requests) }),
               h('span', { class: 'basis', text: () => (isPrecise()
                 ? `recorded requests totalling ${usd(o.summary.costUsd)} of metered cost`
-                : `AI calls recorded, worth ${usd(o.summary.costUsd)} by our own measurement`) }))
+                : `AI calls recorded, with ${usd(o.summary.costUsd)} of metered cost estimates`) }))
           : null,
 
         h('section', { class: 'section' },

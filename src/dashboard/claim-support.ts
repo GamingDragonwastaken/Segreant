@@ -55,6 +55,7 @@
 
 import type { ClaimProfilePayload, ClaimSupportPayload } from './shared-types.ts';
 import type { WindowRetentionCoverage } from '../store/db.ts';
+import { recordedTime } from '../util/time.ts';
 
 /**
  * The seven axes that do not vary, and why stating them is the point.
@@ -160,7 +161,7 @@ export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPay
   if (truncated) {
     const removed = input.retention.rowsRemoved === 1 ? '1 request row' : `${input.retention.rowsRemoved} request rows`;
     notes.push(
-      `retention deleted ${removed} from before ${new Date(input.retention.prunedBeforeMs ?? 0).toISOString()}, `
+      `retention deleted ${removed} from before ${recordedTime(input.retention.prunedBeforeMs)}, `
       + 'so this window covers what survived rather than everything metered in it',
     );
   }
