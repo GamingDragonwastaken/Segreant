@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- Configuration now refuses unknown section and budget field names, so a
+  misspelled cap cannot silently leave forwarding unlimited. The proxy also
+  refuses invalid live budget values before forwarding, including oversized caps.
+
 - **Close refuses unsafe thresholds and filenames without exposing submitted text.** A very large materiality threshold could overflow to infinity and hide every discrepancy; the dashboard now refuses amounts outside the safe microdollar range. Billing uploads refuse directory names and paths in either platform's format. Malformed requests and exports show a concise JSON error without quoting their contents.
 
 - **A monthly statement, as the finance home.**
