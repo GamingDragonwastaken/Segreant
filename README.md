@@ -173,6 +173,24 @@ Per-tool recipes (Cursor, aider, opencode, Antigravity, your own SDK scripts):
 - **Keep your data yours.** SQLite on your disk, verified backup and restore,
   and evidence packs you can sign and verify.
 
+### In the dashboard, without the terminal
+
+`segreant start` serves a local dashboard organised by job:
+
+- **Statement**: one calendar month, side by side. What was measured, what the
+  provider billed, how it was split, and what it produced. The four are never
+  added together, and the month downloads as a CSV.
+- **Spend**: where the measured spend went, by project, model and source.
+- **Protect**: caps and alerts that stop spend before it happens.
+- **Close**: declare the OpenAI project, bring in the cost export, and record
+  the comparison with what Segreant measured.
+- **Allocate**: cost centres, the rules that assign spend to them, and the
+  monthly split, previewed before it is recorded.
+- **Value**: what the spend produced, with the limits stated.
+
+Every save shows its preview first. The dashboard follows your system's light
+or dark setting, works at phone width, and loads nothing from the internet.
+
 Every command, flag and design detail is in the **[Segreant guide](docs/GUIDE.md)**.
 
 ## For teams and enterprises
