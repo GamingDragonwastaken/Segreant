@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_CONFIG, loadConfig, validateBudgetConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, exactBudgetCaps, loadConfig, validateBudgetConfig } from '../src/config.ts';
 import { createProxyServer } from '../src/proxy/server.ts';
 import { Store } from '../src/store/db.ts';
 
@@ -22,6 +22,13 @@ const invalidBudgets: Array<[string, unknown]> = [
   ['string enforcement switch', { capIncludesImported: 'false' }],
   ['zero runaway window', { runawayWindowSec: 0 }],
 ];
+
+test('an unknown-key mutation invalidates an already cached unlimited budget', () => {
+  const budget = structuredClone(DEFAULT_CONFIG.budget);
+  assert.equal(exactBudgetCaps(budget).dailyUsd, null);
+  Object.assign(budget, { dailyUSd: 5 });
+  assert.throws(() => exactBudgetCaps(budget), /CONFIG_INVALID/);
+});
 
 for (const [name, override] of invalidBudgets) {
   test(`persisted config refuses ${name}`, () => {
