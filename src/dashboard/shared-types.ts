@@ -472,7 +472,9 @@ export interface StatementBilledRun {
   localCapturedMicros: number;
   unexplainedVarianceMicros: number;
   providerSourceKind: 'provider_api_pull' | 'operator_supplied_export' | 'legacy_unknown';
-  offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention';
+  offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention' | null;
+  snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations' | null;
+  providerProjectRef: string | null;
   coversWholeMonth: boolean;
 }
 

@@ -113,12 +113,12 @@ export interface CapabilitySpec extends Capability {
 
 export const TERRITORIES: ReadonlyArray<{ id: Territory; label: string; plain: string; icon: string }> = [
   { id: 'spend', label: 'Spend', plain: 'What AI is costing you, and where it went.', icon: 'meter' },
-  { id: 'control', label: 'Control', plain: 'Budgets and alerts, so nothing surprises you.', icon: 'shield' },
-  { id: 'allocation', label: 'Allocation', plain: 'Whose cost this is — projects and cost centres.', icon: 'split' },
-  { id: 'evidence', label: 'Evidence', plain: 'Whether the numbers hold up against the provider bill.', icon: 'seal' },
+  { id: 'control', label: 'Protect', plain: 'Budgets and alerts, so nothing surprises you.', icon: 'shield' },
+  { id: 'allocation', label: 'Allocate', plain: 'Whose cost this is — projects and cost centres.', icon: 'split' },
+  { id: 'evidence', label: 'Close', plain: 'Whether the numbers hold up against the provider bill.', icon: 'seal' },
   { id: 'value', label: 'Value', plain: 'What the spend produced, with the limits stated.', icon: 'yield' },
   { id: 'data', label: 'Data', plain: 'Getting your usage in, from tools and providers.', icon: 'inflow' },
-  { id: 'system', label: 'System', plain: 'Pricing, settings, maintenance, and this table.', icon: 'gear' },
+  { id: 'system', label: 'Settings', plain: 'Pricing, settings, maintenance, and this table.', icon: 'gear' },
 ];
 
 export const CAPABILITIES: readonly Capability[] = [

@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Every job is reachable on a phone.** The job bar used to scroll sideways and hid Value past the right edge with nothing to say it was there. On narrow screens all six jobs now sit in a grid, with Data and Settings below, each a full-size target, and the taller header no longer sticks over the page. The Plain/Precise switch has a larger target too.
+- **Keyboard focus survives a save.** Saving a cost centre, rule or project declaration rebuilt the form and dropped focus to the top of the page. Focus now returns to the same control, or, when the save completes a step, to the first control of the next step. Focus the operator moved elsewhere while the request ran is left alone.
+- **Statement shows what each provider comparison can establish.** A comparison no longer earns a green pill because its dates span the month. Each recorded run names its provider project and states, in red, disagreeing provider snapshots, deleted local rows, an estimate above the provider total, or missing bound and stability evidence. A sound run states its conditions in one quiet line. The card reads "conflicted", "compared, limits apply", "partly compared" or "compared".
+- **Page names agree everywhere.** The capability table and the Allocate summary still said Evidence, Control, Allocation and System for pages the navigation calls Close, Protect, Allocate and Settings.
+- **The Settings disclosure marker renders.** A mangled CSS escape drew a missing-glyph box before "What this dashboard can and cannot do". A guard test now refuses stray control characters in source, which also restored three patterns a publication-lock test had silently stopped checking.
+
 - **Financial evidence keeps its own scope and dates.** Allocate no longer calls the whole input ledger checked after one provider comparison; it states that the comparison covers its own project and dates. Statement and Close label provider periods in UTC, so local time cannot add or remove a day. Plain rule and project confirmations explain their consequences without raw status tokens. Rule messages distinguish unchanged recorded runs from a new preview, which follows effective dates and can differ for an earlier period.
 
 - Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.

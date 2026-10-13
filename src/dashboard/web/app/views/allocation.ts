@@ -20,7 +20,7 @@ import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload, type AllocationRunResultPayload, type AllocationRule, type CostCentre } from '../core/api.ts';
 import { isPrecise, relative, count, usdFromMicros, date, pct } from '../core/fmt.ts';
-import { pageNotice, step, field, errorText, type Say } from '../components/workflow.ts';
+import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
 
 /** The payload's `excludedFrom` ids, said in words an operator can act on. */
 const EXCLUSION_WORDS: Record<string, string> = {
@@ -77,7 +77,7 @@ export function allocationView(): Node {
   scopedEffect(() => {
     reloads();
     void api.allocation()
-      .then((payload) => { error.set(null); data.set(payload); })
+      .then((payload) => { const restore = holdFocus(page); error.set(null); data.set(payload); restore(); })
       .catch((e: unknown) => error.set(errorText(e)));
   });
   // Project names to match on. A typo in a match makes a rule that claims
@@ -86,7 +86,7 @@ export function allocationView(): Node {
     .then((o) => projects.set(o.byProject.map((p) => p.label).filter((l) => l && l !== '(unattributed)')))
     .catch(() => projects.set([]));
 
-  return h('div', null,
+  const page = h('div', null,
     h('div', { class: 'view-head' },
       h('h1', { class: 'view-title', text: 'Allocate' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
@@ -128,7 +128,8 @@ export function allocationView(): Node {
             ? runPanel(d.demo, reloadAll, say, nameOf)
             : h('p', { class: 'drawer-muted', text: 'Add a rule first. Without one, every dollar would show as unallocated.' })),
         history(d.runs));
-    });
+    }) as Element;
+  return page;
 }
 
 function basisStrip(d: AllocationPayload): Node {

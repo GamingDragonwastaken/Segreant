@@ -12,7 +12,7 @@ import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type BillingPayload, type KernelNodePayload, type BillingImportSummary, type BillingImportPreviewPayload, type BillingAdoptionPlanPayload, type BillingReconcileResultPayload } from '../core/api.ts';
 import { isPrecise, relative, basisWords, usd, usdFromMicros, count, date, pct } from '../core/fmt.ts';
-import { pageNotice, step, field, errorText, type Say } from '../components/workflow.ts';
+import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
 import { actionCard } from './spend.ts';
 import { projectRenderedAxes } from '../core/claimTypes.ts';
 
@@ -355,11 +355,11 @@ export function evidenceView(): Node {
   scopedEffect(() => {
     reloads();
     void api.billing()
-      .then((payload) => { error.set(null); data.set(payload); })
+      .then((payload) => { const restore = holdFocus(page); error.set(null); data.set(payload); restore(); })
       .catch((e: unknown) => error.set(errorText(e)));
   });
 
-  return h('div', null,
+  const page = h('div', null,
     h('div', { class: 'view-head' },
       h('h1', { class: 'view-title', text: 'Close' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
@@ -404,7 +404,8 @@ export function evidenceView(): Node {
           h('summary', { class: 'section-title', text: () => (isPrecise() ? 'Evidence detail' : 'The evidence behind this') }),
           kernelPanel(d),
           mappingPanel(d)));
-    });
+    }) as Element;
+  return page;
 }
 
 function statusCard(d: BillingPayload): Node {
