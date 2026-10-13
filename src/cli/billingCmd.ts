@@ -22,7 +22,7 @@ import { readBillingImportFile } from '../billing/importer.ts';
 import { billingEvidenceToCsv } from '../export/billingCsv.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
-import { printJson } from './ui.ts';
+import { printJson, cliJsonResponse } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { moneyToJson } from '../economics/money.ts';
 import { recordedTime } from '../util/time.ts';
@@ -903,7 +903,7 @@ export async function cmdBilling(flags: Flags): Promise<void> {
       const records = store.billingEvidenceRecords();
       const summary = store.billingSummary();
       if (flags.json) {
-        writeOrPrint(stringifyJson({ summary, records }) + '\n', flags.out);
+        writeOrPrint(stringifyJson(cliJsonResponse({ summary, records })) + '\n', flags.out);
       } else {
         writeOrPrint(billingEvidenceToCsv(records), flags.out);
       }

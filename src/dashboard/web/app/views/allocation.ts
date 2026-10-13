@@ -117,7 +117,7 @@ export function allocationView(): Node {
           centreList(d.costCentres, d.demo, reloadAll, say),
           d.demo ? null : centreForm(reloadAll, say)),
         step(2, () => (isPrecise() ? 'Rules' : 'What goes where'),
-          () => (isPrecise() ? 'Priority-ordered; lower wins. Edits create a new version; old versions stay for past periods.' : 'Each rule picks some spend and says which centre it belongs to. Changing a rule keeps the old version, so past months still add up the same.'),
+          () => (isPrecise() ? 'Priority-ordered; lower wins. Edits retain the old version and every recorded run. New previews follow effective dates.' : 'Each rule picks some spend and says which centre it belongs to. Changing a rule keeps old versions and recorded splits. A new preview follows the rule dates, so it can change an earlier period.'),
           ruleList(d.rules, d.demo, reloadAll, say, nameOf),
           d.demo ? null : open.length > 0
             ? ruleForm(open, projects, reloadAll, say)
@@ -137,10 +137,10 @@ function basisStrip(d: AllocationPayload): Node {
     h('div', { class: 'card-head' },
       h('span', { class: 'card-title', text: () => (isPrecise() ? 'Basis' : 'What this number is') }),
       h('span', { class: 'pill pill-estimate', text: 'showback only' }),
-      h('span', { class: `pill ${checked ? 'pill-ok' : 'pill-unverified'}`, text: checked ? 'ledger checked against a bill' : 'ledger not checked against a bill' })),
+      h('span', { class: 'pill pill-unverified', text: checked ? 'provider comparison on record' : 'no provider comparison on record' })),
     h('p', { text: () => (checked
-      ? `A split of our own cost estimate, which was last compared with a provider bill ${relative(d.reconciliation.latestComputedAtMs)}.`
-      : 'A split of our own cost estimate. Nobody has compared that estimate with a provider bill yet, so the split is exact arithmetic on an unchecked total.') }),
+      ? `A split of our own cost estimate. A provider comparison is on record (${relative(d.reconciliation.latestComputedAtMs)}); it covers its own project and dates and does not verify the inputs to this allocation.`
+      : 'A split of our own cost estimate. No provider comparison is on record; this split is exact arithmetic on our estimate, not a verified bill.') }),
     h('p', { class: 'basis', text: () => `Never feeds ${(d.excludedFrom ?? []).map((id) => EXCLUSION_WORDS[id] ?? id.replace(/_/g, ' ')).join(', ')}.` }));
 }
 
@@ -251,7 +251,7 @@ function ruleForm(centres: CostCentre[], projects: () => string[], reload: () =>
       const id = slug(`${p || 'all'}-${method() === 'direct' ? target() : method()}`);
       try {
         const r = await api.write.allocation({ op: 'rule', id, method: method(), targets, match: p ? { project: p } : {} });
-        say(true, r.message);
+        say(true, isPrecise() ? r.message : 'Rule saved. Recorded splits keep their results; preview again to see this rule\'s effect.');
         reload();
       } catch (e) { say(false, errorText(e)); }
     },
