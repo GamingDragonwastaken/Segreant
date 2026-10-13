@@ -8,6 +8,7 @@
  * rather than in a README nobody opens.
  */
 
+import { themeChoice, setTheme, type ThemeChoice } from '../core/theme.ts';
 import { h } from '../core/dom.ts';
 import { CAPABILITY_SPECS, TERRITORIES, paritySummary } from '../core/registry.ts';
 import { isPrecise } from '../core/fmt.ts';
@@ -22,6 +23,22 @@ const COVERAGE_WORDS: Record<string, string> = {
   not_applicable: 'cannot have a screen',
 };
 
+const THEME_WORDS: ReadonlyArray<[ThemeChoice, string]> = [['system', 'Match this computer'], ['light', 'Light'], ['dark', 'Dark']];
+
+/** Appearance is kept in this browser only; nothing about it reaches the ledger or the config file. */
+function appearance(): Node {
+  return h('div', { class: 'card appearance' },
+    h('div', { class: 'card-head' }, h('span', { class: 'card-title', id: 'appearance-title', text: 'Appearance' })),
+    h('div', { class: 'register-switch theme-switch', role: 'group', 'aria-labelledby': 'appearance-title' },
+      ...THEME_WORDS.map(([choice, label]) => h('button', {
+        type: 'button',
+        'aria-pressed': () => (themeChoice() === choice ? 'true' : 'false'),
+        onclick: () => setTheme(choice),
+        text: label,
+      }))),
+    h('p', { class: 'basis', text: 'Saved in this browser only.' }));
+}
+
 export function systemView(): Node {
   const parity = paritySummary();
 
@@ -35,6 +52,8 @@ export function systemView(): Node {
     // The settings come first: this is the page someone opens to change one.
     // The parity map used to lead, a 60-row table that made this the longest page
     // in the product (10,140 px) with the settings at the very bottom.
+    appearance(),
+
     h('div', { class: 'actions', style: 'margin-top: var(--s5)' },
       actionCard('settings'),
       actionCard('features'),

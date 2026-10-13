@@ -30,6 +30,7 @@ import { controlView } from './views/control.ts';
 import { dataView } from './views/data.ts';
 import type { Territory } from './core/registry.ts';
 import { statementView } from './views/statement.ts';
+import { initTheme } from './core/theme.ts';
 
 /** A page the shell can show: the registry's territories, plus the monthly statement, which reads all four claims. */
 type Route = Territory | 'statement';
@@ -251,6 +252,7 @@ function viewFor(route: Route): Node {
 }
 
 function boot(): void {
+  initTheme();
   const root = document.getElementById('app');
   if (!root) throw new Error('missing #app');
 
