@@ -15,6 +15,18 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   request exports, place their records in `data` beside the version; object
   responses keep their fields. The stability promise is in the CLI JSON contract.
 
+- **Financial evidence keeps its own scope and dates.** Allocate no longer calls the whole input ledger checked after one provider comparison; it states that the comparison covers its own project and dates. Statement and Close label provider periods in UTC, so local time cannot add or remove a day. Plain rule and project confirmations explain their consequences without raw status tokens. Rule messages distinguish unchanged recorded runs from a new preview, which follows effective dates and can differ for an earlier period.
+
+- Primary job buttons on phones were about 38 px tall. They now have a 44 px minimum height, including Statement month navigation. Browser CI now completes Allocate, Close and Statement and checks all eight routes at 375 px width.
+
+- **Value opens when no value has been computed yet.** The browser rejected the server's `projects: null` response as a broken array and stopped loading the page. Its contracts now accept the uncomputed state as unknown, while checking populated project rows as before.
+
+- Configuration now refuses unknown section and budget field names, so a
+  misspelled cap cannot silently leave forwarding unlimited. The proxy also
+  refuses invalid live budget values before forwarding, including oversized caps.
+
+- **Close refuses unsafe thresholds and filenames without exposing submitted text.** A very large materiality threshold could overflow to infinity and hide every discrepancy; the dashboard now refuses amounts outside the safe microdollar range. Billing uploads refuse directory names and paths in either platform's format. Malformed requests and exports show a concise JSON error without quoting their contents.
+
 - **A monthly statement, as the finance home.**
   - A new Statement page shows one calendar month: what Segreant measured, what the provider billed, how it was split across cost centres, and what the work produced. The four sit side by side, each with its own basis, and are never added together.
   - A billed comparison or a split is labelled with its own dates ("covers part of the month only", "covers the month so far"). It is never prorated into the month.
