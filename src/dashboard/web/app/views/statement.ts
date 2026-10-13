@@ -29,8 +29,8 @@ function shiftMonth(key: string, by: number): string {
 }
 
 /** A run's own period, with the last day shown inclusively. */
-function runPeriod(startMs: number, endMs: number): string {
-  return `${date(startMs)} – ${date(endMs - 1)}`;
+function runPeriod(startMs: number, endMs: number, timeZone?: 'UTC'): string {
+  return `${date(startMs, timeZone)} – ${date(endMs - 1, timeZone)}${timeZone ? ' UTC' : ''}`;
 }
 
 /**
@@ -38,8 +38,8 @@ function runPeriod(startMs: number, endMs: number): string {
  * run from the 1st up to when it was recorded is the month so far, which
  * "part of the month only" would misdescribe.
  */
-function coverWords(covers: boolean, startMs: number, endMs: number, period: StatementPayload['period'], computedAtMs: number): string {
-  const span = runPeriod(startMs, endMs);
+function coverWords(covers: boolean, startMs: number, endMs: number, period: StatementPayload['period'], computedAtMs: number, timeZone?: 'UTC'): string {
+  const span = runPeriod(startMs, endMs, timeZone);
   if (covers) return `covers the whole month (${span})`;
   if (!period.complete && startMs <= period.startMs && endMs >= computedAtMs - 3_600_000) return `covers the month so far (${span})`;
   return `covers part of the month only (${span})`;
@@ -123,7 +123,7 @@ function meteredCard(d: StatementPayload): Node {
 function billedRunLine(r: StatementBilledRun, period: StatementPayload['period']): Node {
   return h('div', { class: 'statement-run' },
     h('p', { text: `Provider billed ${usdFromMicros(r.providerReportedMicros)}; we measured ${usdFromMicros(r.localCapturedMicros)}; ${usdFromMicros(r.unexplainedVarianceMicros)} not explained${r.providerReportedMicros > 0 ? ` (${pct(r.unexplainedVarianceMicros / r.providerReportedMicros)})` : ''}.` }),
-    h('span', { class: 'basis', text: `${coverWords(r.coversWholeMonth, r.periodStartMs, r.periodEndMs, period, r.computedAtMs)} · ${r.providerSourceKind === 'operator_supplied_export' ? 'from an export you supplied' : r.providerSourceKind === 'provider_api_pull' ? 'read from the provider' : 'source not recorded'} · recorded ${relative(r.computedAtMs)}` }));
+    h('span', { class: 'basis', text: `${coverWords(r.coversWholeMonth, r.periodStartMs, r.periodEndMs, period, r.computedAtMs, 'UTC')} · ${r.providerSourceKind === 'operator_supplied_export' ? 'from an export you supplied' : r.providerSourceKind === 'provider_api_pull' ? 'read from the provider' : 'source not recorded'} · recorded ${relative(r.computedAtMs)}` }));
 }
 
 function billedCard(d: StatementPayload): Node {

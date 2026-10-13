@@ -333,7 +333,7 @@ async function fileBase64(file: File): Promise<string> {
 function dayRange(startMs: number | undefined, endMs: number | undefined): string {
   if (startMs === undefined || endMs === undefined) return '—';
   // Provider periods end at an exclusive midnight; show the last day included.
-  return `${date(startMs)} – ${date(endMs - 1)}`;
+  return `${date(startMs, 'UTC')} – ${date(endMs - 1, 'UTC')} UTC`;
 }
 
 function rows(pairs: Array<[string, string]>): Node {
@@ -467,7 +467,7 @@ function scopeForm(demo: boolean, reload: () => void, say: Say, scopeDone: boole
           demo
             ? h('p', { class: 'drawer-muted', text: 'Sample data: a project cannot be declared here.' })
             : h('button', { class: 'btn-commit', type: 'button', text: 'Declare this project', onclick: async () => {
-                try { const r = await api.write.billing({ ...body(), apply: true }); say(true, r.message ?? 'Declared.'); reload(); } catch (e) { say(false, errorText(e)); }
+                try { const r = await api.write.billing({ ...body(), apply: true }); say(true, isPrecise() ? r.message ?? 'Declared.' : 'Project declared for future OpenAI requests through Segreant. Past and imported spend is unchanged; the provider has not verified this declaration.'); reload(); } catch (e) { say(false, errorText(e)); }
               } })));
     });
 }
