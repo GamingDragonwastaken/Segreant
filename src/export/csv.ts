@@ -8,10 +8,18 @@
 
 import type { RequestRow } from '../store/db.ts';
 
-/** RFC-4180-ish cell: quote when it contains a comma, quote, or newline; double internal quotes. */
+const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * RFC-4180-ish cell: quote when it contains a comma, quote, or newline; double
+ * internal quotes. Labels come from tool logs and folder names, so text that a
+ * spreadsheet would read as a formula is prefixed with an apostrophe. Numbers,
+ * including negative amounts carried as strings, are left as numbers.
+ */
 function cell(v: unknown): string {
   if (v === null || v === undefined) return '';
-  const s = String(v);
+  let s = String(v);
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s) && !NUMBER.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
