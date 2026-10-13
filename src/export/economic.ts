@@ -136,14 +136,18 @@ const ECONOMIC_COLUMNS = [
 /** JSON-safe exact export. Money objects retain coefficient/scale/currency/basis. */
 export function economicRequestsToJson(rows: readonly EconomicRequestExportRow[]): string {
   if (!Array.isArray(rows)) throw new Error('economic export rows must be an array');
-  return `${canonicalJson(rows.map((row) => ({
+  // The canonical serializer bounds one record. Each row is bounded on its own;
+  // the number of rows is the ledger's history, so it is not. The joined form is
+  // byte-identical to canonicalising the array whole.
+  const parts = rows.map((row) => canonicalJson({
     ...row,
     sourceMoney: row.sourceMoney === null ? null : { ...row.sourceMoney },
     effectiveMoney: row.effectiveMoney === null ? null : { ...row.effectiveMoney },
     sourceBases: [...row.sourceBases],
     sourceEventIds: [...row.sourceEventIds],
     correctionEventIds: [...row.correctionEventIds],
-  })) as never)}\n`;
+  } as never));
+  return `[${parts.join(',')}]\n`;
 }
 
 /** CSV exact export with compatibility dollars explicitly labelled as such. */
