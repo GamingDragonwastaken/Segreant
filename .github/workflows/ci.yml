@@ -159,6 +159,81 @@ jobs:
   # write permissions: production-source credential/dynamic-code scan, supply-
   # chain policy audit, and high-severity runtime dependency audit for both npm
   # packages. Signed release provenance remains a release-time owner gate.
+  # A stranger's folder can be called "Projects & Learning". Pack the tarball,
+  # install it under a path with a space and an ampersand, and run the routes
+  # docs/GETTING-STARTED.md recommends, on all three operating systems. npm's
+  # own Windows .cmd shim (and npx/npm exec, which go through it) splits that
+  # path at the ampersand in cmd.exe before Segreant runs; that is npm's shim,
+  # so the documented Windows routes are PowerShell and `node <path>`.
+  install-paths:
+    name: install-paths (${{ matrix.os }})
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Pack and install under a path with a space and an ampersand
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/seg & space"
+          mkdir -p "$root/pack" "$root/install"
+          npm pack --pack-destination "$root/pack"
+          cd "$root/install"
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-package-lock "$root"/pack/segreant-*.tgz
+          echo "SEG_ROOT=$root" >> "$GITHUB_ENV"
+      - name: Version, demo and status line through node, in that path
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SEG_ROOT/install"
+          export SEGREANT_HOME="$SEG_ROOT/home dir"
+          node node_modules/segreant/bin/segreant.mjs --version
+          node node_modules/segreant/bin/segreant.mjs demo >demo.txt
+          test -s "$SEGREANT_HOME/demo.db"
+          node node_modules/segreant/bin/segreant.mjs statusline --setup >setup.txt
+          cat setup.txt
+          # Run the exact command the setup text tells the user to install.
+          cmd="$(node -e "const t=require('fs').readFileSync('setup.txt','utf8'); const m=t.match(/\"statusLine\": (\{.*\})/); if(!m) process.exit(1); console.log(JSON.parse(m[1]).command)")"
+          echo '{}' | bash -c "$cmd"
+      - name: Bin shim and npx (macOS and Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SEG_ROOT/install"
+          ./node_modules/.bin/segreant --version
+          npx --no-install segreant --version
+      - name: PowerShell shim (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath (Join-Path $env:SEG_ROOT 'install')
+          & .\node_modules\.bin\segreant.ps1 --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:SEGREANT_HOME = Join-Path $env:SEG_ROOT 'home dir'
+          & .\node_modules\.bin\segreant.ps1 demo | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   security:
     timeout-minutes: 10
     runs-on: ubuntu-latest
