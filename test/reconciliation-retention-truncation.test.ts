@@ -187,6 +187,7 @@ test('a prune inside the reconciled period must not restore an upper bound the e
     assert.equal(store.prune(D0 + DAY), 1, 'exactly the first day of local traffic is deleted');
 
     const after = reconciled(store);
+    assert.equal(after.unexplainedVarianceMicros, 4_000_000, 'retention leaves a positive $4 residual that cannot establish an upper bound');
     assert.equal(after.localCapturedMicros, 6_000_000, 'the surviving ledger is a strict undercount');
     assert.notEqual(
       after.offPathBound,
