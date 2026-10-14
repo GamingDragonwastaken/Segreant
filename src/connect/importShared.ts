@@ -320,7 +320,7 @@ export function createRepoResolver(): (cwd: string | null | undefined, fallback:
   return async (cwd, fallback) => {
     const inferred = projectKeyWithBasis(cwd, fallback);
     if (!cwd || inferred.basis === 'tool_log_fallback') return { ...inferred, supersedes: null };
-    const key = `${cwd} ${fallback}`;
+    const key = `${cwd}\0${fallback}`;
     const hit = cache.get(key);
     if (hit) return hit;
     const top = repoToplevelOnDisk(cwd);

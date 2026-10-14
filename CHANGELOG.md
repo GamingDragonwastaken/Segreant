@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Importing is about twice as fast when sessions span many folders.** Each importer asked git for the repository root of every distinct working directory, one process per folder. On Windows that is about 50 ms each, in every importer, on every refresh, and a profile showed it only as idle time. The root is now found on disk the way git finds it, which takes microseconds. On a synthetic Antigravity corpus with 54 project folders and 3,500 recent calls, seven interleaved pairs went from a median of 5.1 s to 2.2 s, and the stored rows are identical. Claude Code and Codex imports use the same resolver. `scripts/generate-antigravity-corpus.mjs` and `scripts/benchmark-antigravity-corpus.mjs` reproduce the measurement without real data.
+
 - **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:
   - `exec` was "Run under a cap"; it records whether a command passed and sets no limit.
   - `usage` was "requests and tokens"; it scores chat and research work.
