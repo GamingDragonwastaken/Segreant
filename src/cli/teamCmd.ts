@@ -629,7 +629,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
       if (flags.json) {
         console.log(JSON.stringify({ ok: false, error: transportError }, null, 2));
       } else {
-        console.error(`  ${color(tty, C.red, 'âœ—')} ${transportError}`);
+        console.error(`  ${color(tty, C.red, '✗')} ${transportError}`);
       }
       process.exitCode = 1;
       return;

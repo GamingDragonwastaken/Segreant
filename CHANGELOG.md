@@ -11,6 +11,16 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:
+  - `exec` was "Run under a cap"; it records whether a command passed and sets no limit.
+  - `usage` was "requests and tokens"; it scores chat and research work.
+  - `saved` was "what routing avoided"; it is time reclaimed.
+  - `month`, `home` and `export` now say "last 30 days".
+  - `receipt` now writes, so its tier is local.
+  - Alerts, market, pricing and baseline name their network modes.
+  - `backup` says its copy is unencrypted, and `plugin` that it runs your program without a sandbox.
+- The capability table in Settings gives the descriptions room. `segreant scan` no longer calls itself read-only, since it remembers each scan.
+
 - **The classic dashboard says what was refused.** Settings and judge refusals arrive as `{ error: { code, message } }`, which `/classic` showed as "[object Object]". It now shows the message, as the modern dashboard does.
 
 - **A light theme, following your computer.** The dashboard had a light palette that nothing ever switched on. It now follows the operating system's light or dark setting, live, and Settings has an Appearance choice (match this computer, light, dark) kept in this browser only. Every page passes the automated WCAG 2 AA checks in both themes; the selected range chip, which fell to about 3:1 on the light gold, now uses dark text. On phones the current page is outlined in gold so it stands out in the grid.
