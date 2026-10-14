@@ -92,9 +92,9 @@ function bandValue(layer: Layer): string {
     case 'withheld_uncosted':
       return isPrecise() ? 'supported; not priced' : 'happened, but not priced';
     case 'not_a_money_claim':
-      return isPrecise() ? 'not a money claim' : 'not a dollar figure';
+      return isPrecise() ? 'no dollar figure, by design' : 'no dollar figure here';
     case 'withheld_unsupported':
-      return 'not established';
+      return isPrecise() ? 'not established' : 'nothing to show yet';
   }
 }
 
@@ -117,7 +117,7 @@ function band(layer: Layer, state: SpineState): Node {
         h('span', { class: 'band-label' }, layer.label, h('span', { class: 'band-period', text: ` · ${layer.period}` })),
         h('span', { class: 'band-value band-unset', text: 'reading…' }),
         h('span', { class: 'band-basis', text: layer.id === 'realized'
-          ? 'measuring what the work produced; the other claims do not wait for it'
+          ? "measuring what the work produced; the other figures don't wait for it"
           : 'reading the ledger' })));
   }
 
@@ -154,11 +154,14 @@ function band(layer: Layer, state: SpineState): Node {
 
     h('button', {
       class: 'band-inspect',
-      'aria-label': `Inspect the evidence for the ${layer.label.toLowerCase()} claim`,
+      'aria-label': `How the ${layer.label.toLowerCase()} figure was worked out`,
       onclick: () => state.onInspect(layer),
-      text: () => (isPrecise() ? 'inspect claim' : 'why this number?'),
+      text: () => (isPrecise() ? 'show the working' : 'why this number?'),
     }));
 }
+
+/** A sentence that opens with a lowercased label still starts with a capital. */
+const sentence = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function spine(state: SpineState): Node {
   const children: Node[] = [];
@@ -191,35 +194,35 @@ export function spine(state: SpineState): Node {
   const uncostedLine = uncosted.length === 0
     ? null
     : h('p', { class: 'spine-read spine-uncosted' }, isPrecise()
-        ? `${uncosted.join(' and ')} ${uncosted.length === 1 ? 'is' : 'are'} substantiated but unpriced: the evidence holds and an input needed to state a dollar figure is absent. That is a withheld figure, not an absent claim.`
-        : `We can see that ${uncosted.join(' and ')} happened — we just cannot put a number on ${uncosted.length === 1 ? 'it' : 'them'} yet.`);
+        ? `${sentence(uncosted.join(' and '))} ${uncosted.length === 1 ? 'is' : 'are'} backed by evidence but not priced: an input needed for a dollar figure is missing, so the figure is held back. The evidence itself stands.`
+        : `${sentence(uncosted.join(' and '))} happened, but there isn't enough yet to put a dollar figure on ${uncosted.length === 1 ? 'it' : 'them'}.`);
 
   const conflictedLine = conflicted.length === 0
     ? null
     : h('p', { class: 'spine-read spine-conflicted' }, isPrecise()
-        ? `${conflicted.join(' and ')} ${conflicted.length === 1 ? 'is' : 'are'} contradicted: two observations of the same thing disagree. That is unadjudicated evidence, not missing evidence, and resolving it is a different task from collecting more.`
-        : `Something about ${conflicted.join(' and ')} does not add up — two sources say different things. That is a disagreement to settle, not a gap to fill.`);
+        ? `${sentence(conflicted.join(' and '))} ${conflicted.length === 1 ? 'has' : 'have'} conflicting evidence: two records of the same thing disagree. Nothing is missing, so collecting more won't settle it; the conflict has to be resolved.`
+        : `Two sources disagree about ${conflicted.join(' and ')}. That needs sorting out; it isn't missing data.`);
 
   const refutedLine = refuted.length === 0
     ? null
     : h('p', { class: 'spine-read spine-refuted' }, isPrecise()
-        ? `${refuted.join(' and ')} ${refuted.length === 1 ? 'is' : 'are'} refuted: the evidence says no. That is a measured answer, and the only one of these states that is.`
-        : `The evidence actually says no for ${refuted.join(' and ')}. That is an answer, not a gap.`);
+        ? `${sentence(refuted.join(' and '))}: the evidence says no. That is a measured answer, the only one of these states that is.`
+        : `For ${refuted.join(' and ')}, the evidence says no. That is an answer, not a gap.`);
 
-  return h('section', { class: 'spine', 'aria-label': 'The four claims' },
+  return h('section', { class: 'spine', 'aria-label': 'The four figures' },
     h('div', { class: 'spine-rail' }, ...children),
     h('p', { class: 'spine-read' },
       settled
         ? (isPrecise()
-            ? 'All four claims are substantiated on this machine, each on its own evidence.'
+            ? 'All four figures are backed by evidence on this machine, each by its own.'
             : 'All four of these are backed by evidence on this machine.')
         : missing.length === 0
           ? (isPrecise()
-              ? 'Four separate claims with four evidence standards. None is simply unevidenced here; see below for the ones whose evidence is unsettled.'
-              : 'These are four different questions, not four versions of one number. None is simply missing — see below.')
+              ? 'Four separate figures, each needing its own kind of evidence. None is simply missing; the notes below cover the ones still unsettled.'
+              : 'These are four different questions, not four versions of one number. None is simply missing; see below.')
           : (isPrecise()
-              ? `Four separate claims with four evidence standards; ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} unsubstantiated here. An unsubstantiated layer is an absence of evidence, never a measured zero.`
-              : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)),
+              ? `Four separate figures, each needing its own kind of evidence. ${sentence(missing.join(' and '))} ${missing.length === 1 ? 'has' : 'have'} no evidence here yet, which is not the same as a measured zero.`
+              : `These are four different questions, not four versions of one number. ${sentence(missing.join(' and '))}: nothing to show yet, which isn't the same as zero.`)),
     conflictedLine,
     refutedLine,
     uncostedLine,
