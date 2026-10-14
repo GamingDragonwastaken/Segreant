@@ -37,6 +37,12 @@ test('a first-run operator is shown the register choice and nothing else routes 
   assert.match(firstRun, /setRegister\('plain'\)/);
   assert.match(firstRun, /setRegister\('precise'\)/);
   assert.match(firstRun, /loads nothing from the internet/, 'the first screen states the local-only boundary before anything is shown');
+  // The sample figures are the first words a new user hears (a screen reader
+  // reads them inside each choice). VOICE-GUIDE v4 names the figure "list cost
+  // (estimate)"; "metered" and the raw `local_list_price` label are retired.
+  assert.doesNotMatch(firstRun, /metered|local_list_price/, 'the first-run samples use the guide words');
+  assert.match(firstRun, /\$59\.16 list cost \(estimate\)/);
+  assert.match(firstRun, /\$59\.163468 list cost \(estimate\)/);
 });
 
 test('plain rounds and explains; precise states the microdollar and the provenance label', () => {
