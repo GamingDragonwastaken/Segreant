@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Long names keep the money in view.** A project, model or cost-centre name with no spaces set the width of its table column, so on a phone Statement pushed the amount column off the right edge, and one long name in an allocation rule made the whole Allocate page scroll sideways. Names now wrap inside their cell or row, and the amount stays beside them. A share that is neither zero nor the whole no longer rounds to 0% or 100%: $21.90 unallocated out of $12.3M reads "<0.1%" rather than "0.0%", and the cost centre beside it ">99.9%" rather than "100.0%". On Protect, the alert coverage card no longer touches the daily limit card.
+
 - **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:
   - `exec` was "Run under a cap"; it records whether a command passed and sets no limit.
   - `usage` was "requests and tokens"; it scores chat and research work.
