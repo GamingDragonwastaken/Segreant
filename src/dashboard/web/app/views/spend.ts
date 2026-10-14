@@ -12,7 +12,7 @@ import { h } from '../core/dom.ts';
 import { signal, scopedEffect, onCleanup } from '../core/signal.ts';
 import { api, RANGES, type Overview, type GroupRow } from '../core/api.ts';
 import { period, setPeriod } from '../core/period.ts';
-import { usd, count, pct, isPrecise, register } from '../core/fmt.ts';
+import { usd, count, isPrecise, register, share } from '../core/fmt.ts';
 import { capability } from '../core/registry.ts';
 import { openAction } from '../components/drawer.ts';
 import { actionSpec, hasRunner } from '../core/actions.ts';
@@ -166,10 +166,6 @@ function ledger(rows: GroupRow[], totalUsd: number): Node {
       }))));
 }
 
-/** A share that is not zero never prints as 0%. */
-function share(fraction: number): string {
-  return fraction > 0 && fraction < 0.005 ? '<1%' : pct(fraction, 0);
-}
 
 /**
  * Every action opens the drawer, read-only ones included. One path means the
