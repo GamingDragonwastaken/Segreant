@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 6e9141bf946ea5ceff9f3326e9a62c547444681dc9d683013510c252e9b414a6 */
+/** Source SHA-256: b34bfbb4b30c4fb94125811ea496d1af5bfa08260a6d3c5206d5414df862b2f5 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -429,6 +429,22 @@ export interface BillingImportSummary {
   recordsSeen: number;
   recordsInserted: number;
   recordsDuplicate: number;
+  /**
+   * Set when this file has been adopted as the provider side under the
+   * declaration that is active now; null otherwise, including when it was
+   * adopted under an earlier declaration.
+   */
+  inUse: { observationRunId: string; adoptedAtMs: number } | null;
+}
+
+/** The operator's active provider-project declaration. Never verified by the provider. */
+export interface BillingActiveScope {
+  declarationId: string;
+  billingAccountRef: string;
+  providerProjectRef: string | null;
+  upstreamDisplay: string;
+  declaredAtMs: number;
+  trust: string;
 }
 
 export interface StatementPeriod {
@@ -576,6 +592,8 @@ export interface BillingPayload {
    * import id to adopt. Fields mirror `BillingImportRun` in src/store/billing.ts.
    */
   imports: BillingImportSummary[];
+  /** The active provider-project declaration, or null when none is declared. */
+  activeScope: BillingActiveScope | null;
   /** Bounded canonical billed Claims issued by the explicit billing adapter. */
   kernel?: {
     kind: string;
@@ -884,6 +902,13 @@ export interface ReconciliationRunRecord {
       | 'upper_bound_conditional'
       | 'none_local_estimate_exceeds_provider'
       | 'unknown_local_total_truncated_by_retention';
+    /** Sent as part of the whole `ReconciliationRun` (src/billing/reconcile.ts). */
+    providerProjectRef?: string;
+    periodStartMs?: number;
+    periodEndMs?: number;
+    materialityUsd?: number;
+    unexplainedVarianceMicros?: number;
+    coverage?: { providerDays: number; localDays: number; daysWithBoth: number; providerOnlyDays: number; localOnlyDays: number; materialDays: number };
   };
 }
 
@@ -1063,7 +1088,7 @@ export interface BillingReconcileResultPayload {
 
 export interface BillingWritePayload {
   ok: boolean;
-  op: 'import' | 'reconcile' | 'adopt' | 'scope';
+  op: 'import' | 'reconcile' | 'adopt' | 'scope' | 'scope-clear';
   applied: boolean;
   message?: string;
   error?: string;
@@ -1085,6 +1110,9 @@ export interface BillingWritePayload {
   credentialRead?: boolean;
   declaration?: Record<string, unknown>;
   reconciliationStatus?: string;
+  /** The `scope-clear` op: the declaration a preview would end, and whether an apply ended one. */
+  active?: Record<string, unknown> | null;
+  cleared?: boolean;
 }
 
 /**

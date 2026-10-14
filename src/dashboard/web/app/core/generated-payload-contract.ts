@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "6e9141bf946ea5ceff9f3326e9a62c547444681dc9d683013510c252e9b414a6";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b34bfbb4b30c4fb94125811ea496d1af5bfa08260a6d3c5206d5414df862b2f5";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -711,6 +711,43 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "recordsDuplicate",
       "optional": false,
       "type": "number"
+    },
+    {
+      "name": "inUse",
+      "optional": false,
+      "type": "{ observationRunId: string; adoptedAtMs: number } | null"
+    }
+  ],
+  "BillingActiveScope": [
+    {
+      "name": "declarationId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "billingAccountRef",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "providerProjectRef",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "upstreamDisplay",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "declaredAtMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "trust",
+      "optional": false,
+      "type": "string"
     }
   ],
   "StatementPeriod": [
@@ -1114,6 +1151,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "imports",
       "optional": false,
       "type": "BillingImportSummary[]"
+    },
+    {
+      "name": "activeScope",
+      "optional": false,
+      "type": "BillingActiveScope | null"
     },
     {
       "name": "kernel",
@@ -2545,7 +2587,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "op",
       "optional": false,
-      "type": "'import' | 'reconcile' | 'adopt' | 'scope'"
+      "type": "'import' | 'reconcile' | 'adopt' | 'scope' | 'scope-clear'"
     },
     {
       "name": "applied",
@@ -2641,6 +2683,16 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "reconciliationStatus",
       "optional": true,
       "type": "string"
+    },
+    {
+      "name": "active",
+      "optional": true,
+      "type": "Record<string, unknown> | null"
+    },
+    {
+      "name": "cleared",
+      "optional": true,
+      "type": "boolean"
     }
   ],
   "Matured": [
