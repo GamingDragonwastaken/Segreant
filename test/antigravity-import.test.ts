@@ -15,7 +15,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 import { Store } from '../src/store/db.ts';
-import { importAntigravity } from '../src/connect/antigravity.ts';
+import { importAntigravity, type AntigravityImportProfile } from '../src/connect/antigravity.ts';
 
 // --- a minimal protobuf encoder for the fixture -----------------------------
 function varint(n: number): number[] {
@@ -71,8 +71,22 @@ test('Antigravity: one row per model call, at the step time, in the workspace, p
   conversation(dir, 'c1', workspace);
 
   const store = new Store(join(mkdtempSync(join(tmpdir(), 'agy-db-')), 'test.db'));
-  const s = await importAntigravity(store, { root });
+  let profile: AntigravityImportProfile | undefined;
+  const s = await importAntigravity(store, { root, onProfile: (p) => { profile = { ...p }; } });
   assert.equal(s.inserted, 1, 'the step copy, the retry copy and the injected response add nothing');
+  assert.ok(profile, 'opt-in importer profile is emitted');
+  assert.equal(profile.filesRead, 1);
+  assert.equal(profile.stepRows, 2);
+  assert.equal(profile.generatorRows, 2);
+  assert.equal(profile.decodedCalls, 1);
+  assert.equal(profile.eligibleCalls, 1);
+  assert.equal(profile.insertedRows, 1);
+  for (const phase of ['readMs', 'decodeMs', 'filterMs', 'attributionMs', 'pricingMs', 'persistMs', 'totalMs'] as const) {
+    assert.ok(Number.isFinite(profile[phase]) && profile[phase]! >= 0, `${phase} is a bounded elapsed observation`);
+  }
+  assert.ok(profile.readMs > 0 && profile.decodeMs > 0 && profile.persistMs > 0, 'real read, decode and Store work are observed');
+  assert.ok(profile.totalMs >= profile.readMs + profile.decodeMs + profile.filterMs + profile.attributionMs + profile.pricingMs + profile.persistMs,
+    'named phases fit inside the full import interval');
   const [row] = store.requestsInRange(0, Date.now());
   assert.equal(row!.model, 'gemini-3.8-flash');
   assert.equal(row!.provider, 'google');
@@ -87,7 +101,15 @@ test('Antigravity: one row per model call, at the step time, in the workspace, p
   assert.ok(Math.abs(row!.costUsd - expected) < 1e-12, `${row!.costUsd} vs ${expected}`);
   assert.equal(row!.estimated, false, 'an exact rate on the card');
 
-  const again = await importAntigravity(store, { root });
+  let replayProfile: AntigravityImportProfile | undefined;
+  const again = await importAntigravity(store, { root, onProfile: (p) => { replayProfile = { ...p }; } });
   assert.equal(again.inserted, 0);
+  assert.equal(replayProfile?.filesRead, 0, 'cursor-skipped files have no read/decode/persist work');
+  let filteredProfile: AntigravityImportProfile | undefined;
+  const filtered = await importAntigravity(store, { root, rescan: true, sinceMs: T + 2 * 60_000, onProfile: (p) => { filteredProfile = { ...p }; } });
+  assert.equal(filtered.inserted, 0);
+  assert.equal(filteredProfile?.filesRead, 1);
+  assert.equal(filteredProfile?.decodedCalls, 1);
+  assert.equal(filteredProfile?.eligibleCalls, 0, 'old calls are decoded but never persisted');
   store.close();
 });
