@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b34bfbb4b30c4fb94125811ea496d1af5bfa08260a6d3c5206d5414df862b2f5";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "d593594971cc733b2c8e39d0a7610452b6ab4a3e8bedde9db3fa33dd82a45109";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -2748,6 +2748,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "instrumentation",
+      "optional": true,
+      "type": "Record<string, number>"
+    },
+    {
+      "name": "gatePasses",
       "optional": true,
       "type": "Record<string, number>"
     },
