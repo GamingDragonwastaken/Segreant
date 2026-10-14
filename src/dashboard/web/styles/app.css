@@ -923,6 +923,18 @@ select.drawer-input { font-family: inherit; }
 
 .run-panel { display: grid; gap: var(--s4); }
 .run-row .form-field { flex: 0 1 300px; }
+/* Allocate: the rule form's further conditions stay folded until wanted, so the
+   common rule (one project to one centre) is still one row. */
+.rule-more { display: grid; gap: var(--s3); }
+.rule-more > summary { cursor: pointer; list-style: none; min-height: 44px; display: flex; align-items: center; font-size: 13px; color: var(--muted); }
+.rule-more > summary::-webkit-details-marker { display: none; }
+.rule-more > summary::before { content: '\25B8'; margin-right: var(--s2); }
+.rule-more[open] > summary::before { content: '\25BE'; }
+.rule-more > summary:hover { color: var(--text); }
+.rule-more > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.rule-more-row .form-field { flex: 1 1 150px; }
+.run-dates { flex: 1 1 100%; }
+.run-dates .form-field { flex: 0 1 200px; }
 .run-result { display: grid; gap: var(--s3); padding: var(--s4); border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--panel); }
 .row-unalloc td { color: var(--gold-text); }
 .row-unalloc .fact-sub { display: block; margin: 2px 0 0; }
