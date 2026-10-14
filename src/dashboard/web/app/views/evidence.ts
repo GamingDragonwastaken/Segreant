@@ -386,6 +386,7 @@ export function evidenceView(): Node {
           () => (isPrecise()
             ? 'An operator declaration bound to future proxy rows. Unverified by the provider; historical and imported rows are unchanged.'
             : 'Only spend that goes through Segreant after this, to that project, can be matched against the bill. These are the ids from your OpenAI settings, not keys.'),
+          d.activeScope ? declaredScope(d, reload, say) : null,
           scopeForm(d.demo, reload, say, scopeDone)),
         step({ n: 2, done: observed }, () => (isPrecise() ? 'Observe the provider side' : 'Bring in the bill'),
           () => (isPrecise()
@@ -401,7 +402,8 @@ export function evidenceView(): Node {
             ? 'Preview computes the comparison; Record persists an immutable run and issues it to the kernel.'
             : 'See how our measurement compares with the bill. Nothing is saved until you record it.'),
           readinessPanel(d),
-          reconcilePanel(d, reload, say)),
+          reconcilePanel(d, reload, say),
+          recordedComparisons(d)),
         h('details', { class: 'section close-details' },
           h('summary', { class: 'section-title', text: () => (isPrecise() ? 'Evidence detail' : 'The evidence behind this') }),
           kernelPanel(d),
@@ -433,6 +435,42 @@ function statusCard(d: BillingPayload): Node {
                 : 'Careful: the provider reported different figures for the same days at different times. This check disagrees with itself.') })
             : null)
       : h('span', { class: 'basis', text: () => `${count(d.summary.recordCount)} provider line(s) held · no comparison recorded yet` }));
+}
+
+/**
+ * What is declared now, and a way to stop it. Clearing previews first, like
+ * every write here, and says what it leaves alone: requests already recorded
+ * keep their scope and recorded comparisons stay as they were.
+ */
+function declaredScope(d: BillingPayload, reload: () => void, say: Say): Node {
+  const s = d.activeScope!;
+  const preview = signal<string | null>(null);
+  const project = s.providerProjectRef ?? 'no project id';
+  return h('div', { class: 'facts declared-scope' },
+    h('div', { class: 'fact fact-stack' },
+      h('div', { class: 'fact-line' },
+        h('span', { class: 'fact-key' },
+          h('span', { text: `${s.billingAccountRef} · ${project}` }),
+          h('span', { class: 'fact-sub', text: `declared ${relative(s.declaredAtMs)} · your statement, not verified by the provider` })),
+        h('span', { class: 'fact-val' },
+          h('button', { class: 'link-btn', type: 'button', text: 'Stop matching',
+            'aria-label': `Stop matching requests to ${project}`,
+            onclick: async () => {
+              try { const r = await api.write.billing({ op: 'scope-clear' }); preview.set(r.message ?? ''); } catch (e) { say(false, errorText(e)); }
+            } }))),
+      () => {
+        const message = preview();
+        if (message === null) return null;
+        return h('div', { class: 'run-result' },
+          h('p', { class: 'basis', text: message }),
+          h('div', { class: 'form-actions' },
+            d.demo
+              ? h('p', { class: 'drawer-muted', text: 'Sample data: the declaration cannot be cleared here.' })
+              : h('button', { class: 'btn-commit', type: 'button', text: 'Clear the declaration', onclick: async () => {
+                  try { const r = await api.write.billing({ op: 'scope-clear', apply: true }); say(true, r.message ?? 'Cleared.'); reload(); } catch (e) { say(false, errorText(e)); }
+                } }),
+            h('button', { class: 'btn-ghost', type: 'button', text: 'Keep it', onclick: () => preview.set(null) })));
+      }));
 }
 
 function scopeForm(demo: boolean, reload: () => void, say: Say, scopeDone: boolean): Node {
@@ -541,7 +579,9 @@ function adoptRow(imp: BillingImportSummary, demo: boolean, reload: () => void, 
         h('span', { text: imp.fileName }),
         h('span', { class: 'fact-sub', text: `${dayRange(imp.periodStartMs, imp.periodEndMs)} · ${count(imp.recordsSeen)} lines · imported ${relative(imp.importedAtMs)}` })),
       h('span', { class: 'fact-val' },
-        scopeDone
+        imp.inUse
+          ? h('span', { class: 'in-use', text: `in use · adopted ${relative(imp.inUse.adoptedAtMs)}` })
+          : scopeDone
           ? h('button', { class: 'link-btn', type: 'button', text: 'Use for the comparison', 'aria-label': `Use ${imp.fileName} for the comparison`, onclick: async () => {
               try { const r = await api.write.billing({ op: 'adopt', importId: imp.importId }); plan.set(r.plan ?? null); } catch (e) { say(false, errorText(e)); }
             } })
@@ -569,14 +609,59 @@ function adoptRow(imp: BillingImportSummary, demo: boolean, reload: () => void, 
     });
 }
 
+/**
+ * Every recorded comparison the server sends, newest first, each with its own
+ * days. A run is evidence for its own period only, so the list never sums
+ * them; opening one shows what was recorded, not a recomputation.
+ */
+function recordedComparisons(d: BillingPayload): Node | null {
+  const runs = d.reconciliation?.runs ?? [];
+  if (runs.length === 0) return null;
+  return h('section', { class: 'section recorded-runs' },
+    h('h3', { class: 'section-title', text: () => (isPrecise() ? 'Recorded reconciliations' : 'Recorded comparisons') }),
+    h('div', { class: 'facts' },
+      ...runs.map((run) => {
+        const r = run.result;
+        const days = dayRange(r.periodStartMs, r.periodEndMs);
+        return h('details', { class: 'fact fact-stack recorded-run' },
+          h('summary', null,
+            h('span', { class: 'fact-line' },
+              h('span', { class: 'fact-key' },
+                h('span', { text: days }),
+                h('span', { class: 'fact-sub', text: `${r.providerProjectRef ? `${r.providerProjectRef} · ` : ''}recorded ${relative(run.computedAtMs)}` })),
+              h('span', { class: 'fact-val', text: r.unexplainedVarianceMicros === undefined ? '—' : `${usdFromMicros(r.unexplainedVarianceMicros)} not explained` }))),
+          rows([
+            ['Billed by the provider', r.providerReportedMicros === undefined ? '—' : usdFromMicros(r.providerReportedMicros)],
+            ['Measured by Segreant', r.localCapturedMicros === undefined ? '—' : usdFromMicros(r.localCapturedMicros)],
+            ['Not explained', r.unexplainedVarianceMicros === undefined ? '—' : usdFromMicros(r.unexplainedVarianceMicros)],
+            ['Days compared', r.coverage ? `${count(r.coverage.daysWithBoth)} with both · ${count(r.coverage.providerOnlyDays)} bill only · ${count(r.coverage.localOnlyDays)} ours only` : '—'],
+            ['Days that differ', r.coverage && r.materialityUsd !== undefined ? `${count(r.coverage.materialDays)} by more than ${usd(r.materialityUsd)}` : '—'],
+            ['Provider side', basisWords(r.providerSourceKind)],
+          ]),
+          h('p', { class: residualBoundIsError(r.offPathBound) ? 'drawer-error' : 'basis', text: () => residualBoundWords(r.offPathBound, isPrecise()) }),
+          r.snapshotStability === 'changed_across_observations'
+            ? h('p', { class: 'drawer-error', text: 'The provider reported different figures for the same days at different times. This comparison is contradicted.' })
+            : null);
+      })));
+}
+
 function reconcilePanel(d: BillingPayload, reload: () => void, say: Say): Node {
   const result = signal<BillingReconcileResultPayload | null>(null);
   const busy = signal(false);
+  // Blank means the server's default. The value previewed is the value
+  // recorded: changing it clears the preview, so a run is never recorded under
+  // a threshold nobody looked at.
+  const materiality = signal('');
+  const materialityUsd = (): number | undefined => {
+    const raw = materiality().trim();
+    return raw === '' ? undefined : Number(raw);
+  };
   const remaining = (d.readiness?.missing ?? []).filter((m) => !m.step.startsWith('observe a closed period — route A'));
   const run = async (apply: boolean): Promise<void> => {
     busy.set(true);
     try {
-      const r = await api.write.billing({ op: 'reconcile', ...(apply ? { apply: true } : {}) });
+      const m = materialityUsd();
+      const r = await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }), ...(apply ? { apply: true } : {}) });
       if (apply) { result.set(null); say(true, 'Recorded. The comparison is saved, and the Billed claim above now rests on it.'); reload(); }
       else result.set(r.result ?? null);
     } catch (e) { say(false, errorText(e)); } finally { busy.set(false); }
@@ -587,8 +672,14 @@ function reconcilePanel(d: BillingPayload, reload: () => void, say: Say): Node {
       h('ul', { class: 'drawer-notes' }, ...remaining.map((m) => h('li', { text: m.step.replace(/^observe a closed period — route B, /, '') }))));
   }
   return h('div', { class: 'run-panel' },
-    h('div', { class: 'form-row' },
+    h('div', { class: 'form-row run-row' },
+      field('reconcile-materiality', 'Ignore daily differences up to ($)', h('input', {
+        id: 'reconcile-materiality', class: 'drawer-input', type: 'number', min: '0', step: '0.01', inputmode: 'decimal',
+        placeholder: '0.50', 'aria-describedby': 'reconcile-materiality-hint',
+        oninput: (e: Event) => { materiality.set((e.target as HTMLInputElement).value); result.set(null); },
+      })),
       h('button', { class: 'btn-ghost', type: 'button', disabled: () => busy(), text: () => (busy() ? 'Working…' : 'Preview the comparison'), onclick: () => void run(false) })),
+    h('p', { id: 'reconcile-materiality-hint', class: 'form-hint', text: 'A day counts as different only when the bill and our measurement differ by more than this. Blank uses $0.50.' }),
     () => {
       const r = result();
       if (!r) return null;
@@ -600,6 +691,7 @@ function reconcilePanel(d: BillingPayload, reload: () => void, say: Say): Node {
           ['Measured by Segreant', usdFromMicros(r.localCapturedMicros)],
           ['Not explained', `${usdFromMicros(residual)}${r.providerReportedMicros > 0 ? ` (${pct(residual / r.providerReportedMicros)} of the bill)` : ''}`],
           ['Days compared', `${count(r.coverage.daysWithBoth)} with both · ${count(r.coverage.providerOnlyDays)} bill only · ${count(r.coverage.localOnlyDays)} ours only`],
+          ['Days that differ', `${count(r.coverage.materialDays)} by more than ${usd(r.materialityUsd)}`],
           ['Provider side', basisWords(r.providerSourceKind)],
         ]),
         h('p', { class: residualBoundIsError(r.offPathBound) ? 'drawer-error' : 'basis', text: () => residualBoundWords(r.offPathBound, isPrecise()) }),

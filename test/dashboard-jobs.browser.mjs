@@ -176,14 +176,21 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await reads(main, /supplied by you, not read from the provider/, 'adoption names its evidence class');
     await button('Use this export').click();
     await reads(main, /Recorded as the provider side for these days\./, 'adoption recorded');
+    await reads(main, /in use · adopted/, 'the adopted export says it is in use');
+    assert.equal(await button('Use costs.json for the comparison').count(), 0, 'an export in use is not offered again');
+    await reads(main, new RegExp(`org_browser_jobs · ${PROJECT}`), 'the declaration is named on the page');
     const scopeId = store.activeOpenAiScope().declarationId;
     store.insertRequest(row('close-a', start + DAY / 2, 1.5, scopeId));
     store.insertRequest(row('close-b', start + DAY + DAY / 2, 1.75, scopeId));
     // Re-open the job to read the injected synthetic proxy rows; no shell reload.
     await jobs.getByRole('button', { name: 'Statement', exact: true }).click();
     await jobs.getByRole('button', { name: 'Close', exact: true }).click();
+    // $2.00 against $1.50 and $1.75: the days differ by $0.50 and $0.25, so a
+    // $0.30 threshold makes exactly one of them material.
+    await main.getByRole('spinbutton', { name: 'Ignore daily differences up to ($)', exact: true }).fill('0.3');
     await button('Preview the comparison').click();
     await button('Record this comparison').waitFor();
+    await reads(main, /Days that differ\s+1 by more than \$0\.30/, 'the threshold decides which days count as different');
     await reads(main, /Billed by the provider\s+\$4\.00/, 'provider amount displayed');
     await reads(main, /Measured by Segreant\s+\$3\.25/, 'local amount displayed separately');
     await reads(main, /Not explained\s+\$0\.75/, 'residual displayed separately');
@@ -196,6 +203,25 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await reads(main, /Where this stands\s+supported/i, 'status pill reads supported');
     await reads(claims.getByRole('button', { name: /^Billed ·/ }), /reconciled against a provider report, with a residual/, 'Billed band refreshes without a page reload');
     assert.equal(store.reconciliationRuns().length, 1);
+    assert.equal(store.reconciliationRuns()[0].result.materialityUsd, 0.3, 'the run is recorded under the threshold that was previewed');
+    // Every recorded comparison is listed with its own days and opens to what was recorded.
+    const recorded = main.locator('details.recorded-run');
+    await recorded.first().waitFor();
+    assert.equal(await recorded.count(), 1);
+    await recorded.first().locator('summary').click();
+    await reads(recorded.first(), /Not explained\s+\$0\.75/, 'a recorded comparison re-opens to its own figures');
+    await reads(recorded.first(), /Days that differ\s+1 by more than \$0\.30/, 'with the threshold it was recorded under');
+    await capture(page, 'close-recorded-phone');
+    // Clearing the declaration previews first and leaves the recorded comparison alone.
+    await button(`Stop matching requests to ${PROJECT}`).click();
+    await reads(main, /Requests already recorded and recorded comparisons are unchanged/, 'clearing says what it leaves alone');
+    assert.notEqual(store.activeOpenAiScope(), null, 'the preview clears nothing');
+    await button('Clear the declaration').click();
+    await reads(main, /Future OpenAI requests through Segreant are no longer matched to a project/, 'clearing is confirmed');
+    assert.equal(store.activeOpenAiScope(), null);
+    assert.equal(store.reconciliationRuns().length, 1, 'the recorded comparison survives clearing');
+    await reads(main, /Organisation id/, 'step 1 offers a new declaration');
+    await capture(page, 'close-cleared-phone');
 
     await jobs.getByRole('button', { name: 'Statement', exact: true }).click();
     const allocated = store.allocationRuns()[0].result;
