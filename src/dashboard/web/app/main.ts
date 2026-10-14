@@ -168,12 +168,12 @@ function firstRun(): Node {
         h('button', { class: 'choice', onclick: () => { setRegister('plain'); go('statement'); } },
           h('strong', { text: 'I look after the money' }),
           h('span', { text: 'See what AI cost, set limits, check it against the bill and assign it to budgets. Plain wording; no terminal needed.' }),
-          h('code', { class: 'choice-eg', text: '$59.16 · measured from metered requests' })),
+          h('code', { class: 'choice-eg', text: '$59.16 list cost (estimate)' })),
         h('button', { class: 'choice', onclick: () => { setRegister('precise'); go('data'); } },
           h('strong', { text: 'I build with AI tools' }),
           h('span', { text: 'Bring in usage from Claude Code, Codex and others, then see it by project and model. Exact figures and the matching commands.' }),
-          h('code', { class: 'choice-eg', text: '$59.163468 · local_list_price' }))),
-      h('p', { class: 'fine', text: 'Runs entirely on this machine. This page loads nothing from the internet — no fonts, no analytics, no third parties.' })));
+          h('code', { class: 'choice-eg', text: '$59.163468 list cost (estimate)' }))),
+      h('p', { class: 'fine', text: 'Runs entirely on this machine. This page loads nothing from the internet: no fonts, no analytics, no third parties.' })));
 
   const release = trapFocus(body);
   const onKey = (event: KeyboardEvent): void => {

@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The first screen uses the same words as the rest.** The two choices on the welcome screen showed sample figures in retired wording: "$59.16 · measured from metered requests" and "$59.163468 · local_list_price". They now read "$59.16 list cost (estimate)" and "$59.163468 list cost (estimate)", the guide's words. A screen reader reads these samples as part of each choice, so they were the first words a new user heard.
+
 - **The dashboard talks like a person.**
   - **Legal words gone:** the four-figure strip and the Value page used words like "inspect claim", "four evidence standards", "unsubstantiated", "unadjudicated", "Gate verdicts" and "your verdict". They now say what they mean.
   - **The four figures:** the strip is labelled List cost (estimate), Billed cost, Allocated cost and Value (kept work), not METERED, BILLED, ALLOCATED and REALIZED.
