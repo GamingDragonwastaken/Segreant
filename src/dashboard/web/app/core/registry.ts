@@ -162,7 +162,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc run --apply',
-    guiEvidence: { file: 'views/allocation.ts', token: "op: 'run'", note: 'preview then record for last month or this month; arbitrary periods stay on the CLI' },
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'run'", note: 'preview then record for last month or this month; each recorded split downloads as CSV (segreant alloc export); arbitrary periods stay on the CLI' },
   },
 
   // ---- Evidence -----------------------------------------------------------

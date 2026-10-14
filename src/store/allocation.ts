@@ -251,6 +251,25 @@ export function allocationRuns(
   }));
 }
 
+/** One recorded run, exactly as stored, or null when no run has that id. */
+export function allocationRunById(
+  db: DatabaseSync,
+  allocationRunId: string,
+): { allocationRunId: string; computedAtMs: number; result: AllocationRunResult } | null {
+  const row = db
+    .prepare(
+      `SELECT allocation_run_id AS allocationRunId, computed_at_ms AS computedAtMs, result_json AS resultJson
+         FROM allocation_runs WHERE allocation_run_id = ?`,
+    )
+    .get(allocationRunId) as Record<string, unknown> | undefined;
+  if (row === undefined) return null;
+  return {
+    allocationRunId: String(row.allocationRunId),
+    computedAtMs: Number(row.computedAtMs),
+    result: JSON.parse(String(row.resultJson)) as AllocationRunResult,
+  };
+}
+
 export interface ExactAllocationRunRecord {
   allocationRunId: string;
   computedAtMs: number;
