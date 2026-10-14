@@ -14,6 +14,7 @@
 import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from './core/dom.ts';
 import { signal, effect, computed, onCleanup } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
+import { GRIFFIN_PATH, GRIFFIN_TRANSFORM, GRIFFIN_VIEWBOX } from './core/griffin.ts';
 import { api, ApiError, type Overview, type BillingPayload, type AllocationPayload, type ValuePayload } from './core/api.ts';
 import { buildClaimLayers, chainIsSampleData } from './core/claimLayers.ts';
 import { period } from './core/period.ts';
@@ -147,9 +148,8 @@ function go(route: Route): void {
 }
 
 function brandMark(): Node {
-  return h('svg', { class: 'brand-mark', viewBox: '0 0 30 34', 'aria-hidden': 'true' },
-    h('path', { d: 'M15 1 28 6v11c0 8-5.6 13.4-13 16C7.6 30.4 2 25 2 17V6z', fill: 'none', stroke: 'var(--gold)', 'stroke-width': '1.6' }),
-    h('path', { d: 'M11 11h8M11 16h6M11 21h4', stroke: 'var(--gold)', 'stroke-width': '1.6', 'stroke-linecap': 'round' }));
+  return h('svg', { class: 'brand-mark', viewBox: GRIFFIN_VIEWBOX, 'aria-hidden': 'true' },
+    h('path', { d: GRIFFIN_PATH, transform: GRIFFIN_TRANSFORM, fill: 'var(--gold)', 'fill-rule': 'evenodd' }));
 }
 
 function firstRun(): Node {

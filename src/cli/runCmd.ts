@@ -11,13 +11,25 @@ import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type SegreantConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
-import { seedDemo } from '../demo/seed.ts';
+import { seedDemo, type SeedResult } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+
+/**
+ * Fill an empty sample ledger before the dashboard serves it. `start --demo`
+ * used to serve whatever demo.db held, so on a fresh install every page said
+ * "sample data" over $0 and "no recorded requests". demo.db only ever holds
+ * synthetic rows, so seeding it never touches real metering; a ledger that
+ * already has sample rows is left exactly as it is.
+ */
+export function ensureDemoSeeded(store: Store): SeedResult | null {
+  if (store.earliestRequestMs() !== null) return null;
+  return seedDemo(store);
+}
 
 export async function cmdStart(flags: Flags): Promise<void> {
   const cfg = loadConfig();
@@ -26,6 +38,10 @@ export async function cmdStart(flags: Flags): Promise<void> {
 
   const store = new Store(dbPath());
   const tty = process.stdout.isTTY ?? false;
+  if (isDemo()) {
+    const seeded = ensureDemoSeeded(store);
+    if (seeded) console.log(color(tty, C.gray, `  Sample data generated: ${num(seeded.requests)} requests over ${seeded.days} days (same as segreant demo).`));
+  }
 
   // The proposal store may contain literal suggested code. Honor its short
   // retention boundary whenever the local service starts; this does not touch
