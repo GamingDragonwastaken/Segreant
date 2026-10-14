@@ -663,6 +663,17 @@ export function handleBilling({ res, url, store }: RouteContext): void {
     // disagree the moment a run landed between the calls.
     const runs = store.reconciliationRuns(10);
     const summary = store.billingSummary();
+    // An adopted export is recorded as an observation whose one "page" digest
+    // is the file's SHA-256 (adoptOpenAiCostsFromImport). Only an adoption under
+    // the ACTIVE declaration puts a file in use: one adopted under an earlier
+    // declaration says nothing about the project declared now.
+    const scope = store.activeOpenAiScope();
+    const adoptions = scope === null ? [] : store.openAiCostsObservationRuns(200).filter((o) =>
+      o.sourceKind === 'operator_supplied_export' && o.resultState === 'succeeded' && o.declaredScopeId === scope.declarationId);
+    const imports = store.billingImportRuns(25).map((run) => {
+      const adopted = adoptions.find((o) => o.pageDigestChainSha256 === run.fileSha256);
+      return { ...run, inUse: adopted ? { observationRunId: adopted.observationRunId, adoptedAtMs: adopted.fetchedAtMs } : null };
+    });
     return json(res, 200, {
       demo: isDemo(),
       /** The boundary the kernel claims answer at; `null` is a live read. */
@@ -694,7 +705,17 @@ export function handleBilling({ res, url, store }: RouteContext): void {
         ],
       },
       summary,
-      imports: store.billingImportRuns(25),
+      // The declaration itself, so the page can name what is declared and what
+      // clearing it would end. An operator statement, never provider-verified.
+      activeScope: scope === null ? null : {
+        declarationId: scope.declarationId,
+        billingAccountRef: scope.billingAccountRef,
+        providerProjectRef: scope.providerProjectRef,
+        upstreamDisplay: scope.upstreamDisplay,
+        declaredAtMs: scope.declaredAtMs,
+        trust: scope.trust,
+      },
+      imports,
       kernel: {
         kind: 'trusted_epistemic_kernel_billing',
         claims: store.billingKernelClaims(25, asOf),
@@ -1361,7 +1382,7 @@ export function handleAllocationWrite({ req, res, store }: RouteContext): void {
 }
 
 const BILLING_WRITE_FIELDS = new Set(['op', 'apply', 'fileName', 'contentBase64', 'materialityUsd', 'importId', 'accountRef', 'projectRef']);
-const BILLING_WRITE_OPS = new Set(['import', 'reconcile', 'adopt', 'scope']);
+const BILLING_WRITE_OPS = new Set(['import', 'reconcile', 'adopt', 'scope', 'scope-clear']);
 /**
  * Import content travels as the file's raw bytes in base64, never as decoded
  * text. The CLI hashes the bytes on disk; a browser that sent `file.text()`
@@ -1481,6 +1502,37 @@ function billingAdopt(store: Store, body: Record<string, unknown>, apply: boolea
   };
 }
 
+/**
+ * Same preview and effect as `billing scope clear` in src/cli/billingCmd.ts.
+ * Clearing ends the declaration for future proxy traffic only: requests
+ * already recorded keep the scope they were captured under, and recorded
+ * comparisons stay as they were.
+ */
+function billingScopeClear(store: Store, apply: boolean): { status: number; payload: Record<string, unknown> } {
+  const active = store.activeOpenAiScope();
+  if (!apply) {
+    return {
+      status: 200,
+      payload: {
+        ok: true, op: 'scope-clear', applied: false, active,
+        message: active
+          ? 'Not cleared. Clearing stops matching future OpenAI requests to this project. Requests already recorded and recorded comparisons are unchanged.'
+          : 'No project is declared, so there is nothing to clear.',
+      },
+    };
+  }
+  const cleared = store.clearOpenAiScope();
+  return {
+    status: 200,
+    payload: {
+      ok: true, op: 'scope-clear', applied: true, cleared,
+      message: cleared
+        ? 'Cleared. Future OpenAI requests through Segreant are no longer matched to a project. Requests already recorded and recorded comparisons are unchanged.'
+        : 'No project was declared, so nothing changed.',
+    },
+  };
+}
+
 /** Same declaration, preview and refusal as `billing scope set` in src/cli/billingCmd.ts. */
 function billingScope(store: Store, body: Record<string, unknown>, apply: boolean): { status: number; payload: Record<string, unknown> } {
   const accountRef = billingText(body.accountRef, 'accountRef', 200);
@@ -1547,7 +1599,7 @@ export function handleBillingWrite({ req, res, store }: RouteContext): void {
       if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('billing request must be an object');
       const body = raw as Record<string, unknown>;
       if (Object.keys(body).some((key) => !BILLING_WRITE_FIELDS.has(key))) throw new Error('billing request has an unknown field');
-      if (typeof body.op !== 'string' || !BILLING_WRITE_OPS.has(body.op)) throw new Error('op must be one of import, reconcile, adopt, scope');
+      if (typeof body.op !== 'string' || !BILLING_WRITE_OPS.has(body.op)) throw new Error('op must be one of import, reconcile, adopt, scope, scope-clear');
       const op = body.op;
       if (body.apply !== undefined && typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
       const apply = body.apply === true;
@@ -1586,6 +1638,7 @@ export function handleBillingWrite({ req, res, store }: RouteContext): void {
 
       const outcome = op === 'reconcile' ? billingReconcile(store, body, apply)
         : op === 'adopt' ? billingAdopt(store, body, apply)
+        : op === 'scope-clear' ? billingScopeClear(store, apply)
         : billingScope(store, body, apply);
       return billingJson(res, outcome.status, outcome.payload);
     } catch (error) {
