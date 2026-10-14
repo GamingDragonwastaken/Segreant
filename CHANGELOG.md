@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **"How far the work got" counts what passed.** The Value page listed how many pieces of work were *checked* at each step, labelled as if they had *passed* ("was merged", "survived in production"). On the sample data it read merged 10, shipped 10, survived 13, so more work seemed to survive than shipped. Each step now shows passed, failed and not checked, out of the finished work. "Not checked" means there was no signal for that step, not that it failed. The value report carries a new `gatePasses` count per gate beside `instrumentation`.
+
 - **The dashboard wears the griffin.**
   - **Logo:** the top bar, the welcome screen and the browser tab show the Segreant griffin, the same mark as the website. It replaces a placeholder shield.
   - **Scrollbars:** pages, tables and drawers use the dashboard's own scrollbars in both themes, instead of the system's grey ones.

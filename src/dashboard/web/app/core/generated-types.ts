@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: b34bfbb4b30c4fb94125811ea496d1af5bfa08260a6d3c5206d5414df862b2f5 */
+/** Source SHA-256: d593594971cc733b2c8e39d0a7610452b6ab4a3e8bedde9db3fa33dd82a45109 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1164,7 +1164,10 @@ export interface Matured {
   spendWindowUnknownUnits?: number;
   /** Where units died, in stage order. The stage that costs most is the one to fix. */
   wasteByStage?: Array<{ stage: string; units: number; costUsd: number }>;
+  /** Per gate, matured units CHECKED there (pass or fail). Not a pass count. */
   instrumentation?: Record<string, number>;
+  /** Per gate, matured units that PASSED, contradictions excluded. */
+  gatePasses?: Record<string, number>;
   /** Per-gate count of mature units whose evidence contradicted itself (AII-003). */
   gateConflicts?: Record<string, number>;
   /** Partial-identification bounds on the realization rate. */
