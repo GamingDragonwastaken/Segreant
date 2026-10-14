@@ -48,6 +48,18 @@ function slug(name: string): string {
 }
 
 
+/** A `yyyy-mm-dd` date input as the local midnight it names, in ISO form. */
+function localMidnightIso(day: string): string {
+  return new Date(`${day}T00:00:00`).toISOString();
+}
+
+/** The local midnight after a `yyyy-mm-dd` day: the exclusive end of an inclusive range. */
+function dayAfterIso(day: string): string {
+  const d = new Date(`${day}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
 /** Month boundaries in local time, as ISO strings the server parses. */
 function monthRange(offset: number): { from: string; to: string; label: string } {
   const now = new Date();
@@ -64,6 +76,7 @@ export function allocationView(): Node {
   const data = signal<AllocationPayload | null>(null);
   const error = signal<string | null>(null);
   const projects = signal<string[]>([]);
+  const models = signal<string[]>([]);
   const reloads = signal(0);
   const reload = (): void => reloads.set(reloads() + 1);
   const { node: noticeNode, say } = pageNotice();
@@ -83,8 +96,11 @@ export function allocationView(): Node {
   // Project names to match on. A typo in a match makes a rule that claims
   // nothing, and the run would only say "no rule claimed it" afterwards.
   void api.overview('all')
-    .then((o) => projects.set(o.byProject.map((p) => p.label).filter((l) => l && l !== '(unattributed)')))
-    .catch(() => projects.set([]));
+    .then((o) => {
+      projects.set(o.byProject.map((p) => p.label).filter((l) => l && l !== '(unattributed)'));
+      models.set([...new Set(o.byModel.map((m) => m.label).filter(Boolean))]);
+    })
+    .catch(() => { projects.set([]); models.set([]); });
 
   const page = h('div', null,
     h('div', { class: 'view-head' },
@@ -102,7 +118,10 @@ export function allocationView(): Node {
       if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-busy': 'true', text: 'Loading…' }));
 
       const open = d.costCentres.filter((c) => c.archivedAtMs == null);
-      const live = d.rules.filter((r) => r.revokedAtMs == null && r.effectiveToMs == null);
+      // Any rule not revoked can claim spend in some period: a superseded version or
+      // one with an end date still governs the past it covered, which is exactly
+      // what a preview of an earlier period asks about.
+      const live = d.rules.filter((r) => r.revokedAtMs == null);
       // People type names; the engine keys on ids. Show what they typed.
       const names = new Map(d.costCentres.map((c) => [c.costCentreId, c.name]));
       const nameOf = (id: string): string => names.get(id) ?? id;
@@ -120,7 +139,7 @@ export function allocationView(): Node {
           () => (isPrecise() ? 'Priority-ordered; lower wins. Edits retain the old version and every recorded run. New previews follow effective dates.' : 'Each rule picks some spend and says which centre it belongs to. Changing a rule keeps old versions and recorded splits. A new preview follows the rule dates, so it can change an earlier period.'),
           ruleList(d.rules, d.demo, reloadAll, say, nameOf),
           d.demo ? null : open.length > 0
-            ? ruleForm(open, projects, reloadAll, say)
+            ? ruleForm(open, projects, models, reloadAll, say)
             : h('p', { class: 'drawer-muted', text: 'Add a cost centre first. A rule needs somewhere to send spend.' })),
         step(3, () => (isPrecise() ? 'Run' : 'Work out the split'),
           () => (isPrecise() ? 'Preview computes; Record persists an immutable run.' : 'Preview the split for a month. Nothing is saved until you record it.'),
@@ -213,12 +232,23 @@ function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, sa
     // computed under it, and a reader comparing runs needs to see why the split
     // changed rather than find a rule silently absent.
     ...rules.map((r) => {
-      const state = r.revokedAtMs != null ? 'revoked' : r.effectiveToMs != null ? 'superseded' : null;
+      // Superseded means a later version of the same rule exists. An end date the
+      // operator set is not supersession: `--until` and "Stops on" set it too, and
+      // calling those rules superseded misdescribed a rule that is still the
+      // current version.
+      const superseded = rules.some((o) => o.ruleId === r.ruleId && o.version > r.version);
+      const ended = !superseded && r.effectiveToMs != null && r.effectiveToMs <= Date.now();
+      const state = r.revokedAtMs != null ? 'revoked' : superseded ? 'superseded' : ended ? 'ended' : null;
+      const dates = [
+        r.effectiveFromMs > 0 ? `from ${date(r.effectiveFromMs)}` : '',
+        r.effectiveToMs != null && !superseded ? `${ended ? 'ended' : 'until'} ${date(r.effectiveToMs)}` : '',
+      ].filter(Boolean).join(' · ');
       return h('div', { class: `fact${state ? ' fact-off' : ''}` },
         h('span', { class: 'fact-key' },
-          h('span', { text: describeRule(r, nameOf) })),
+          h('span', { text: describeRule(r, nameOf) }),
+          dates ? h('span', { class: 'fact-sub', text: dates }) : null),
         h('span', { class: 'fact-val' },
-          h('span', { text: `${r.ruleId} v${r.version}${state ? ` · ${state}` : ` · p${r.priority}`}` }),
+          h('span', { text: `${r.ruleId} v${r.version}${state && state !== 'ended' ? ` · ${state}` : ` · p${r.priority}`}` }),
           !state && !demo
             ? h('button', {
                 class: 'link-btn',
@@ -232,9 +262,21 @@ function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, sa
     }));
 }
 
-function ruleForm(centres: CostCentre[], projects: () => string[], reload: () => void, say: Say): Node {
+/** The match fields beyond project, in the engine's own vocabulary (MATCH_FIELDS). */
+const EXTRA_MATCH: Array<{ key: 'model' | 'provider' | 'source' | 'user'; label: string; placeholder: string }> = [
+  { key: 'model', label: 'Model', placeholder: 'for example gpt-5' },
+  { key: 'provider', label: 'Provider', placeholder: 'for example openai' },
+  { key: 'source', label: 'Tool', placeholder: 'for example claude-code' },
+  { key: 'user', label: 'User', placeholder: 'as recorded on the request' },
+];
+
+function ruleForm(centres: CostCentre[], projects: () => string[], models: () => string[], reload: () => void, say: Say): Node {
   const method = signal<AllocationRule['method']>('direct');
   const project = signal('');
+  const extra = signal<Record<string, string>>({});
+  const priority = signal('');
+  const from = signal('');
+  const until = signal('');
   const target = signal(centres[0]!.costCentreId);
   const shares = signal<Record<string, string>>({});
 
@@ -245,13 +287,25 @@ function ruleForm(centres: CostCentre[], projects: () => string[], reload: () =>
     onsubmit: async (event: Event) => {
       event.preventDefault();
       const p = project().trim();
+      const match: Record<string, string> = p ? { project: p } : {};
+      for (const { key } of EXTRA_MATCH) { const v = (extra()[key] ?? '').trim(); if (v) match[key] = v; }
+      const pr = priority().trim();
+      if (pr !== '' && !/^-?\d+$/.test(pr)) return say(false, 'Priority must be a whole number.');
+      if (from() && until() && until() <= from()) return say(false, 'The stop date must be after the start date.');
       const targets = method() === 'fixed_split'
         ? Object.entries(shares()).filter(([, v]) => Number(v) > 0).map(([costCentreId, v]) => ({ costCentreId, ratio: Math.round(Number(v) * 10_000) / 1_000_000 }))
         : [{ costCentreId: target(), ratio: method() === 'direct' ? 1 : 0 }];
       if (method() === 'fixed_split' && Math.abs(shareTotal() - 100) > 1e-9) return say(false, `The shares add up to ${shareTotal()}%. They need to add up to 100%.`);
-      const id = slug(`${p || 'all'}-${method() === 'direct' ? target() : method()}`);
+      // Every condition is part of the id: with only project and centre in it, a
+      // rule for one model would have replaced an existing rule for all spend.
+      const id = slug([...Object.values(match), method() === 'direct' ? target() : method()].join('-') || 'all');
       try {
-        const r = await api.write.allocation({ op: 'rule', id, method: method(), targets, match: p ? { project: p } : {} });
+        const r = await api.write.allocation({
+          op: 'rule', id, method: method(), targets, match,
+          ...(pr === '' ? {} : { priority: Number(pr) }),
+          ...(from() ? { from: localMidnightIso(from()) } : {}),
+          ...(until() ? { until: localMidnightIso(until()) } : {}),
+        });
         say(true, isPrecise() ? r.message : 'Rule saved. Recorded splits keep their results; preview again to see this rule\'s effect.');
         reload();
       } catch (e) { say(false, errorText(e)); }
@@ -264,6 +318,7 @@ function ruleForm(centres: CostCentre[], projects: () => string[], reload: () =>
         oninput: (e: Event) => project.set((e.target as HTMLInputElement).value),
       })),
       h('datalist', { id: 'rule-projects' }, () => projects().map((p) => h('option', { value: p }))),
+      h('datalist', { id: 'rule-models' }, () => models().map((m) => h('option', { value: m }))),
       field('rule-method', 'How', h('select', {
         id: 'rule-method', class: 'drawer-input',
         onchange: (e: Event) => method.set((e.target as HTMLSelectElement).value as AllocationRule['method']),
@@ -288,18 +343,51 @@ function ruleForm(centres: CostCentre[], projects: () => string[], reload: () =>
       : method() === 'proportional_to_direct'
         ? h('p', { class: 'form-hint', text: 'This spend is shared out in the same proportions as the spend each centre gets directly in the period. If nothing was allocated directly, it stays unallocated rather than being split evenly.' })
         : null,
+    h('details', { class: 'rule-more' },
+      h('summary', { text: 'More conditions and dates' }),
+      h('p', { class: 'form-hint', text: 'Every condition must hold for a request to match. Leave a field empty to match anything.' }),
+      h('div', { class: 'form-row rule-more-row' },
+        ...EXTRA_MATCH.map(({ key, label, placeholder }) => field(`rule-${key}`, label, h('input', {
+          id: `rule-${key}`, class: 'drawer-input', autocomplete: 'off', spellcheck: 'false', placeholder,
+          ...(key === 'model' ? { list: 'rule-models' } : {}),
+          oninput: (e: Event) => extra.set({ ...extra(), [key]: (e.target as HTMLInputElement).value }),
+        })))),
+      h('div', { class: 'form-row rule-more-row' },
+        field('rule-priority', 'Priority', h('input', {
+          id: 'rule-priority', class: 'drawer-input', type: 'number', step: '1', inputmode: 'numeric', placeholder: '100',
+          'aria-describedby': 'rule-priority-hint',
+          oninput: (e: Event) => priority.set((e.target as HTMLInputElement).value),
+        })),
+        field('rule-from', 'Applies from', h('input', {
+          id: 'rule-from', class: 'drawer-input', type: 'date',
+          oninput: (e: Event) => from.set((e.target as HTMLInputElement).value),
+        })),
+        field('rule-until', 'Stops on', h('input', {
+          id: 'rule-until', class: 'drawer-input', type: 'date',
+          oninput: (e: Event) => until.set((e.target as HTMLInputElement).value),
+        }))),
+      h('p', { id: 'rule-priority-hint', class: 'form-hint', text: 'Rules are checked lowest number first, and the first rule that matches a request takes it. Dates are matched against when the spend happened; empty means from the start of your history and with no end.' })),
     h('div', { class: 'form-actions' }, h('button', { class: 'btn-commit', type: 'submit', text: 'Save rule' })),
   );
 }
 
 function runPanel(demo: boolean, reload: () => void, say: Say, nameOf: (id: string) => string): Node {
   const ranges = [monthRange(-1), monthRange(0)];
+  const CUSTOM = ranges.length;
   const chosen = signal(0);
+  const customFrom = signal('');
+  const customThrough = signal('');
   const preview = signal<AllocationRunResultPayload | null>(null);
   const busy = signal(false);
 
   const run = async (apply: boolean): Promise<void> => {
-    const r = ranges[chosen()]!;
+    let r: { from: string; to: string };
+    if (chosen() === CUSTOM) {
+      if (!customFrom() || !customThrough()) return say(false, 'Choose both the first and the last day of the period.');
+      if (customThrough() < customFrom()) return say(false, 'The last day must not be before the first day.');
+      // Both days are included: the period ends at the local midnight after the last one.
+      r = { from: localMidnightIso(customFrom()), to: dayAfterIso(customThrough()) };
+    } else r = ranges[chosen()]!;
     busy.set(true);
     try {
       const res = await api.write.allocation({ op: 'run', from: r.from, to: r.to, apply });
@@ -316,7 +404,15 @@ function runPanel(demo: boolean, reload: () => void, say: Say, nameOf: (id: stri
       field('run-period', 'Period', h('select', {
         id: 'run-period', class: 'drawer-input',
         onchange: (e: Event) => { chosen.set(Number((e.target as HTMLSelectElement).value)); preview.set(null); },
-      }, ...ranges.map((r, i) => h('option', { value: String(i), text: r.label })))),
+      }, ...ranges.map((r, i) => h('option', { value: String(i), text: r.label })),
+        h('option', { value: String(CUSTOM), text: 'Choose dates…' }))),
+      () => chosen() === CUSTOM
+        ? h('div', { class: 'form-row run-dates' },
+            field('run-from', 'First day', h('input', { id: 'run-from', class: 'drawer-input', type: 'date',
+              oninput: (e: Event) => { customFrom.set((e.target as HTMLInputElement).value); preview.set(null); } })),
+            field('run-through', 'Last day', h('input', { id: 'run-through', class: 'drawer-input', type: 'date',
+              oninput: (e: Event) => { customThrough.set((e.target as HTMLInputElement).value); preview.set(null); } })))
+        : null,
       h('button', { class: 'btn-ghost', disabled: () => busy(), onclick: () => void run(false), text: () => (busy() ? 'Working…' : 'Preview split') })),
     () => {
       const p = preview();
