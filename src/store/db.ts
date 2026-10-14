@@ -3087,6 +3087,10 @@ export class Store {
     return allocation.allocationRuns(this.db, limit);
   }
 
+  allocationRunById(allocationRunId: string): { allocationRunId: string; computedAtMs: number; result: AllocationRunResult } | null {
+    return allocation.allocationRunById(this.db, allocationRunId);
+  }
+
   /** Recorded reconciliation runs, newest first. */
   reconciliationRuns(limit = 20): Array<{ reconciliationRunId: string; computedAtMs: number; result: ReconciliationRun }> {
     return billing.reconciliationRuns(this.db, limit);

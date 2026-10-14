@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A recorded split downloads as a spreadsheet.** Each row under Saved splits on Allocate has a CSV link, and `segreant alloc runs` and `segreant alloc export <run-id> [--out file]` do the same from the terminal, byte for byte. The file is the run exactly as recorded, never recomputed under today's rules: one row per cost centre and rule, and one per unallocated reason with the projects behind it. Every row is labelled showback of the local estimate. The amount column adds up to the run's total to the microdollar; the total is stated in the first row's note rather than given its own row, so summing the column never doubles it. `GET /api/allocation/run.csv?id=` serves it.
+
 - **Long names keep the money in view.** A project, model or cost-centre name with no spaces set the width of its table column, so on a phone Statement pushed the amount column off the right edge, and one long name in an allocation rule made the whole Allocate page scroll sideways. Names now wrap inside their cell or row, and the amount stays beside them. A share that is neither zero nor the whole no longer rounds to 0% or 100%: $21.90 unallocated out of $12.3M reads "<0.1%" rather than "0.0%", and the cost centre beside it ">99.9%" rather than "100.0%". On Protect, the alert coverage card no longer touches the daily limit card.
 
 - **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:
