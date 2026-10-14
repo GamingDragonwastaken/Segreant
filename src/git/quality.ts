@@ -168,14 +168,34 @@ function commitFiles(repoPath: string, hash: string): Promise<Array<{ path: stri
 }
 
 async function readCommitFiles(repoPath: string, hash: string): Promise<Array<{ path: string; added: number }>> {
-  // --format= suppresses the commit header; --numstat gives "added<TAB>deleted<TAB>path".
-  const out = await git(repoPath, ['show', '--numstat', '--format=', hash]);
+  // --format= suppresses the commit header; -z keeps paths exact (see parseNumstatZ).
+  return parseNumstatZ(await git(repoPath, ['show', '--numstat', '-z', '--format=', hash]));
+}
+
+/**
+ * Parse `git show --numstat -z`. Each file is `added<TAB>deleted<TAB>path<NUL>`,
+ * except a rename or copy, which is `added<TAB>deleted<TAB><NUL>old<NUL>new<NUL>`.
+ *
+ * The paths returned are blamed at HEAD, so a rename has to yield its NEW path.
+ * Without -z, git prints a renamed file as `src/{old.ts => new.ts}`, which is not
+ * a path: blame refused it ("no such path in HEAD"), the file read as deleted,
+ * and every line the commit added there counted as not retained. -z also keeps
+ * a path containing spaces, tabs, quotes or " => " exactly as it is.
+ */
+export function parseNumstatZ(out: string): Array<{ path: string; added: number }> {
+  const fields = out.split('\0');
   const files: Array<{ path: string; added: number }> = [];
-  for (const line of out.split('\n')) {
-    const m = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
+  for (let i = 0; i < fields.length; i++) {
+    const m = /^\n?(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(fields[i]!);
     if (!m) continue;
-    const added = m[1] === '-' ? 0 : Number(m[1]);
-    files.push({ path: m[3]!, added });
+    let path = m[3]!;
+    if (path === '') {
+      // A rename or copy: the old path, then the new one, as their own fields.
+      path = fields[i + 2] ?? '';
+      i += 2;
+    }
+    if (path === '') continue;
+    files.push({ path, added: m[1] === '-' ? 0 : Number(m[1]) });
   }
   return files;
 }
