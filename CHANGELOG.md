@@ -11,6 +11,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Importing is about twice as fast when sessions span many folders.** Each importer asked git for the repository root of every distinct working directory, one process per folder. On Windows that is about 50 ms each, in every importer, on every refresh, and a profile showed it only as idle time. The root is now found on disk the way git finds it, which takes microseconds. On a synthetic Antigravity corpus with 54 project folders and 3,500 recent calls, seven interleaved pairs went from a median of 5.1 s to 2.2 s, and the stored rows are identical. Claude Code and Codex imports use the same resolver. `scripts/generate-antigravity-corpus.mjs` and `scripts/benchmark-antigravity-corpus.mjs` reproduce the measurement without real data.
+
 - **Long names keep the money in view.** A project, model or cost-centre name with no spaces set the width of its table column, so on a phone Statement pushed the amount column off the right edge, and one long name in an allocation rule made the whole Allocate page scroll sideways. Names now wrap inside their cell or row, and the amount stays beside them. A share that is neither zero nor the whole no longer rounds to 0% or 100%: $21.90 unallocated out of $12.3M reads "<0.1%" rather than "0.0%", and the cost centre beside it ">99.9%" rather than "100.0%". On Protect, the alert coverage card no longer touches the daily limit card.
 
 - **Every capability says what its command does.** An audit read the code behind all 64 capability rows. 34 described something the command does not do, or left out a consequence. Corrected:

@@ -18,6 +18,10 @@
   require retaining the complete normalized row array;
 - Antigravity counts each model call once, from its generator row; the same
   usage repeated in step metadata and retry records is not added again;
+- a working directory is resolved to its repository root on disk (`repoRoot.ts`),
+  the way git's discovery finds it, without starting a process; a parity test
+  compares it with `git rev-parse --show-toplevel` across worktree, nested,
+  bare, broken-pointer, symlink and letter-case layouts;
 - imported spend keeps its source and estimated/exact pricing labels; a partial
   source capture never becomes complete evidence merely because some rows were
   imported.
@@ -33,5 +37,5 @@
 ## Verify
 
 ```bash
-node --test --experimental-strip-types test/claude-code-import.test.ts test/codex-import.test.ts test/opencode-import.test.ts test/antigravity-import.test.ts
+node --test --experimental-strip-types test/claude-code-import.test.ts test/codex-import.test.ts test/opencode-import.test.ts test/antigravity-import.test.ts test/repo-root-disk.test.ts
 ```
