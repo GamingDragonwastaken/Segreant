@@ -214,7 +214,7 @@ test('contradicted gate evidence is a hole in coverage, not a contradiction in t
   assert.match(conflicted.note ?? '', /12 mature unit\(s\)/);
   assert.match(conflicted.note ?? '', /clean, survived/);
   assert.doesNotMatch(conflicted.note ?? '', /shipped/, 'a gate with zero conflicts is not named');
-  assert.match(conflicted.note ?? '', /unadjudicated rather than refuted/);
+  assert.match(conflicted.note ?? '', /unresolved, not a fail/);
 
   // Without conflicts, full RoI coverage is complete — so the assertion above
   // is about the conflicts and not about something else in the fixture.

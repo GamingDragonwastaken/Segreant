@@ -100,7 +100,7 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await page.getByRole('dialog', { name: 'What brings you to Segreant?' }).getByRole('button', { name: /I look after the money/ }).click();
     const main = page.getByRole('main');
     const jobs = page.getByRole('navigation', { name: 'Jobs' });
-    const claims = page.getByRole('region', { name: 'The four claims' });
+    const claims = page.getByRole('region', { name: 'The four figures' });
     const button = (name) => main.getByRole('button', { name, exact: true });
     await main.getByRole('heading', { name: 'Statement', exact: true }).waitFor();
     assert.equal(new URL(page.url()).hash, '#/statement', 'finance first run lands on Statement');
@@ -130,7 +130,7 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await phoneLayout(page, 'Allocate preview');
     await capture(page, 'allocate-preview-phone');
     await button('Record this run').click();
-    await reads(claims.getByRole('button', { name: /^Allocated ·/ }), /apportioned by recorded rules — showback only/, 'Allocated band refreshes without a page reload');
+    await reads(claims.getByRole('button', { name: /^Allocated cost ·/ }), /split by your rules, for reporting \(not a bill\)/, 'Allocated band refreshes without a page reload');
     assert.equal(store.allocationRuns().length, 1);
     // The recorded split downloads as the run it is, not a recomputation.
     const csvLink = main.getByRole('link', { name: /^Download the split for .+ as CSV$/ });
@@ -201,7 +201,7 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await capture(page, 'close-preview-phone');
     await button('Record this comparison').click();
     await reads(main, /Where this stands\s+supported/i, 'status pill reads supported');
-    await reads(claims.getByRole('button', { name: /^Billed ·/ }), /reconciled against a provider report, with a residual/, 'Billed band refreshes without a page reload');
+    await reads(claims.getByRole('button', { name: /^Billed cost ·/ }), /compared with your invoice; see Close for the difference/, 'Billed band refreshes without a page reload');
     assert.equal(store.reconciliationRuns().length, 1);
     assert.equal(store.reconciliationRuns()[0].result.materialityUsd, 0.3, 'the run is recorded under the threshold that was previewed');
     // Every recorded comparison is listed with its own days and opens to what was recorded.

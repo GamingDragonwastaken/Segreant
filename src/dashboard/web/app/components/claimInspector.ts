@@ -158,7 +158,7 @@ function panel(layer: Layer): Node {
       : null,
 
     i.missingEvidence.length
-      ? list(isPrecise() ? 'Missing evidence' : 'What we do not have', i.missingEvidence, 'claim-missing')
+      ? list(isPrecise() ? 'Missing evidence' : "What's missing", i.missingEvidence, 'claim-missing')
       : h('p', { class: 'claim-complete', text: claimCompletionLine(layer, isPrecise()) }),
 
     stronger
