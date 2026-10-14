@@ -13,7 +13,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { RequestObservationConflictError, type Store, type RequestRow } from '../store/db.ts';
-import { repoToplevel } from '../git/correlate.ts';
+import { repoToplevelOnDisk } from './repoRoot.ts';
 import { projectKey, projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
@@ -307,19 +307,23 @@ export interface ResolvedAttribution {
  * of nearly lining up.
  *
  * When the path is not inside a repository (a scratch folder, a deleted
- * directory, no git on PATH), this degrades to exactly the previous behaviour
+ * directory), this degrades to exactly the previous behaviour
  * and says so through the basis. Results are cached per directory: a transcript
  * corpus has thousands of lines and a handful of distinct working directories.
+ *
+ * The root is found on disk (`repoToplevelOnDisk`), the way git discovers it,
+ * rather than by running git: one spawn per directory cost about 45 ms on
+ * Windows, in every importer, on every refresh.
  */
 export function createRepoResolver(): (cwd: string | null | undefined, fallback: string) => Promise<ResolvedAttribution> {
   const cache = new Map<string, ResolvedAttribution>();
   return async (cwd, fallback) => {
     const inferred = projectKeyWithBasis(cwd, fallback);
     if (!cwd || inferred.basis === 'tool_log_fallback') return { ...inferred, supersedes: null };
-    const key = `${cwd} ${fallback}`;
+    const key = `${cwd}\0${fallback}`;
     const hit = cache.get(key);
     if (hit) return hit;
-    const top = await repoToplevel(cwd);
+    const top = repoToplevelOnDisk(cwd);
     const resolved: ResolvedAttribution =
       top === null
         ? { ...inferred, supersedes: null }
