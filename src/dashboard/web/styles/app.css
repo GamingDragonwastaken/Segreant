@@ -1019,6 +1019,18 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 .parity-summary::-webkit-details-marker { display: none; }
 .parity-summary::before { content: '\25B8'; color: var(--muted); }
 .parity-details[open] > .parity-summary::before { content: '\25BE'; }
+/* Close: an adopted export says it is in use rather than offering itself again. */
+.in-use { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* Close: each recorded comparison opens to what was recorded. The summary is a
+   flex row, so it draws its own disclosure marker, as the parity table does. */
+.recorded-run > summary { cursor: pointer; list-style: none; min-height: 44px; display: flex; align-items: baseline; padding: var(--s2) 0; }
+.recorded-run > summary::-webkit-details-marker { display: none; }
+.recorded-run > summary .fact-line { flex: 1; min-width: 0; }
+.recorded-run > summary::before { content: '\25B8'; color: var(--muted); margin-right: var(--s2); }
+.recorded-run[open] > summary::before { content: '\25BE'; }
+.recorded-run > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.recorded-run[open] > summary { margin-bottom: var(--s2); }
+.declared-scope { margin-bottom: var(--s3); }
 .parity-counts { color: var(--muted); font-size: 13px; }
 /* The capability and its plain description are what this table is for; the
    command column had taken the width and wrapped the descriptions a word or

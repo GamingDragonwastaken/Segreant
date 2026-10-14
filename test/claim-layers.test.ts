@@ -53,6 +53,7 @@ const aBilling = (recordCount: number, runs: ReconciliationRunRecord[] = []): Bi
   demo: false,
   asOf: null,
   imports: [],
+  activeScope: null,
   claimSupport: billedClaimSupport({ recordCount, runCount: runs.length, latest: runs[0]?.result ?? null }),
   evidence: { reconciliationStatus: 'not_reconciled' },
   summary: { recordCount },
