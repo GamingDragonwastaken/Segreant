@@ -52,6 +52,14 @@ figure, and each stays on the machine under the Segreant home:
 - `scan_snapshots.repos_json` — repository locations discovered by a local
   scan, so the same disclosure applies as for `requests.cwd`.
 
+Outside the ledger, `<home>/survival/` keeps git's answers to survival
+measurement between runs: for each measured repository, commit hashes, the
+repository-relative paths of files those commits touched, and per-file line
+counts by commit. It holds no file contents, and the repository's own location
+appears only as a hash in the file name. It is a cache, never evidence:
+deleting the directory costs the next value run its time, not any figure, and
+only the CLI and the dashboard it starts write it.
+
 Everything above is local. Only the declared egress paths below leave the
 Segreant process, and none of them carries these columns.
 

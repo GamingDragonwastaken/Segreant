@@ -222,7 +222,6 @@ const BLAME_CACHE_MAX = 4096;
 export function clearBlameCache(): void {
   blameCache.clear();
   commitFilesCache.clear();
-  headMemo.clear();
 }
 
 /**
@@ -241,6 +240,8 @@ export async function prefetchSurvival(
   concurrency = 8,
   /** The same history bound the measuring pass will use, so the caches meet. */
   sinceSec?: number,
+  /** The pass's HEAD (survivalHead); read here when not given. */
+  passHead?: string | null,
 ): Promise<void> {
   const expired = () => deadlineMs !== undefined && Date.now() >= deadlineMs;
   const pool = async <T>(items: readonly T[], work: (item: T) => Promise<unknown>) => {
@@ -253,7 +254,7 @@ export async function prefetchSurvival(
     });
     await Promise.all(lanes);
   };
-  const head = await headCommit(repoPath);
+  const head = passHead === undefined ? await survivalHead(repoPath) : passHead;
   if (head === null) return;
   const paths = new Set<string>();
   await pool(hashes, async (hash) => {
@@ -264,25 +265,13 @@ export async function prefetchSurvival(
 }
 
 /**
- * HEAD, read at most once per repository every two seconds. `survivingLines`
- * asks for it once per commit, and a measuring pass over 80 commits spent 3.6 s
- * of a 3.9 s run starting `git rev-parse` once the blames themselves were
- * cached. A pass is meant to measure against one HEAD anyway; a commit landing
- * mid-pass is a new key for the next pass, as before.
+ * The commit HEAD names now, or null for an unborn branch. A measuring pass
+ * reads it once and hands it to `prefetchSurvival` and `survivingLines`: asking
+ * per commit started one `git rev-parse` each, which was 3.6 s of a 3.9 s pass
+ * over 80 commits once the blames were cached. A caller that passes no HEAD
+ * still gets a fresh read per call, so a commit made a moment ago is seen.
  */
-const headMemo = new Map<string, { at: number; head: Promise<string | null> }>();
-const HEAD_MEMO_MS = 2000;
-
-function headCommit(repoPath: string): Promise<string | null> {
-  const now = Date.now();
-  const hit = headMemo.get(repoPath);
-  if (hit && now - hit.at < HEAD_MEMO_MS) return hit.head;
-  const head = readHead(repoPath);
-  headMemo.set(repoPath, { at: now, head });
-  return head;
-}
-
-async function readHead(repoPath: string): Promise<string | null> {
+export async function survivalHead(repoPath: string): Promise<string | null> {
   try {
     const out = (await git(repoPath, ['rev-parse', 'HEAD'])).trim();
     return /^[0-9a-f]{40,64}$/.test(out) ? out : null;
@@ -396,8 +385,10 @@ export async function survivingLines(
   deadlineMs?: number,
   /** Optional history bound for blame; must be older than `hash` (see blameAt). */
   sinceSec?: number,
+  /** The pass's HEAD (survivalHead); read here when not given. */
+  passHead?: string | null,
 ): Promise<SurvivingLines> {
-  const [files, head] = await Promise.all([commitFiles(repoPath, hash), headCommit(repoPath)]);
+  const [files, head] = await Promise.all([commitFiles(repoPath, hash), passHead === undefined ? survivalHead(repoPath) : passHead]);
   let added = 0;
   let surviving = 0;
   let measured = true;
@@ -562,8 +553,9 @@ export async function computeArtifactPersistence(
   const reverted = await revertedHashes(repoPath, limit);
 
   const commits: ArtifactPersistenceCommit[] = [];
+  const passHead = await survivalHead(repoPath);
   for (const a of attributions) {
-    const survival = await survivingLines(repoPath, a.hash);
+    const survival = await survivingLines(repoPath, a.hash, undefined, undefined, passHead);
     const { added, surviving } = survival;
     const retainedArtifact = artifactPersistence({
       introducedLines: added,

@@ -60,8 +60,8 @@ export function configureSurvivalStore(dir: string | null): void {
   validity.clear();
   if (dir !== null && !exitHooked) {
     exitHooked = true;
-    // Synchronous on purpose: 'exit' runs no further asynchronous work, and a
-    // CLI command that calls process.exit() still keeps what it measured.
+    // Deliberately synchronous: the exit event runs no further asynchronous
+    // work, and a CLI command that calls process.exit() still keeps what it measured.
     process.once('exit', flushSurvivalStore);
   }
 }
