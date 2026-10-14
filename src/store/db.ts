@@ -300,6 +300,23 @@ const EXACT_SPEND_CACHE_KEYS = 64;
  */
 const MAX_DATE_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 
+/** Every RequestRow column, alias-canonical label included; callers add WHERE and ORDER BY. */
+const REQUEST_ROW_SELECT = `SELECT request_id AS requestId, session_id AS sessionId, ts_epoch_ms AS tsEpochMs,
+                provider, model, r.project AS project,
+                COALESCE(a.canonical, r.project) AS projectCanonical, task_weight AS taskWeight,
+                input_tokens AS inputTokens, output_tokens AS outputTokens,
+                cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
+                reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
+                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
+                cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
+                scope_capture_status AS scopeCaptureStatus,
+                provider_scope_declaration_id AS providerScopeDeclarationId,
+                attribution_basis AS attributionBasis,
+                capture_coverage AS captureCoverage
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project`;
+
 /**
  * Merge a few new ids into an already sorted list, in the same order
  * `Array.prototype.sort()` gives strings. Re-sorting the whole list on every
@@ -2030,26 +2047,36 @@ export class Store {
   requestsInRange(startMs: number, endMs: number): RequestRow[] {
     // Carry the alias-canonical label alongside the raw one so an export totals
     // the same way `byProject` does without rewriting the recorded row.
-    const rows = this.db
-      .prepare(
-        `SELECT request_id AS requestId, session_id AS sessionId, ts_epoch_ms AS tsEpochMs,
-                provider, model, r.project AS project,
-                COALESCE(a.canonical, r.project) AS projectCanonical, task_weight AS taskWeight,
-                input_tokens AS inputTokens, output_tokens AS outputTokens,
-                cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
-                reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
-                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
-                cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
-                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
-                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
-                 scope_capture_status AS scopeCaptureStatus,
-                 provider_scope_declaration_id AS providerScopeDeclarationId,
-                 attribution_basis AS attributionBasis,
-                 capture_coverage AS captureCoverage
-         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
-         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
-      )
-      .all(startMs, endMs) as Array<Record<string, unknown>>;
+    // Streamed and mapped one record at a time: `.all()` held every raw record
+    // alongside its mapped row, which put a 100,000-row month at 455 MiB RSS.
+    const out: RequestRow[] = [];
+    const stmt = this.db.prepare(`${REQUEST_ROW_SELECT} WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`);
+    for (const record of stmt.iterate(startMs, endMs)) out.push(requestRowFromRecord(record as Record<string, unknown>));
+    return out;
+  }
+
+  /**
+   * The rows `requestsInRange(0, endMs)` would return that one self-reported
+   * spend link names: one request, one session, or one tool over [fromMs, toMs).
+   * Same columns, same order, read through an index instead of the whole
+   * ledger. Matching by filtering every request ever recorded took the value
+   * report from 320 MiB of heap to 864 MiB on a 300,000-request ledger.
+   */
+  requestsForSpendLink(
+    link:
+      | { type: 'request'; requestId: string }
+      | { type: 'session'; sessionId: string }
+      | { type: 'window'; fromMs: number; toMs: number; tool: string },
+    endMs: number,
+  ): RequestRow[] {
+    const range = 'ts_epoch_ms >= 0 AND ts_epoch_ms < ?';
+    const order = 'ORDER BY ts_epoch_ms ASC';
+    const rows = (link.type === 'request'
+      ? this.db.prepare(`${REQUEST_ROW_SELECT} WHERE request_id = ? AND ${range} ${order}`).all(link.requestId, endMs)
+      : link.type === 'session'
+        ? this.db.prepare(`${REQUEST_ROW_SELECT} WHERE session_id = ? AND ${range} ${order}`).all(link.sessionId, endMs)
+        : this.db.prepare(`${REQUEST_ROW_SELECT} WHERE source = ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ? AND ${range} ${order}`)
+          .all(link.tool, link.fromMs, link.toMs, endMs)) as Array<Record<string, unknown>>;
     return rows.map(requestRowFromRecord);
   }
 
