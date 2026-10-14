@@ -1,7 +1,8 @@
 /**
  * `segreant quota`: each vendor's own usage meter, read from its tool's logs,
  * the pace to the next reset, and whether the meter moves in step with what
- * Segreant counted. Imports first, so the reading is as fresh as the logs.
+ * Segreant counted. It reads what the last import or status-line reading
+ * stored; `segreant import all` refreshes it.
  */
 import { Store } from '../store/db.ts';
 import { dbPath } from '../config.ts';

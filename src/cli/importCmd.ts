@@ -474,7 +474,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     console.log('');
     console.log(color(tty, C.bold, '  Scan — find your AI tools and repos, then set it all up'));
     console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-    console.log(color(tty, C.gray, '  Read-only: reads what exists on disk. Nothing is imported or sent.'));
+    console.log(color(tty, C.gray, '  Reads what exists on disk and remembers this scan to report changes. Nothing is imported or sent.'));
     console.log('');
 
     // Detected tools.
