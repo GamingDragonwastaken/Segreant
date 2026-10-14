@@ -59,7 +59,7 @@ const modes: Record<string, string[][]> = {
   usage: [[]], outcome: [['report']], judge: [['--session', 'missing-session']], team: [[]],
   evidence: [['ux', '--options', '$options']], import: [['codex', '--root', '$folder']],
   billing: [['status'], ['export'], ['scope', 'status'], ['mapping', 'status'], ['openai-costs', 'status'], ['openai-costs', 'coverage'], ['openai-costs', 'preview', '--from', '2026-01-01', '--to', '2026-02-01'], ['reconcile']],
-  alloc: [['centres'], ['rules'], ['run', '--from', '2026-01-01T00:00:00.000Z', '--to', '2026-02-01T00:00:00.000Z']],
+  alloc: [['centres'], ['rules'], ['runs'], ['run', '--from', '2026-01-01T00:00:00.000Z', '--to', '2026-02-01T00:00:00.000Z']],
   discover: [[]], scan: [['$folder']], receipt: [['--verify', '$absent', '--key-id', 'fixture-signer']], project: [[], ['--coverage']],
   restore: [['--from', '$absent', '--out', '$restore']], pack: [['inspect', '$absent'], ['verify', '$absent']],
   plugin: [['run', '--manifest', '$absent', '--request', '$absent', '--exec', '$absent', '--scope', 'fixture=yes']],

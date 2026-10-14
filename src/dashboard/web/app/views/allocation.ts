@@ -368,9 +368,21 @@ function history(runs: AllocationPayload['runs']): Node {
             h('thead', null, h('tr', null,
               h('th', { text: 'Period' }), h('th', { class: 'num', text: 'Total' }), h('th', { class: 'num', text: 'Allocated' }), h('th', { text: 'Recorded' }))),
             h('tbody', null,
-              ...runs.map((r) => h('tr', null,
-                h('td', { text: `${date(r.result.periodStartMs)} – ${date(r.result.periodEndMs)}` }),
-                h('td', { class: 'num', text: usdFromMicros(r.result.totalMicros) }),
-                h('td', { class: 'num', text: r.result.totalMicros > 0 ? shareOf(r.result.allocatedMicros / r.result.totalMicros, 1) : '—' }),
-                h('td', { text: relative(r.computedAtMs) })))))));
+              ...runs.map((r) => {
+                const period = `${date(r.result.periodStartMs)} – ${date(r.result.periodEndMs)}`;
+                return h('tr', null,
+                  // The download sits with the run it names rather than in a
+                  // column of its own, which pushed the table past a phone screen.
+                  // It is the recorded run exactly as stored: every line and
+                  // unallocated reason, adding up to the total to the microdollar.
+                  h('td', null,
+                    h('span', { class: 'run-period', text: period }),
+                    h('a', {
+                      class: 'run-download', href: api.allocationRunCsvHref(r.allocationRunId), download: '',
+                      'aria-label': `Download the split for ${period} as CSV`, text: 'Export CSV',
+                    })),
+                  h('td', { class: 'num', text: usdFromMicros(r.result.totalMicros) }),
+                  h('td', { class: 'num', text: r.result.totalMicros > 0 ? shareOf(r.result.allocatedMicros / r.result.totalMicros, 1) : '—' }),
+                  h('td', { text: relative(r.computedAtMs) }));
+              })))));
 }

@@ -2,7 +2,7 @@
 // No proxy process or provider credential is needed for these synthetic rows.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -132,6 +132,18 @@ test('finance jobs: allocate, close with a BOM export, and read each run on Stat
     await button('Record this run').click();
     await reads(claims.getByRole('button', { name: /^Allocated ·/ }), /apportioned by recorded rules — showback only/, 'Allocated band refreshes without a page reload');
     assert.equal(store.allocationRuns().length, 1);
+    // The recorded split downloads as the run it is, not a recomputation.
+    const csvLink = main.getByRole('link', { name: /^Download the split for .+ as CSV$/ });
+    await csvLink.waitFor();
+    const [download] = await Promise.all([page.waitForEvent('download'), csvLink.click()]);
+    assert.match(download.suggestedFilename(), /^segreant-allocation-\d{4}-\d{2}-\d{2}\.csv$/);
+    const csv = await readFile(await download.path(), 'utf8');
+    assert.match(csv, /Total estimated spend in the period: \$10\.000000\. The rows below add up to it exactly\./);
+    assert.match(csv, /Engineering,[^,]+,.*,7\.000000,7000000,/, 'the Engineering line carries its exact amount');
+    assert.match(csv, /Operations,[^,]+,.*,3\.000000,3000000,/, 'the Operations line carries its exact amount');
+    assert.equal(csv.match(/showback split of the local estimate/g)?.length, 3, 'the run row and both lines say showback');
+    await phoneLayout(page, 'Allocate saved splits');
+    await capture(page, 'allocate-saved-phone');
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await jobs.getByRole('button', { name: 'Close', exact: true }).click();

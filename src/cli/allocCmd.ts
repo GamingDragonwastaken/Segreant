@@ -8,7 +8,9 @@
  * is settled cost is not.
  */
 
-import { dbPath } from '../config.ts';
+import { writeFileSync } from 'node:fs';
+import { dbPath, isDemo } from '../config.ts';
+import { allocationRunToCsv } from '../export/allocationCsv.ts';
 import { Store } from '../store/db.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { displayUsd } from '../billing/reconcile.ts';
@@ -19,7 +21,7 @@ import type { Flags } from './flags.ts';
 import { recordedTime } from '../util/time.ts';
 
 function usage(): void {
-  console.error('  Usage: segreant alloc <centres|centre|rules|rule|revoke|run> [options]');
+  console.error('  Usage: segreant alloc <centres|centre|rules|rule|revoke|run|runs|export> [options]');
   console.error('         segreant alloc centre <id> --name "<name>" [--owner <who>]   add or update a cost centre');
   console.error('         segreant alloc centre <id> --archive                          retain it, stop it receiving');
   console.error('         segreant alloc rule <id> --method <direct|fixed_split|proportional_to_direct> \\');
@@ -29,6 +31,8 @@ function usage(): void {
   console.error('             a proportional_to_direct rule derives its split, so its centre takes ratio 0');
   console.error('         segreant alloc revoke <rule-id>');
   console.error('         segreant alloc run --from <ISO> --to <ISO> [--apply] [--json]');
+  console.error('         segreant alloc runs [--json]                                  recorded splits, newest first');
+  console.error('         segreant alloc export <run-id> [--out <file>]                 one recorded split as CSV');
   console.error('  Allocation is derived: it never modifies a request row, and never feeds budgets or RoI.');
 }
 
@@ -146,6 +150,56 @@ export function cmdAlloc(flags: Flags): void {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'run';
   const store = new Store(dbPath());
   try {
+    if (action === 'runs') {
+      const runs = store.allocationRuns(50);
+      if (flags.json) {
+        return void printJson({
+          runs: runs.map((r) => ({
+            allocationRunId: r.allocationRunId,
+            computedAtMs: r.computedAtMs,
+            periodStartMs: r.result.periodStartMs,
+            periodEndMs: r.result.periodEndMs,
+            totalMicros: r.result.totalMicros,
+            allocatedMicros: r.result.allocatedMicros,
+            unallocatedMicros: r.result.unallocatedMicros,
+          })),
+        });
+      }
+      console.log('');
+      if (runs.length === 0) console.log(color(tty, C.gray, '  No recorded splits. Record one: segreant alloc run --from <ISO> --to <ISO> --apply'));
+      for (const r of runs) {
+        const period = `${new Date(r.result.periodStartMs).toISOString().slice(0, 10)} – ${new Date(r.result.periodEndMs).toISOString().slice(0, 10)}`;
+        const share = r.result.totalMicros > 0 ? `${((r.result.allocatedMicros / r.result.totalMicros) * 100).toFixed(1)}% allocated` : 'nothing to allocate';
+        console.log(`  ${r.allocationRunId}  ${period}  ${displayUsd(r.result.totalMicros)}  ${color(tty, C.gray, share)}`);
+      }
+      if (runs.length > 0) console.log(color(tty, C.gray, '\n  Export one as CSV: segreant alloc export <run-id> --out split.csv'));
+      return;
+    }
+
+    if (action === 'export') {
+      const id = typeof flags._[1] === 'string' ? flags._[1] : '';
+      if (id === '') {
+        console.error('  alloc export needs the run id: segreant alloc runs lists them.');
+        process.exitCode = 2;
+        return;
+      }
+      const run = store.allocationRunById(id);
+      if (run === null) {
+        console.error(`  No recorded allocation run has the id "${id}". segreant alloc runs lists them.`);
+        process.exitCode = 1;
+        return;
+      }
+      const names = new Map(store.costCentres().map((c) => [c.costCentreId, c.name]));
+      const csv = allocationRunToCsv(run, (costCentreId) => names.get(costCentreId) ?? costCentreId, isDemo());
+      if (typeof flags.out === 'string') {
+        writeFileSync(flags.out, csv);
+        console.error(color(tty, C.green, `  Exported the split for ${new Date(run.result.periodStartMs).toISOString().slice(0, 10)} → ${flags.out}`));
+      } else {
+        process.stdout.write(csv);
+      }
+      return;
+    }
+
     if (action === 'centres') {
       const centres = store.costCentres();
       if (flags.json) return void printJson({ costCentres: centres });

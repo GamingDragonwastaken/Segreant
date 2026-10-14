@@ -54,6 +54,7 @@ import { buildGuide } from '../guide.ts';
 import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { statementToCsv } from '../export/statementCsv.ts';
+import { allocationRunToCsv } from '../export/allocationCsv.ts';
 import { economicRequestsToCsv } from '../export/economic.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
@@ -763,6 +764,32 @@ export function handleBilling({ res, url, store }: RouteContext): void {
  * rather than derived money — the page needs them to name a centre and to
  * show which rule version placed each line.
  */
+/**
+ * One recorded allocation run as CSV, by id. Read from the stored run, never
+ * recomputed, so the file is the split someone reviewed. An id is required:
+ * "the latest run" would silently change meaning when a new one is recorded.
+ */
+export function handleAllocationRunCsv({ res, url, store }: RouteContext): void {
+  const id = url.searchParams.get('id');
+  if (id === null || id.trim() === '') return json(res, 400, { error: 'id is required: the allocation run to export' });
+  if (id.length > 200) return json(res, 400, { error: 'id is too long to be an allocation run id' });
+  try {
+    const run = store.allocationRunById(id);
+    if (run === null) return json(res, 404, { error: 'no recorded allocation run has that id' });
+    const names = new Map(store.costCentres().map((c) => [c.costCentreId, c.name]));
+    const demo = isDemo();
+    const day = new Date(run.result.periodStartMs).toISOString().slice(0, 10);
+    res.writeHead(200, {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="segreant-allocation-${day}${demo ? '-sample' : ''}.csv"`,
+      'cache-control': 'no-store',
+    });
+    res.end(allocationRunToCsv(run, (costCentreId) => names.get(costCentreId) ?? costCentreId, demo));
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
 export function handleAllocation({ res, store }: RouteContext): void {
   try {
     const reconciliationRuns = store.reconciliationRuns(1);
@@ -1836,6 +1863,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('statement-csv', handleStatementCsv),
   apiRoute('allocation', handleAllocation),
   apiRoute('allocation-write', handleAllocationWrite),
+  apiRoute('allocation-run-csv', handleAllocationRunCsv),
   apiRoute('billing-write', handleBillingWrite),
   apiRoute('economic', handleEconomic),
   apiRoute('pricing', handlePricing),
