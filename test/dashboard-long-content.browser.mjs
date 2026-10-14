@@ -123,6 +123,8 @@ test('long names, many rows and an eight-figure amount never make a page scroll 
 
     assert.deepEqual(overflow, []);
     await page.goto(`${base}/#/spend`, { waitUntil: 'networkidle' });
+    // Wait for the figure itself: on a fast runner the page can still be reading the ledger.
+    await main.getByText(/12,345,678/).first().waitFor({ timeout: 15_000 });
     assert.match(await main.innerText(), /12,345,678/, 'the eight-figure amount is shown, grouped');
   } finally {
     await browser?.close();
