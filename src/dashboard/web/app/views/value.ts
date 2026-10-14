@@ -26,16 +26,16 @@ import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, 
 import { usd, count, pct, share, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
-/** What each gate means, for the funnel counts. */
+/** Each gate as a step name, for the passed / failed / not checked table. */
 const GATE_WORDS: Record<string, string> = {
-  proposed: 'was suggested',
-  accepted: 'was accepted',
-  committed: 'was committed',
-  tested: 'was tested',
-  merged: 'was merged',
-  shipped: 'shipped',
-  survived: 'survived in production',
-  clean: 'survived without rework',
+  proposed: 'Suggested by the AI',
+  accepted: 'Accepted',
+  committed: 'Committed',
+  tested: 'Tests passed',
+  merged: 'Merged',
+  shipped: 'Shipped',
+  survived: 'Still in the code after 14 days',
+  clean: 'Kept without rework',
 };
 
 /** The same gates named as a stage a unit STOPPED at, for the waste breakdown. */
@@ -434,6 +434,8 @@ export function valueView(): Node {
       }
 
       const funnel = matured?.instrumentation ?? {};
+      const gatePasses = matured?.gatePasses ?? {};
+      const maturedUnits = matured?.units ?? 0;
       // Gates where two sources disagreed. Shown separately from the counts
       // because a contradiction is not a measurement of the gate, and because
       // the legacy projection renders it as a plain failure (AII-003).
@@ -627,13 +629,37 @@ export function valueView(): Node {
 
         // The funnel, as counts. Deliberately after the waste breakdown: the
         // question worth asking is where work dies, not how big the pipeline is.
+        // Passed, failed and not checked, side by side. This list used to show
+        // only how many units were CHECKED at each gate, under words like "was
+        // merged", so it read as a funnel that grew: merged 10, shipped 10,
+        // survived 13 (more work surviving than shipped).
         Object.keys(funnel).length > 0
           ? h('section', { class: 'section' },
-              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Instrumented gates' : 'How far work got') }),
-              h('div', { class: 'facts' },
-                ...Object.entries(funnel).map(([stage, n]) => h('div', { class: 'fact' },
-                  h('span', { class: 'fact-key', text: () => (isPrecise() ? stage : (GATE_WORDS[stage] ?? stage)) }),
-                  h('span', { class: 'fact-val', text: count(n) })))),
+              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Gate verdicts' : 'How far the work got') }),
+              h('p', { class: 'view-plain', text: () => (isPrecise()
+                ? `Matured units: ${count(maturedUnits)}. Each gate is judged on its own evidence, so a later gate can pass more often than an earlier one that had no signal.${gateConflicts.length > 0 ? ' Failed counts include contradicted evidence, listed below.' : ''}`
+                : `Out of ${count(maturedUnits)} finished ${plural(maturedUnits, 'piece', 'pieces')} of work. "Not checked" means Segreant had no signal for that step, not that it failed.`) }),
+              h('div', { class: 'ledger ledger-gates', role: 'table', 'aria-label': 'Gate verdicts for matured work' },
+                h('div', { class: 'ledger-head', role: 'row' },
+                  h('span', { role: 'columnheader', text: () => (isPrecise() ? 'Gate' : 'Step') }),
+                  h('span', { class: 'num', role: 'columnheader', text: 'Passed' }),
+                  h('span', { class: 'num', role: 'columnheader', text: 'Failed' }),
+                  h('span', { class: 'num', role: 'columnheader', text: 'Not checked' })),
+                ...Object.entries(funnel).map(([stage, checked]) => {
+                  const passed = gatePasses[stage] ?? 0;
+                  const failed = Math.max(0, checked - passed);
+                  const unchecked = Math.max(0, maturedUnits - checked);
+                  return h('div', { class: 'ledger-row', role: 'row' },
+                    h('span', { class: 'ledger-key', role: 'cell', text: () => (isPrecise() ? stage : (GATE_WORDS[stage] ?? stage)) }),
+                    h('span', { class: 'num gate-pass', role: 'cell', text: count(passed) }),
+                    h('span', { class: failed > 0 ? 'num gate-fail' : 'num', role: 'cell', text: count(failed) }),
+                    h('span', { class: 'num gate-unchecked', role: 'cell', text: count(unchecked) }),
+                    h('span', {
+                      class: 'ledger-bar',
+                      'aria-hidden': 'true',
+                      style: `--fill: ${maturedUnits > 0 ? (passed / maturedUnits) * 100 : 0}%`,
+                    }));
+                })),
               gateConflicts.length > 0
                 ? h('p', { class: 'section-note', text: () => (isPrecise()
                     ? `Contradicted evidence at ${gateConflicts.map(([stage, n]) => `${stage} (${n})`).join(', ')}: sources both supported and refuted these gates. The unit records a failure only because the three-valued projection has no other option — it is unadjudicated, not refuted.`
