@@ -168,7 +168,7 @@ export const CAPABILITIES: readonly Capability[] = [
   // ---- Evidence -----------------------------------------------------------
   {
     id: 'billing-scope', label: 'Declare a provider scope', plain: 'Declare the OpenAI organisation and project your proxied traffic goes to from now on. Your declaration, not verified by the provider.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set',
-    guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 previews and declares; clearing a scope stays on the CLI' },
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 names the declaration, previews and declares, and clears it with a preview first; no drawer runner yet' },
   },
   {
     id: 'billing-readiness', label: 'Reconciliation readiness', plain: 'Whether a provider check would actually match anything.', territory: 'evidence', consequence: 'read', coverage: 'full', command: 'segreant billing reconcile',
@@ -185,7 +185,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what Segreant measured with the provider-reported total, project by day, for the declared scope only.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply',
-    guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews and records; the materiality threshold stays on the CLI' },
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews with a materiality threshold and records under it; every recorded comparison opens to its own figures; no drawer runner yet' },
   },
   { id: 'receipt', label: 'Receipts', plain: 'Sign and store a receipt for each matured piece of work, creating the signing key on first use; --verify checks one.', territory: 'evidence', consequence: 'local', coverage: 'planned', command: 'segreant receipt' },
   { id: 'evidence', label: 'Evidence records', plain: 'Signed CI test evidence: emit writes a signed artifact, import records it as a verified outcome.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant evidence' },
