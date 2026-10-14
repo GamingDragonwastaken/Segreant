@@ -105,7 +105,7 @@ function residualBoundWords(bound: string | undefined, precise: boolean): string
   if (words === undefined) {
     return precise
       ? 'this run predates the recorded bound condition, so what the residual bounds is not established'
-      : 'This run is older than the check that says what the remainder means, so we cannot tell you.'
+      : 'This run is older than the check that explains the remainder, so there is nothing to show for it.'
   }
   return precise ? words.precise : words.plain;
 }
@@ -232,7 +232,7 @@ function readinessPanel(d: BillingPayload): Node | null {
       h('strong', { text: 'This ledger was emptied by retention' }),
       h('p', { text: () => (isPrecise()
         ? `No OpenAI rows survive, and retention deleted rows before ${boundary}. Whether any OpenAI spend was metered here cannot be read from the ledger, so nothing about what a reconciliation would match is stated.`
-        : `Your older records were deleted, so there is no OpenAI spend left here to check. We cannot tell you whether there ever was any — only that it is gone.`) }));
+        : `Your older records were deleted, so there is no OpenAI spend left here to check. There's no record of whether there ever was any, only that it is gone.`) }));
   }
   const uncountable = c.importedUsd + c.proxyOffScopeUsd;
   if (c.onDeclaredRouteUsd > 0 || uncountable <= 0) return null;

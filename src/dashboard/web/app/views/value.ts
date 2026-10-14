@@ -38,17 +38,22 @@ const GATE_WORDS: Record<string, string> = {
   clean: 'Kept without rework',
 };
 
-/** The same gates named as a stage a unit STOPPED at, for the waste breakdown. */
-const STOPPED_AFTER: Record<string, string> = {
-  proposed: 'being suggested',
-  accepted: 'being accepted',
-  committed: 'being committed',
-  tested: 'being tested',
-  merged: 'being merged',
-  shipped: 'shipping',
-  survived: 'surviving in production',
-  clean: 'surviving without rework',
-  unverified: 'never being verified',
+/**
+ * The waste breakdown is keyed by `diedAt`, the FIRST FAILED gate, so each
+ * label says what went wrong. It used to read "stopped after surviving in
+ * production" for work that failed the survival check.
+ */
+const FAILED_AT: Record<string, string> = {
+  proposed: 'Suggestion not used',
+  accepted: 'Not accepted',
+  committed: 'Never committed',
+  tested: 'Tests failed',
+  merged: 'Not merged',
+  shipped: 'Not shipped',
+  survived: 'Gone from the code within 14 days',
+  clean: 'Needed rework',
+  unverified: 'No signal to judge it by',
+  conflicted: 'Results disagree',
 };
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
@@ -122,7 +127,7 @@ function selfReportedCard(report: ValuePayload['selfReported'], refresh: () => v
       `${row.key}: ${row.accepted}/${row.outcomes} accepted, ${row.used} used; cost/accepted ${row.costPerAcceptedUsd === null ? 'unknown' : usd(row.costPerAcceptedUsd)}; cost/used ${row.costPerUsedUsd === null ? 'unknown' : usd(row.costPerUsedUsd)} (self-reported, ${row.linked}/${row.outcomes} linked)` })),
     h('details', { class: 'card', style: 'margin-top: var(--s4)' },
       h('summary', { text: 'Record a result' }),
-      h('p', { class: 'basis', text: 'Preview first. The result and your verdict stay on this machine.' }),
+      h('p', { class: 'basis', text: 'Preview first. The result and your answer stay on this machine.' }),
       field('Result ID', outcomeId, 'my-result-1'),
       choice('Kind', kind, [['chat', 'Chat'], ['image', 'Image'], ['other', 'Other']]),
       choice('Spend link', linkType, [['session', 'Session ID'], ['request', 'Request ID'], ['window', 'Time window + tool (inferred)']]),
@@ -371,7 +376,7 @@ function modelSwitchCoverageCard(frontier: ValuePayload['frontier']): Node | nul
         retentionUnknown > 0
           ? h('p', { class: 'basis', role: 'status', text: () => (isPrecise()
               ? `${count(retentionUnknown)} included unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown.`
-              : `For ${count(retentionUnknown)} included unit(s), we cannot tell whether retention deleted spend because their snapshots predate the coverage record.`) })
+              : `For ${count(retentionUnknown)} included unit(s) there's no record of whether old spend was deleted: they're older than that record.`) })
           : null,
         h('p', { class: 'basis', text: () => (isPrecise()
           ? `Observed headroom ${usd(recommendation.historicalEquivalentHeadroomUsd)}; this is a local list-price comparison, not provider-billed savings.`
@@ -419,10 +424,10 @@ export function valueView(): Node {
       if (!established) {
         return h('div', null,
           h('div', { class: 'notyet' },
-            h('h2', { text: () => (isPrecise() ? 'Realized value is not established' : 'We cannot tell you this yet') }),
+            h('h2', { text: () => (isPrecise() ? 'Realized value is not established' : 'Nothing to show yet') }),
             h('p', { text: () => (isPrecise()
               ? 'No work units have matured into verified outcomes on this machine. This is an absence of evidence, not a realized value of zero — the two must not be reported alike.'
-              : 'Nothing has been observed all the way through to a shipped, surviving outcome yet. That is missing evidence, not an answer of nothing.') }),
+              : 'No work has been followed all the way to shipped and kept yet. That is missing evidence, not zero.') }),
             h('p', { class: 'basis', text: () => (isPrecise()
               ? 'Maturation requires observable outcomes: a repository whose history can be read, or imported units with recorded gate results.'
               : 'Segreant needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
@@ -497,14 +502,14 @@ export function valueView(): Node {
           (matured?.spendWindowUnknownUnits ?? 0) > 0
             ? h('span', { class: 'basis', text: () => (isPrecise()
                 ? `${count(matured?.spendWindowUnknownUnits)} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown.`
-                : `For ${count(matured?.spendWindowUnknownUnits)} of these we cannot tell whether any cost records were deleted.`) })
+                : `For ${count(matured?.spendWindowUnknownUnits)} of these, Segreant has no record of whether any cost rows were deleted.`) })
             : null),
           economic
             ? h('p', { class: 'basis', role: 'status', text: () => {
                 if (economic.coverage === 'legacy_unknown' || economic.total === null) {
                   return isPrecise()
                     ? 'Exact economic coverage: legacy_unknown — these snapshots predate exact request evidence, so numeric costs are compatibility projections.'
-                    : 'Exact economic coverage is not available for these snapshots; the cost figures are legacy compatibility totals.';
+                    : 'These older snapshots have no exact per-request prices, so their costs are approximate totals.';
                 }
                 const total = economic.total;
                 if (economic.coverage === 'partial' || total.unresolvedRequests > 0) {
@@ -549,10 +554,10 @@ export function valueView(): Node {
                     ? 'the AI spend plus your own measured time, priced at your labour rate'
                     : 'the AI spend plus an estimate of the time it took you') })))
           : h('div', { class: 'notyet', style: 'margin-top: var(--s4)' },
-              h('h2', { text: () => (isPrecise() ? 'Realized value is not priced' : 'We cannot put a figure on this') }),
+              h('h2', { text: () => (isPrecise() ? 'Value of kept work: no price set' : 'No dollar figure yet') }),
               h('p', { text: () => (isPrecise()
-                ? 'Work matured, but no labour rate is configured, so the value it produced cannot be expressed in dollars. The rate below is still computable; the money figure is not.'
-                : 'Work did get finished, but Segreant has no hourly rate to value it against — so it can tell you how much stuck, but not what it was worth.') })),
+                ? 'Work matured, but no labour rate is set, so its value has no dollar figure. The rate below is still computed.'
+                : 'Work did get finished, but Segreant has no hourly rate to value it against. It can tell you how much you kept, not what it was worth.') })),
 
         // The money face is an observed/manual-equivalent scenario. A separate
         // qualified randomized study is required for causal economics.
@@ -562,19 +567,19 @@ export function valueView(): Node {
                 h('span', { class: 'card-title', text: () => (isPrecise() ? 'Observed value scenario' : 'The value it looks like it delivered') }),
                 h('span', {
                   class: 'pill pill-warn',
-                  text: 'not causal evidence',
+                  text: () => (isPrecise() ? 'not causal evidence' : "doesn't prove cause"),
                 })),
               h('div', { class: 'stat', text: `${ret.grossRatio.toFixed(2)}\u00d7` }),
               h('span', { class: 'basis', text: () => (isPrecise()
                 ? 'realized manual-equivalent value divided by tokens plus measured time; a qualified randomized study is required for causal net benefit'
-                : 'This uses the value of work that stuck and what it cost in AI and time. It cannot tell us what would have happened without AI.') }))
+                : "This compares the value of work you kept with what it cost in AI and time. It doesn't show what would have happened without AI.") }))
           : null,
 
         // Realization rate with its partial-identification bounds. A point estimate
         // alone would overstate how precisely this is known.
         h('div', { class: 'card', style: 'margin-top: var(--s4)' },
           h('div', { class: 'card-head' },
-            h('span', { class: 'card-title', text: () => (isPrecise() ? 'Realization rate' : 'How much of the work stuck') })),
+            h('span', { class: 'card-title', text: () => (isPrecise() ? 'Realization rate' : 'How much of the work you kept') })),
           h('div', { class: 'stat', text: pct(matured?.realizationRate, 0) }),
           bounds
             ? h('span', { class: 'basis', text: () => (isPrecise()
@@ -587,28 +592,28 @@ export function valueView(): Node {
                 text: () => (drift.alarm
                   ? (isPrecise()
                       ? `Drift alarm: the recent realization rate (${pct(drift.recentRate, 0)}) has departed from the overall rate (${pct(drift.overallRate, 0)}) beyond chance.`
-                      : `Warning: work has recently been sticking much less often than it used to (${pct(drift.recentRate, 0)} against ${pct(drift.overallRate, 0)} overall).`)
+                      : `Change alert: lately, much less of the work has been kept (${pct(drift.recentRate, 0)}, against ${pct(drift.overallRate, 0)} overall).`)
                   : (isPrecise()
                       ? `The drift alarm did not fire over n=${count(drift.n)} mature units.`
                         + (drift.referenceDriftWouldFire === false
                           ? ' At this length the same test does not fire even on a total regime change, so its silence carries no information.'
                           : ' An e-process bounds false alarms and not missed ones, so this is not evidence that the rate held.')
-                      : `Nothing has tripped the drift watch over ${count(drift.n)} pieces of work`
+                      : `No change alert fired over ${count(drift.n)} pieces of work`
                         + (drift.referenceDriftWouldFire === false
-                          ? ', but that is too few for this check to notice a change at all yet.'
-                          : ' — which is not the same as knowing the rate held steady.'))),              })
+                          ? ", but that's too few for the check to notice a change yet."
+                          : ". That doesn't prove the rate held steady."))),              })
             : null),
 
         // The actionable part: where units die and what that costs.
         waste.length > 0
           ? h('section', { class: 'section' },
-              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Where value is lost' : 'Where the work fell over') }),
+              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Where value is lost' : 'Where work was lost') }),
               h('p', { class: 'view-plain', text: () => (isPrecise()
                 ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.spendOnRealizedUnitsUsd)} reached a realized outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
-                : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.spendOnRealizedUnitsUsd)} went on work that stuck and ${usd(wasteCost)} went on work that did not.`) }),
+                : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.spendOnRealizedUnitsUsd)} went on work you kept and ${usd(wasteCost)} on work you didn't.`) }),
               h('div', { class: 'ledger', role: 'table', 'aria-label': 'Where value was lost, by stopping stage' },
                 h('div', { class: 'ledger-head', role: 'row' },
-                  h('span', { role: 'columnheader', text: () => (isPrecise() ? 'Stopped at' : 'Where it stopped') }),
+                  h('span', { role: 'columnheader', text: () => (isPrecise() ? 'First failed gate' : 'What went wrong') }),
                   h('span', { class: 'num cell-calls', role: 'columnheader', text: 'Units' }),
                   h('span', { class: 'num cell-cost', role: 'columnheader', text: 'Cost' }),
                   h('span', { class: 'num cell-share', role: 'columnheader', text: 'Share' })),
@@ -616,7 +621,7 @@ export function valueView(): Node {
                   .slice()
                   .sort((a, b) => b.costUsd - a.costUsd)
                   .map((w) => h('div', { class: 'ledger-row', role: 'row' },
-                    h('span', { class: 'ledger-key', role: 'cell', text: () => (isPrecise() ? w.stage : `stopped after ${STOPPED_AFTER[w.stage] ?? w.stage}`) }),
+                    h('span', { class: 'ledger-key', role: 'cell', text: () => (isPrecise() ? w.stage : (FAILED_AT[w.stage] ?? w.stage)) }),
                     h('span', { class: 'num cell-calls', role: 'cell', text: `${count(w.units)} ${plural(w.units, 'unit', 'units')}` }),
                     h('span', { class: 'num cell-cost ledger-cost', role: 'cell', text: usd(w.costUsd) }),
                     h('span', { class: 'num cell-share', role: 'cell', text: wasteCost > 0 ? share(w.costUsd / wasteCost) : '—' }),
@@ -635,11 +640,11 @@ export function valueView(): Node {
         // survived 13 (more work surviving than shipped).
         Object.keys(funnel).length > 0
           ? h('section', { class: 'section' },
-              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Gate verdicts' : 'How far the work got') }),
+              h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Checks passed at each step' : 'How far the work got') }),
               h('p', { class: 'view-plain', text: () => (isPrecise()
                 ? `Matured units: ${count(maturedUnits)}. Each gate is judged on its own evidence, so a later gate can pass more often than an earlier one that had no signal.${gateConflicts.length > 0 ? ' Failed counts include contradicted evidence, listed below.' : ''}`
                 : `Out of ${count(maturedUnits)} finished ${plural(maturedUnits, 'piece', 'pieces')} of work. "Not checked" means Segreant had no signal for that step, not that it failed.`) }),
-              h('div', { class: 'ledger ledger-gates', role: 'table', 'aria-label': 'Gate verdicts for matured work' },
+              h('div', { class: 'ledger ledger-gates', role: 'table', 'aria-label': 'Checks passed at each step, finished work' },
                 h('div', { class: 'ledger-head', role: 'row' },
                   h('span', { role: 'columnheader', text: () => (isPrecise() ? 'Gate' : 'Step') }),
                   h('span', { class: 'num', role: 'columnheader', text: 'Passed' }),
@@ -662,8 +667,8 @@ export function valueView(): Node {
                 })),
               gateConflicts.length > 0
                 ? h('p', { class: 'section-note', text: () => (isPrecise()
-                    ? `Contradicted evidence at ${gateConflicts.map(([stage, n]) => `${stage} (${n})`).join(', ')}: sources both supported and refuted these gates. The unit records a failure only because the three-valued projection has no other option — it is unadjudicated, not refuted.`
-                    : `Some evidence disagrees with itself at ${gateConflicts.map(([stage]) => (GATE_WORDS[stage] ?? stage)).join(', ')}. That is a conflict to resolve, not a result.`) })
+                    ? `Conflicting results at ${gateConflicts.map(([stage, n]) => `${stage} (${n})`).join(', ')}: some sources passed these steps and others failed them. They count as failed only because a step has no third "disputed" value; the conflict is unresolved, not a fail.`
+                    : `Results disagree with each other at ${gateConflicts.map(([stage]) => (GATE_WORDS[stage] ?? stage)).join(', ')}. That needs resolving; it isn't a result.`) })
                 : null)
           : null,
 

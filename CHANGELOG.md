@@ -11,6 +11,18 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The dashboard talks like a person.**
+  - **Legal words gone:** the four-figure strip and the Value page used words like "inspect claim", "four evidence standards", "unsubstantiated", "unadjudicated", "Gate verdicts" and "your verdict". They now say what they mean.
+  - **The four figures:** the strip is labelled List cost (estimate), Billed cost, Allocated cost and Value (kept work), not METERED, BILLED, ALLOCATED and REALIZED.
+    - Billed cost reads "no invoice imported. Import one under Close to see billed cost beside list cost."
+    - Allocated cost reads "split by your rules, for reporting (not a bill)".
+    - Value reads "10 of 15 finished pieces of work kept".
+    - The price list is no longer called a rate card.
+  - **Missing evidence:** a figure with no evidence is "nothing to show yet, which isn't the same as zero". The button is "show the working". A conflict is "two records of the same thing disagree". The change alert reads "No change alert fired".
+  - **Capitals:** sentences that open with a figure's name now start with a capital letter.
+  - **Wrong label fixed:** "Where work was lost" names what went wrong at each step. It used to say "stopped after surviving in production" for work that failed the survival check, because the table is keyed by the first failed step, and it called contradicted results "stopped after conflicted". Now it reads "Gone from the code within 14 days", "Needed rework", "Results disagree". "Work that stuck" is now "work you kept", the guide's word.
+  - **Precise mode:** keeps exact method terms where they carry meaning, such as "not causal evidence" and "e-process". The figures and their rules are unchanged; only the words are.
+
 - **"How far the work got" counts what passed.** The Value page listed how many pieces of work were *checked* at each step, labelled as if they had *passed* ("was merged", "survived in production"). On the sample data it read merged 10, shipped 10, survived 13, so more work seemed to survive than shipped. Each step now shows passed, failed and not checked, out of the finished work. "Not checked" means there was no signal for that step, not that it failed. The value report carries a new `gatePasses` count per gate beside `instrumentation`.
 
 - **The dashboard wears the griffin.**

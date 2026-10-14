@@ -341,7 +341,7 @@ export function realizedClaimSupport(input: RealizedSupportInput): ClaimSupportP
     conflicted.length > 0
       ? `${conflictedUnits} mature unit(s) hold contradicted gate evidence at ${conflicted
         .map(([gate]) => gate)
-        .join(', ')} and are unadjudicated rather than refuted`
+        .join(', ')}; the conflict is unresolved, not a fail`
       : undefined,
   );
 }
