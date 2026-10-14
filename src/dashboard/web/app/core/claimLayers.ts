@@ -76,20 +76,20 @@ function modelsOf(c: Basis['cohorts'][number]): string {
 export function meteredBasisLine(basis: Basis | undefined): string {
   if (!basis || basis.cohorts.length === 0) return 'no recorded requests in this period';
   switch (basis.headline) {
-    case 'sample_cost': return 'sample data, priced from the rate card';
+    case 'sample_cost': return 'sample data, priced from the price list';
     case 'tool_reported_cost': return 'amounts the tools reported, not verified';
     case 'list_cost':
       return basis.cohorts.some((c) => c.id === 'list_family')
-        ? "API list price from the rate card (some models at the nearest model's rate)"
-        : "API list price: each model's own rate on the rate card";
+        ? "list prices (some models at the nearest model's price)"
+        : "list prices: each model's own published price";
     default: {
       const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
       // With no weak part above a cent, the "estimated" headline comes from the
       // mix itself (sample rows beside priced ones, or unpriced requests). It
       // used to print "0% priced without the model's own rate ()".
       if (weak.length === 0) {
-        if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the rate card';
-        if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'API list price; some requests could not be priced';
+        if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the price list';
+        if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'list prices; some requests have no price';
         return "API list price from the rate card";
       }
       const share = basis.totalUsd > 0 ? Math.round((weak.reduce((s, c) => s + c.costUsd, 0) / basis.totalUsd) * 100) : 0;
@@ -116,7 +116,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const estimatedShare = o?.pricing.estimatedSpendShare ?? null;
   const metered: Layer = {
     id: 'metered',
-    label: 'Metered',
+    label: 'List cost (estimate)',
     period: periodWords(range),
     claim: 'what we observed',
     valueUsd: o?.summary.costUsd ?? null,
@@ -152,7 +152,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
               : c.id === 'tool_reported' ? ['verification of the tool-reported amounts']
               : c.id === 'unrecorded' ? ['the pricing basis of rows recorded before it was kept']
               : []),
-            ...(o.pricing.basis ? [] : estimatedShare !== null && estimatedShare > 0 ? ['exact rate-card matches for the estimated rows'] : []),
+            ...(o.pricing.basis ? [] : estimatedShare !== null && estimatedShare > 0 ? ['exact price-list matches for the estimated rows'] : []),
           ],
     },
   };
@@ -169,8 +169,8 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const billedNote = b?.claimSupport?.note ?? null;
   const billed: Layer = {
     id: 'billed',
-    period: 'latest reconciliation run',
-    label: 'Billed',
+    period: 'latest invoice comparison',
+    label: 'Billed cost',
     claim: 'what the provider charged',
     valueUsd: null,
     // Holding provider records and having reconciled them are different states,
@@ -188,12 +188,12 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       // a reconciliation that established anything, and saying "reconciled" here
       // while the axis says `conflicted` is the disagreement this line exists to
       // avoid.
-      ? `reconciled against a provider report, but ${billedNote}`
+      ? `compared with your invoice, but ${billedNote}`
       : runs > 0
-        ? 'reconciled against a provider report, with a residual'
+        ? 'compared with your invoice; see Close for the difference'
         : b && b.summary.recordCount > 0
-          ? `${b.summary.recordCount} provider records held, none reconciled yet`
-          : 'no provider bill has been compared against this ledger',
+          ? `${b.summary.recordCount} billing records from your provider, not compared yet`
+          : 'no invoice imported',
     // A contradiction with no next action leaves an operator looking at a
     // problem they are not told how to work on. Resolving a disagreement is a
     // different task from collecting more evidence, so it gets its own sentence.
@@ -203,7 +203,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       ? 'Re-observe the disagreeing days before relying on this reconciliation.'
       : runs > 0
         ? undefined
-        : 'Check readiness in Close before spending a credential on it.',
+        : 'Import one under Close to see billed cost beside list cost.',
     inspection: {
       provenance: latestRun?.result.providerSourceKind
         ?? (b && b.summary.recordCount > 0 ? 'operator-supplied provider evidence, unreconciled' : 'none'),
@@ -228,8 +228,8 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const centres = Array.isArray(a?.costCentres) ? a.costCentres.length : 0;
   const allocated: Layer = {
     id: 'allocated',
-    period: 'latest allocation run',
-    label: 'Allocated',
+    period: 'latest cost split',
+    label: 'Allocated cost',
     claim: 'whose cost it is',
     valueUsd: null,
     // Cost centres defined with no run recorded is partial coverage of a claim
@@ -241,13 +241,13 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: a === null
       ? 'could not read the allocation report'
       : allocRuns > 0
-      ? 'apportioned by recorded rules — showback only'
+      ? 'split by your rules, for reporting (not a bill)'
       : centres > 0
-        ? `${centres} cost centre${centres === 1 ? '' : 's'} defined, no allocation recorded`
-        : 'no cost centres and no rules yet',
+        ? `${centres} cost centre${centres === 1 ? '' : 's'} set up, nothing split yet`
+        : 'no cost split set up yet',
     nextStep: a === null
       ? 'Check that Segreant is running, then retry the allocation report.'
-      : allocRuns > 0 ? undefined : 'Define a cost centre, then run an allocation.',
+      : allocRuns > 0 ? undefined : 'Set up a cost centre, then split the spend under Allocate.',
     inspection: {
       provenance: a?.basis ?? 'no allocation basis recorded',
       scope: a
@@ -305,7 +305,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   const realized: Layer = {
     id: 'realized',
     period: 'outcomes on record',
-    label: 'Realized',
+    label: 'Value (kept work)',
     claim: 'what it produced',
     valueUsd: valued ? (ret?.manualEquivalentValueUsd ?? null) : null,
     // THE CASE THE OLD BOOLEAN COLLAPSED (AII-014). `realizedUnits > 0 && valued`
@@ -324,17 +324,17 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: v === null
       ? 'could not read the outcome report'
       : realizedUnits === 0
-      ? 'no work units have matured into verified outcomes'
+      ? 'no finished work old enough to judge yet'
       : valued
-        ? `${realizedUnits} of ${matured?.units ?? 0} matured units shipped and survived; manual-equivalent value, net of rework`
-        : `${realizedUnits} of ${matured?.units ?? 0} units matured, but no labour rate is set to price what they produced`,
+        ? `${realizedUnits} of ${matured?.units ?? 0} finished pieces of work kept; valued at what the work would cost by hand, less rework`
+        : `${realizedUnits} of ${matured?.units ?? 0} finished pieces of work kept, but no hourly rate is set to value them`,
     nextStep: v === null
       ? 'Check that Segreant is running, then retry the outcome report.'
       : realizedUnits === 0
-      ? 'Connect a repository so outcomes can be observed.'
+      ? 'Connect a repository so Segreant can see which work you kept.'
       : valued
         ? undefined
-        : 'Set a labour rate so realized work can be priced.',
+        : 'Set an hourly rate to put a dollar value on kept work.',
     inspection: {
       provenance: v?.valueSource ?? 'no outcome source established',
       scope: v?.projectScoped === true

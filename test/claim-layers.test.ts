@@ -107,7 +107,7 @@ test('holding a provider bill is not the same claim as reconciling against it', 
   const [, billed] = buildClaimLayers({ ...NOTHING, billing: aBilling(412) }, '30d');
   assert.equal(billed!.support.profile.epistemic, 'unknown', '412 imported records establish nothing on their own');
   assert.equal(billed!.support.profile.coverage, 'partial', 'but they are not nothing either — held, uncompared');
-  assert.match(billed!.basis, /412 provider records held, none reconciled yet/);
+  assert.match(billed!.basis, /412 billing records from your provider, not compared yet/);
   assert.match(billed!.inspection.provenance, /unreconciled/);
   assert.deepEqual(billed!.inspection.missingEvidence, [
     'a compatible provider observation or export',
@@ -289,7 +289,7 @@ test('a payload that answers without stating its support reads as unknown, and d
   assert.equal(layers[1]!.support.figure, 'not_a_money_claim');
   assert.equal(layers[1]!.support.profile.epistemic, 'unknown');
   // And the prose still renders, from the fields that ARE present.
-  assert.match(layers[1]!.basis, /9 provider records held/);
+  assert.match(layers[1]!.basis, /9 billing records from your provider/);
   assert.equal(layers[0]!.inspection.coverage, '$5.00 list price');
 });
 
@@ -320,15 +320,15 @@ test('the metered claim states how each part was priced, and never calls a match
   assert.deepEqual(metered!.inspection.missingEvidence, ['a model rate for gpt-6.9-new (if the card has learned it since, segreant reprice previews the new price)']);
 
   const [clean] = buildClaimLayers({ ...NOTHING, overview: base }, '30d');
-  assert.equal(clean!.basis, "API list price: each model's own rate on the rate card");
+  assert.equal(clean!.basis, "list prices: each model's own published price");
 });
 
 test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {
   const week = buildClaimLayers({ ...NOTHING, overview: anOverview(5, 2) }, '7d');
   assert.deepEqual(week.map((l) => [l.id, l.period]), [
     ['metered', 'last 7 days'],
-    ['billed', 'latest reconciliation run'],
-    ['allocated', 'latest allocation run'],
+    ['billed', 'latest invoice comparison'],
+    ['allocated', 'latest cost split'],
     ['realized', 'outcomes on record'],
   ]);
   assert.equal(buildClaimLayers(NOTHING, 'today')[0]!.period, 'today');
