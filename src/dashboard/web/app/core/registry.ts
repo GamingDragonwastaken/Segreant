@@ -158,11 +158,11 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc rule',
-    guiEvidence: { file: 'views/allocation.ts', token: "op: 'rule'", note: 'all three methods; the GUI matches on project only, and priority and effective dates stay on the CLI' },
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'rule'", note: 'all three methods, every match field (project, model, provider, tool, user), priority and effective dates; a GUI rule equals the CLI rule field by field; no drawer runner yet' },
   },
   {
     id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc run --apply',
-    guiEvidence: { file: 'views/allocation.ts', token: "op: 'run'", note: 'preview then record for last month or this month; each recorded split downloads as CSV (segreant alloc export); arbitrary periods stay on the CLI' },
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'run'", note: 'preview then record for last month, this month or any chosen days; each recorded split downloads as CSV (segreant alloc export); no drawer runner yet' },
   },
 
   // ---- Evidence -----------------------------------------------------------
