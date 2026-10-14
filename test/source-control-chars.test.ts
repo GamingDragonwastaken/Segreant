@@ -23,7 +23,6 @@ const TEXT = /\.(ts|mts|mjs|js|css|html|json|md)$/;
 const DELIBERATE = new Set([
   'src/alloc/apply.ts:201',
   'src/alloc/rules.ts:93',
-  'src/connect/importShared.ts:319',
   'test/dashboard-coverage-value.test.ts:97',
   'test/economic-conservation-laws.test.ts:387',
 ]);
