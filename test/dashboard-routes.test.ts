@@ -197,6 +197,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/market': 'GET, HEAD',
   '/api/statement': 'GET, HEAD',
   '/api/statement.csv': 'GET, HEAD',
+  '/api/allocation/run.csv': 'GET, HEAD',
 };
 
 test('405 responses send the same Allow header they always have', async () => {
@@ -438,17 +439,22 @@ test('restricting those routes did not break the methods they legitimately serve
   const empty = mkdtempSync(join(tmpdir(), 'segreant-norepo-'));
   // `/api/kernel` addresses one node and refuses a request that names none
   // (400 by contract), so the dispatch check asks for a node that is not there.
-  const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}${path === '/api/kernel' ? '&node=claim:none' : ''}`;
+  // `/api/allocation/run.csv` exports one recorded run by id and an empty
+  // ledger has none, so the check names one and expects the handler's own 404,
+  // told apart from the router's by its message.
+  const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}${path === '/api/kernel' ? '&node=claim:none' : ''}${path === '/api/allocation/run.csv' ? '&id=none' : ''}`;
+  const expected = (path: string) => (path === '/api/allocation/run.csv' ? 404 : 200);
   try {
     for (const path of Object.keys(READ_ONLY_ALLOW)) {
       const get = await rawRequest(srv.base, scoped(path), 'GET');
-      assert.equal(get.status, 200, `GET ${path}`);
+      assert.equal(get.status, expected(path), `GET ${path}`);
       assert.ok(get.text.length > 0, `GET ${path} returned an empty body`);
+      if (path === '/api/allocation/run.csv') assert.match(get.text, /no recorded allocation run has that id/);
 
       // Node drops the body for HEAD on its own; the status and headers are
       // what a HEAD is for, and they must still come from the real handler.
       const head = await rawRequest(srv.base, scoped(path), 'HEAD');
-      assert.equal(head.status, 200, `HEAD ${path}`);
+      assert.equal(head.status, expected(path), `HEAD ${path}`);
       assert.equal(head.text, '', `HEAD ${path} must not send a body`);
     }
   } finally {
