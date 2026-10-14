@@ -95,7 +95,7 @@ export function systemView(): Node {
         h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Parity map' })),
         h('p', { class: 'view-plain', style: 'margin-bottom: var(--s4)', text: 'Every capability Segreant has, where it lives, what it costs you to run it, and whether this interface covers it. Generated from the same registry the navigation uses, and checked against the command line\u2019s own dispatch, so it cannot drift from what the GUI does or quietly leave a command out.' }),
         h('div', { class: 'table-wrap' },
-          h('table', { 'aria-label': 'CLI/GUI parity map' },
+          h('table', { class: 'parity-table', 'aria-label': 'CLI/GUI parity map' },
             h('thead', null, h('tr', null,
               h('th', { scope: 'col', text: 'Capability' }),
               h('th', { scope: 'col', text: 'Section' }),

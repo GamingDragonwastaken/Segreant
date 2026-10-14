@@ -1012,3 +1012,9 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 .parity-summary::before { content: '\25B8'; color: var(--muted); }
 .parity-details[open] > .parity-summary::before { content: '\25BE'; }
 .parity-counts { color: var(--muted); font-size: 13px; }
+/* The capability and its plain description are what this table is for; the
+   command column had taken the width and wrapped the descriptions a word or
+   two per line. Status tags stay on one line. */
+.parity-table td:first-child { width: 44%; min-width: 260px; }
+.parity-table .tag { white-space: nowrap; }
+.parity-table td:last-child code { white-space: nowrap; }
