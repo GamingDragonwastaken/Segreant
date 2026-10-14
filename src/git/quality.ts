@@ -18,6 +18,7 @@ import type { Store } from '../store/db.ts';
 import { attributeCommits, type CommitAttribution } from './correlate.ts';
 import { measurementModel, type MeasurementModel } from '../measurement/model.ts';
 import { scope } from '../epistemic/scope.ts';
+import { storedCommitFiles, rememberCommitFiles, reusableBlame, rememberBlame, flushSurvivalStore } from './survivalStore.ts';
 
 const run = promisify(execFile);
 
@@ -131,6 +132,20 @@ async function git(repoPath: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/**
+ * How many survival reads actually started git, since the process began or the
+ * last reset. For tests and diagnostics: a cache that answers shows up here as
+ * work not done.
+ */
+const gitRuns = { blame: 0, numstat: 0 };
+export function survivalGitRuns(): Readonly<{ blame: number; numstat: number }> {
+  return { ...gitRuns };
+}
+export function resetSurvivalGitRuns(): void {
+  gitRuns.blame = 0;
+  gitRuns.numstat = 0;
+}
+
 /** A commit's numstat never changes, so it is read once per process. */
 const commitFilesCache = new Map<string, Promise<Array<{ path: string; added: number }>>>();
 
@@ -140,7 +155,11 @@ function commitFiles(repoPath: string, hash: string): Promise<Array<{ path: stri
   let pending = commitFilesCache.get(key);
   if (pending === undefined) {
     if (commitFilesCache.size >= BLAME_CACHE_MAX) commitFilesCache.clear();
-    pending = readCommitFiles(repoPath, hash);
+    // A commit's file list is fixed by its hash, so one read in any earlier run stands.
+    const stored = storedCommitFiles(repoPath, hash);
+    pending = stored !== undefined
+      ? Promise.resolve(stored)
+      : (gitRuns.numstat += 1, readCommitFiles(repoPath, hash).then((files) => { rememberCommitFiles(repoPath, hash, files); return files; }));
     // A failed read is not cached: the next caller retries rather than inheriting it.
     pending.catch(() => commitFilesCache.delete(key));
     commitFilesCache.set(key, pending);
@@ -183,6 +202,7 @@ const BLAME_CACHE_MAX = 4096;
 export function clearBlameCache(): void {
   blameCache.clear();
   commitFilesCache.clear();
+  headMemo.clear();
 }
 
 /**
@@ -220,9 +240,29 @@ export async function prefetchSurvival(
     for (const f of await commitFiles(repoPath, hash)) if (f.added > 0) paths.add(f.path);
   });
   await pool([...paths], (path) => blameAt(repoPath, head, path, sinceSec));
+  flushSurvivalStore();
 }
 
-async function headCommit(repoPath: string): Promise<string | null> {
+/**
+ * HEAD, read at most once per repository every two seconds. `survivingLines`
+ * asks for it once per commit, and a measuring pass over 80 commits spent 3.6 s
+ * of a 3.9 s run starting `git rev-parse` once the blames themselves were
+ * cached. A pass is meant to measure against one HEAD anyway; a commit landing
+ * mid-pass is a new key for the next pass, as before.
+ */
+const headMemo = new Map<string, { at: number; head: Promise<string | null> }>();
+const HEAD_MEMO_MS = 2000;
+
+function headCommit(repoPath: string): Promise<string | null> {
+  const now = Date.now();
+  const hit = headMemo.get(repoPath);
+  if (hit && now - hit.at < HEAD_MEMO_MS) return hit.head;
+  const head = readHead(repoPath);
+  headMemo.set(repoPath, { at: now, head });
+  return head;
+}
+
+async function readHead(repoPath: string): Promise<string | null> {
   try {
     const out = (await git(repoPath, ['rev-parse', 'HEAD'])).trim();
     return /^[0-9a-f]{40,64}$/.test(out) ? out : null;
@@ -260,10 +300,19 @@ function blameAt(repoPath: string, head: string, path: string, sinceSec?: number
   if (pending === undefined) {
     if (blameCache.size >= BLAME_CACHE_MAX) blameCache.clear();
     const bound = sinceSec === undefined ? [] : [`--since=${sinceSec}`];
-    pending = git(repoPath, ['blame', '--porcelain', ...bound, head, '--', path]).then(
-      blameCountsFromPorcelain,
-      () => null, // file deleted/renamed at HEAD
-    );
+    pending = (async () => {
+      // An earlier run's blame of this file, when it is provably the same
+      // observation (survivalStore.ts says when that is).
+      const reused = await reusableBlame(repoPath, head, path, sinceSec);
+      if (reused !== undefined) return reused;
+      gitRuns.blame += 1;
+      const counts = await git(repoPath, ['blame', '--porcelain', ...bound, head, '--', path]).then(
+        blameCountsFromPorcelain,
+        () => null, // file deleted/renamed at HEAD
+      );
+      if (counts !== null) rememberBlame(repoPath, head, path, sinceSec, counts);
+      return counts;
+    })();
     blameCache.set(key, pending);
   }
   return pending;
