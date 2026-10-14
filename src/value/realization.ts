@@ -19,7 +19,7 @@ import { promisify } from 'node:util';
 import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage, RequestRow } from '../store/db.ts';
 import { attributeCommits, commitCountSince, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
-import { survivingLines, revertScan, prefetchSurvival } from '../git/quality.ts';
+import { survivingLines, revertScan, prefetchSurvival, survivalHead } from '../git/quality.ts';
 import { repoIdentity, repoSpendScope, type LinkedFolder, type RepoSpendScope } from '../git/repoScope.ts';
 import { mapLimit } from '../util/pool.ts';
 import { modelSpendFromRows, type ScopeEvidence } from '../store/scopeEvidence.ts';
@@ -635,7 +635,9 @@ export async function computeRealization(
     const bm = now - b.tsEpochMs < windowMs ? 1 : 0;
     return am - bm || b.attributedCostUsd - a.attributedCostUsd;
   });
-  await prefetchSurvival(repoPath, measureOrder.map((a) => a.hash), gitDeadlineMs, 8, blameSinceSec);
+  // One HEAD for the whole pass: every unit below is measured against it.
+  const passHead = await survivalHead(repoPath);
+  await prefetchSurvival(repoPath, measureOrder.map((a) => a.hash), gitDeadlineMs, 8, blameSinceSec, passHead);
 
   const units: WorkUnit[] = [];
   for (const a of measureOrder) {
@@ -648,7 +650,7 @@ export async function computeRealization(
     // were gathered.
     const scanned = !gitBudgetSpent();
     const survival = scanned
-      ? await survivingLines(repoPath, a.hash, gitDeadlineMs, blameSinceSec)
+      ? await survivingLines(repoPath, a.hash, gitDeadlineMs, blameSinceSec, passHead)
       : { added: 0, surviving: 0, measured: false };
     const { added, surviving } = survival;
     const survivalRatio = added > 0 ? Math.min(1, surviving / added) : 0;

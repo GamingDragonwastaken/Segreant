@@ -11,8 +11,10 @@
  */
 
 import './util/quiet.ts';
-import { demoDbPath, envOverrideKey } from './config.ts';
+import { join } from 'node:path';
+import { demoDbPath, envOverrideKey, segreantHome } from './config.ts';
 import { packageVersion } from './version.ts';
+import { configureSurvivalStore } from './git/survivalStore.ts';
 
 import { parseFlags, trackFlags, suggestOption, UserInputError } from './cli/flags.ts';
 
@@ -301,6 +303,10 @@ function cmdHelp(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  // Survival measurements are kept between runs in the home directory, so a
+  // later value run spends its git budget on what an earlier one did not reach.
+  // Only the CLI (and the dashboard it starts) turns this on.
+  configureSurvivalStore(join(segreantHome(), 'survival'));
   // Bare `segreant` opens the home view, not the reference: what was spent this
   // month, what stayed in the code, and the next step (or, on a new machine, the
   // one command that reads the logs). `guide` keeps the full checklist.
