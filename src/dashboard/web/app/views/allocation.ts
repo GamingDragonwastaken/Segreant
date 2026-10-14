@@ -19,7 +19,7 @@
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload, type AllocationRunResultPayload, type AllocationRule, type CostCentre } from '../core/api.ts';
-import { isPrecise, relative, count, usdFromMicros, date, pct } from '../core/fmt.ts';
+import { isPrecise, relative, count, usdFromMicros, date, share as shareOf } from '../core/fmt.ts';
 import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
 
 /** The payload's `excludedFrom` ids, said in words an operator can act on. */
@@ -335,7 +335,7 @@ function runPanel(demo: boolean, reload: () => void, say: Say, nameOf: (id: stri
 }
 
 function runTable(p: AllocationRunResultPayload, nameOf: (id: string) => string): Node {
-  const share = (m: number): string => (p.totalMicros > 0 ? pct(m / p.totalMicros) : '—');
+  const share = (m: number): string => (p.totalMicros > 0 ? shareOf(m / p.totalMicros, 1) : '—');
   return h('div', { class: 'table-wrap' },
     h('table', null,
       h('caption', { class: 'sr-only', text: 'Allocation preview by cost centre' }),
@@ -343,10 +343,10 @@ function runTable(p: AllocationRunResultPayload, nameOf: (id: string) => string)
         h('th', { text: 'Cost centre' }), h('th', { class: 'num', text: 'Amount' }), h('th', { class: 'num', text: 'Share' }), h('th', { class: 'num', text: 'Requests' }))),
       h('tbody', null,
         ...p.byCostCentre.map((c) => h('tr', null,
-          h('td', { text: nameOf(c.costCentreId) }), h('td', { class: 'num', text: usdFromMicros(c.allocatedMicros) }),
+          h('td', { class: 'name-cell', text: nameOf(c.costCentreId) }), h('td', { class: 'num', text: usdFromMicros(c.allocatedMicros) }),
           h('td', { class: 'num', text: share(c.allocatedMicros) }), h('td', { class: 'num', text: count(c.requestCount) }))),
         ...p.unallocated.map((u) => h('tr', { class: 'row-unalloc' },
-          h('td', null,
+          h('td', { class: 'name-cell' },
             h('span', { text: `Unallocated: ${REASON_WORDS[u.reason] ?? u.reason.replace(/_/g, ' ')}` }),
             u.topProjects.length > 0
               ? h('span', { class: 'fact-sub', text: `mostly ${u.topProjects.slice(0, 3).map((t) => t.project).join(', ')}` })
@@ -371,6 +371,6 @@ function history(runs: AllocationPayload['runs']): Node {
               ...runs.map((r) => h('tr', null,
                 h('td', { text: `${date(r.result.periodStartMs)} – ${date(r.result.periodEndMs)}` }),
                 h('td', { class: 'num', text: usdFromMicros(r.result.totalMicros) }),
-                h('td', { class: 'num', text: r.result.totalMicros > 0 ? pct(r.result.allocatedMicros / r.result.totalMicros) : '—' }),
+                h('td', { class: 'num', text: r.result.totalMicros > 0 ? shareOf(r.result.allocatedMicros / r.result.totalMicros, 1) : '—' }),
                 h('td', { text: relative(r.computedAtMs) })))))));
 }

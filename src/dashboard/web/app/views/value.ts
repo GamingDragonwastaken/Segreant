@@ -23,7 +23,7 @@
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, type MarketPayload, type MarketBoardPayload, type MarketBenchmarkRowPayload, type MarketRatingRowPayload, type MarketConsensusPayload } from '../core/api.ts';
-import { usd, count, pct, isPrecise } from '../core/fmt.ts';
+import { usd, count, pct, share, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
 /** What each gate means, for the funnel counts. */
@@ -617,7 +617,7 @@ export function valueView(): Node {
                     h('span', { class: 'ledger-key', role: 'cell', text: () => (isPrecise() ? w.stage : `stopped after ${STOPPED_AFTER[w.stage] ?? w.stage}`) }),
                     h('span', { class: 'num cell-calls', role: 'cell', text: `${count(w.units)} ${plural(w.units, 'unit', 'units')}` }),
                     h('span', { class: 'num cell-cost ledger-cost', role: 'cell', text: usd(w.costUsd) }),
-                    h('span', { class: 'num cell-share', role: 'cell', text: wasteCost > 0 ? pct(w.costUsd / wasteCost, 0) : '—' }),
+                    h('span', { class: 'num cell-share', role: 'cell', text: wasteCost > 0 ? share(w.costUsd / wasteCost) : '—' }),
                     h('span', {
                       class: 'ledger-bar',
                       'aria-hidden': 'true',
