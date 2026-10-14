@@ -695,6 +695,19 @@ body.claim-open { overflow: hidden; }
   border-bottom: 1px solid var(--line-soft);
 }
 
+.ledger-gates .ledger-head, .ledger-gates .ledger-row { grid-template-columns: minmax(0, 1fr) 6rem 6rem 7rem; }
+.ledger-gates .ledger-key { font-family: var(--sans); font-size: 14px; }
+.ledger-gates .ledger-bar { background: var(--mint); }
+.gate-pass { color: var(--mint); }
+.gate-fail { color: var(--coral); }
+.gate-unchecked { color: var(--faint); }
+@media (max-width: 820px) {
+  /* Three bare numbers mean nothing without their headers, so this table
+     keeps its header row where the other ledgers fold it away. */
+  .ledger-gates .ledger-head { position: static; width: auto; height: auto; margin: 0; padding: var(--s3) 0; overflow: visible; clip: auto; white-space: normal; border-bottom: 1px solid var(--line-soft); }
+  .ledger-gates .ledger-head, .ledger-gates .ledger-row { grid-template-columns: minmax(0, 1fr) 3.5rem 3.5rem 4.5rem; grid-template-areas: none; gap: var(--s2); }
+}
+
 .ledger-key {
   font-family: var(--mono); font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;

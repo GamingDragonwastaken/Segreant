@@ -292,7 +292,10 @@ export interface RealizationReport {
     acceptanceWeightedSpendUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
     realizedSpendShare: number | null;
     wasteByStage: WasteBucket[];
+    /** Per gate, the matured units with any verdict there (pass or fail): how many were CHECKED, not how many passed. */
     instrumentation: Record<Gate, number>;
+    /** Per gate, the matured units that passed it, contradictions excluded. Never more than `instrumentation`. */
+    gatePasses: Record<Gate, number>;
     /**
      * Mature units whose evidence for a gate both supported and refuted it
      * (AII-003, WP-B03). Counted separately from `instrumentation` because a
@@ -1521,10 +1524,12 @@ export function rollupRealization(
   }
 
   const instrumentation = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
+  const gatePasses = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
   const gateConflicts = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
   for (const u of mature) {
     for (const r of u.funnel.results) {
       if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
+      if (r.verdict === 'pass' && r.polarity !== 'conflicted') gatePasses[r.gate] += 1;
       if (r.polarity === 'conflicted') gateConflicts[r.gate] += 1;
     }
   }
@@ -1566,6 +1571,7 @@ export function rollupRealization(
       realizedSpendShare: totalCostUsd > 0 ? spendOnRealizedUnitsUsd / totalCostUsd : null,
       wasteByStage: [...wasteMap.values()].sort((a, b) => b.costUsd - a.costUsd),
       instrumentation,
+      gatePasses,
       gateConflicts,
       realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),
       serial: serialRealization(mature.map((u) => u.funnel)),
