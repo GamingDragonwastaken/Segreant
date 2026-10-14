@@ -152,10 +152,14 @@ function events(store: Store, startMs: number, endMs: number): ReportedEvent[] {
   });
 }
 
-function matched(rows: readonly RequestRow[], link: SpendLink): RequestRow[] {
-  if (link.type === 'request') return rows.filter((row) => row.requestId === link.requestId);
-  if (link.type === 'session') return rows.filter((row) => row.sessionId === link.sessionId);
-  return rows.filter((row) => row.tsEpochMs >= link.fromMs && row.tsEpochMs < link.toMs && row.source === link.tool);
+/**
+ * The requests before `endMs` that a link names, read per link rather than by
+ * filtering the whole ledger: the report ran on every /api/value load and held
+ * every request ever recorded, outcomes or not (540 MiB of heap on a
+ * 300,000-request ledger).
+ */
+function matched(store: Store, link: SpendLink, endMs: number): RequestRow[] {
+  return store.requestsForSpendLink(link, endMs);
 }
 
 /** Preview is read-only; apply appends one signal to the existing ledger. */
@@ -164,7 +168,7 @@ export function recordReportedOutcome(store: Store, raw: OutcomeInput, apply = f
   const event = prepareReportedOutcome(raw, nowMs);
   const prior = events(store, 0, Number.MAX_SAFE_INTEGER).filter((item) => item.outcomeId === event.outcomeId);
   if (prior.some((item) => !sameIdentity(item, event))) throw new Error('outcomeId already has a different kind or spend link');
-  const rows = matched(store.requestsInRange(0, Number.MAX_SAFE_INTEGER), event.link);
+  const rows = matched(store, event.link, Number.MAX_SAFE_INTEGER);
   const preview: OutcomePreview = {
     apply,
     basis: SELF_REPORTED_BASIS,
@@ -230,8 +234,7 @@ export function selfReportedValueReport(store: Store, startMs: number, endMs: nu
   // A linked session or request may have started before the report window, so
   // spend is matched over all history up to the window end, exactly as the
   // record preview matches it. The window selects outcomes, not their cost.
-  const requestRows = store.requestsInRange(0, endMs);
-  const claims = selected.map((group) => matched(requestRows, group[0]!.link));
+  const claims = selected.map((group) => matched(store, group[0]!.link, endMs));
   const claimedBy = new Map<string, number>();
   for (const rows of claims) for (const row of rows) claimedBy.set(row.requestId, (claimedBy.get(row.requestId) ?? 0) + 1);
   const units: ReportedUnit[] = selected.map((group, index) => {
