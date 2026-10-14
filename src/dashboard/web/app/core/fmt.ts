@@ -92,6 +92,21 @@ export function pct(value: number | null | undefined, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/**
+ * A part of a whole, as a percentage. A part that is not zero never prints as
+ * 0%, and a part short of the whole never prints as 100%: either rounding would
+ * state something the figures do not. At the default precision those show as
+ * "<1%" and ">99%".
+ */
+export function share(fraction: number | null | undefined, digits = 0): string {
+  if (fraction === null || fraction === undefined || Number.isNaN(fraction)) return '—';
+  const step = 10 ** -digits;
+  const percent = fraction * 100;
+  if (fraction > 0 && percent < step / 2) return `<${step.toFixed(digits)}%`;
+  if (fraction < 1 && percent >= 100 - step / 2) return `>${(100 - step).toFixed(digits)}%`;
+  return pct(fraction, digits);
+}
+
 export function dateTime(ms: number | null | undefined): string {
   if (!ms) return '—';
   return new Date(ms).toLocaleString(undefined, {
