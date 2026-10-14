@@ -15,7 +15,7 @@
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type StatementPayload, type StatementBilledRun, type StatementAllocatedRun } from '../core/api.ts';
-import { isPrecise, usd, usdFromMicros, count, pct, date, relative } from '../core/fmt.ts';
+import { isPrecise, usd, usdFromMicros, count, pct, share, date, relative } from '../core/fmt.ts';
 import { meteredBasisLine } from '../core/claimLayers.ts';
 import { errorText } from '../components/workflow.ts';
 
@@ -184,7 +184,7 @@ function allocatedRunLine(r: StatementAllocatedRun, nameOf: (id: string) => stri
     h('ul', { class: 'statement-shares' },
       ...r.byCostCentre.map((c) => h('li', null,
         h('span', { text: nameOf(c.costCentreId) }),
-        h('span', { class: 'num', text: `${usdFromMicros(c.allocatedMicros)}${r.totalMicros > 0 ? ` · ${pct(c.allocatedMicros / r.totalMicros, 0)}` : ''}` }))),
+        h('span', { class: 'num', text: `${usdFromMicros(c.allocatedMicros)}${r.totalMicros > 0 ? ` · ${share(c.allocatedMicros / r.totalMicros)}` : ''}` }))),
       r.unallocatedMicros > 0
         ? h('li', { class: 'row-unalloc' }, h('span', { text: 'Not allocated' }), h('span', { class: 'num', text: usdFromMicros(r.unallocatedMicros) }))
         : null),
@@ -220,9 +220,9 @@ function breakdown(d: StatementPayload): Node | null {
       h('table', { 'aria-label': label },
         h('thead', null, h('tr', null, h('th', { scope: 'col', text: label }), h('th', { scope: 'col', class: 'num', text: 'Measured' }), h('th', { scope: 'col', class: 'num', text: 'Share' }), h('th', { scope: 'col', class: 'num', text: 'Requests' }))),
         h('tbody', null, ...rows.map((r) => h('tr', null,
-          h('td', { text: r.label }),
+          h('td', { class: 'name-cell', text: r.label }),
           h('td', { class: 'num', text: usd(r.costUsd) }),
-          h('td', { class: 'num', text: m.costUsd > 0 ? pct(r.costUsd / m.costUsd, 0) : '—' }),
+          h('td', { class: 'num', text: m.costUsd > 0 ? share(r.costUsd / m.costUsd) : '—' }),
           h('td', { class: 'num', text: count(r.requests) }))))));
   return h('section', { class: 'section' },
     h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Metered, by project and model' : 'Where the measured spend went') }),
