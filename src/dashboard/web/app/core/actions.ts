@@ -31,9 +31,30 @@ const DEMO_SETTINGS_BLOCKED = 'This dashboard is showing sample data, so setting
 /** Sample data refuses every ledger write; the preview says so before Apply. */
 const DEMO_LEDGER_BLOCKED = 'This dashboard is showing sample data, so nothing can be saved here. Start Segreant without --demo to change your own.';
 
-/** A value as one shell word, so a pasted command keeps names with spaces intact. */
+/** A value no quoting can carry literally into every shell the command may be pasted into. */
+class UnquotableValue extends Error {}
+
+/**
+ * A value as one literal shell word. Single quotes are literal in POSIX shells
+ * and in PowerShell; the double quotes JSON produces are not, so a name like
+ * `$(whoami)` pasted from the drawer ran in the shell and saved a different
+ * value from Apply. A value holding a single quote has no quoting that is
+ * literal in both, so the command is withheld instead of shown wrong.
+ */
 function shellWord(text: string): string {
-  return /^[A-Za-z0-9._:/@-]+$/.test(text) ? text : JSON.stringify(text);
+  if (/^[A-Za-z0-9._:/@-]+$/.test(text)) return text;
+  if (!text.includes("'")) return `'${text}'`;
+  throw new UnquotableValue();
+}
+
+/** The command a drawer shows, or null when a value cannot be written literally. */
+function quoted(build: () => string | null): string | null {
+  try { return build(); } catch (e) { if (e instanceof UnquotableValue) return null; throw e; }
+}
+
+/** Tell the shell a claim changed, so the four-figure strip re-reads it (as the pages do). */
+function ledgerChanged(claim: 'allocation' | 'billing'): void {
+  window.dispatchEvent(new CustomEvent('segreant:ledger-changed', { detail: { claim } }));
 }
 
 /** Read a typed dollar amount: null for empty, NaN for anything unusable. */
@@ -308,12 +329,12 @@ const BUILDERS: Record<string, Builder> = {
 
     return {
       capability: cap,
-      command: () => {
+      command: () => quoted(() => {
         if (!id()) return null;
         if (archive()) return `segreant alloc centre ${id()} --archive`;
         if (!name().trim()) return null;
         return `segreant alloc centre ${id()} --name ${shellWord(name().trim())}${owner().trim() ? ` --owner ${shellWord(owner().trim())}` : ''}`;
-      },
+      }),
       fields: () => h('div', null,
         h('label', { class: 'drawer-h3', for: 'centre-target' }, 'Cost centre'),
         h('select', {
@@ -428,6 +449,7 @@ const BUILDERS: Record<string, Builder> = {
           ? await api.write.allocation({ op: 'archive', id: key })
           : await api.write.allocation({ op: 'centre', id: key, name: name().trim(), ...(owner().trim() ? { owner: owner().trim() } : {}) });
         read = null;
+        if (result.ok) ledgerChanged('allocation');
         return { ok: result.ok, message: result.message ?? 'Saved.' };
       },
     };
@@ -464,7 +486,7 @@ const BUILDERS: Record<string, Builder> = {
 
     return {
       capability: cap,
-      command: () => {
+      command: () => quoted(() => {
         if (revoking()) return revokeId() ? `segreant alloc revoke ${revokeId()}` : null;
         const x = draft();
         if (!x || typeof x === 'string') return null;
@@ -477,7 +499,7 @@ const BUILDERS: Record<string, Builder> = {
           + (body.until ? ` --until ${body.until}` : '')
           + (x.owner ? ` --owner ${shellWord(x.owner)}` : '')
           + (x.note ? ` --note ${shellWord(x.note)}` : '');
-      },
+      }),
       fields: () => h('div', null,
         h('label', { class: 'drawer-h3', for: 'rule-drawer-change' }, 'Change'),
         h('select', { id: 'rule-drawer-change', class: 'drawer-input', onchange: (event: Event) => revoking.set((event.target as HTMLSelectElement).value === 'revoke') },
@@ -551,12 +573,14 @@ const BUILDERS: Record<string, Builder> = {
         if (revoking()) {
           const r = await api.write.allocation({ op: 'revoke', id: revokeId() });
           read = null; void load();
+          if (r.ok) ledgerChanged('allocation');
           return { ok: r.ok, message: r.message };
         }
         const x = draft();
         if (!x || typeof x === 'string') return { ok: false, message: typeof x === 'string' ? x : 'Nothing to save yet.' };
         const r = await api.write.allocation(x.body);
         read = null;
+        if (r.ok) ledgerChanged('allocation');
         return { ok: r.ok, message: isPrecise() ? r.message : 'Rule saved. Splits already recorded keep their results; the next preview uses this rule.' };
       },
     };
@@ -606,9 +630,9 @@ const BUILDERS: Record<string, Builder> = {
         () => custom()
           ? h('div', null,
               h('label', { class: 'drawer-h3', for: 'run-drawer-first' }, 'First day'),
-              h('input', { id: 'run-drawer-first', class: 'drawer-input', type: 'date', oninput: (event: Event) => first.set((event.target as HTMLInputElement).value) }),
+              h('input', { id: 'run-drawer-first', class: 'drawer-input', type: 'date', value: first.peek(), oninput: (event: Event) => first.set((event.target as HTMLInputElement).value) }),
               h('label', { class: 'drawer-h3', for: 'run-drawer-last' }, 'Last day (included)'),
-              h('input', { id: 'run-drawer-last', class: 'drawer-input', type: 'date', oninput: (event: Event) => last.set((event.target as HTMLInputElement).value) }))
+              h('input', { id: 'run-drawer-last', class: 'drawer-input', type: 'date', value: last.peek(), oninput: (event: Event) => last.set((event.target as HTMLInputElement).value) }))
           : null),
 
       preview: async (): Promise<PreviewResult> => {
@@ -647,6 +671,7 @@ const BUILDERS: Record<string, Builder> = {
         if (typeof p === 'string') return { ok: false, message: p };
         const r = await api.write.allocation({ op: 'run', from: p.from, to: p.to, apply: true });
         read = null;
+        if (r.ok) ledgerChanged('allocation');
         return {
           ok: r.ok,
           message: isPrecise() && r.allocationRunId
@@ -716,6 +741,7 @@ const BUILDERS: Record<string, Builder> = {
       commit: async () => {
         const r = await api.write.billing({ op: 'adopt', importId: chosen(), apply: true });
         read = null;
+        if (r.ok) ledgerChanged('billing');
         return {
           ok: r.ok,
           message: isPrecise() && r.observationRunId
@@ -816,6 +842,7 @@ const BUILDERS: Record<string, Builder> = {
         if (m !== undefined && Number.isNaN(m)) return { ok: false, message: 'That is not a usable amount, so nothing was recorded.' };
         const r = await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }), apply: true });
         read = null;
+        if (r.ok) ledgerChanged('billing');
         return {
           ok: r.ok,
           message: isPrecise() && r.reconciliationRunId
@@ -840,11 +867,11 @@ const BUILDERS: Record<string, Builder> = {
 
     return {
       capability: cap,
-      command: () => clear()
+      command: () => quoted(() => (clear()
         ? 'segreant billing scope clear --apply'
         : account().trim()
           ? `segreant billing scope set --account-ref ${shellWord(account().trim())}${project().trim() ? ` --project-ref ${shellWord(project().trim())}` : ''} --apply`
-          : null,
+          : null)),
       fields: () => h('div', null,
         h('label', { class: 'drawer-h3', for: 'scope-change' }, 'Change'),
         h('select', { id: 'scope-change', class: 'drawer-input', onchange: (event: Event) => clear.set((event.target as HTMLSelectElement).value === 'clear') },
@@ -856,11 +883,14 @@ const BUILDERS: Record<string, Builder> = {
               h('label', { class: 'drawer-h3', for: 'scope-drawer-account' }, 'Organisation id'),
               h('input', {
                 id: 'scope-drawer-account', class: 'drawer-input', maxlength: '200', autocomplete: 'off', spellcheck: 'false', placeholder: 'org_…',
+                // Rebuilt when the change switches back from Clear: show what Apply would send.
+                value: account.peek(),
                 oninput: (event: Event) => account.set((event.target as HTMLInputElement).value),
               }),
               h('label', { class: 'drawer-h3', for: 'scope-drawer-project' }, 'Project id (optional)'),
               h('input', {
                 id: 'scope-drawer-project', class: 'drawer-input', maxlength: '200', autocomplete: 'off', spellcheck: 'false', placeholder: 'proj_…',
+                value: project.peek(),
                 'aria-describedby': 'scope-drawer-note',
                 oninput: (event: Event) => project.set((event.target as HTMLInputElement).value),
               }),
@@ -914,6 +944,7 @@ const BUILDERS: Record<string, Builder> = {
           ? await api.write.billing({ op: 'scope-clear', apply: true })
           : await api.write.billing({ op: 'scope', accountRef: account().trim(), ...(project().trim() ? { projectRef: project().trim() } : {}), apply: true });
         read = null;
+        if (result.ok) ledgerChanged('billing');
         const plain = clear()
           ? 'Cleared. Future OpenAI requests through Segreant are no longer matched to a project. Past spend and recorded comparisons are unchanged.'
           : 'Declared for future OpenAI requests through Segreant. Past and imported spend is unchanged, and OpenAI has not checked this declaration.';

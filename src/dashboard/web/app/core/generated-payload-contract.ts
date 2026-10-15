@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b2c78a4efffcef9c65954fe3154fe66992396341ac7784aadd2162e2e5033f2c";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "28fdec60332f2c9c6509372cfa48d83fb0d50654400e65ced45c339b34b28e63";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1069,6 +1069,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "number"
     },
     {
+      "name": "assumedWindowUnits",
+      "optional": false,
+      "type": "number"
+    },
+    {
       "name": "measuredAt",
       "optional": false,
       "type": "string | null"
@@ -1080,6 +1085,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "notKept",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "contested",
       "optional": false,
       "type": "StatementKeptCount"
     },

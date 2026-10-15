@@ -558,12 +558,16 @@ export interface StatementKeptCount {
  */
 export interface StatementRealized {
   standing: 'judged_in_month' | 'none_judged';
-  /** The survival window the stored measurement used, in days. */
+  /** The default survival window, in days; units that recorded their own window use it. */
   windowDays: number;
+  /** Units in this month placed by the default window because their measurement predates recording it. */
+  assumedWindowUnits: number;
   /** When the outcomes were last measured (ISO), or null when nothing has been measured yet. */
   measuredAt: string | null;
   kept: StatementKeptCount;
   notKept: StatementKeptCount;
+  /** Judged, but the evidence disagreed and nothing failed outright. */
+  contested: StatementKeptCount;
   /** Judged, but a check had no signal either way. */
   unknown: StatementKeptCount;
   /** Committed by the month's end, check still due at the last measurement. */

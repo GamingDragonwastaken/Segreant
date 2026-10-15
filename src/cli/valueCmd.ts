@@ -103,7 +103,7 @@ export async function cmdYield(flags: Flags): Promise<void> {
  */
 function printKeptAnswer(tty: boolean, report: RealizationReport): void {
   const k = keptSummary(report);
-  const total = k.kept.units + k.notKept.units + k.unknown.units + k.maturing.units;
+  const total = k.kept.units + k.notKept.units + k.contested.units + k.unknown.units + k.maturing.units;
   if (total === 0) return;
   const days = report.windowDays;
   const row = (label: string, b: { units: number; costUsd: number }, what: string, tone: string): void => {
@@ -114,6 +114,7 @@ function printKeptAnswer(tty: boolean, report: RealizationReport): void {
   console.log(color(tty, C.bold, '  Did the AI work stay in the code?') + color(tty, C.gray, '   from git history · list cost (estimate), not your bill'));
   row('Kept', k.kept, `most of its lines are still in the code after ${days} days, and no tracked check failed`, C.green);
   row('Not kept', k.notKept, 'most of its lines were rewritten or removed, or it was reverted', C.yellow);
+  row('Disputed', k.contested, 'the checks disagreed, and nothing failed outright; not settled either way', C.gray);
   row('Unknown', k.unknown, 'not measured in this run (the git time budget ran out)', C.gray);
   const due = k.maturing.nextVerdictMs === null ? '' : `; first verdict ${new Date(k.maturing.nextVerdictMs).toISOString().slice(0, 10)}`;
   row('Maturing', k.maturing, `younger than ${days} days${due}`, C.gray);

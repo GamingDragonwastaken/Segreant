@@ -11,6 +11,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Fixes from an independent review of the last eleven PRs.** Codex (`gpt-6.1-sol`) reviewed #110 to #120 read-only. Each finding was checked against the code and pinned by a test:
+  - **Copied commands are literal.** A drawer's "same thing, as a command" quoted values for JSON. Pasted into a shell, a name like `$(whoami)` ran as a command, so it saved a different value from Apply. Values are now single-quoted, and a value no quoting can carry shows no command at all.
+  - **Each piece of work is placed by its own check.** The Statement assumed every measurement used the 14-day window. Measurements now record their window. Older ones are placed by the default, and the card says how many.
+  - **Disagreeing evidence is "disputed", not "not kept".** When a check both passed and failed, the work was counted as not kept. It now has its own count on the Statement, in its CSV, and in `segreant value` and `segreant home`.
+  - **The four figures update after a drawer saves,** as they already did after a page save.
+  - **Switching a drawer between modes no longer hides typed values.** The fields show exactly what Apply will send.
+
 - **Cost centres and the provider scope are finished in the dashboard.** Both now read "in the GUI" on the parity map, which earned it rather than being relabelled:
   - **Cost centres:** a drawer adds, renames, changes the owner of, or archives a cost centre: everything `segreant alloc centre` does. Renaming was impossible before, because the Allocate page derives the id from the name. The preview names any rule that still points at a centre you are about to archive, and says when a name belongs to an archived centre, which saving would rename but not reopen.
   - **Provider scope:** a drawer declares or clears the OpenAI organisation and project, with the project optional, as on the command line. Its preview is the server's own dry run.
