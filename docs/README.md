@@ -31,6 +31,7 @@ Four groups, by who they are for. If you are new, read the first group in order.
 
 | Document | What it covers |
 |---|---|
+| [PRIVACY.md](PRIVACY.md) | The privacy statement in plain words: what stays here, what leaves, how to delete it |
 | [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) | Everything that can leave your machine, and what triggers it |
 | [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md) | What is supported, what is intended, what is not offered |
 | [THREAT-MODEL.md](THREAT-MODEL.md) | What Segreant defends against, and its integrity guarantees |

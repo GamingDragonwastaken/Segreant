@@ -25,6 +25,7 @@ import type { Layer } from './components/spine.ts';
 import { spendView } from './views/spend.ts';
 import { evidenceView } from './views/evidence.ts';
 import { systemView } from './views/system.ts';
+import { privacyView } from './views/privacy.ts';
 import { allocationView } from './views/allocation.ts';
 import { valueView } from './views/value.ts';
 import { controlView } from './views/control.ts';
@@ -36,7 +37,7 @@ import { initView, viewPrefs, jobShown } from './core/view.ts';
 import { JOBS as SHARED_JOBS } from './core/jobs.ts';
 
 /** A page the shell can show: the registry's territories, plus the monthly statement, which reads all four claims. */
-type Route = Territory | 'statement';
+type Route = Territory | 'statement' | 'privacy';
 
 /** The four spine bands map onto the territories that answer their question. */
 const LAYER_ROUTE: Record<LayerId, Territory> = {
@@ -67,7 +68,7 @@ const UTILITIES: ReadonlyArray<{ id: Route; label: string; plain: string }> = [
   { id: 'system', label: 'Settings', plain: 'Pricing, settings, maintenance, and what this GUI covers.' },
 ];
 
-const ALL_ROUTES: Route[] = ['statement', 'spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
+const ALL_ROUTES: Route[] = ['statement', 'spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system', 'privacy'];
 
 const current = signal<Route>(readRoute());
 // The four payloads behind the claims. `undefined` = still on its way; `null` =
@@ -260,6 +261,7 @@ function viewFor(route: Route): Node {
     case 'control': return controlView();
     case 'data': return dataView();
     case 'system': return systemView();
+    case 'privacy': return privacyView();
   }
 }
 
@@ -397,7 +399,9 @@ function boot(): void {
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
         h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider and the other routes you set up.' }),
-        h('a', { href: '/classic', text: 'Classic dashboard' })));
+        h('span', { class: 'shellfoot-links' },
+          h('a', { href: '#/privacy', text: 'Privacy' }),
+          h('a', { href: '/classic', text: 'Classic dashboard' }))));
 
   });
 }
