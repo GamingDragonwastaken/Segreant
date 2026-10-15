@@ -107,6 +107,12 @@
   color-scheme: light;
 }
 
+/* Compact: the same page with tighter spacing, for readers who live in it. */
+:root[data-density='compact'] {
+  --s3: 9px; --s4: 12px; --s5: 15px; --s6: 18px; --s8: 24px; --s10: 28px; --s12: 34px;
+}
+:root[data-intros='off'] .view-head .view-plain { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   :root { --t: 0ms; }
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
@@ -1006,6 +1012,14 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 
 /* The page-level result of a save: fixed in view, because the form that caused
    it may be far down a long page. Errors stay; confirmations clear. */
+.view-prefs { margin-top: var(--s5); }
+.view-prefs .pref-group { border: 0; padding: 0; margin: var(--s4) 0 0; display: grid; gap: var(--s2); }
+.view-prefs legend { font-size: 12px; color: var(--muted); padding: 0; margin-bottom: var(--s1); }
+.pref { display: flex; align-items: center; gap: var(--s2); font-size: 14px; cursor: pointer; }
+.pref input { accent-color: var(--accent); width: 16px; height: 16px; }
+.pref-links { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.pref-links a { color: var(--accent-text); font-size: 13px; }
+
 .page-notice {
   position: fixed; left: 50%; bottom: calc(var(--s6) + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   z-index: 40; max-width: min(640px, calc(100vw - 2 * var(--s4)));
