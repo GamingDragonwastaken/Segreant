@@ -9,6 +9,8 @@
  */
 
 import { themeChoice, setTheme, type ThemeChoice } from '../core/theme.ts';
+import { viewPrefs, setView, setJobShown, jobShown, type Density } from '../core/view.ts';
+import { JOBS } from '../core/jobs.ts';
 import { h } from '../core/dom.ts';
 import { CAPABILITY_SPECS, TERRITORIES, paritySummary } from '../core/registry.ts';
 import { isPrecise } from '../core/fmt.ts';
@@ -39,6 +41,38 @@ function appearance(): Node {
     h('p', { class: 'basis', text: 'Saved in this browser only.' }));
 }
 
+const DENSITY_WORDS: ReadonlyArray<[Density, string]> = [['comfortable', 'Comfortable'], ['compact', 'Compact']];
+
+function check(label: string, on: boolean, change: (on: boolean) => void): Node {
+  return h('label', { class: 'pref' },
+    h('input', { type: 'checkbox', checked: on, onchange: (e: Event) => change((e.target as HTMLInputElement).checked) }),
+    h('span', { text: label }));
+}
+
+/** What you see. Display only: hiding a part never changes a figure. */
+function viewChoices(): Node {
+  const p = viewPrefs();
+  return h('div', { class: 'card view-prefs' },
+    h('div', { class: 'card-head' }, h('span', { class: 'card-title', id: 'view-title', text: 'What you see' })),
+    h('div', { class: 'register-switch theme-switch', role: 'group', 'aria-label': 'Density' },
+      ...DENSITY_WORDS.map(([d, label]) => h('button', {
+        type: 'button',
+        'aria-pressed': () => (viewPrefs().density === d ? 'true' : 'false'),
+        onclick: () => setView({ density: d }),
+        text: label,
+      }))),
+    h('fieldset', { class: 'pref-group' },
+      h('legend', { text: 'On every page' }),
+      check('The four figures above the money pages', p.strip, (on) => setView({ strip: on })),
+      check('A short explanation under each page title', p.intros, (on) => setView({ intros: on }))),
+    h('fieldset', { class: 'pref-group' },
+      h('legend', { text: 'Jobs in the top bar' }),
+      ...JOBS.map((j) => check(j.label, jobShown(j.id), (on) => setJobShown(j.id, on))),
+      h('p', { class: 'form-hint', text: 'A hidden job still opens from here, and the job you are in always shows.' }),
+      () => h('div', { class: 'pref-links' }, ...JOBS.filter((j) => !jobShown(j.id)).map((j) => h('a', { href: `#/${j.id}`, text: `Open ${j.label}` })))),
+    h('p', { class: 'basis', text: 'Saved in this browser only. Hiding something never changes a figure.' }));
+}
+
 export function systemView(): Node {
   const parity = paritySummary();
 
@@ -53,6 +87,7 @@ export function systemView(): Node {
     // The parity map used to lead, a 60-row table that made this the longest page
     // in the product (10,140 px) with the settings at the very bottom.
     appearance(),
+    viewChoices(),
 
     h('div', { class: 'actions', style: 'margin-top: var(--s5)' },
       actionCard('settings'),
