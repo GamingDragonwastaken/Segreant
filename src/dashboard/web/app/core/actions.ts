@@ -11,7 +11,9 @@
 import { api, type AllocationPayload, type BillingPayload } from './api.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
-import { isPrecise, usd, count } from './fmt.ts';
+import { isPrecise, usd, usdFromMicros, share, count, basisWords } from './fmt.ts';
+import { residualBoundWords, dayRange } from './reconcileWords.ts';
+import { localMidnightIso, dayAfterIso, monthRange, REASON_WORDS } from './periods.ts';
 import { slug } from './slug.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
@@ -296,8 +298,7 @@ const BUILDERS: Record<string, Builder> = {
     const owner = signal('');
     let read: Promise<AllocationPayload> | null = null;
     const allocation = (): Promise<AllocationPayload> => (read ??= api.allocation());
-    const open = signal<AllocationPayload['costCentres']>([]);
-    void allocation().then((d) => open.set(d.costCentres.filter((c) => c.archivedAtMs == null)), () => undefined);
+    let open: AllocationPayload['costCentres'] = [];
     const id = (): string => target() || slug(name());
     const fill = (inputId: string, value: string): void => {
       const input = document.getElementById(inputId) as HTMLInputElement | null;
@@ -314,12 +315,12 @@ const BUILDERS: Record<string, Builder> = {
       },
       fields: () => h('div', null,
         h('label', { class: 'drawer-h3', for: 'centre-target' }, 'Cost centre'),
-        () => h('select', {
+        h('select', {
           id: 'centre-target',
           class: 'drawer-input',
           onchange: (event: Event) => {
             const chosen = (event.target as HTMLSelectElement).value;
-            const centre = open().find((c) => c.costCentreId === chosen);
+            const centre = open.find((c) => c.costCentreId === chosen);
             target.set(chosen);
             if (editing() !== (chosen !== '')) editing.set(chosen !== '');
             archive.set(false);
@@ -330,8 +331,17 @@ const BUILDERS: Record<string, Builder> = {
             fill('centre-change', 'save');
           },
         },
-          h('option', { value: '', text: 'A new cost centre' }),
-          ...open().map((c) => h('option', { value: c.costCentreId, text: `${c.name} (${c.costCentreId})` }))),
+          // Built once; the centres are appended when they arrive. Rebuilding the
+          // select on arrival took focus, and the choice, from a reader who had
+          // already reached it.
+          (() => {
+            const placeholder = h('option', { value: '', text: 'A new cost centre' });
+            void allocation().then((d) => {
+              open = d.costCentres.filter((c) => c.archivedAtMs == null);
+              placeholder.after(...open.map((c) => h('option', { value: c.costCentreId, text: `${c.name} (${c.costCentreId})` })));
+            }, () => undefined);
+            return placeholder;
+          })()),
         () => editing()
           ? h('div', null,
               h('label', { class: 'drawer-h3', for: 'centre-change' }, 'Change'),
@@ -418,6 +428,270 @@ const BUILDERS: Record<string, Builder> = {
           : await api.write.allocation({ op: 'centre', id: key, name: name().trim(), ...(owner().trim() ? { owner: owner().trim() } : {}) });
         read = null;
         return { ok: result.ok, message: result.message ?? 'Saved.' };
+      },
+    };
+  },
+
+  /**
+   * Run an allocation: `segreant alloc run --from --to [--apply]`. The preview
+   * is the server's own computation for the period, refused if it does not
+   * conserve its input; Apply records exactly that run.
+   */
+  'alloc-run': (cap) => {
+    const ranges = [monthRange(-1), monthRange(0)];
+    const CUSTOM = String(ranges.length);
+    const chosen = signal('0');
+    const custom = signal(false);
+    const first = signal('');
+    const last = signal('');
+    let read: Promise<AllocationPayload> | null = null;
+    const allocation = (): Promise<AllocationPayload> => (read ??= api.allocation());
+    /** The period the fields name, or the reason they name none. */
+    const period = (): { from: string; to: string } | string => {
+      if (chosen() !== CUSTOM) return ranges[Number(chosen())]!;
+      if (!first() || !last()) return 'Choose both the first and the last day of the period.';
+      if (last() < first()) return 'The last day must not be before the first day.';
+      // Both days are included: the period ends at the local midnight after the last one.
+      return { from: localMidnightIso(first()), to: dayAfterIso(last()) };
+    };
+
+    return {
+      capability: cap,
+      command: () => {
+        const p = period();
+        return typeof p === 'string' ? null : `segreant alloc run --from ${p.from} --to ${p.to} --apply`;
+      },
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'run-drawer-period' }, 'Period'),
+        h('select', {
+          id: 'run-drawer-period', class: 'drawer-input',
+          onchange: (event: Event) => {
+            const value = (event.target as HTMLSelectElement).value;
+            chosen.set(value);
+            if (custom() !== (value === CUSTOM)) custom.set(value === CUSTOM);
+          },
+        },
+          ...ranges.map((r, i) => h('option', { value: String(i), text: r.label })),
+          h('option', { value: CUSTOM, text: 'Choose dates…' })),
+        () => custom()
+          ? h('div', null,
+              h('label', { class: 'drawer-h3', for: 'run-drawer-first' }, 'First day'),
+              h('input', { id: 'run-drawer-first', class: 'drawer-input', type: 'date', oninput: (event: Event) => first.set((event.target as HTMLInputElement).value) }),
+              h('label', { class: 'drawer-h3', for: 'run-drawer-last' }, 'Last day (included)'),
+              h('input', { id: 'run-drawer-last', class: 'drawer-input', type: 'date', oninput: (event: Event) => last.set((event.target as HTMLInputElement).value) }))
+          : null),
+
+      preview: async (): Promise<PreviewResult> => {
+        const p = period();
+        if (typeof p === 'string') return { applicable: false, blockedReason: p, summary: 'Splits the spend in a period across your cost centres, by your rules.' };
+        const [d, r] = await Promise.all([allocation(), api.write.allocation({ op: 'run', from: p.from, to: p.to })]);
+        const result = r.result;
+        if (!result) return { applicable: false, blockedReason: 'The server returned no split for this period.', summary: r.message };
+        const nameOf = (id: string): string => d.costCentres.find((c) => c.costCentreId === id)?.name ?? id;
+        const shareOf = (m: number): string => (result.totalMicros > 0 ? share(m / result.totalMicros, 1) : '—');
+        const blockedReason = d.demo
+          ? DEMO_LEDGER_BLOCKED
+          : !result.conserves
+            ? 'This split does not add up to the spend it divides, so it cannot be recorded. Please report it.'
+            : undefined;
+        return {
+          applicable: blockedReason === undefined,
+          blockedReason,
+          summary: isPrecise()
+            ? 'Previews alloc run for the period. Apply appends an immutable allocation run; recorded runs are never recomputed.'
+            : 'This is how the estimated spend in the period would be split. Recording it saves this split; it is never recalculated later.',
+          rows: [
+            ...result.byCostCentre.map((c) => ({ label: nameOf(c.costCentreId), value: usdFromMicros(c.allocatedMicros), note: `${shareOf(c.allocatedMicros)} · ${count(c.requestCount)} requests` })),
+            ...result.unallocated.map((u) => ({ label: `Unallocated: ${REASON_WORDS[u.reason] ?? u.reason.replace(/_/g, ' ')}`, value: usdFromMicros(u.micros), note: `${shareOf(u.micros)} · ${count(u.requestCount)} requests` })),
+            { label: 'Total estimated spend', value: usdFromMicros(result.totalMicros), note: result.totalMicros > 0 ? 'list cost (estimate), not the provider bill' : 'no spend in this period' },
+          ],
+          notes: [
+            ...(result.retention?.truncated ? ['Some records in this period were deleted by retention. The split covers what remains, so the unallocated part may be understated.'] : []),
+            'Recorded splits are listed on the Allocate page, where each one downloads as CSV.',
+          ],
+        };
+      },
+
+      commit: async () => {
+        const p = period();
+        if (typeof p === 'string') return { ok: false, message: p };
+        const r = await api.write.allocation({ op: 'run', from: p.from, to: p.to, apply: true });
+        read = null;
+        return {
+          ok: r.ok,
+          message: isPrecise() && r.allocationRunId
+            ? `Recorded allocation run ${r.allocationRunId}.`
+            : 'Recorded. The split is saved and listed under Saved splits on the Allocate page.',
+        };
+      },
+    };
+  },
+
+  /**
+   * Adopt an imported export as the provider side: `segreant billing
+   * openai-costs adopt --import-id <id> [--apply]`. No credential, no network;
+   * the preview is the server's adoption plan, refusals included.
+   */
+  'billing-adopt': (cap) => {
+    const chosen = signal('');
+    let read: Promise<BillingPayload> | null = null;
+    const billing = (): Promise<BillingPayload> => (read ??= api.billing());
+
+    return {
+      capability: cap,
+      command: () => (chosen() ? `segreant billing openai-costs adopt --import-id ${chosen()} --apply` : null),
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'adopt-drawer-import' }, 'Imported cost export'),
+        h('select', { id: 'adopt-drawer-import', class: 'drawer-input', onchange: (event: Event) => chosen.set((event.target as HTMLSelectElement).value) },
+          // Built once; the imports are appended when they arrive, so a reader
+          // already on the select keeps focus and their place.
+          (() => {
+            const placeholder = h('option', { value: '', text: 'Choose an export' });
+            void billing().then((d) => {
+              placeholder.after(...d.imports.map((imp) => h('option', {
+                value: imp.importId,
+                text: `${imp.fileName} · ${dayRange(imp.periodStartMs, imp.periodEndMs)}${imp.inUse ? ' · in use' : ''}`,
+              })));
+            }, () => undefined);
+            return placeholder;
+          })())),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await billing();
+        const summary = isPrecise()
+          ? 'Adopts an imported operator export as an operator_supplied observation for the declared scope. No credential is read and no request is made.'
+          : 'Uses a cost export you already imported as the provider side of the comparison. Nothing is fetched and no key is used.';
+        if (!d.activeScope) return { applicable: false, blockedReason: 'Declare the OpenAI organisation and project first, so the export’s lines can be matched to it.', summary };
+        if (d.imports.length === 0) return { applicable: false, blockedReason: 'No cost export has been imported yet. Import one on the Close page first.', summary };
+        if (!chosen()) return { applicable: false, blockedReason: 'Choose an export to see what would be used.', summary };
+        const p = (await api.write.billing({ op: 'adopt', importId: chosen() })).plan;
+        if (!p) return { applicable: false, blockedReason: 'The server returned no plan for this export.', summary };
+        if (!p.adoptable) return { applicable: false, blockedReason: p.detail ?? (p.refusal ? p.refusal.replace(/_/g, ' ') : 'This export cannot be used.'), summary };
+        const left = p.excluded && p.excluded.otherOrNoProjectRecordCount > 0
+          ? { value: `${count(p.excluded.otherOrNoProjectRecordCount)} lines, ${usdFromMicros(p.excluded.otherOrNoProjectMicros)}`, note: 'no project, or another one' }
+          : { value: 'none' };
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary,
+          rows: [
+            { label: 'Matched to your project', value: `${count(p.matchedRecordCount)} lines, ${usdFromMicros(p.matchedMicros)}`, note: p.providerProjectRef },
+            { label: 'Left out', ...left },
+            { label: 'Days', value: dayRange(p.periodStartMs, p.periodEndMs) },
+            { label: 'Evidence class', value: 'supplied by you', note: 'not read from the provider; every comparison built on it says so' },
+          ],
+        };
+      },
+
+      commit: async () => {
+        const r = await api.write.billing({ op: 'adopt', importId: chosen(), apply: true });
+        read = null;
+        return {
+          ok: r.ok,
+          message: isPrecise() && r.observationRunId
+            ? `Adopted as observation ${r.observationRunId}.`
+            : 'Recorded as the provider side for these days. You can now compare on the Close page or in the Reconcile drawer.',
+        };
+      },
+    };
+  },
+
+  /**
+   * Reconcile: `segreant billing reconcile [--materiality <usd>] [--apply]`.
+   * Readiness is checked first and its missing steps named; the comparison
+   * previewed is the server's own, under the threshold Apply records with.
+   */
+  'billing-reconcile': (cap) => {
+    const materiality = signal('');
+    let read: Promise<BillingPayload> | null = null;
+    const billing = (): Promise<BillingPayload> => (read ??= api.billing());
+    /** Blank is the server's default; NaN is a value nobody can record under. */
+    const threshold = (): number | undefined => {
+      const raw = materiality().trim();
+      if (raw === '') return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : Number.NaN;
+    };
+
+    return {
+      capability: cap,
+      command: () => {
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) return null;
+        return `segreant billing reconcile${m === undefined ? '' : ` --materiality ${m}`} --apply`;
+      },
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'reconcile-drawer-materiality' }, 'Ignore daily differences up to ($)'),
+        h('input', {
+          id: 'reconcile-drawer-materiality', class: 'drawer-input', type: 'number', min: '0', step: '0.01', inputmode: 'decimal', placeholder: '0.50',
+          'aria-describedby': 'reconcile-drawer-note',
+          oninput: (event: Event) => materiality.set((event.target as HTMLInputElement).value),
+        }),
+        h('p', { id: 'reconcile-drawer-note', class: 'drawer-note', text: 'A day counts as different only when the bill and our measurement differ by more than this. Blank uses $0.50.' })),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await billing();
+        if (d.readiness && !d.readiness.ready) {
+          return {
+            applicable: false,
+            blockedReason: 'Not ready to compare yet. The preview lists the steps still to do.',
+            summary: 'Compares what Segreant measured with what the provider billed, day by day, for the declared project.',
+            rows: d.readiness.missing
+              .filter((m) => !m.step.startsWith('observe a closed period — route A'))
+              .map((m) => {
+                // The server's detail is the terminal spelling. In plain words,
+                // point at where the dashboard does the same step.
+                const where = /scope/.test(m.step)
+                  ? 'Close step 1, or "Declare a provider scope" on this map'
+                  : /adopt|import/.test(m.step)
+                    ? 'Close step 2, or "Adopt a provider export" on this map'
+                    : m.detail;
+                return { label: 'Still to do', value: m.step.replace(/^observe a closed period — route B, /, ''), note: isPrecise() ? m.detail : where };
+              }),
+          };
+        }
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) {
+          return { applicable: false, blockedReason: 'That is not a usable amount. Enter dollars, or leave it blank for $0.50.', summary: 'Compares what Segreant measured with what the provider billed.' };
+        }
+        const r = (await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }) })).result;
+        if (!r) return { applicable: false, blockedReason: 'The server returned no comparison.', summary: 'Compares what Segreant measured with what the provider billed.' };
+        const residual = r.unexplainedVarianceMicros;
+        const contradicted = r.snapshotStability === 'changed_across_observations';
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary: isPrecise()
+            ? 'Previews billing reconcile for the declared scope. Apply appends a reconciliation run; the Billed claim then rests on it.'
+            : 'This is how the provider’s bill compares with what Segreant measured. Recording it saves the comparison as evidence.',
+          rows: [
+            { label: 'Period', value: dayRange(r.periodStartMs, r.periodEndMs) },
+            { label: 'Billed by the provider', value: usdFromMicros(r.providerReportedMicros) },
+            { label: 'Measured by Segreant', value: usdFromMicros(r.localCapturedMicros), note: 'list cost (estimate)' },
+            { label: 'Not explained', value: usdFromMicros(residual), note: r.providerReportedMicros > 0 ? `${share(residual / r.providerReportedMicros, 1)} of the bill` : undefined },
+            { label: 'Days compared', value: `${count(r.coverage.daysWithBoth)} with both`, note: `${count(r.coverage.providerOnlyDays)} bill only · ${count(r.coverage.localOnlyDays)} ours only` },
+            { label: 'Days that differ', value: count(r.coverage.materialDays), note: `by more than ${usd(r.materialityUsd)}` },
+            { label: 'Provider side', value: basisWords(r.providerSourceKind) },
+          ],
+          notes: [
+            residualBoundWords(r.offPathBound, isPrecise()),
+            ...(contradicted ? ['The provider reported different figures for the same days at different times. This comparison would be contradicted.'] : []),
+            ...r.conditions.map((c) => c.replace(/_/g, ' ')),
+          ],
+        };
+      },
+
+      commit: async () => {
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) return { ok: false, message: 'That is not a usable amount, so nothing was recorded.' };
+        const r = await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }), apply: true });
+        read = null;
+        return {
+          ok: r.ok,
+          message: isPrecise() && r.reconciliationRunId
+            ? `Recorded reconciliation run ${r.reconciliationRunId}.`
+            : 'Recorded. The comparison is saved, and the Billed figure on the Close page now rests on it.',
+        };
       },
     };
   },
