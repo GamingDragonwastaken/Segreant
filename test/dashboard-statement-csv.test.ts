@@ -127,6 +127,9 @@ test('the statement CSV keeps four sections with their own basis and no total', 
 
     const realized = body.find((r) => r[0] === 'realized')!;
     assert.equal(realized[2], '', 'realized value carries no amount for a calendar month');
+    const realizedRows = body.filter((r) => r[0] === 'realized');
+    assert.deepEqual(realizedRows.map((r) => r[1]), ['kept', 'not kept', 'no signal', 'too early to tell'], 'work judged in the month, by outcome');
+    for (const r of realizedRows) assert.equal(r[2], '', 'no realized row carries an amount a reader could sum as value');
   });
   store.close();
 });

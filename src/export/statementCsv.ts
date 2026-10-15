@@ -85,7 +85,16 @@ export function statementToCsv(s: StatementPayload): string {
     if (r.unallocatedMicros !== 0) rows.push(['allocated', 'not allocated', microsUsd(r.unallocatedMicros), r.unallocatedMicros, '', 'showback split of the local estimate', ...own, note]);
   }
 
-  rows.push(['realized', 'not computed per month', '', '', '', '', ...month, 'no', '', '', s.realized.reason]);
+  const kept = (item: string, c: { units: number; costUsd: number }): void => {
+    // No amount: the realized section never carries a dollar a reader could sum
+    // as value. The count is in the requests column; the spend behind it is named
+    // in the note as spend.
+    rows.push(['realized', item, '', '', c.units, 'pieces of work judged in the month (count in the requests column); not value', ...month, 'yes', s.realized.measuredAt ?? '', '', `list cost behind this work: $${c.costUsd.toFixed(2)} (spend, not value). ${s.realized.reason}`]);
+  };
+  kept('kept', s.realized.kept);
+  kept('not kept', s.realized.notKept);
+  kept('no signal', s.realized.unknown);
+  kept('too early to tell', s.realized.tooEarly);
   rows.push(['close', s.close.status, '', '', '', 'economic period close', ...month, '', '', s.close.activeFinalizationId ?? '', '']);
   return toCsv([...STATEMENT_CSV_COLUMNS], rows);
 }
