@@ -167,7 +167,7 @@ function billedPill(b: StatementPayload['billed']): { text: string; tone: string
 function billedCard(d: StatementPayload): Node {
   const b = d.billed;
   if (b.monthCoverage === 'not_established') {
-    return card(() => (isPrecise() ? 'Provider-billed' : 'What the provider billed'), { text: 'not established', tone: 'pill-unverified' },
+    return card(() => (isPrecise() ? 'Provider-billed' : 'What the provider billed'), { text: 'not established', tone: 'pill-empty' },
       h('p', { class: 'statement-none', text: b.scanComplete
         ? 'No comparison with a provider bill covers this month.'
         : 'No comparison found among the most recent ones; an older one may exist.' }),
@@ -194,7 +194,7 @@ function allocatedRunLine(r: StatementAllocatedRun, nameOf: (id: string) => stri
 function allocatedCard(d: StatementPayload, nameOf: (id: string) => string): Node {
   const a = d.allocated;
   if (a.monthCoverage === 'not_established') {
-    return card(() => (isPrecise() ? 'Allocated' : 'How it was split'), { text: 'not established', tone: 'pill-unverified' },
+    return card(() => (isPrecise() ? 'Allocated' : 'How it was split'), { text: 'not established', tone: 'pill-empty' },
       h('p', { class: 'statement-none', text: a.scanComplete
         ? 'No recorded split covers this month.'
         : 'No split found among the most recent ones; an older one may exist.' }),
@@ -207,7 +207,7 @@ function allocatedCard(d: StatementPayload, nameOf: (id: string) => string): Nod
 }
 
 function realizedCard(d: StatementPayload): Node {
-  return card(() => (isPrecise() ? 'Realized' : 'What it produced'), { text: 'not per month', tone: 'pill-unverified' },
+  return card(() => (isPrecise() ? 'Realized' : 'What it produced'), { text: 'not per month', tone: 'pill-empty' },
     h('p', { class: 'statement-none', text: d.realized.reason }),
     goLink('value', 'Open Value'));
 }
