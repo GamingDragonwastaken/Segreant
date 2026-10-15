@@ -175,8 +175,8 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'views/evidence.ts', token: 'readinessPanel(d)', note: 'Close step 3 shows readiness and the steps still missing before it offers a comparison' },
   },
   {
-    id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a cost export you already imported as the provider side of the comparison. No credential is used.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing openai-costs adopt --apply',
-    guiEvidence: { file: 'views/evidence.ts', token: "op: 'adopt'", note: 'Close step 2 imports an export and adopts it, each with a preview first' },
+    id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a cost export you already imported as the provider side of the comparison. No credential is used.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'segreant billing openai-costs adopt --apply',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'adopt'", note: 'Close step 2 imports an export and adopts it, each with a preview first; the drawer adopts any imported export by id, as --import-id does' },
   },
   {
     id: 'billing-pull', label: 'Pull provider costs', plain: 'Fetch the costs OpenAI reports for a period, using an Admin key. A provider observation, not yet reconciled.',
@@ -184,8 +184,8 @@ export const CAPABILITIES: readonly Capability[] = [
     warning: 'Reads an OpenAI Admin credential from your environment and makes a network request to OpenAI. Segreant never stores it. Check readiness first — on a ledger with no proxy traffic on the declared route, a pull reports your entire bill as unexplained.',
   },
   {
-    id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what Segreant measured with the provider-reported total, project by day, for the declared scope only.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing reconcile --apply',
-    guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews with a materiality threshold and records under it; every recorded comparison opens to its own figures; no drawer runner yet' },
+    id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what Segreant measured with the provider-reported total, project by day, for the declared scope only.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'segreant billing reconcile --apply',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'reconcile'", note: 'Close step 3 previews with a materiality threshold and records under it; every recorded comparison opens to its own figures; the drawer previews and records the same comparison under the same threshold' },
   },
   { id: 'receipt', label: 'Receipts', plain: 'Sign and store a receipt for each matured piece of work, creating the signing key on first use; --verify checks one.', territory: 'evidence', consequence: 'local', coverage: 'planned', command: 'segreant receipt' },
   { id: 'evidence', label: 'Evidence records', plain: 'Signed CI test evidence: emit writes a signed artifact, import records it as a verified outcome.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'segreant evidence' },
