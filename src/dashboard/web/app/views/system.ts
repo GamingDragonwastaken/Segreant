@@ -15,6 +15,8 @@ import { h } from '../core/dom.ts';
 import { CAPABILITY_SPECS, TERRITORIES, paritySummary } from '../core/registry.ts';
 import { isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
+import { actionSpec, hasRunner } from '../core/actions.ts';
+import { openAction } from '../components/drawer.ts';
 
 const COVERAGE_WORDS: Record<string, string> = {
   full: 'in the GUI',
@@ -149,6 +151,9 @@ export function systemView(): Node {
                 // The reason travels with the state, in the same cell. A row that
                 // says the GUI cannot do something and does not say why is the
                 // assertion without its basis.
-                ...(c.coverageNote ? [h('br'), h('span', { class: 'action-plain', text: c.coverageNote })] : [])),
+                ...(c.coverageNote ? [h('br'), h('span', { class: 'action-plain', text: c.coverageNote })] : []),
+                // The map is where a reader learns a capability exists, so a row
+                // the GUI can run opens its drawer right here, preview first.
+                ...(hasRunner(c) ? [h('br'), h('button', { class: 'link-btn parity-open', type: 'button', 'aria-label': `Open ${c.label}`, text: 'Open', onclick: () => openAction(actionSpec(c)) })] : [])),
               h('td', null, h('code', { class: 'cmd', style: 'white-space: nowrap', text: c.command }))))))))));
 }

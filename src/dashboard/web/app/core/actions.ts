@@ -8,10 +8,11 @@
  * is better than a button that silently does nothing.
  */
 
-import { api } from './api.ts';
+import { api, type AllocationPayload, type BillingPayload } from './api.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
 import { isPrecise, usd, count } from './fmt.ts';
+import { slug } from './slug.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
@@ -23,6 +24,14 @@ type Builder = (cap: Capability) => ActionSpec;
  * enabling a button whose only outcome is a refusal (H005).
  */
 const DEMO_SETTINGS_BLOCKED = 'This dashboard is showing sample data, so settings can\'t be changed here. Start Segreant without --demo to change your own.';
+
+/** Sample data refuses every ledger write; the preview says so before Apply. */
+const DEMO_LEDGER_BLOCKED = 'This dashboard is showing sample data, so nothing can be saved here. Start Segreant without --demo to change your own.';
+
+/** A value as one shell word, so a pasted command keeps names with spaces intact. */
+function shellWord(text: string): string {
+  return /^[A-Za-z0-9._:/@-]+$/.test(text) ? text : JSON.stringify(text);
+}
 
 /** Read a typed dollar amount: null for empty, NaN for anything unusable. */
 function enteredUsd(raw: string): number | null {
@@ -266,6 +275,245 @@ const BUILDERS: Record<string, Builder> = {
           ok: true,
           message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. The running proxy will enforce it for future requests immediately.`,
         };
+      },
+    };
+  },
+
+  /**
+   * Add, rename or archive a cost centre: everything `segreant alloc centre`
+   * does. The Allocate page adds and archives; only here can an existing
+   * centre's name or owner change, because the page derives the id from the
+   * name and so can never reach a centre under a new name.
+   */
+  'alloc-centres': (cap) => {
+    const target = signal('');
+    // Separate from `target`: the regions below re-render only when whether a
+    // centre is chosen changes, never on the choice itself, so a keyboard user
+    // arrowing through the select keeps focus on it.
+    const editing = signal(false);
+    const archive = signal(false);
+    const name = signal('');
+    const owner = signal('');
+    let read: Promise<AllocationPayload> | null = null;
+    const allocation = (): Promise<AllocationPayload> => (read ??= api.allocation());
+    const open = signal<AllocationPayload['costCentres']>([]);
+    void allocation().then((d) => open.set(d.costCentres.filter((c) => c.archivedAtMs == null)), () => undefined);
+    const id = (): string => target() || slug(name());
+    const fill = (inputId: string, value: string): void => {
+      const input = document.getElementById(inputId) as HTMLInputElement | null;
+      if (input) input.value = value;
+    };
+
+    return {
+      capability: cap,
+      command: () => {
+        if (!id()) return null;
+        if (archive()) return `segreant alloc centre ${id()} --archive`;
+        if (!name().trim()) return null;
+        return `segreant alloc centre ${id()} --name ${shellWord(name().trim())}${owner().trim() ? ` --owner ${shellWord(owner().trim())}` : ''}`;
+      },
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'centre-target' }, 'Cost centre'),
+        () => h('select', {
+          id: 'centre-target',
+          class: 'drawer-input',
+          onchange: (event: Event) => {
+            const chosen = (event.target as HTMLSelectElement).value;
+            const centre = open().find((c) => c.costCentreId === chosen);
+            target.set(chosen);
+            if (editing() !== (chosen !== '')) editing.set(chosen !== '');
+            archive.set(false);
+            name.set(centre?.name ?? '');
+            owner.set(centre?.owner ?? '');
+            fill('centre-drawer-name', name());
+            fill('centre-drawer-owner', owner());
+            fill('centre-change', 'save');
+          },
+        },
+          h('option', { value: '', text: 'A new cost centre' }),
+          ...open().map((c) => h('option', { value: c.costCentreId, text: `${c.name} (${c.costCentreId})` }))),
+        () => editing()
+          ? h('div', null,
+              h('label', { class: 'drawer-h3', for: 'centre-change' }, 'Change'),
+              h('select', { id: 'centre-change', class: 'drawer-input', onchange: (event: Event) => archive.set((event.target as HTMLSelectElement).value === 'archive') },
+                h('option', { value: 'save', text: 'Its name or owner' }),
+                h('option', { value: 'archive', text: 'Archive it' })))
+          : null,
+        h('label', { class: 'drawer-h3', for: 'centre-drawer-name' }, 'Name'),
+        h('input', {
+          id: 'centre-drawer-name', class: 'drawer-input', maxlength: '120', autocomplete: 'off', placeholder: 'for example Engineering',
+          oninput: (event: Event) => name.set((event.target as HTMLInputElement).value),
+        }),
+        h('label', { class: 'drawer-h3', for: 'centre-drawer-owner' }, 'Owner (optional)'),
+        h('input', {
+          id: 'centre-drawer-owner', class: 'drawer-input', maxlength: '120', autocomplete: 'off', placeholder: 'who answers for it',
+          'aria-describedby': 'centre-drawer-note',
+          oninput: (event: Event) => owner.set((event.target as HTMLInputElement).value),
+        }),
+        h('p', { id: 'centre-drawer-note', class: 'drawer-note', text: 'Saving replaces the owner, so an empty owner field clears it, as the command does.' })),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await allocation();
+        const key = id();
+        const existing = d.costCentres.find((c) => c.costCentreId === key) ?? null;
+        const now = Date.now();
+        const namedBy = d.rules.filter((r) =>
+          r.revokedAtMs == null
+          && (r.effectiveToMs == null || r.effectiveToMs > now)
+          && !d.rules.some((o) => o.ruleId === r.ruleId && o.version > r.version)
+          && r.targets.some((t) => t.costCentreId === key)).length;
+
+        if (archive()) {
+          return {
+            applicable: !d.demo && existing?.archivedAtMs == null,
+            blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : existing?.archivedAtMs != null ? 'This cost centre is already archived.' : undefined,
+            summary: isPrecise()
+              ? 'Sets archived_at_ms on the centre. Recorded runs keep it; later runs do not allocate to it.'
+              : 'Stops this cost centre receiving spend. Splits already recorded keep it, so they still add up.',
+            rows: [
+              { label: 'Cost centre', value: existing ? existing.name : key, note: key },
+              { label: 'Rules that name it', value: count(namedBy), note: namedBy > 0 ? 'revise them on the Allocate page, or their share has nowhere to go' : undefined },
+              { label: 'Reversible', value: 'not from here', note: 'an archived centre stays archived; saving it again only changes its name' },
+            ],
+          };
+        }
+
+        const typed = name().trim();
+        const blockedReason = d.demo
+          ? DEMO_LEDGER_BLOCKED
+          : !key
+            ? 'Give the cost centre a name with at least one letter or number.'
+            : !typed
+              ? 'A cost centre needs a name.'
+              : existing && existing.name === typed && (existing.owner ?? '') === owner().trim()
+                ? 'Nothing would change yet: the name and owner are already these.'
+                : undefined;
+        const unchanged = existing !== null && existing.name === typed && (existing.owner ?? '') === owner().trim();
+        const effect = !existing
+          ? 'adds a new cost centre'
+          : unchanged
+            ? 'none yet; edit the name or owner'
+            : existing.archivedAtMs != null
+            ? 'renames an archived centre; it stays archived and still receives no spend'
+            : 'changes its name or owner';
+        return {
+          applicable: blockedReason === undefined,
+          blockedReason,
+          summary: isPrecise()
+            ? 'Upserts one cost_centres row by id. Recorded runs keep the figures they were computed with.'
+            : 'Saves this cost centre on this machine. Splits already recorded are not changed.',
+          rows: [
+            { label: 'Saved as', value: key || '—', note: target() ? 'the id stays the same' : 'derived from the name' },
+            { label: 'Effect', value: effect },
+            ...(existing ? [{ label: 'Now', value: existing.name, note: existing.owner ? `owner ${existing.owner}` : 'no owner' }] : []),
+            { label: 'Rules that name it', value: count(namedBy) },
+          ],
+        };
+      },
+
+      commit: async () => {
+        const key = id();
+        const result = archive()
+          ? await api.write.allocation({ op: 'archive', id: key })
+          : await api.write.allocation({ op: 'centre', id: key, name: name().trim(), ...(owner().trim() ? { owner: owner().trim() } : {}) });
+        read = null;
+        return { ok: result.ok, message: result.message ?? 'Saved.' };
+      },
+    };
+  },
+
+  /**
+   * Declare or clear the OpenAI organisation and project: `segreant billing
+   * scope set` and `clear`. The preview is the server's own dry run, so what
+   * the drawer shows is what the declaration would be, not a client guess.
+   */
+  'billing-scope': (cap) => {
+    const clear = signal(false);
+    const account = signal('');
+    const project = signal('');
+    let read: Promise<BillingPayload> | null = null;
+    const billing = (): Promise<BillingPayload> => (read ??= api.billing());
+
+    return {
+      capability: cap,
+      command: () => clear()
+        ? 'segreant billing scope clear --apply'
+        : account().trim()
+          ? `segreant billing scope set --account-ref ${shellWord(account().trim())}${project().trim() ? ` --project-ref ${shellWord(project().trim())}` : ''} --apply`
+          : null,
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'scope-change' }, 'Change'),
+        h('select', { id: 'scope-change', class: 'drawer-input', onchange: (event: Event) => clear.set((event.target as HTMLSelectElement).value === 'clear') },
+          h('option', { value: 'set', text: 'Declare an organisation and project', selected: true }),
+          h('option', { value: 'clear', text: 'Clear the declaration' })),
+        () => clear()
+          ? null
+          : h('div', null,
+              h('label', { class: 'drawer-h3', for: 'scope-drawer-account' }, 'Organisation id'),
+              h('input', {
+                id: 'scope-drawer-account', class: 'drawer-input', maxlength: '200', autocomplete: 'off', spellcheck: 'false', placeholder: 'org_…',
+                oninput: (event: Event) => account.set((event.target as HTMLInputElement).value),
+              }),
+              h('label', { class: 'drawer-h3', for: 'scope-drawer-project' }, 'Project id (optional)'),
+              h('input', {
+                id: 'scope-drawer-project', class: 'drawer-input', maxlength: '200', autocomplete: 'off', spellcheck: 'false', placeholder: 'proj_…',
+                'aria-describedby': 'scope-drawer-note',
+                oninput: (event: Event) => project.set((event.target as HTMLInputElement).value),
+              }),
+              h('p', { id: 'scope-drawer-note', class: 'drawer-note', text: 'These are ids, not keys. Segreant never asks for an OpenAI key here.' }))),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await billing();
+        const active = d.activeScope;
+        const current = active
+          ? { label: 'Declared now', value: active.providerProjectRef ? `${active.billingAccountRef} / ${active.providerProjectRef}` : active.billingAccountRef, note: `to ${active.upstreamDisplay}` }
+          : { label: 'Declared now', value: 'nothing' };
+
+        if (clear()) {
+          const r = await api.write.billing({ op: 'scope-clear' });
+          return {
+            applicable: !d.demo && active != null,
+            blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : active == null ? 'No project is declared, so there is nothing to clear.' : undefined,
+            summary: r.message ?? 'Clearing stops matching future OpenAI requests to this project.',
+            rows: [current, { label: 'Already recorded', value: 'unchanged', note: 'requests and recorded comparisons keep their figures' }],
+          };
+        }
+
+        const ref = account().trim();
+        if (!ref) {
+          return {
+            applicable: false,
+            blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : 'Enter the organisation id to see the declaration.',
+            summary: 'Names the OpenAI organisation, and optionally the project, that requests through Segreant go to from now on.',
+            rows: [current],
+          };
+        }
+        const r = await api.write.billing({ op: 'scope', accountRef: ref, ...(project().trim() ? { projectRef: project().trim() } : {}) });
+        const p = r.scopePreview ?? {};
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary: isPrecise()
+            ? 'Writes an operator_declared_unverified scope. Only future OpenAI proxy rows to the exact configured endpoint are captured.'
+            : 'Your declaration, not checked with OpenAI. It applies to OpenAI requests that go through Segreant from now on.',
+          rows: [
+            current,
+            { label: 'Will declare', value: project().trim() ? `${ref} / ${project().trim()}` : ref, note: typeof p['upstreamDisplay'] === 'string' ? `to ${p['upstreamDisplay']}` : undefined },
+            { label: 'Past and imported spend', value: 'unchanged', note: 'it cannot be matched to the bill' },
+          ],
+          notes: ['Declaring replaces any earlier declaration for future traffic.'],
+        };
+      },
+
+      commit: async () => {
+        const result = clear()
+          ? await api.write.billing({ op: 'scope-clear', apply: true })
+          : await api.write.billing({ op: 'scope', accountRef: account().trim(), ...(project().trim() ? { projectRef: project().trim() } : {}), apply: true });
+        read = null;
+        const plain = clear()
+          ? 'Cleared. Future OpenAI requests through Segreant are no longer matched to a project. Past spend and recorded comparisons are unchanged.'
+          : 'Declared for future OpenAI requests through Segreant. Past and imported spend is unchanged, and OpenAI has not checked this declaration.';
+        return { ok: result.ok, message: isPrecise() ? result.message ?? plain : plain };
       },
     };
   },

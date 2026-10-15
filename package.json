@@ -34,7 +34,7 @@
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "benchmark:contribution": "node --disable-warning=ExperimentalWarning scripts/contribution-benchmark.mjs",
     "proxy-load": "node --disable-warning=ExperimentalWarning scripts/proxy-load.mjs",
-    "test:browser": "npm run build && node --test --test-force-exit test/dashboard-runtime-accessibility.browser.mjs test/dashboard-outage-stale.browser.mjs test/dashboard-jobs.browser.mjs test/dashboard-basis-copy.browser.mjs test/dashboard-statement-evidence.browser.mjs test/dashboard-workflow-focus.browser.mjs test/dashboard-sentinels.browser.mjs test/dashboard-theme.browser.mjs test/dashboard-classic-errors.browser.mjs test/dashboard-long-content.browser.mjs test/dashboard-allocation-rules.browser.mjs test/dashboard-announcements.browser.mjs test/dashboard-view-prefs.browser.mjs",
+    "test:browser": "npm run build && node --test --test-force-exit test/dashboard-runtime-accessibility.browser.mjs test/dashboard-outage-stale.browser.mjs test/dashboard-jobs.browser.mjs test/dashboard-basis-copy.browser.mjs test/dashboard-statement-evidence.browser.mjs test/dashboard-workflow-focus.browser.mjs test/dashboard-sentinels.browser.mjs test/dashboard-theme.browser.mjs test/dashboard-classic-errors.browser.mjs test/dashboard-long-content.browser.mjs test/dashboard-allocation-rules.browser.mjs test/dashboard-announcements.browser.mjs test/dashboard-view-prefs.browser.mjs test/dashboard-drawer-runners.browser.mjs",
     "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/segreant.mjs demo --serve",
     "prepack": "npm run build",

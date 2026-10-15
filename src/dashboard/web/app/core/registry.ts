@@ -153,8 +153,8 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'segreant project --coverage' },
   { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'planned', command: 'segreant project alias' },
   {
-    id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc centre',
-    guiEvidence: { file: 'views/allocation.ts', token: "op: 'centre'", note: 'Allocate step 1 lists, adds and archives cost centres through /api/allocation/write' },
+    id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'segreant alloc centre',
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'centre'", note: 'Allocate step 1 lists, adds and archives cost centres; the drawer also renames one or changes its owner, as alloc centre <id> --name does, with a preview first' },
   },
   {
     id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc rule',
@@ -167,8 +167,8 @@ export const CAPABILITIES: readonly Capability[] = [
 
   // ---- Evidence -----------------------------------------------------------
   {
-    id: 'billing-scope', label: 'Declare a provider scope', plain: 'Declare the OpenAI organisation and project your proxied traffic goes to from now on. Your declaration, not verified by the provider.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'segreant billing scope set',
-    guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 names the declaration, previews and declares, and clears it with a preview first; no drawer runner yet' },
+    id: 'billing-scope', label: 'Declare a provider scope', plain: 'Declare the OpenAI organisation and project your proxied traffic goes to from now on. Your declaration, not verified by the provider.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'segreant billing scope set',
+    guiEvidence: { file: 'views/evidence.ts', token: "op: 'scope'", note: 'Close step 1 names the declaration, previews and declares, and clears it with a preview first; the drawer does the same with the project optional, as the command allows' },
   },
   {
     id: 'billing-readiness', label: 'Reconciliation readiness', plain: 'Whether a provider check would actually match anything.', territory: 'evidence', consequence: 'read', coverage: 'full', command: 'segreant billing reconcile',
