@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A screen reader is told where it is and what happened.** Running NVDA 2026.2 over the accessibility script found three defects:
+  - **Lost focus after the welcome screen:** after the first-run choice, focus fell to the bottom of the page structure, so NVDA started again from the top. It now lands on the chosen page's heading.
+  - **Unannounced messages:** each job's status line was hidden until it had a message, and a live region that appears already holding its text is usually not announced. "Saved", the Close check result and every refusal were shown but never spoken. The status line now stays in place, empty and invisible, until it has something to say.
+  - **Raw month key read aloud:** while a month loaded, its label briefly read the raw key ("2026-09") before the name. It now reads the name once.
+  - `test/dashboard-announcements.browser.mjs` pins all three.
+
 - **The first screen uses the same words as the rest.** The two choices on the welcome screen showed sample figures in retired wording: "$59.16 · measured from metered requests" and "$59.163468 · local_list_price". They now read "$59.16 list cost (estimate)" and "$59.163468 list cost (estimate)", the guide's words. A screen reader reads these samples as part of each choice, so they were the first words a new user heard.
 
 - **The dashboard talks like a person.**

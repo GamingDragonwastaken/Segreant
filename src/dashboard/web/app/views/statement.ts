@@ -58,6 +58,12 @@ export function statementView(): Node {
   });
 
   const thisMonth = monthKey(new Date());
+  // While a month loads, the live label says its name, never the raw key: NVDA
+  // read "2026-09" and then "September 2026" (2026-10-15).
+  const monthName = (key: string): string => {
+    const [y, m] = key.split('-').map(Number);
+    return new Date(y!, (m ?? 1) - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  };
   return h('div', null,
     h('div', { class: 'view-head' },
       h('h1', { class: 'view-title', text: 'Statement' }),
@@ -67,7 +73,7 @@ export function statementView(): Node {
 
     h('div', { class: 'month-bar', role: 'group', 'aria-label': 'Month' },
       h('button', { class: 'btn-ghost', type: 'button', 'aria-label': 'Previous month', text: '‹', onclick: () => month.set(shiftMonth(month(), -1)) }),
-      h('span', { class: 'month-label', 'aria-live': 'polite', text: () => data()?.period.label ?? month() }),
+      h('span', { class: 'month-label', 'aria-live': 'polite', text: () => data()?.period.label ?? monthName(month()) }),
       h('button', { class: 'btn-ghost', type: 'button', 'aria-label': 'Next month', text: '›',
         disabled: () => month() >= thisMonth, onclick: () => month.set(shiftMonth(month(), 1)) }),
       h('span', { class: 'month-state', text: () => {
