@@ -15,6 +15,7 @@ import { isPrecise, usd, usdFromMicros, share, count, basisWords } from './fmt.t
 import { residualBoundWords, dayRange } from './reconcileWords.ts';
 import { localMidnightIso, dayAfterIso, monthRange, REASON_WORDS } from './periods.ts';
 import { slug } from './slug.ts';
+import { ruleFields, describeRule, type RuleDraft } from '../components/ruleFields.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
@@ -428,6 +429,135 @@ const BUILDERS: Record<string, Builder> = {
           : await api.write.allocation({ op: 'centre', id: key, name: name().trim(), ...(owner().trim() ? { owner: owner().trim() } : {}) });
         read = null;
         return { ok: result.ok, message: result.message ?? 'Saved.' };
+      },
+    };
+  },
+
+  /**
+   * Allocation rules: `segreant alloc rule` and `segreant alloc revoke`. The
+   * fields are the Allocate page's own (components/ruleFields.ts), so a rule
+   * written here is the rule written there; the preview says what it takes,
+   * where it sends it, and whether it replaces a current version.
+   */
+  'alloc-rules': (cap) => {
+    const revoking = signal(false);
+    const revokeId = signal('');
+    type Ready = { d: AllocationPayload; fields: ReturnType<typeof ruleFields> };
+    const ready = signal<Ready | null>(null);
+    let read: Promise<Ready> | null = null;
+    const load = (): Promise<Ready> => (read ??= Promise.all([api.allocation(), api.overview('all').catch(() => null)]).then(([d, o]) => {
+      const open = d.costCentres.filter((c) => c.archivedAtMs == null);
+      const projects = o ? o.byProject.map((p) => p.label).filter((l) => l && l !== '(unattributed)') : [];
+      const models = o ? [...new Set(o.byModel.map((m) => m.label).filter(Boolean))] : [];
+      const r = { d, fields: ruleFields(open, () => projects, () => models, 'rule-drawer') };
+      ready.set(r);
+      return r;
+    }));
+    void load();
+    const nameOf = (d: AllocationPayload) => (id: string): string => d.costCentres.find((c) => c.costCentreId === id)?.name ?? id;
+    const current = (d: AllocationPayload): AllocationPayload['rules'] => d.rules.filter((r) =>
+      r.revokedAtMs == null && !d.rules.some((o) => o.ruleId === r.ruleId && o.version > r.version));
+    const draft = (): RuleDraft | string | null => {
+      const r = ready();
+      return r ? r.fields.build() : null;
+    };
+
+    return {
+      capability: cap,
+      command: () => {
+        if (revoking()) return revokeId() ? `segreant alloc revoke ${revokeId()}` : null;
+        const x = draft();
+        if (!x || typeof x === 'string') return null;
+        const centre = x.rule.targets.map((t) => (x.rule.method === 'fixed_split' ? `${t.costCentreId}:${t.ratio}` : t.costCentreId)).join(',');
+        const match = Object.entries(x.rule.match).map(([k, v]) => ` --match-${k} ${shellWord(String(v))}`).join('');
+        const body = x.body as { from?: string; until?: string };
+        return `segreant alloc rule ${x.id} --method ${x.rule.method} --centre ${centre}${match}`
+          + (x.priority === null ? '' : ` --priority ${x.priority}`)
+          + (body.from ? ` --from ${body.from}` : '')
+          + (body.until ? ` --until ${body.until}` : '')
+          + (x.owner ? ` --owner ${shellWord(x.owner)}` : '')
+          + (x.note ? ` --note ${shellWord(x.note)}` : '');
+      },
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'rule-drawer-change' }, 'Change'),
+        h('select', { id: 'rule-drawer-change', class: 'drawer-input', onchange: (event: Event) => revoking.set((event.target as HTMLSelectElement).value === 'revoke') },
+          h('option', { value: 'save', text: 'Add a rule, or a new version of one' }),
+          h('option', { value: 'revoke', text: 'Revoke a rule' })),
+        // Each region reads only whether its data has arrived or the choice
+        // above, so typing in a field never rebuilds the field.
+        () => {
+          if (!revoking()) return null;
+          const r = ready();
+          if (!r) return h('p', { class: 'drawer-muted', text: 'Reading your rules…' });
+          return h('div', null,
+            h('label', { class: 'drawer-h3', for: 'rule-drawer-revoke' }, 'Rule'),
+            h('select', { id: 'rule-drawer-revoke', class: 'drawer-input', onchange: (event: Event) => revokeId.set((event.target as HTMLSelectElement).value) },
+              h('option', { value: '', text: 'Choose a rule' }),
+              ...current(r.d).map((rule) => h('option', { value: rule.ruleId, text: `${describeRule(rule, nameOf(r.d))} (${rule.ruleId})` }))));
+        },
+        () => {
+          if (revoking()) return null;
+          const r = ready();
+          if (!r) return h('p', { class: 'drawer-muted', text: 'Reading your cost centres…' });
+          // A form with nowhere to send spend only fails at Apply; say so first.
+          if (!r.d.costCentres.some((c) => c.archivedAtMs == null)) {
+            return h('p', { class: 'drawer-note', text: 'Add a cost centre first: a rule needs somewhere to send spend. Open "Cost centres" on this map, or use step 1 of Allocate.' });
+          }
+          return h('div', { class: 'rule-drawer-fields' }, ...r.fields.children);
+        }),
+
+      preview: async (): Promise<PreviewResult> => {
+        const { d } = await load();
+        const names = nameOf(d);
+        const live = current(d);
+        if (revoking()) {
+          const rule = live.find((r) => r.ruleId === revokeId());
+          if (!rule) return { applicable: false, blockedReason: live.length === 0 ? 'There are no current rules to revoke.' : 'Choose a rule to revoke.', summary: 'Stops a rule claiming spend from now on.' };
+          return {
+            applicable: !d.demo,
+            blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+            summary: isPrecise()
+              ? 'Sets revoked_at_ms on every version of the rule. Recorded runs keep the splits computed under it.'
+              : 'Stops this rule claiming spend. Splits already recorded keep their results, and the rule stays listed as revoked.',
+            rows: [
+              { label: 'Rule', value: describeRule(rule, names), note: `${rule.ruleId} v${rule.version}` },
+              { label: 'Its spend goes to', value: 'the next rule that matches, or unallocated' },
+              { label: 'Reversible', value: 'not as such', note: 'saving the same rule again starts a new version' },
+            ],
+          };
+        }
+        const x = draft();
+        if (x === null) return { applicable: false, blockedReason: 'Reading your cost centres…', summary: 'Decides which cost centre carries which spend.' };
+        if (typeof x === 'string') return { applicable: false, blockedReason: x, summary: 'Decides which cost centre carries which spend.' };
+        const existing = live.find((r) => r.ruleId === x.id) ?? null;
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary: isPrecise()
+            ? 'Saves an allocation_rules version. Recorded runs are unchanged; new previews use effective dates.'
+            : 'Saves this rule on this machine. Splits already recorded are not changed; the next preview uses it.',
+          rows: [
+            { label: 'The rule', value: describeRule(x.rule, names) },
+            { label: 'Saved as', value: x.id, note: existing ? `version ${existing.version + 1}; version ${existing.version} is kept and closed when this one starts` : 'a new rule' },
+            { label: 'Checked in order', value: x.priority === null ? '100' : String(x.priority), note: 'lowest number first; the first rule that matches takes the request' },
+            { label: 'Applies', value: x.from || x.until ? `${x.from ? `from ${x.from}` : 'from the start'}${x.until ? ` until ${x.until}` : ''}` : 'to all of your history' },
+            ...(x.owner ? [{ label: 'Owner', value: x.owner }] : []),
+            ...(x.note ? [{ label: 'Note', value: x.note }] : []),
+          ],
+        };
+      },
+
+      commit: async () => {
+        if (revoking()) {
+          const r = await api.write.allocation({ op: 'revoke', id: revokeId() });
+          read = null; void load();
+          return { ok: r.ok, message: r.message };
+        }
+        const x = draft();
+        if (!x || typeof x === 'string') return { ok: false, message: typeof x === 'string' ? x : 'Nothing to save yet.' };
+        const r = await api.write.allocation(x.body);
+        read = null;
+        return { ok: r.ok, message: isPrecise() ? r.message : 'Rule saved. Splits already recorded keep their results; the next preview uses this rule.' };
       },
     };
   },
