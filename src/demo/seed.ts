@@ -475,6 +475,9 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     costPerHundredLines: spec.linesAdded > 0 ? (spec.costUsd / spec.linesAdded) * 100 : null,
     ageDays: spec.daysAgo,
     maturing: arch.maturing,
+    // The sample is synthesised with the default window; saying so keeps it
+    // from reading as an old measurement that never recorded its own.
+    checkWindowDays: 14,
     survivalRatio: arch.survival,
     reverted: arch.verdicts.clean === 'fail',
     hadProposal: spec.acceptance !== null,
