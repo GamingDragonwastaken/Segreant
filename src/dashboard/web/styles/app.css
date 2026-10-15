@@ -1132,4 +1132,11 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
    two per line. Status tags stay on one line. */
 .parity-table td:first-child { width: 44%; min-width: 260px; }
 .parity-table .tag { white-space: nowrap; }
+/* Opens the capability's drawer. An action, so it takes the action colour, not
+   the muted link-btn grey (whose coral hover means "archive"), and a 24px target. */
+.parity-table .parity-open {
+  display: inline-flex; align-items: center; min-height: 24px; margin-top: var(--s1);
+  color: var(--accent-text);
+}
+.parity-table .parity-open:hover, .parity-table .parity-open:focus-visible { color: var(--text); }
 .parity-table td:last-child code { white-space: nowrap; }

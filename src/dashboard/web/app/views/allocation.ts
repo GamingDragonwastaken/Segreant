@@ -17,6 +17,7 @@
  */
 
 import { h } from '../core/dom.ts';
+import { slug } from '../core/slug.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload, type AllocationRunResultPayload, type AllocationRule, type CostCentre } from '../core/api.ts';
 import { isPrecise, relative, count, usdFromMicros, date, share as shareOf } from '../core/fmt.ts';
@@ -42,10 +43,6 @@ const METHOD_WORDS: Record<AllocationRule['method'], { plain: string; precise: s
   proportional_to_direct: { plain: 'shared, split like the direct spend', precise: 'proportional_to_direct' },
 };
 
-/** The engine's id format (src/alloc/rules.ts), derived from a typed name. */
-function slug(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').replace(/-+$/, '').slice(0, 64);
-}
 
 
 /** A `yyyy-mm-dd` date input as the local midnight it names, in ISO form. */
