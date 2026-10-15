@@ -18,6 +18,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **The four figures update after a drawer saves,** as they already did after a page save.
   - **Switching a drawer between modes no longer hides typed values.** The fields show exactly what Apply will send.
 
+- **A privacy statement, one click from every page.**
+  - **Where:** the footer now links to Privacy, a page the dashboard serves from this machine. It says in plain words what Segreant keeps, what leaves and only when you turn it on, how long records are kept, and how to delete them.
+  - **The same words everywhere:** `docs/PRIVACY.md` carries identical text for the npm page and the site, and a test fails if the two ever differ.
+
 - **Cost centres and the provider scope are finished in the dashboard.** Both now read "in the GUI" on the parity map, which earned it rather than being relabelled:
   - **Cost centres:** a drawer adds, renames, changes the owner of, or archives a cost centre: everything `segreant alloc centre` does. Renaming was impossible before, because the Allocate page derives the id from the name. The preview names any rule that still points at a centre you are about to archive, and says when a name belongs to an archived centre, which saving would rename but not reopen.
   - **Provider scope:** a drawer declares or clears the OpenAI organisation and project, with the project optional, as on the command line. Its preview is the server's own dry run.
