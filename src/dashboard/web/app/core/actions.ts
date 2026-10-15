@@ -11,7 +11,8 @@
 import { api, type AllocationPayload, type BillingPayload } from './api.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
-import { isPrecise, usd, usdFromMicros, share, count } from './fmt.ts';
+import { isPrecise, usd, usdFromMicros, share, count, basisWords } from './fmt.ts';
+import { residualBoundWords, dayRange } from './reconcileWords.ts';
 import { localMidnightIso, dayAfterIso, monthRange, REASON_WORDS } from './periods.ts';
 import { slug } from './slug.ts';
 import type { Capability } from './registry.ts';
@@ -521,6 +522,175 @@ const BUILDERS: Record<string, Builder> = {
           message: isPrecise() && r.allocationRunId
             ? `Recorded allocation run ${r.allocationRunId}.`
             : 'Recorded. The split is saved and listed under Saved splits on the Allocate page.',
+        };
+      },
+    };
+  },
+
+  /**
+   * Adopt an imported export as the provider side: `segreant billing
+   * openai-costs adopt --import-id <id> [--apply]`. No credential, no network;
+   * the preview is the server's adoption plan, refusals included.
+   */
+  'billing-adopt': (cap) => {
+    const chosen = signal('');
+    let read: Promise<BillingPayload> | null = null;
+    const billing = (): Promise<BillingPayload> => (read ??= api.billing());
+
+    return {
+      capability: cap,
+      command: () => (chosen() ? `segreant billing openai-costs adopt --import-id ${chosen()} --apply` : null),
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'adopt-drawer-import' }, 'Imported cost export'),
+        h('select', { id: 'adopt-drawer-import', class: 'drawer-input', onchange: (event: Event) => chosen.set((event.target as HTMLSelectElement).value) },
+          // Built once; the imports are appended when they arrive, so a reader
+          // already on the select keeps focus and their place.
+          (() => {
+            const placeholder = h('option', { value: '', text: 'Choose an export' });
+            void billing().then((d) => {
+              placeholder.after(...d.imports.map((imp) => h('option', {
+                value: imp.importId,
+                text: `${imp.fileName} · ${dayRange(imp.periodStartMs, imp.periodEndMs)}${imp.inUse ? ' · in use' : ''}`,
+              })));
+            }, () => undefined);
+            return placeholder;
+          })())),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await billing();
+        const summary = isPrecise()
+          ? 'Adopts an imported operator export as an operator_supplied observation for the declared scope. No credential is read and no request is made.'
+          : 'Uses a cost export you already imported as the provider side of the comparison. Nothing is fetched and no key is used.';
+        if (!d.activeScope) return { applicable: false, blockedReason: 'Declare the OpenAI organisation and project first, so the export’s lines can be matched to it.', summary };
+        if (d.imports.length === 0) return { applicable: false, blockedReason: 'No cost export has been imported yet. Import one on the Close page first.', summary };
+        if (!chosen()) return { applicable: false, blockedReason: 'Choose an export to see what would be used.', summary };
+        const p = (await api.write.billing({ op: 'adopt', importId: chosen() })).plan;
+        if (!p) return { applicable: false, blockedReason: 'The server returned no plan for this export.', summary };
+        if (!p.adoptable) return { applicable: false, blockedReason: p.detail ?? (p.refusal ? p.refusal.replace(/_/g, ' ') : 'This export cannot be used.'), summary };
+        const left = p.excluded && p.excluded.otherOrNoProjectRecordCount > 0
+          ? { value: `${count(p.excluded.otherOrNoProjectRecordCount)} lines, ${usdFromMicros(p.excluded.otherOrNoProjectMicros)}`, note: 'no project, or another one' }
+          : { value: 'none' };
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary,
+          rows: [
+            { label: 'Matched to your project', value: `${count(p.matchedRecordCount)} lines, ${usdFromMicros(p.matchedMicros)}`, note: p.providerProjectRef },
+            { label: 'Left out', ...left },
+            { label: 'Days', value: dayRange(p.periodStartMs, p.periodEndMs) },
+            { label: 'Evidence class', value: 'supplied by you', note: 'not read from the provider; every comparison built on it says so' },
+          ],
+        };
+      },
+
+      commit: async () => {
+        const r = await api.write.billing({ op: 'adopt', importId: chosen(), apply: true });
+        read = null;
+        return {
+          ok: r.ok,
+          message: isPrecise() && r.observationRunId
+            ? `Adopted as observation ${r.observationRunId}.`
+            : 'Recorded as the provider side for these days. You can now compare on the Close page or in the Reconcile drawer.',
+        };
+      },
+    };
+  },
+
+  /**
+   * Reconcile: `segreant billing reconcile [--materiality <usd>] [--apply]`.
+   * Readiness is checked first and its missing steps named; the comparison
+   * previewed is the server's own, under the threshold Apply records with.
+   */
+  'billing-reconcile': (cap) => {
+    const materiality = signal('');
+    let read: Promise<BillingPayload> | null = null;
+    const billing = (): Promise<BillingPayload> => (read ??= api.billing());
+    /** Blank is the server's default; NaN is a value nobody can record under. */
+    const threshold = (): number | undefined => {
+      const raw = materiality().trim();
+      if (raw === '') return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : Number.NaN;
+    };
+
+    return {
+      capability: cap,
+      command: () => {
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) return null;
+        return `segreant billing reconcile${m === undefined ? '' : ` --materiality ${m}`} --apply`;
+      },
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'reconcile-drawer-materiality' }, 'Ignore daily differences up to ($)'),
+        h('input', {
+          id: 'reconcile-drawer-materiality', class: 'drawer-input', type: 'number', min: '0', step: '0.01', inputmode: 'decimal', placeholder: '0.50',
+          'aria-describedby': 'reconcile-drawer-note',
+          oninput: (event: Event) => materiality.set((event.target as HTMLInputElement).value),
+        }),
+        h('p', { id: 'reconcile-drawer-note', class: 'drawer-note', text: 'A day counts as different only when the bill and our measurement differ by more than this. Blank uses $0.50.' })),
+
+      preview: async (): Promise<PreviewResult> => {
+        const d = await billing();
+        if (d.readiness && !d.readiness.ready) {
+          return {
+            applicable: false,
+            blockedReason: 'Not ready to compare yet. The preview lists the steps still to do.',
+            summary: 'Compares what Segreant measured with what the provider billed, day by day, for the declared project.',
+            rows: d.readiness.missing
+              .filter((m) => !m.step.startsWith('observe a closed period — route A'))
+              .map((m) => {
+                // The server's detail is the terminal spelling. In plain words,
+                // point at where the dashboard does the same step.
+                const where = /scope/.test(m.step)
+                  ? 'Close step 1, or "Declare a provider scope" on this map'
+                  : /adopt|import/.test(m.step)
+                    ? 'Close step 2, or "Adopt a provider export" on this map'
+                    : m.detail;
+                return { label: 'Still to do', value: m.step.replace(/^observe a closed period — route B, /, ''), note: isPrecise() ? m.detail : where };
+              }),
+          };
+        }
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) {
+          return { applicable: false, blockedReason: 'That is not a usable amount. Enter dollars, or leave it blank for $0.50.', summary: 'Compares what Segreant measured with what the provider billed.' };
+        }
+        const r = (await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }) })).result;
+        if (!r) return { applicable: false, blockedReason: 'The server returned no comparison.', summary: 'Compares what Segreant measured with what the provider billed.' };
+        const residual = r.unexplainedVarianceMicros;
+        const contradicted = r.snapshotStability === 'changed_across_observations';
+        return {
+          applicable: !d.demo,
+          blockedReason: d.demo ? DEMO_LEDGER_BLOCKED : undefined,
+          summary: isPrecise()
+            ? 'Previews billing reconcile for the declared scope. Apply appends a reconciliation run; the Billed claim then rests on it.'
+            : 'This is how the provider’s bill compares with what Segreant measured. Recording it saves the comparison as evidence.',
+          rows: [
+            { label: 'Period', value: dayRange(r.periodStartMs, r.periodEndMs) },
+            { label: 'Billed by the provider', value: usdFromMicros(r.providerReportedMicros) },
+            { label: 'Measured by Segreant', value: usdFromMicros(r.localCapturedMicros), note: 'list cost (estimate)' },
+            { label: 'Not explained', value: usdFromMicros(residual), note: r.providerReportedMicros > 0 ? `${share(residual / r.providerReportedMicros, 1)} of the bill` : undefined },
+            { label: 'Days compared', value: `${count(r.coverage.daysWithBoth)} with both`, note: `${count(r.coverage.providerOnlyDays)} bill only · ${count(r.coverage.localOnlyDays)} ours only` },
+            { label: 'Days that differ', value: count(r.coverage.materialDays), note: `by more than ${usd(r.materialityUsd)}` },
+            { label: 'Provider side', value: basisWords(r.providerSourceKind) },
+          ],
+          notes: [
+            residualBoundWords(r.offPathBound, isPrecise()),
+            ...(contradicted ? ['The provider reported different figures for the same days at different times. This comparison would be contradicted.'] : []),
+            ...r.conditions.map((c) => c.replace(/_/g, ' ')),
+          ],
+        };
+      },
+
+      commit: async () => {
+        const m = threshold();
+        if (m !== undefined && Number.isNaN(m)) return { ok: false, message: 'That is not a usable amount, so nothing was recorded.' };
+        const r = await api.write.billing({ op: 'reconcile', ...(m === undefined ? {} : { materialityUsd: m }), apply: true });
+        read = null;
+        return {
+          ok: r.ok,
+          message: isPrecise() && r.reconciliationRunId
+            ? `Recorded reconciliation run ${r.reconciliationRunId}.`
+            : 'Recorded. The comparison is saved, and the Billed figure on the Close page now rests on it.',
         };
       },
     };

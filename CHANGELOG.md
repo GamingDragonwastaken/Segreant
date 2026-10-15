@@ -15,6 +15,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **Cost centres:** a drawer adds, renames, changes the owner of, or archives a cost centre: everything `segreant alloc centre` does. Renaming was impossible before, because the Allocate page derives the id from the name. The preview names any rule that still points at a centre you are about to archive, and says when a name belongs to an archived centre, which saving would rename but not reopen.
   - **Provider scope:** a drawer declares or clears the OpenAI organisation and project, with the project optional, as on the command line. Its preview is the server's own dry run.
   - **Open from the map:** any row on the parity map the dashboard can run now has an Open button, so the map shows what can be done and opens it.
+- **Running an allocation, adopting a cost export and reconciling also finish in drawers.** Each is opened from the parity map and now reads "in the GUI":
+  - **Run an allocation:** last month, this month or any chosen days. The preview is the split itself, centre by centre, with what stayed unallocated and why. A split that does not add up to the spend it divides is refused.
+  - **Adopt a provider export:** choose any imported export. The preview is the server's adoption plan: what matches your project, what is left out, and any refusal.
+  - **Reconcile:** if the comparison is not ready, the drawer lists the steps still to do. Otherwise it previews the comparison with your daily threshold and records it under that same threshold.
+  - **One wording:** the drawers and the Allocate and Close pages share their period and comparison wording, so a split or a comparison reads the same in both places.
 - **Apply works on the first click.** In every drawer, typing a value and then clicking Apply did nothing the first time. Leaving the field re-ran the preview and disabled Apply under the pointer. Apply also used to drop keyboard focus to the page body after saving; it now hands focus to Close, and the result is announced as before.
 
 - **The Statement now says what each month produced.**
