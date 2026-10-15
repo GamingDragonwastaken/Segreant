@@ -16,6 +16,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **Unannounced messages:** each job's status line was hidden until it had a message, and a live region that appears already holding its text is usually not announced. "Saved", the Close check result and every refusal were shown but never spoken. The status line now stays in place, empty and invisible, until it has something to say.
   - **Raw month key read aloud:** while a month loaded, its label briefly read the raw key ("2026-09") before the name. It now reads the name once.
   - `test/dashboard-announcements.browser.mjs` pins all three.
+
 - **Orange for what you act on; gold where it means something.**
   - **Ember orange:** buttons, the current job, selected figures, focus rings, links and next steps now use an ember orange (`--accent`, #f0883e on dark, #b04a14 on light). It sits beside the griffin's gold as one warm family.
   - **Gold:** the griffin is unchanged. Gold now marks only the brand and genuine cautions ("partly compared", "no cap set"), so it stands out again.
