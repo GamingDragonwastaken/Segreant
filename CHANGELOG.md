@@ -11,6 +11,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Choose what you see.** Settings has a new "What you see" card:
+  - **Density:** Comfortable or Compact. Compact tightens the spacing scale on every page.
+  - **The four figures:** you can fold the four-figure strip away from the money pages.
+  - **Explanations:** you can hide the short explanation under each page title.
+  - **The top bar:** you choose which of the six jobs it shows. A hidden job still opens from Settings and by its address, and the job you are in always shows.
+  - **Display only:** these choices never change a figure, and they are kept in this browser only, like the theme.
+
 - **A screen reader is told where it is and what happened.** Running NVDA 2026.2 over the accessibility script found three defects:
   - **Lost focus after the welcome screen:** after the first-run choice, focus fell to the bottom of the page structure, so NVDA started again from the top. It now lands on the chosen page's heading.
   - **Unannounced messages:** each job's status line was hidden until it had a message, and a live region that appears already holding its text is usually not announced. "Saved", the Close check result and every refusal were shown but never spoken. The status line now stays in place, empty and invisible, until it has something to say.
