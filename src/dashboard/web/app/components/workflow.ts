@@ -28,8 +28,10 @@ export function pageNotice(): { node: Node; say: Say } {
   };
   const node = h('p', {
     class: () => `form-msg page-notice${notice()?.ok === false ? ' drawer-error' : ''}`,
+    // Always in the accessibility tree, empty when idle. A live region that is
+    // unhidden with its message already inside is usually not announced, so
+    // "saved" was shown but never spoken (NVDA run, 2026-10-15).
     role: 'status', 'aria-live': 'polite',
-    hidden: () => notice() === null,
     text: () => notice()?.text ?? '',
   });
   return { node, say };
