@@ -2,7 +2,7 @@
    Segreant web GUI — the Night Vault system.
 
    Inherited from the incumbent dashboard rather than replaced: dark ledger
-   ground, gold as the single accent, serif display, mono for anything that is a
+   ground, gold for the mark, money and caution, ember for what you act on, serif display, mono for anything that is a
    quantity or an identifier. What changes here is scope — this is a console for
    operating the product, not a page for reading five cards.
 
@@ -41,8 +41,18 @@
   /* Text on a gold fill. Dark in both themes: the light theme's gold is a
      mid-tone, and its paper-coloured --ink on it fell to about 3:1. */
   --on-gold: #14161d;
+  /* Ember is what you act on: buttons, the current job, selection, focus and
+     links. Gold keeps three jobs: the griffin, money, and "look at this".
+     Orange (hue 25) sits beside the griffin's gold (hue 42) as one warm family
+     against the cool ink, without ever repainting the mark. */
+  --accent: #f0883e;
+  --accent-text: #f39a57;
+  --accent-soft: rgba(240, 136, 62, 0.14);
+  --on-accent: #14161d;
   --mint: #63c593;
-  --coral: #e25d4a;
+  /* Waste red moved off orange's hue (8 -> 352) so "not kept" never reads
+     as "press here". */
+  --coral: #f0566a;
   --sky: #7ea6e0;
   --violet: #9ba4d6;
 
@@ -83,8 +93,12 @@
   --gold: #b8842a;
   --gold-text: #846013;
   --gold-soft: rgba(184, 132, 42, 0.12);
+  --accent: #b04a14;
+  --accent-text: #a8440f;
+  --accent-soft: rgba(176, 74, 20, 0.10);
+  --on-accent: #ffffff;
   --mint: #206d4c;
-  --coral: #a83625;
+  --coral: #b3243f;
   --sky: #3f68b0;
   --violet: #5c62a8;
   --shadow: 0 18px 48px rgba(60, 50, 30, 0.14);
@@ -131,7 +145,7 @@ body {
 h1[tabindex='-1']:focus { outline: none; }
 
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -183,10 +197,10 @@ h1[tabindex='-1']:focus { outline: none; }
   transition: color var(--t) var(--ease), background var(--t) var(--ease);
 }
 .op:hover { color: var(--text); background: var(--panel); }
-.op[aria-current='page'] { color: var(--text); background: var(--panel-2); }
+.op[aria-current='page'] { color: var(--text); background: var(--panel-2); box-shadow: inset 0 -2px 0 var(--accent); }
 /* Setup sits apart from the jobs: quieter, and after a hairline. */
 .card-action { margin-left: auto; margin-right: var(--s3); padding: var(--s1) var(--s3); border-radius: var(--r-sm); font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
-.card-action:hover { border-color: var(--gold); }
+.card-action:hover { border-color: var(--accent); }
 .ops-util { margin-left: 0; padding-left: var(--s3); border-left: 1px solid var(--line-soft); }
 .op-util { color: var(--faint); font-size: 13.5px; }
 
@@ -196,7 +210,7 @@ h1[tabindex='-1']:focus { outline: none; }
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 5px 10px; border-radius: 6px; transition: all var(--t) var(--ease);
 }
-.register-switch button[aria-pressed='true'] { background: var(--panel-2); color: var(--gold-text); }
+.register-switch button[aria-pressed='true'] { background: var(--panel-2); color: var(--accent-text); }
 
 .sheet { max-width: 1180px; margin: 0 auto; padding: 0 var(--s8); width: 100%; }
 
@@ -249,13 +263,13 @@ h1[tabindex='-1']:focus { outline: none; }
   color: var(--faint); cursor: pointer;
   transition: color var(--t) var(--ease), border-color var(--t) var(--ease);
 }
-.band-inspect:hover { color: var(--gold-text); border-bottom-color: var(--gold-text); }
-.band-active { border-top-color: var(--gold); background: var(--panel); }
+.band-inspect:hover { color: var(--accent-text); border-bottom-color: var(--accent-text); }
+.band-active { border-top-color: var(--accent); background: var(--panel); }
 
 /* An unestablished layer is drawn as an open socket, not a filled card. The
    dashed top edge is the visual half of the same statement its words make. */
 .band-open { border-top-style: dashed; border-top-color: var(--line); }
-.band-open.band-active { border-top-color: var(--gold-text); }
+.band-open.band-active { border-top-color: var(--accent-text); }
 
 .band-label {
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
@@ -272,7 +286,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .band-period { letter-spacing: 0.06em; text-transform: none; }
 .band-pending .band-value { opacity: 0.7; }
 .band-basis { font-size: 12.5px; color: var(--muted); max-width: 34ch; }
-.band-next { font-size: 12px; color: var(--gold-text); max-width: 34ch; }
+.band-next { font-size: 12px; color: var(--accent-text); max-width: 34ch; }
 /* An estimate: present, but never at a measured figure's size or brightness. */
 .band-estimate { display: flex; flex-direction: column; gap: 4px; font-size: clamp(16px, 1.45vw, 20px); color: var(--muted); }
 .band-chip {
@@ -326,7 +340,7 @@ h1[tabindex='-1']:focus { outline: none; }
   cursor: pointer; transition: all var(--t) var(--ease);
 }
 .chip:hover { color: var(--text); border-color: var(--line); }
-.chip[aria-pressed='true'] { color: var(--on-gold); background: var(--gold); border-color: var(--gold); }
+.chip[aria-pressed='true'] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 
 .grid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 .grid-2 { display: grid; gap: var(--s4); grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
@@ -368,6 +382,9 @@ h1[tabindex='-1']:focus { outline: none; }
 .topbar-demo { flex-shrink: 0; }
 .pill-estimate { color: var(--sky); }
 .pill-unverified { color: var(--gold-text); }
+/* Nothing to show yet is a state, not a warning: neutral and dashed, so the
+   caution gold stays rare enough to mean "look at this". */
+.pill-empty { color: var(--muted); border-style: dashed; }
 .pill-ok { color: var(--mint); }
 .pill-warn { color: var(--coral); }
 
@@ -491,7 +508,7 @@ tr:last-child td { border-bottom: 0; }
   border: 1px solid var(--line-soft); background: none; color: var(--muted);
   padding: 0 var(--s3); border-radius: var(--r-sm); cursor: pointer; transition: all var(--t) var(--ease);
 }
-.cmd-copy:hover { color: var(--gold-text); border-color: var(--gold); }
+.cmd-copy:hover { color: var(--accent-text); border-color: var(--accent); }
 
 .drawer-input {
   width: 100%; font-family: var(--mono); font-size: 13px;
@@ -511,11 +528,11 @@ tr:last-child td { border-bottom: 0; }
 .btn-ghost { background: none; border: 1px solid var(--line); color: var(--muted); }
 .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
 
-.btn-commit { border: 1px solid var(--gold); background: var(--gold); color: var(--on-gold); font-weight: 500; }
+.btn-commit { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 500; }
 .btn-commit:hover:not(:disabled) { filter: brightness(1.08); }
 .btn-commit:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-commit.tone-danger { background: var(--coral); border-color: var(--coral); color: #fff; }
-.btn-commit.tone-warn { background: var(--gold); border-color: var(--gold); }
+.btn-commit.tone-warn { background: var(--gold); border-color: var(--gold); color: var(--on-gold); }
 
 body.drawer-open { overflow: hidden; }
 body.claim-open { overflow: hidden; }
@@ -603,7 +620,7 @@ body.claim-open { overflow: hidden; }
 .claim-missing { border-left-color: var(--coral); }
 .claim-missing ul { color: var(--text); }
 .claim-complete { font-size: 13px; color: var(--mint); }
-.claim-next { font-size: 13px; color: var(--gold-text); }
+.claim-next { font-size: 13px; color: var(--accent-text); }
 
 @media (max-width: 900px) {
   .claim-panel { width: 100%; padding: var(--s5); }
@@ -624,7 +641,7 @@ body.claim-open { overflow: hidden; }
   border: 1px solid var(--line); background: var(--panel); color: var(--text);
   font: inherit; cursor: pointer; transition: all var(--t) var(--ease);
 }
-.choice:hover { border-color: var(--gold); }
+.choice:hover { border-color: var(--accent); }
 .choice strong { display: block; font-size: 15px; margin-bottom: var(--s2); }
 .choice span { color: var(--muted); font-size: 13px; }
 .firstrun .fine { color: var(--faint); font-size: 13px; margin-top: var(--s6); max-width: 58ch; }
@@ -671,7 +688,7 @@ body.claim-open { overflow: hidden; }
   transition: color var(--t) var(--ease), border-color var(--t) var(--ease);
 }
 .axis:hover { color: var(--text); }
-.axis[aria-pressed='true'] { color: var(--text); border-bottom-color: var(--gold); }
+.axis[aria-pressed='true'] { color: var(--text); border-bottom-color: var(--accent); }
 .axisbar-note { font-size: 12.5px; color: var(--faint); margin-left: auto; }
 
 /* ---------- Ledger -------------------------------------------------------- */
@@ -824,7 +841,7 @@ body.claim-open { overflow: hidden; }
   width: 6px; height: 6px; border-radius: 50%; flex: none;
   border: 1px solid var(--line); background: transparent;
 }
-.dot-on { background: var(--gold); border-color: var(--gold); }
+.dot-on { background: var(--accent); border-color: var(--accent); }
 
 /* Spend against a cap. Deliberately thin: it is a reading, not a gauge to watch. */
 .meter {
@@ -860,7 +877,7 @@ body.claim-open { overflow: hidden; }
   color: var(--faint); padding: var(--s2) 0;
 }
 .more summary:hover { color: var(--text); }
-.more summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (max-width: 820px) {
   /* On a phone the header wraps to several rows, and a sticky one that tall
@@ -873,7 +890,7 @@ body.claim-open { overflow: hidden; }
   .op { min-height: 44px; text-align: center; background: var(--panel); }
   /* Every grid cell has a fill here, so the current page needs more than a
      slightly different fill to stand out. */
-  .op[aria-current='page'] { color: var(--text); background: var(--gold-soft); box-shadow: inset 0 0 0 1px var(--gold); }
+  .op[aria-current='page'] { color: var(--text); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
   .register-switch button { min-height: 38px; }
   .register-switch { margin-left: auto; }
   .sheet { padding: 0 var(--s4); }
@@ -934,7 +951,7 @@ body.claim-open { overflow: hidden; }
 .step-n {
   display: inline-grid; place-items: center; flex: none;
   width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid var(--gold); color: var(--gold-text);
+  border: 1px solid var(--accent); color: var(--accent-text);
   font-family: var(--mono); font-size: 12px;
 }
 .step-lede { color: var(--muted); max-width: 70ch; margin: var(--s1) 0 var(--s3) calc(26px + var(--s3)); }
@@ -978,7 +995,7 @@ select.drawer-input { font-family: inherit; }
 .rule-more > summary::before { content: '\25B8'; margin-right: var(--s2); }
 .rule-more[open] > summary::before { content: '\25BE'; }
 .rule-more > summary:hover { color: var(--text); }
-.rule-more > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.rule-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rule-more-row .form-field { flex: 1 1 150px; }
 .run-dates { flex: 1 1 100%; }
 .run-dates .form-field { flex: 0 1 200px; }
@@ -1043,12 +1060,12 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 .appearance .card-head { margin: 0; }
 .appearance .basis { margin: 0; }
 .theme-switch button { text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: 13px; min-height: 32px; }
-.statement-download { margin-left: auto; color: var(--gold-text); font-size: 14px; padding: var(--s2) 0; }
-.statement-download:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-/* One recorded split's CSV, in the Saved splits table: the same gold link, sized for a thumb on phones. */
+.statement-download { margin-left: auto; color: var(--accent-text); font-size: 14px; padding: var(--s2) 0; }
+.statement-download:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* One recorded split's CSV, in the Saved splits table: the same accent link, sized for a thumb on phones. */
 .run-period { display: block; }
-.run-download { display: inline-block; margin-top: 2px; color: var(--gold-text); font-size: 12px; white-space: nowrap; }
-.run-download:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.run-download { display: inline-block; margin-top: 2px; color: var(--accent-text); font-size: 12px; white-space: nowrap; }
+.run-download:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 820px) { .run-download { display: inline-flex; align-items: center; min-height: 44px; margin-top: 0; } }
 @media (max-width: 820px) { .statement-download { margin-left: 0; width: 100%; min-height: 44px; display: flex; align-items: center; } }
 .statement-grid { display: grid; gap: var(--s4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1061,14 +1078,14 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 .statement-run:last-of-type { border-bottom: 0; }
 .statement-shares { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .statement-shares li { display: flex; justify-content: space-between; gap: var(--s3); font-size: 14px; }
-.statement-link { margin-top: auto; padding-top: var(--s2); color: var(--gold-text); font-size: 13px; text-underline-offset: 3px; }
+.statement-link { margin-top: auto; padding-top: var(--s2); color: var(--accent-text); font-size: 13px; text-underline-offset: 3px; }
 .statement-rule { margin-top: var(--s4); max-width: 80ch; }
 
 /* ---------- Folds (long evidence, closed by default) ------------------------ */
 .fold { margin-top: var(--s3); border-top: 1px solid var(--line-soft); }
 .fold:last-of-type { border-bottom: 1px solid var(--line-soft); }
 .fold-summary, .parity-summary { cursor: pointer; padding: var(--s3) 0; list-style: revert; color: var(--text); font-size: 14px; }
-.fold-summary:hover, .parity-summary:hover { color: var(--gold-text); }
+.fold-summary:hover, .parity-summary:hover { color: var(--accent-text); }
 .fold[open] > .fold-summary { margin-bottom: var(--s2); }
 .fold-head { margin-top: var(--s10); }
 .parity-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); }
@@ -1088,7 +1105,7 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 .recorded-run > summary .fact-line { flex: 1; min-width: 0; }
 .recorded-run > summary::before { content: '\25B8'; color: var(--muted); margin-right: var(--s2); }
 .recorded-run[open] > summary::before { content: '\25BE'; }
-.recorded-run > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.recorded-run > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .recorded-run[open] > summary { margin-bottom: var(--s2); }
 .declared-scope { margin-bottom: var(--s3); }
 .parity-counts { color: var(--muted); font-size: 13px; }
