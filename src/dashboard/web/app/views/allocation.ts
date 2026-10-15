@@ -157,7 +157,7 @@ function basisStrip(d: AllocationPayload): Node {
     h('div', { class: 'card-head' },
       h('span', { class: 'card-title', text: () => (isPrecise() ? 'Basis' : 'What this number is') }),
       h('span', { class: 'pill pill-estimate', text: 'showback only' }),
-      h('span', { class: 'pill pill-unverified', text: checked ? 'provider comparison on record' : 'no provider comparison on record' })),
+      h('span', { class: checked ? 'pill pill-unverified' : 'pill pill-empty', text: checked ? 'provider comparison on record' : 'no provider comparison on record' })),
     h('p', { text: () => (checked
       ? `A split of our own cost estimate. A provider comparison is on record (${relative(d.reconciliation.latestComputedAtMs)}); it covers its own project and dates and does not verify the inputs to this allocation.`
       : 'A split of our own cost estimate. No provider comparison is on record; this split is exact arithmetic on our estimate, not a verified bill.') }),
