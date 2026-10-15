@@ -16,6 +16,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **Unannounced messages:** each job's status line was hidden until it had a message, and a live region that appears already holding its text is usually not announced. "Saved", the Close check result and every refusal were shown but never spoken. The status line now stays in place, empty and invisible, until it has something to say.
   - **Raw month key read aloud:** while a month loaded, its label briefly read the raw key ("2026-09") before the name. It now reads the name once.
   - `test/dashboard-announcements.browser.mjs` pins all three.
+- **Orange for what you act on; gold where it means something.**
+  - **Ember orange:** buttons, the current job, selected figures, focus rings, links and next steps now use an ember orange (`--accent`, #f0883e on dark, #b04a14 on light). It sits beside the griffin's gold as one warm family.
+  - **Gold:** the griffin is unchanged. Gold now marks only the brand and genuine cautions ("partly compared", "no cap set"), so it stands out again.
+  - **Empty states:** "not established" and "not per month" are states, not warnings. They now show as neutral dashed pills instead of gold ones.
+  - **Red:** waste red moved off orange's hue (#e25d4a to #f0566a on dark, #a83625 to #b3243f on light), so "not kept" never reads as "press here".
+  - **Contrast:** every new pair passes WCAG AA. Accent text is 8.9:1 on dark and 5.5:1 on light; button text is 7.1:1 and 5.5:1.
 
 - **The first screen uses the same words as the rest.** The two choices on the welcome screen showed sample figures in retired wording: "$59.16 · measured from metered requests" and "$59.163468 · local_list_price". They now read "$59.16 list cost (estimate)" and "$59.163468 list cost (estimate)", the guide's words. A screen reader reads these samples as part of each choice, so they were the first words a new user heard.
 
