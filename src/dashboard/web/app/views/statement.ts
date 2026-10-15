@@ -230,6 +230,7 @@ function realizedCard(d: StatementPayload): Node {
     h('div', { class: 'statement-kept' },
       line('Kept', r.kept, 'gate-pass'),
       line('Not kept', r.notKept, 'gate-fail'),
+      r.contested.units > 0 ? line('Results disagree', r.contested, 'gate-unchecked') : null,
       r.unknown.units > 0 ? line('No signal', r.unknown, 'gate-unchecked') : null,
       r.tooEarly.units > 0 ? h('div', { class: 'statement-kept-row' },
         h('span', { class: 'statement-kept-key gate-unchecked', text: 'Too early to tell' }),
