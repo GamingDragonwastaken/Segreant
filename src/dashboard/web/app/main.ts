@@ -32,6 +32,8 @@ import { dataView } from './views/data.ts';
 import type { Territory } from './core/registry.ts';
 import { statementView } from './views/statement.ts';
 import { initTheme } from './core/theme.ts';
+import { initView, viewPrefs, jobShown } from './core/view.ts';
+import { JOBS as SHARED_JOBS } from './core/jobs.ts';
 
 /** A page the shell can show: the registry's territories, plus the monthly statement, which reads all four claims. */
 type Route = Territory | 'statement';
@@ -57,14 +59,7 @@ const ROUTE_LAYER: Partial<Record<Route, LayerId>> = {
  * reachable through the spine alone, and Billed, Allocated and Realized had no
  * name a finance reader would look for (critique 2026-10-12).
  */
-const JOBS: ReadonlyArray<{ id: Route; label: string; plain: string }> = [
-  { id: 'statement', label: 'Statement', plain: 'One month: measured, billed, split and produced, side by side.' },
-  { id: 'spend', label: 'Spend', plain: 'What AI cost, and where it went.' },
-  { id: 'control', label: 'Protect', plain: 'Limits and alerts that stop spend before it happens.' },
-  { id: 'evidence', label: 'Close', plain: 'Check what was measured against the provider bill.' },
-  { id: 'allocation', label: 'Allocate', plain: 'Assign cost to the teams and projects that carry it.' },
-  { id: 'value', label: 'Value', plain: 'What the spend produced.' },
-];
+const JOBS = SHARED_JOBS as ReadonlyArray<{ id: Route; label: string; plain: string }>;
 
 /** How you feed and configure the tool: needed, but not why anyone opens it. */
 const UTILITIES: ReadonlyArray<{ id: Route; label: string; plain: string }> = [
@@ -229,6 +224,8 @@ function topbar(): Node {
     h('nav', { class: 'ops', 'aria-label': 'Jobs' },
       ...JOBS.map((op) => h('button', {
         class: 'op',
+        // A job the reader hid stays out of the bar unless it is the one open.
+        hidden: () => !jobShown(op.id) && current() !== op.id,
         'aria-current': () => (current() === op.id ? 'page' : false),
         title: op.plain,
         onclick: () => go(op.id),
@@ -268,6 +265,7 @@ function viewFor(route: Route): Node {
 
 function boot(): void {
   initTheme();
+  initView();
   const root = document.getElementById('app');
   if (!root) throw new Error('missing #app');
 
@@ -384,6 +382,8 @@ function boot(): void {
           // and Settings they pushed the screen's own content below the fold
           // and asserted nothing about it.
           if (!ROUTE_LAYER[current()]) return null;
+          // The reader can fold the strip away in Settings; every figure is still on its own page.
+          if (!viewPrefs().strip) return null;
           const layers = chain();
           if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
           return spine({
