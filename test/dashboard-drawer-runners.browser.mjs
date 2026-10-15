@@ -108,3 +108,117 @@ test('cost centres and the provider scope are finished from their drawers, previ
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+function request(id, iso, costUsd) {
+  return {
+    requestId: id, sessionId: null, tsEpochMs: Date.parse(iso), provider: 'openai', model: 'gpt-5', project: 'app', taskWeight: 1,
+    inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, costUsd,
+    estimated: false, streamed: false, statusCode: 200, durationMs: 1, source: 'claude-code', user: 'pat',
+  };
+}
+
+test('an allocation run is previewed and recorded from its drawer, for exactly the days chosen', async () => {
+  const store = new Store(':memory:');
+  store.upsertCostCentre({ costCentreId: 'eng', name: 'Engineering' });
+  store.saveAllocationRule({
+    ruleId: 'app', method: 'direct', match: { project: 'app' }, targets: [{ costCentreId: 'eng', ratio: 1 }], priority: 10,
+    effectiveFromMs: 0, effectiveToMs: null, revokedAtMs: null, owner: null, note: null,
+  });
+  store.insertRequest(request('in-a', '2026-07-15T12:00:00.000Z', 2));
+  store.insertRequest(request('in-b', '2026-07-20T12:00:00.000Z', 1));
+  store.insertRequest(request('outside', '2026-08-15T12:00:00.000Z', 5));
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'drawer-run-test' });
+  let browser;
+  try {
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('segreant.register', 'plain'); } catch {} });
+    await page.goto(`${base}/#/system`);
+    const main = page.getByRole('main');
+    await main.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+    await main.locator('details.parity-details summary').click();
+    await main.getByRole('button', { name: 'Open Run an allocation', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Run an allocation' });
+    await drawer.waitFor();
+
+    await drawer.getByLabel('Period').selectOption({ label: 'Choose dates…' });
+    await drawer.getByLabel('First day').fill('2026-07-01');
+    await drawer.getByLabel('Last day (included)').fill('2026-07-31');
+    await drawer.getByText('Engineering').waitFor();
+    await drawer.getByText('$3.00').first().waitFor();
+    assert.equal(store.allocationRuns().length, 0, 'the preview records nothing');
+
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('Recorded').waitFor();
+    const runs = store.allocationRuns();
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].result.totalMicros, 3_000_000, 'August spend stays out of a July run');
+    assert.deepEqual(runs[0].result.byCostCentre.map((c) => [c.costCentreId, c.allocatedMicros]), [['eng', 3_000_000]]);
+  } finally {
+    await browser?.close();
+    server.close();
+    store.close?.();
+  }
+});
+
+test('an imported export is adopted and the month reconciled from their drawers, preview first', async () => {
+  const { readFileSync } = await import('node:fs');
+  const fixture = readFileSync(join(import.meta.dirname, 'fixtures', 'billing', 'openai-operator-export.v1.json'), 'utf8');
+  const store = new Store(':memory:');
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'drawer-billing-test' });
+  let browser;
+  try {
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const post = (body) => fetch(`${base}/api/billing/write`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-segreant-local': '1' }, body: JSON.stringify(body) });
+    assert.equal((await post({ op: 'scope', accountRef: 'acct-example-001', projectRef: 'proj_alpha', apply: true })).status, 200);
+    assert.equal((await post({ op: 'import', fileName: 'openai-operator-export.v1.json', contentBase64: Buffer.from(fixture).toString('base64'), apply: true })).status, 200);
+    const inUse = async () => (await (await fetch(`${base}/api/billing`)).json()).imports[0].inUse;
+
+    browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('segreant.register', 'plain'); } catch {} });
+    const openFromMap = async (label) => {
+      await page.goto(`${base}/#/system`);
+      const main = page.getByRole('main');
+      await main.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+      const details = main.locator('details.parity-details');
+      if (!(await details.evaluate((el) => el.open))) await details.locator('summary').click();
+      await main.getByRole('button', { name: `Open ${label}`, exact: true }).click();
+      const drawer = page.getByRole('dialog', { name: label });
+      await drawer.waitFor();
+      return drawer;
+    };
+
+    let drawer = await openFromMap('Adopt a provider export');
+    const which = drawer.getByLabel('Imported cost export');
+    await which.locator('option', { hasText: 'openai-operator-export.v1.json' }).waitFor({ state: 'attached' });
+    await which.selectOption({ index: 1 });
+    await drawer.getByText('Matched to your project').waitFor();
+    assert.equal(await inUse(), null, 'the adoption plan records nothing');
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('Recorded as the provider side').waitFor();
+    assert.ok(await inUse(), 'the export is now the provider side');
+    await page.keyboard.press('Enter');
+    await drawer.waitFor({ state: 'detached' });
+
+    drawer = await openFromMap('Reconcile');
+    await drawer.getByLabel('Ignore daily differences up to ($)').fill('1');
+    await drawer.getByText('Billed by the provider').waitFor();
+    await drawer.getByText('segreant billing reconcile --materiality 1 --apply').waitFor();
+    assert.equal(store.reconciliationRuns().length, 0, 'the comparison preview records nothing');
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('Recorded').waitFor();
+    const runs = store.reconciliationRuns();
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].result.materialityUsd, 1, 'recorded under the threshold that was previewed');
+  } finally {
+    await browser?.close();
+    server.close();
+    store.close?.();
+  }
+});

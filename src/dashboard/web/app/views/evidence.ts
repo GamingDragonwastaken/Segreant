@@ -15,6 +15,7 @@ import { isPrecise, relative, basisWords, usd, usdFromMicros, count, date, pct }
 import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
 import { actionCard } from './spend.ts';
 import { projectRenderedAxes } from '../core/claimTypes.ts';
+import { residualBoundIsError, residualBoundWords, dayRange } from '../core/reconcileWords.ts';
 
 /**
  * The headline of this card, keyed on the BILLED CLAIM's state.
@@ -57,58 +58,6 @@ const CLAIM_WORDS: Record<string, { plain: string; precise: string; pill: string
     pill: 'pill-ok',
   },
 };
-
-/**
- * What the recorded residual actually bounds, from the run's own `offPathBound`.
- *
- * Absent means a run written before the field existed. That is not a licence to
- * assume the favourable branch: it says the condition was never recorded, which
- * is the whole reason the field exists.
- */
-type ResidualBound = NonNullable<
-  NonNullable<NonNullable<BillingPayload['reconciliation']>['runs']>[number]['result']['offPathBound']
->;
-
-/**
- * A `Record` rather than an if-chain, keyed by the wire's own union.
- *
- * That is the gate: adding a state to `offPathBound` in `shared-types.ts`
- * without a rendering here fails the BROWSER typecheck. With an if-chain the
- * new state fell through to the "older than the check" sentence below, which
- * would have said a fresh run predates a field it carries — an unrecognised
- * value rendered as an absent one, which is the defect class this screen keeps
- * finding.
- */
-const RESIDUAL_BOUND_WORDS: Readonly<Record<ResidualBound, { precise: string; plain: string }>> = {
-  none_local_estimate_exceeds_provider: {
-    precise: 'residual bounds nothing — the local estimate exceeds the provider total, so no upper bound on off-path spend survives',
-    plain: 'This remainder cannot tell you how much went outside Segreant: our own estimate already came out higher than the provider’s bill.',
-  },
-  upper_bound_conditional: {
-    precise: 'residual is an upper bound on off-path spend while the local estimate does not exceed true on-path billed cost',
-    plain: 'At most this much could have gone outside Segreant — assuming our own pricing did not overshoot what you were really charged.',
-  },
-  unknown_local_total_truncated_by_retention: {
-    precise: 'residual bounds nothing — retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount',
-    plain: 'This remainder cannot tell you how much went outside Segreant: some of your own metered requests in this period were deleted by your retention setting, so part of the difference is traffic we did see.',
-  },
-};
-
-/** Whether the run's own bound state is bad news rather than a caveat. */
-function residualBoundIsError(bound: string | undefined): boolean {
-  return bound === 'none_local_estimate_exceeds_provider'
-    || bound === 'unknown_local_total_truncated_by_retention';
-}
-
-function residualBoundWords(bound: string | undefined, precise: boolean): string {
-  const words = bound === undefined ? undefined : RESIDUAL_BOUND_WORDS[bound as ResidualBound];
-  if (words === undefined) {
-    return precise
-      ? 'this run predates the recorded bound condition, so what the residual bounds is not established'
-      : 'This run is older than the check that explains the remainder, so there is nothing to show for it.'
-  }
-  return precise ? words.precise : words.plain;
-}
 
 /**
  * What a reconciliation would actually match, stated before the credential.
@@ -330,12 +279,6 @@ async function fileBase64(file: File): Promise<string> {
   let binary = '';
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(binary);
-}
-
-function dayRange(startMs: number | undefined, endMs: number | undefined): string {
-  if (startMs === undefined || endMs === undefined) return '—';
-  // Provider periods end at an exclusive midnight; show the last day included.
-  return `${date(startMs, 'UTC')} – ${date(endMs - 1, 'UTC')} UTC`;
 }
 
 function rows(pairs: Array<[string, string]>): Node {
