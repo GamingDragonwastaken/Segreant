@@ -213,8 +213,28 @@ function allocatedCard(d: StatementPayload, nameOf: (id: string) => string): Nod
 }
 
 function realizedCard(d: StatementPayload): Node {
-  return card(() => (isPrecise() ? 'Realized' : 'What it produced'), { text: 'not per month', tone: 'pill-empty' },
-    h('p', { class: 'statement-none', text: d.realized.reason }),
+  const r = d.realized;
+  const title = () => (isPrecise() ? 'Realized' : 'What it produced');
+  if (r.standing === 'none_judged' && r.tooEarly.units === 0) {
+    return card(title, { text: 'nothing judged', tone: 'pill-empty' },
+      h('p', { class: 'statement-none', text: r.measuredAt === null ? r.reason : 'No work had its check in this month.' }),
+      goLink('value', 'Open Value'));
+  }
+  const pieces = (n: number): string => `${count(n)} ${n === 1 ? 'piece' : 'pieces'} of work`;
+  const line = (label: string, c: { units: number; costUsd: number }, tone: string): Node =>
+    h('div', { class: 'statement-kept-row' },
+      h('span', { class: `statement-kept-key ${tone}`, text: label }),
+      h('span', { class: 'statement-kept-val', text: `${pieces(c.units)} · ${usd(c.costUsd)} list cost` }));
+  const due = r.tooEarly.nextCheckMs === null ? '' : `, first check ${new Date(r.tooEarly.nextCheckMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+  return card(title, { text: 'counts, not value', tone: 'pill-estimate' },
+    h('div', { class: 'statement-kept' },
+      line('Kept', r.kept, 'gate-pass'),
+      line('Not kept', r.notKept, 'gate-fail'),
+      r.unknown.units > 0 ? line('No signal', r.unknown, 'gate-unchecked') : null,
+      r.tooEarly.units > 0 ? h('div', { class: 'statement-kept-row' },
+        h('span', { class: 'statement-kept-key gate-unchecked', text: 'Too early to tell' }),
+        h('span', { class: 'statement-kept-val', text: `${pieces(r.tooEarly.units)}${due}` })) : null),
+    h('span', { class: 'basis', text: r.reason }),
     goLink('value', 'Open Value'));
 }
 

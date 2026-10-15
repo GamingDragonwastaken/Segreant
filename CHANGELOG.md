@@ -11,6 +11,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The Statement now says what each month produced.**
+  - **Before:** the fourth card read "not computed per calendar month".
+  - **The rule:** work now counts in the month its 14-day check falls, as kept, not kept, or no signal. Work still inside its 14 days is listed as too early to tell, with the date of its first check.
+  - **No git on load:** the counts come from the last stored measurement, so opening a month never runs git.
+  - **Spend, not value:** the dollars beside each count are the list cost of that work. A value figure needs an hourly rate and stays on the Value page. In the CSV the realized rows carry counts and name the spend in the note, so nobody can sum them as value.
+  - **For integrators:** `/api/statement` `realized` changes shape (`standing` is now `judged_in_month` or `none_judged`, with `kept`, `notKept`, `unknown`, `tooEarly`, `windowDays` and `measuredAt`).
+
 - **A screen reader is told where it is and what happened.** Running NVDA 2026.2 over the accessibility script found three defects:
   - **Lost focus after the welcome screen:** after the first-run choice, focus fell to the bottom of the page structure, so NVDA started again from the top. It now lands on the chosen page's heading.
   - **Unannounced messages:** each job's status line was hidden until it had a message, and a live region that appears already holding its text is usually not announced. "Saved", the Close check result and every refusal were shown but never spoken. The status line now stays in place, empty and invisible, until it has something to say.

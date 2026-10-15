@@ -545,9 +545,29 @@ export interface StatementAllocated {
   costCentres: StatementCostCentreName[];
 }
 
+export interface StatementKeptCount {
+  units: number;
+  /** List cost (estimate) attributed to these units. Spend, never value. */
+  costUsd: number;
+}
+
+/**
+ * Work whose survival check fell in this month, read from the last stored
+ * measurement (no git work on load). Counts and the list cost behind them only:
+ * a value figure needs an hourly rate and is read on the Value page.
+ */
 export interface StatementRealized {
-  /** Not computed per calendar month. Realized value is read on the Value page. */
-  standing: 'not_computed_per_month';
+  standing: 'judged_in_month' | 'none_judged';
+  /** The survival window the stored measurement used, in days. */
+  windowDays: number;
+  /** When the outcomes were last measured (ISO), or null when nothing has been measured yet. */
+  measuredAt: string | null;
+  kept: StatementKeptCount;
+  notKept: StatementKeptCount;
+  /** Judged, but a check had no signal either way. */
+  unknown: StatementKeptCount;
+  /** Committed by the month's end, check still due at the last measurement. */
+  tooEarly: StatementKeptCount & { nextCheckMs: number | null };
   reason: string;
 }
 
