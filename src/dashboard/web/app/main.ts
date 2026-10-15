@@ -147,6 +147,17 @@ function go(route: Route): void {
   current.set(route);
 }
 
+/** Focus the current page's h1 once the view has rendered; give up quietly after a second. */
+function focusPageHeading(tries = 20): void {
+  const heading = document.querySelector<HTMLElement>('main h1');
+  if (!heading) {
+    if (tries > 0) setTimeout(() => focusPageHeading(tries - 1), 50);
+    return;
+  }
+  if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+  heading.focus();
+}
+
 function brandMark(): Node {
   return h('svg', { class: 'brand-mark', viewBox: GRIFFIN_VIEWBOX, 'aria-hidden': 'true' },
     h('path', { d: GRIFFIN_PATH, transform: GRIFFIN_TRANSFORM, fill: 'var(--gold)', 'fill-rule': 'evenodd' }));
@@ -188,7 +199,11 @@ function firstRun(): Node {
   onCleanup(() => {
     release();
     body.removeEventListener('keydown', onKey);
-    restoreFocus(previousFocus);
+    // On a fresh page the opener is <body>, and "restoring" to it left a screen
+    // reader at the top of the document (NVDA run, 2026-10-15). Land on the
+    // chosen page's heading instead.
+    if (previousFocus && previousFocus !== document.body) restoreFocus(previousFocus);
+    else focusPageHeading();
   });
   queueMicrotask(() => body.querySelector<HTMLElement>('.choice')?.focus());
   return body;

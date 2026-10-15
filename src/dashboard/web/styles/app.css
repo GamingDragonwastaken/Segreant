@@ -127,6 +127,9 @@ body {
 
 [hidden] { display: none !important; }
 
+/* A heading focused for screen readers after a page change is not a control. */
+h1[tabindex='-1']:focus { outline: none; }
+
 :focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
@@ -995,7 +998,8 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
   width: max-content; overflow-wrap: anywhere;
 }
 .page-notice.drawer-error { border-color: var(--coral); color: var(--coral); }
-.page-notice[hidden] { display: none; }
+/* Idle: present for screen readers, invisible on screen. */
+.page-notice:empty { padding: 0; border: 0; box-shadow: none; background: none; }
 
 /* A step the ledger already satisfies: its number becomes a check in mint. */
 .step-done .step-n { border-color: var(--mint); color: var(--mint); }
