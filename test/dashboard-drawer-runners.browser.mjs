@@ -222,3 +222,63 @@ test('an imported export is adopted and the month reconciled from their drawers,
     store.close?.();
   }
 });
+
+test('a rule is previewed, saved with its owner and note, and revoked from its drawer', async () => {
+  const store = new Store(':memory:');
+  store.upsertCostCentre({ costCentreId: 'eng', name: 'Engineering' });
+  store.upsertCostCentre({ costCentreId: 'ops', name: 'Operations' });
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'drawer-rule-test' });
+  let browser;
+  try {
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('segreant.register', 'plain'); } catch {} });
+    const open = async () => {
+      await page.goto(`${base}/#/system`);
+      const main = page.getByRole('main');
+      await main.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+      const details = main.locator('details.parity-details');
+      if (!(await details.evaluate((el) => el.open))) await details.locator('summary').click();
+      await main.getByRole('button', { name: 'Open Allocation rules', exact: true }).click();
+      const drawer = page.getByRole('dialog', { name: 'Allocation rules' });
+      await drawer.waitFor();
+      return drawer;
+    };
+
+    let drawer = await open();
+    await drawer.getByLabel('Which spend').fill('app');
+    await drawer.getByLabel('To', { exact: true }).selectOption('ops');
+    await drawer.getByText('More conditions and dates').click();
+    await drawer.getByLabel('Priority').fill('5');
+    await drawer.getByLabel('Owner (optional)').fill('Pat');
+    await drawer.getByLabel('Note (optional)').fill('platform work');
+    await drawer.getByText('Spend where project app goes to Operations').waitFor();
+    await drawer.getByText('segreant alloc rule app-ops --method direct --centre ops --match-project app --priority 5 --owner Pat --note "platform work"').waitFor();
+    assert.equal(store.allocationRules().length, 0, 'the preview saves nothing');
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('Rule saved').waitFor();
+    const [rule] = store.allocationRules();
+    assert.deepEqual(
+      { id: rule.ruleId, method: rule.method, match: Object.fromEntries(Object.entries(rule.match).filter(([, v]) => v != null)), targets: rule.targets, priority: rule.priority, owner: rule.owner, note: rule.note },
+      { id: 'app-ops', method: 'direct', match: { project: 'app' }, targets: [{ costCentreId: 'ops', ratio: 1 }], priority: 5, owner: 'Pat', note: 'platform work' },
+    );
+    await page.keyboard.press('Enter');
+    await drawer.waitFor({ state: 'detached' });
+
+    drawer = await open();
+    await drawer.getByLabel('Change').selectOption('revoke');
+    await drawer.getByLabel('Rule', { exact: true }).selectOption('app-ops');
+    await drawer.getByText('segreant alloc revoke app-ops').waitFor();
+    assert.equal(store.allocationRules()[0].revokedAtMs, null, 'the revoke preview changes nothing');
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('app-ops').waitFor();
+    assert.notEqual(store.allocationRules()[0].revokedAtMs, null);
+  } finally {
+    await browser?.close();
+    server.close();
+    store.close?.();
+  }
+});

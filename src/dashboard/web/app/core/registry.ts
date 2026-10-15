@@ -157,8 +157,8 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'views/allocation.ts', token: "op: 'centre'", note: 'Allocate step 1 lists, adds and archives cost centres; the drawer also renames one or changes its owner, as alloc centre <id> --name does, with a preview first' },
   },
   {
-    id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'segreant alloc rule',
-    guiEvidence: { file: 'views/allocation.ts', token: "op: 'rule'", note: 'all three methods, every match field (project, model, provider, tool, user), priority and effective dates; a GUI rule equals the CLI rule field by field; no drawer runner yet' },
+    id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'segreant alloc rule',
+    guiEvidence: { file: 'views/allocation.ts', token: "op: 'rule'", note: 'all three methods, every match field (project, model, provider, tool, user), priority, effective dates, owner and note; a GUI rule equals the CLI rule field by field; the drawer previews a rule or a revocation before saving' },
   },
   {
     id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'segreant alloc run --apply',

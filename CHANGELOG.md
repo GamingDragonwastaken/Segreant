@@ -20,6 +20,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **Adopt a provider export:** choose any imported export. The preview is the server's adoption plan: what matches your project, what is left out, and any refusal.
   - **Reconcile:** if the comparison is not ready, the drawer lists the steps still to do. Otherwise it previews the comparison with your daily threshold and records it under that same threshold.
   - **One wording:** the drawers and the Allocate and Close pages share their period and comparison wording, so a split or a comparison reads the same in both places.
+- **Allocation rules finish in a drawer too, and a rule can carry an owner and a note.**
+  - **The drawer:** adds a rule or a new version of one, or revokes one, previewing first. The preview states the rule as a sentence, the id it is saved under, whether it replaces a current version, its place in the order, and its dates.
+  - **The same form:** it uses the same fields as the Allocate page, so a rule written in either place is the rule `segreant alloc rule` writes. With no cost centre yet, the drawer says so first instead of offering a form that can only fail.
+  - **Owner and note:** both forms now have the `--owner` and `--note` the command always had.
+  - **A fixed choice:** switching the method away and back no longer shows the first centre while keeping the one chosen before.
 - **Apply works on the first click.** In every drawer, typing a value and then clicking Apply did nothing the first time. Leaving the field re-ran the preview and disabled Apply under the pointer. Apply also used to drop keyboard focus to the page body after saving; it now hands focus to Close, and the result is announced as before.
 
 - **The Statement now says what each month produced.**
