@@ -227,6 +227,19 @@ h1[tabindex='-1']:focus { outline: none; }
   font-size: 12.5px; color: var(--faint);
 }
 .shellfoot a { color: var(--muted); }
+.shellfoot-links { display: flex; gap: var(--s5); }
+
+/* The privacy statement: prose, so it reads at a book's line length rather
+   than the dashboard's full width. */
+.privacy { max-width: 68ch; }
+/* The promise itself: full text colour, and not a page explanation, so hiding
+   explanations in "What you see" never hides it. */
+.privacy-lead { color: var(--text); font-size: 15px; line-height: 1.6; margin-top: var(--s2); }
+.privacy-section p, .privacy-section li { line-height: 1.6; color: var(--text); }
+.privacy-section p + p { margin-top: var(--s3); }
+.privacy-section ul { margin: var(--s3) 0 0; padding-left: var(--s5); display: grid; gap: var(--s2); }
+/* A command inside running prose: marked, not boxed, so lines keep their spacing. */
+.inline-code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: var(--line-soft); border-radius: 4px; padding: 0.08em 0.36em; white-space: nowrap; }
 
 /* ---------- The ledger spine: the thesis, as the layout ------------------ */
 
