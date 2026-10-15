@@ -11,6 +11,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Cost centres and the provider scope are finished in the dashboard.** Both now read "in the GUI" on the parity map, which earned it rather than being relabelled:
+  - **Cost centres:** a drawer adds, renames, changes the owner of, or archives a cost centre: everything `segreant alloc centre` does. Renaming was impossible before, because the Allocate page derives the id from the name. The preview names any rule that still points at a centre you are about to archive, and says when a name belongs to an archived centre, which saving would rename but not reopen.
+  - **Provider scope:** a drawer declares or clears the OpenAI organisation and project, with the project optional, as on the command line. Its preview is the server's own dry run.
+  - **Open from the map:** any row on the parity map the dashboard can run now has an Open button, so the map shows what can be done and opens it.
+- **Apply works on the first click.** In every drawer, typing a value and then clicking Apply did nothing the first time. Leaving the field re-ran the preview and disabled Apply under the pointer. Apply also used to drop keyboard focus to the page body after saving; it now hands focus to Close, and the result is announced as before.
+
 - **The Statement now says what each month produced.**
   - **Before:** the fourth card read "not computed per calendar month".
   - **The rule:** work now counts in the month its 14-day check falls, as kept, not kept, or no signal. Work still inside its 14 days is listed as too early to tell, with the date of its first check.
