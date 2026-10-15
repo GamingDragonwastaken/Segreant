@@ -129,7 +129,20 @@ function panel(spec: ActionSpec): Node {
   };
   runPreview();
   let pending: ReturnType<typeof setTimeout> | null = null;
-  const fieldsChanged = (): void => {
+  // What the fields last said. A text field fires `change` again when it loses
+  // focus, and pressing Apply is what makes it lose focus: re-previewing on that
+  // echo disabled Apply between mousedown and click, so typing a value and
+  // clicking Apply did nothing the first time. Only a real difference counts.
+  let lastFields: string | null = null;
+  const fieldsChanged = (event?: Event): void => {
+    const scope = event?.currentTarget instanceof Element ? event.currentTarget : null;
+    if (scope) {
+      const now = Array.from(scope.querySelectorAll('input, select, textarea'))
+        .map((el) => (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio') ? String(el.checked) : (el as HTMLInputElement).value))
+        .join('\u0000');
+      if (now === lastFields) return;
+      lastFields = now;
+    }
     // An outcome described the input as it was; once the input changes it is
     // history, and keeping it would also keep Apply disabled.
     if (!committing.peek()) result.set(null);
@@ -291,37 +304,51 @@ function panel(spec: ActionSpec): Node {
         spec.download
           ? h('a', { class: 'btn-commit', href: spec.download, download: '', text: 'Download' })
           : null,
-        () => {
-          if (!spec.commit) return null;
-          const p = preview();
-          // A failed outcome does not block a retry; a successful one does,
-          // until a field changes and the preview is recomputed.
-          const ready = !busy() && !refreshing() && p !== null && p.applicable && confirmed() && !committing() && result()?.ok !== true;
-          // `title` is not exposed to keyboard or screen-reader users on a
-          // `disabled` control — browsers do not run hover/focus tooltip
-          // logic for it, and a disabled element cannot receive focus at
-          // all — so it was the ONLY carrier of why the button could not be
-          // pressed. The reason is now a visible sibling, reached from the
-          // button with `aria-describedby`, the same pattern the daily-cap
-          // field uses for its own consequence text (`actions.ts`).
-          const blocked = p && !p.applicable ? (p.blockedReason ?? 'Nothing to apply') : null;
-          return [
-            h('button', {
-              class: `btn-commit tone-${consequence.tone}`,
-              disabled: !ready,
-              'aria-describedby': blocked ? 'drawer-blocked-reason' : undefined,
-              text: () => (committing() ? 'Working…' : commitLabel(cap.consequence)),
-              onclick: () => {
-                if (!ready || !spec.commit) return;
-                committing.set(true);
-                void spec.commit()
-                  .then((r) => result.set(r))
-                  .catch((e: unknown) => result.set({ ok: false, message: e instanceof Error ? e.message : String(e) }))
-                  .finally(() => committing.set(false));
-              },
-            }),
-          ];
-        },
+        // One persistent button whose state is reactive. It used to be rebuilt
+        // whenever the preview, the busy flag or the result changed: a preview
+        // landing between mousedown and mouseup swallowed the click (no click
+        // event fires across two elements), and a commit moved keyboard focus
+        // from Apply to the page body.
+        spec.commit
+          ? (() => {
+              // A failed outcome does not block a retry; a successful one does,
+              // until a field changes and the preview is recomputed.
+              const ready = (): boolean => {
+                const p = preview();
+                return !busy() && !refreshing() && p !== null && p.applicable && confirmed() && !committing() && result()?.ok !== true;
+              };
+              // `title` is not exposed to keyboard or screen-reader users on a
+              // `disabled` control, so the reason Apply is unavailable is a
+              // visible sibling reached with `aria-describedby`, the pattern the
+              // daily-cap field uses for its own consequence text (`actions.ts`).
+              const blocked = (): boolean => { const p = preview(); return p !== null && !p.applicable; };
+              return h('button', {
+                class: `btn-commit tone-${consequence.tone}`,
+                disabled: () => !ready(),
+                'aria-describedby': () => (blocked() ? 'drawer-blocked-reason' : null),
+                text: () => (committing() ? 'Working…' : commitLabel(cap.consequence)),
+                onclick: (event: Event) => {
+                  if (!ready() || !spec.commit) return;
+                  const button = event.currentTarget as HTMLButtonElement;
+                  committing.set(true);
+                  void spec.commit()
+                    .then((r) => result.set(r))
+                    .catch((e: unknown) => result.set({ ok: false, message: e instanceof Error ? e.message : String(e) }))
+                    .finally(() => {
+                      committing.set(false);
+                      // A disabled Apply can hold no useful focus: Chrome either
+                      // blurs it to the page body or leaves it on the dead
+                      // button. The result is announced by the status line;
+                      // focus goes to Close, the next thing to do.
+                      const at = document.activeElement;
+                      if (button.disabled && (at === null || at === document.body || at === button)) {
+                        (button.parentElement?.querySelector('.btn-ghost') as HTMLButtonElement | null)?.focus();
+                      }
+                    });
+                },
+              });
+            })()
+          : null,
       ),
     ),
   );
