@@ -37,7 +37,7 @@ interface StatementBody {
   metered: { costUsd: number; requests: number; byProject: unknown[]; byModel: unknown[]; claimSupport: unknown; basis: { totalUsd: number; headline: string }; retention: { truncated: boolean } };
   billed: { monthCoverage: string; overlappingRuns: number; scanComplete: boolean; runs: Array<{ reconciliationRunId: string; periodStartMs: number; periodEndMs: number; providerReportedMicros: number; coversWholeMonth: boolean }> };
   allocated: { monthCoverage: string; overlappingRuns: number; runs: Array<{ allocationRunId: string; coversWholeMonth: boolean; byCostCentre: Array<{ costCentreId: string; allocatedMicros: number }> }>; costCentres: Array<{ costCentreId: string; name: string }> };
-  realized: { standing: string; reason: string };
+  realized: { standing: string; reason: string; measuredAt: string | null; kept: { units: number; costUsd: number } };
   close: { status: string; activeFinalizationId: string | null; eventCount: number | null };
 }
 
@@ -145,7 +145,9 @@ test('(a) an empty store gives zeros and "not established" everywhere, and 200',
     assert.equal(b.billed.runs.length, 0);
     assert.equal(b.allocated.monthCoverage, 'not_established');
     assert.equal(b.allocated.runs.length, 0);
-    assert.equal(b.realized.standing, 'not_computed_per_month');
+    assert.equal(b.realized.standing, 'none_judged', 'an empty ledger has nothing judged in the month');
+    assert.equal(b.realized.measuredAt, null);
+    assert.equal(b.realized.kept.units, 0);
     assert.match(b.realized.reason, /Value page/);
     assert.equal(b.close.activeFinalizationId, null);
 

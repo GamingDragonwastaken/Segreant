@@ -40,7 +40,7 @@ import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, typ
 import { serveHtml } from './static.ts';
 import { resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
 import { driftDetectability } from '../value/drift.ts';
-import { loadRealization, realizeDiscoveredProjects } from '../value/realization.ts';
+import { loadRealization, realizeDiscoveredProjects, realizationFromStore, keptSummary } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
 import { valueReport } from '../value/report.ts';
@@ -70,7 +70,7 @@ import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { stringifyJson } from '../util/json.ts';
 import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
-import type { DashboardResponseFor } from './shared-types.ts';
+import type { DashboardResponseFor, StatementRealized } from './shared-types.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -506,6 +506,34 @@ export function handleStatementCsv({ res, url, store }: RouteContext): void {
   res.end(statementToCsv(r.payload));
 }
 
+/**
+ * F5. A unit is counted in the month its survival check falls (commit time plus
+ * the window), as last measured. Read from stored snapshots, so opening a month
+ * never runs git. Dollars are the list cost behind the work, not its value.
+ */
+export function realizedForMonth(store: Store, startMs: number, endMs: number): StatementRealized {
+  const report = realizationFromStore(store);
+  const windowMs = report.windowDays * 24 * 60 * 60 * 1000;
+  const due = (u: { tsEpochMs: number }): number => u.tsEpochMs + windowMs;
+  const judged = report.units.filter((u) => !u.maturing && due(u) >= startMs && due(u) < endMs);
+  const waiting = report.units.filter((u) => u.maturing && u.tsEpochMs < endMs && due(u) >= startMs);
+  const k = keptSummary({ units: judged, windowDays: report.windowDays });
+  const cost = (us: Array<{ attributedCostUsd: number }>): number => us.reduce((s, u) => s + (Number.isFinite(u.attributedCostUsd) ? u.attributedCostUsd : 0), 0);
+  const measuredAt = report.units.length > 0 ? report.generatedAt : null;
+  return {
+    standing: judged.length > 0 ? 'judged_in_month' : 'none_judged',
+    windowDays: report.windowDays,
+    measuredAt,
+    kept: k.kept,
+    notKept: k.notKept,
+    unknown: k.unknown,
+    tooEarly: { units: waiting.length, costUsd: cost(waiting), nextCheckMs: waiting.length > 0 ? Math.min(...waiting.map(due)) : null },
+    reason: measuredAt === null
+      ? 'No outcomes have been measured on this machine yet. Run a value read from the Value page.'
+      : `Work is counted in the month its ${report.windowDays}-day check falls, as last measured. The dollars are the list cost of that work, not its value; a value needs an hourly rate and is on the Value page.`,
+  };
+}
+
 function buildStatement(store: Store, raw: string | null, top: number | null): StatementResult {
   try {
     const now = Date.now();
@@ -622,10 +650,7 @@ function buildStatement(store: Store, raw: string | null, top: number | null): S
         runs: allocatedRuns,
         costCentres: store.costCentres().map((c) => ({ costCentreId: c.costCentreId, name: c.name })),
       },
-      realized: {
-        standing: 'not_computed_per_month',
-        reason: 'Realized value is read on the Value page; it is not computed per calendar month.',
-      },
+      realized: realizedForMonth(store, startMs, endMs),
       close: {
         status: closeStatus.status,
         activeFinalizationId: closeStatus.activeFinalizationId,

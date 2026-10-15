@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "d593594971cc733b2c8e39d0a7610452b6ab4a3e8bedde9db3fa33dd82a45109";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b2c78a4efffcef9c65954fe3154fe66992396341ac7784aadd2162e2e5033f2c";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1045,11 +1045,53 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "StatementCostCentreName[]"
     }
   ],
+  "StatementKeptCount": [
+    {
+      "name": "units",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    }
+  ],
   "StatementRealized": [
     {
       "name": "standing",
       "optional": false,
-      "type": "'not_computed_per_month'"
+      "type": "'judged_in_month' | 'none_judged'"
+    },
+    {
+      "name": "windowDays",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "measuredAt",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "kept",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "notKept",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "unknown",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "tooEarly",
+      "optional": false,
+      "type": "StatementKeptCount & { nextCheckMs: number | null }"
     },
     {
       "name": "reason",
