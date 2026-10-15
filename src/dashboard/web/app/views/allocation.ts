@@ -23,6 +23,7 @@ import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload, type AllocationRunResultPayload, type AllocationRule, type CostCentre } from '../core/api.ts';
 import { isPrecise, relative, count, usdFromMicros, date, share as shareOf } from '../core/fmt.ts';
 import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
+import { ruleFields, describeRule } from '../components/ruleFields.ts';
 
 /** The payload's `excludedFrom` ids, said in words an operator can act on. */
 const EXCLUSION_WORDS: Record<string, string> = {
@@ -32,11 +33,6 @@ const EXCLUSION_WORDS: Record<string, string> = {
   model_recommendations: 'which model we suggest',
 };
 
-const METHOD_WORDS: Record<AllocationRule['method'], { plain: string; precise: string }> = {
-  direct: { plain: 'all of it to one centre', precise: 'direct' },
-  fixed_split: { plain: 'split by fixed shares', precise: 'fixed_split' },
-  proportional_to_direct: { plain: 'shared, split like the direct spend', precise: 'proportional_to_direct' },
-};
 
 
 
@@ -185,13 +181,6 @@ function centreForm(reload: () => void, say: Say): Node {
 }
 
 
-function describeRule(r: AllocationRule, nameOf: (id: string) => string): string {
-  const match = Object.entries(r.match ?? {}).filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(', ');
-  const what = match ? `Spend where ${match}` : 'All spend';
-  if (r.method === 'proportional_to_direct') return `${what}: shared across centres in proportion to their direct spend`;
-  if (r.method === 'fixed_split') return `${what}: ${r.targets.map((t) => `${Math.round(t.ratio * 1000) / 10}% to ${nameOf(t.costCentreId)}`).join(', ')}`;
-  return `${what} goes to ${r.targets[0] ? nameOf(r.targets[0].costCentreId) : '—'}`;
-}
 
 function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, say: Say, nameOf: (id: string) => string): Node {
   if (rules.length === 0) return h('p', { class: 'drawer-muted', text: 'No rules yet.' });
@@ -230,111 +219,23 @@ function ruleList(rules: AllocationRule[], demo: boolean, reload: () => void, sa
     }));
 }
 
-/** The match fields beyond project, in the engine's own vocabulary (MATCH_FIELDS). */
-const EXTRA_MATCH: Array<{ key: 'model' | 'provider' | 'source' | 'user'; label: string; placeholder: string }> = [
-  { key: 'model', label: 'Model', placeholder: 'for example gpt-5' },
-  { key: 'provider', label: 'Provider', placeholder: 'for example openai' },
-  { key: 'source', label: 'Tool', placeholder: 'for example claude-code' },
-  { key: 'user', label: 'User', placeholder: 'as recorded on the request' },
-];
 
 function ruleForm(centres: CostCentre[], projects: () => string[], models: () => string[], reload: () => void, say: Say): Node {
-  const method = signal<AllocationRule['method']>('direct');
-  const project = signal('');
-  const extra = signal<Record<string, string>>({});
-  const priority = signal('');
-  const from = signal('');
-  const until = signal('');
-  const target = signal(centres[0]!.costCentreId);
-  const shares = signal<Record<string, string>>({});
-
-  const shareTotal = (): number => Object.values(shares()).reduce((s, v) => s + (Number(v) || 0), 0);
-
+  const fields = ruleFields(centres, projects, models);
   return h('form', {
     class: 'inline-form',
     onsubmit: async (event: Event) => {
       event.preventDefault();
-      const p = project().trim();
-      const match: Record<string, string> = p ? { project: p } : {};
-      for (const { key } of EXTRA_MATCH) { const v = (extra()[key] ?? '').trim(); if (v) match[key] = v; }
-      const pr = priority().trim();
-      if (pr !== '' && !/^-?\d+$/.test(pr)) return say(false, 'Priority must be a whole number.');
-      if (from() && until() && until() <= from()) return say(false, 'The stop date must be after the start date.');
-      const targets = method() === 'fixed_split'
-        ? Object.entries(shares()).filter(([, v]) => Number(v) > 0).map(([costCentreId, v]) => ({ costCentreId, ratio: Math.round(Number(v) * 10_000) / 1_000_000 }))
-        : [{ costCentreId: target(), ratio: method() === 'direct' ? 1 : 0 }];
-      if (method() === 'fixed_split' && Math.abs(shareTotal() - 100) > 1e-9) return say(false, `The shares add up to ${shareTotal()}%. They need to add up to 100%.`);
-      // Every condition is part of the id: with only project and centre in it, a
-      // rule for one model would have replaced an existing rule for all spend.
-      const id = slug([...Object.values(match), method() === 'direct' ? target() : method()].join('-') || 'all');
+      const draft = fields.build();
+      if (typeof draft === 'string') return say(false, draft);
       try {
-        const r = await api.write.allocation({
-          op: 'rule', id, method: method(), targets, match,
-          ...(pr === '' ? {} : { priority: Number(pr) }),
-          ...(from() ? { from: localMidnightIso(from()) } : {}),
-          ...(until() ? { until: localMidnightIso(until()) } : {}),
-        });
+        const r = await api.write.allocation(draft.body);
         say(true, isPrecise() ? r.message : 'Rule saved. Recorded splits keep their results; preview again to see this rule\'s effect.');
         reload();
       } catch (e) { say(false, errorText(e)); }
     },
   },
-    h('div', { class: 'form-row' },
-      field('rule-project', 'Which spend', h('input', {
-        id: 'rule-project', class: 'drawer-input', list: 'rule-projects', autocomplete: 'off',
-        placeholder: 'a project name, or empty for all spend',
-        oninput: (e: Event) => project.set((e.target as HTMLInputElement).value),
-      })),
-      h('datalist', { id: 'rule-projects' }, () => projects().map((p) => h('option', { value: p }))),
-      h('datalist', { id: 'rule-models' }, () => models().map((m) => h('option', { value: m }))),
-      field('rule-method', 'How', h('select', {
-        id: 'rule-method', class: 'drawer-input',
-        onchange: (e: Event) => method.set((e.target as HTMLSelectElement).value as AllocationRule['method']),
-      }, ...(Object.keys(METHOD_WORDS) as Array<AllocationRule['method']>).map((m) =>
-        h('option', { value: m, text: isPrecise() ? METHOD_WORDS[m].precise : METHOD_WORDS[m].plain })))),
-      () => method() === 'direct'
-        ? field('rule-target', 'To', h('select', {
-            id: 'rule-target', class: 'drawer-input',
-            onchange: (e: Event) => target.set((e.target as HTMLSelectElement).value),
-          }, ...centres.map((c) => h('option', { value: c.costCentreId, text: c.name }))))
-        : null),
-    () => method() === 'fixed_split'
-      ? h('fieldset', { class: 'shares' },
-          h('legend', { text: () => `Shares, in percent (now ${shareTotal()}% of 100%)` }),
-          ...centres.map((c) => h('label', { class: 'share' },
-            h('span', { text: c.name }),
-            h('input', {
-              class: 'drawer-input', type: 'number', min: '0', max: '100', step: '0.01', inputmode: 'decimal',
-              'aria-label': `Share for ${c.name}, percent`,
-              oninput: (e: Event) => shares.set({ ...shares(), [c.costCentreId]: (e.target as HTMLInputElement).value }),
-            }))))
-      : method() === 'proportional_to_direct'
-        ? h('p', { class: 'form-hint', text: 'This spend is shared out in the same proportions as the spend each centre gets directly in the period. If nothing was allocated directly, it stays unallocated rather than being split evenly.' })
-        : null,
-    h('details', { class: 'rule-more' },
-      h('summary', { text: 'More conditions and dates' }),
-      h('p', { class: 'form-hint', text: 'Every condition must hold for a request to match. Leave a field empty to match anything.' }),
-      h('div', { class: 'form-row rule-more-row' },
-        ...EXTRA_MATCH.map(({ key, label, placeholder }) => field(`rule-${key}`, label, h('input', {
-          id: `rule-${key}`, class: 'drawer-input', autocomplete: 'off', spellcheck: 'false', placeholder,
-          ...(key === 'model' ? { list: 'rule-models' } : {}),
-          oninput: (e: Event) => extra.set({ ...extra(), [key]: (e.target as HTMLInputElement).value }),
-        })))),
-      h('div', { class: 'form-row rule-more-row' },
-        field('rule-priority', 'Priority', h('input', {
-          id: 'rule-priority', class: 'drawer-input', type: 'number', step: '1', inputmode: 'numeric', placeholder: '100',
-          'aria-describedby': 'rule-priority-hint',
-          oninput: (e: Event) => priority.set((e.target as HTMLInputElement).value),
-        })),
-        field('rule-from', 'Applies from', h('input', {
-          id: 'rule-from', class: 'drawer-input', type: 'date',
-          oninput: (e: Event) => from.set((e.target as HTMLInputElement).value),
-        })),
-        field('rule-until', 'Stops on', h('input', {
-          id: 'rule-until', class: 'drawer-input', type: 'date',
-          oninput: (e: Event) => until.set((e.target as HTMLInputElement).value),
-        }))),
-      h('p', { id: 'rule-priority-hint', class: 'form-hint', text: 'Rules are checked lowest number first, and the first rule that matches a request takes it. Dates are matched against when the spend happened; empty means from the start of your history and with no end.' })),
+    ...fields.children,
     h('div', { class: 'form-actions' }, h('button', { class: 'btn-commit', type: 'submit', text: 'Save rule' })),
   );
 }
