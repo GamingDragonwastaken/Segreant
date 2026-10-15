@@ -108,3 +108,58 @@ test('cost centres and the provider scope are finished from their drawers, previ
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+function request(id, iso, costUsd) {
+  return {
+    requestId: id, sessionId: null, tsEpochMs: Date.parse(iso), provider: 'openai', model: 'gpt-5', project: 'app', taskWeight: 1,
+    inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, costUsd,
+    estimated: false, streamed: false, statusCode: 200, durationMs: 1, source: 'claude-code', user: 'pat',
+  };
+}
+
+test('an allocation run is previewed and recorded from its drawer, for exactly the days chosen', async () => {
+  const store = new Store(':memory:');
+  store.upsertCostCentre({ costCentreId: 'eng', name: 'Engineering' });
+  store.saveAllocationRule({
+    ruleId: 'app', method: 'direct', match: { project: 'app' }, targets: [{ costCentreId: 'eng', ratio: 1 }], priority: 10,
+    effectiveFromMs: 0, effectiveToMs: null, revokedAtMs: null, owner: null, note: null,
+  });
+  store.insertRequest(request('in-a', '2026-07-15T12:00:00.000Z', 2));
+  store.insertRequest(request('in-b', '2026-07-20T12:00:00.000Z', 1));
+  store.insertRequest(request('outside', '2026-08-15T12:00:00.000Z', 5));
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'drawer-run-test' });
+  let browser;
+  try {
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('segreant.register', 'plain'); } catch {} });
+    await page.goto(`${base}/#/system`);
+    const main = page.getByRole('main');
+    await main.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+    await main.locator('details.parity-details summary').click();
+    await main.getByRole('button', { name: 'Open Run an allocation', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Run an allocation' });
+    await drawer.waitFor();
+
+    await drawer.getByLabel('Period').selectOption({ label: 'Choose dates…' });
+    await drawer.getByLabel('First day').fill('2026-07-01');
+    await drawer.getByLabel('Last day (included)').fill('2026-07-31');
+    await drawer.getByText('Engineering').waitFor();
+    await drawer.getByText('$3.00').first().waitFor();
+    assert.equal(store.allocationRuns().length, 0, 'the preview records nothing');
+
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('Recorded').waitFor();
+    const runs = store.allocationRuns();
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].result.totalMicros, 3_000_000, 'August spend stays out of a July run');
+    assert.deepEqual(runs[0].result.byCostCentre.map((c) => [c.costCentreId, c.allocatedMicros]), [['eng', 3_000_000]]);
+  } finally {
+    await browser?.close();
+    server.close();
+    store.close?.();
+  }
+});
