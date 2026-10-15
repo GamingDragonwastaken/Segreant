@@ -1006,6 +1006,10 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 
 /* The page-level result of a save: fixed in view, because the form that caused
    it may be far down a long page. Errors stay; confirmations clear. */
+.statement-kept { display: grid; gap: var(--s1); margin: var(--s2) 0; }
+.statement-kept-row { display: flex; justify-content: space-between; gap: var(--s4); font-size: 14px; }
+.statement-kept-val { font-family: var(--mono); font-size: 13px; color: var(--text); white-space: nowrap; }
+
 .page-notice {
   position: fixed; left: 50%; bottom: calc(var(--s6) + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   z-index: 40; max-width: min(640px, calc(100vw - 2 * var(--s4)));
