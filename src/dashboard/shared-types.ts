@@ -581,7 +581,7 @@ export interface StatementClose {
   eventCount: number | null;
 }
 
-/** Where a session's commit stands, by the kept-summary rule; `unmeasured` when no value read has measured it. */
+/** Where a session's commit stands, by the kept-summary rule; `unmeasured` when no single measured commit matches its sha. */
 export type SessionCommitOutcome = 'kept' | 'notKept' | 'contested' | 'unknown' | 'maturing' | 'unmeasured';
 
 export interface SessionCommit {
@@ -661,9 +661,14 @@ export interface SessionsPayload {
     unsessionedRequests: number;
     unsessionedCostUsd: number;
   };
-  /** The five most expensive models in the range, most expensive first; the rest are `other`. */
+  /** The five most expensive models in the range, most expensive first. */
   models: string[];
-  buckets: Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }> }>;
+  /**
+   * `byModel` holds only the named models. Every other model's cost is
+   * `otherUsd`: a field of its own, so no real model id (a model may be named
+   * "other") can collide with the aggregate.
+   */
+  buckets: Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }>; otherUsd: number }>;
   /** Newest first, at most `sessionLimit`. */
   sessions: SessionRow[];
   sessionLimit: number;
