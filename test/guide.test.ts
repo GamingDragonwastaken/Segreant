@@ -90,3 +90,18 @@ test('guide: demo data is named as such and the steward stage owns the four ques
   assert.ok(done.next.state.includes('fully instrumented'));
   assert.ok(done.next.commands.some((c) => c.includes('frontier')), 'steward points at the decision surfaces');
 });
+
+test('guide: the cap step offers a recommendation only when the cap basis has spend', () => {
+  // Imported logs only: spend exists, but none of it is what a cap governs.
+  const imported = buildGuide(freshFacts({ requestsAllTime: 44_000, spend30dUsd: 812, capBasisSpend30dUsd: 0 }));
+  assert.equal(imported.next.id, 'cap');
+  assert.ok(!imported.next.commands.some((c) => c.includes('--recommend')), 'recommend would refuse for lack of proxied history');
+  assert.ok((imported.next.notice ?? '').includes('imported from agent logs'));
+
+  const proxied = buildGuide(freshFacts({ requestsAllTime: 40, spend30dUsd: 812, capBasisSpend30dUsd: 9 }));
+  assert.ok(proxied.next.commands.includes('segreant budget --recommend'));
+
+  // A caller that does not report the basis keeps the old behaviour.
+  const legacy = buildGuide(freshFacts({ requestsAllTime: 40, spend30dUsd: 9 }));
+  assert.ok(legacy.next.commands.includes('segreant budget --recommend'));
+});

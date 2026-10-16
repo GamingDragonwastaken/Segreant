@@ -279,16 +279,26 @@ function alertList(alerts: AlertRow[]): Node {
  * from one recommended from a month of it, and the difference must be visible
  * before anyone acts on it.
  */
+/** A note that ends in a command ("...with: segreant budget --x on") shows it as code that does not wrap mid-flag. */
+function noteWithCommand(note: string): Node {
+  const at = note.lastIndexOf(': segreant ');
+  if (at < 0) return h('li', { text: note });
+  return h('li', {}, note.slice(0, at + 2), h('code', { class: 'inline-code', text: note.slice(at + 2) }));
+}
+
 function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: number | null): Node {
   const ready = rec.canApply === true;
   const value = rec.recommendedDailyUsd ?? null;
+  // Zero days on a proxy-only basis is not thin history: nothing the cap
+  // governs has run yet, whatever was imported. The rationale below says why.
+  const noProxied = rec.basisDays === 0 && rec.spendBasis === 'live_proxy';
 
   return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
     h('div', { class: 'card-head' },
       h('span', { class: 'card-title', text: () => (isPrecise() ? 'Recommended cap' : 'What we would suggest') }),
       h('span', {
         class: `pill ${ready ? 'pill-ok' : 'pill-unverified'}`,
-        text: ready ? 'enough data' : 'not enough data',
+        text: ready ? 'enough data' : noProxied ? 'no proxied spend' : 'not enough data',
       })),
 
     value !== null
@@ -299,7 +309,11 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
       ? `derived from ${count(rec.basisDays)} day(s) of observed spend on a ${rec.spendBasis === 'live_proxy' ? 'live proxy' : 'all observed'} basis; minimum ${count(rec.minActiveDays)} active days`
       : `worked out from ${count(rec.basisDays)} days of your actual spend`) }),
 
-    !ready
+    !ready && noProxied
+      ? h('p', { class: 'scope-note', text: () => (isPrecise()
+          ? 'No proxied spend in this window: a cap governs requests through the proxy, and none have run.'
+          : 'Nothing has gone through the proxy yet, and that is the spend a limit controls.') })
+    : !ready
       ? h('p', { class: 'scope-note', text: () => (isPrecise()
           ? 'Status is not review-ready: too few active days stand behind this to recommend acting on it.'
           : 'There is not enough history yet for this to be a suggestion worth acting on.') })
@@ -309,7 +323,9 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
             : 'Your current limit already matches this.') })
         : null,
 
-    rec.observed
+    // With no basis day there is no typical, busy or worst day: zeros here
+    // would read as measured. The rationale says why instead.
+    rec.observed && (rec.basisDays ?? 0) > 0
       ? h('div', { class: 'facts' },
           h('div', { class: 'fact' },
             h('span', { class: 'fact-key', text: () => (isPrecise() ? 'median daily' : 'a typical day') }),
@@ -333,6 +349,6 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
       : null,
 
     rec.rationale?.length
-      ? h('ul', { class: 'drawer-notes' }, ...rec.rationale.map((r) => h('li', { text: r })))
+      ? h('ul', { class: 'drawer-notes' }, ...rec.rationale.map(noteWithCommand))
       : null);
 }
