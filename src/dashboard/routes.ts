@@ -1085,6 +1085,8 @@ export function handleGuide({ res, store, config }: RouteContext): void {
         requestsAllTime: store.summary(0, now + 1000).requests,
         requestsRetention: store.retentionFloor(),
         spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
+        capBasisSpend30dUsd: store.economicSeries(now - 30 * day, now + 1000, day, !config.budget.capIncludesImported)
+          .reduce((a, s) => a + s.costUsd, 0),
         dailyCapUsd: config.budget.dailyUsd,
         outcomeSignals: store.countSignals(),
         realizationUnits: store.countRealizationUnits(),

@@ -398,6 +398,31 @@ test('budget advice consumes exact effective buckets and discloses unresolved le
   }
 });
 
+test('budget advice on imported-only spend names the cap basis instead of claiming no history', () => {
+  const store = new Store(':memory:');
+  try {
+    const now = Date.parse('2026-06-02T00:00:00Z');
+    store.insertRequest({ ...request('segreant', 'imported-a', money('3.5', 'USD', 'list'), 3.5), tsEpochMs: now - 60_000, via: 'import' });
+    store.insertRequest({ ...request('segreant', 'imported-b', money('1.25', 'USD', 'list'), 1.25), tsEpochMs: now - 90_000_000, via: 'import' });
+    const config = structuredClone(DEFAULT_CONFIG);
+    const advice = budgetAdvice(store, config, { nowMs: now, windowDays: 30 });
+    assert.equal(advice.status, 'cold_start');
+    assert.equal(advice.recommendedDailyUsd, null, 'imported spend never becomes a cap basis by default');
+    const why = advice.rationale[0] ?? '';
+    assert.ok(why.includes("No requests went through Segreant's proxy"), why);
+    assert.ok(why.includes('$4.75'), 'the imported total is stated, at list price');
+    assert.ok(why.includes('segreant budget --include-imported on'));
+    assert.ok(!/not enough spend history/i.test(why));
+
+    config.budget.capIncludesImported = true;
+    const opted = budgetAdvice(store, config, { nowMs: now, windowDays: 30 });
+    assert.equal(opted.spendBasis, 'all_observed');
+    assert.notEqual(opted.status, 'cold_start', 'once opted in, imported days are the basis');
+  } finally {
+    store.close();
+  }
+});
+
 test('time-reclaimed strata carry exact effective spend coverage beside manual-minute claims', () => {
   const exact = economicAttributionView({
     amount: money('1.234567', 'USD', 'effective'),

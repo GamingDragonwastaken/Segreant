@@ -408,14 +408,27 @@ export function budgetAdvice(
   const realizedSpendShare = opts.realizedSpendShare ?? null;
   const coverage: 'exact' | 'partial' | 'legacy_unknown' =
     exactRows.length === 0 ? 'legacy_unknown' : exact.complete ? 'exact' : 'partial';
+  const rec = recommendBudget({
+    dailySpends: series.map((s) => s.costUsd),
+    realizedSpendShare,
+    frontier: opts.frontier ?? [],
+    currentDailyCapUsd: config.budget.dailyUsd,
+    decisionInputs: budgetCapDecisionInputs(coverage, realizedSpendShare),
+  });
+  // A user whose spend so far was all imported from agent logs has history,
+  // just none the cap governs. "Not enough spend history" would contradict
+  // every other page, so name the basis and the two ways forward instead.
+  if (liveOnly && rec.status === 'cold_start') {
+    const liveUsd = series.reduce((a, s) => a + s.costUsd, 0);
+    const importedUsd = store.economicSeries(startMs, endMs, DAY_MS, false).reduce((a, s) => a + s.costUsd, 0) - liveUsd;
+    if (importedUsd >= 0.005) {
+      rec.rationale = [
+        `No requests went through Segreant's proxy in the last ${days} days. The $${importedUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} at list price in that time was imported from agent logs: it is observed, but a cap only governs proxied requests, so it does not count toward one. Route a tool through the proxy for a few active days, or count imported spend toward the cap with: segreant budget --include-imported on`,
+      ];
+    }
+  }
   return {
-    ...recommendBudget({
-      dailySpends: series.map((s) => s.costUsd),
-      realizedSpendShare,
-      frontier: opts.frontier ?? [],
-      currentDailyCapUsd: config.budget.dailyUsd,
-      decisionInputs: budgetCapDecisionInputs(coverage, realizedSpendShare),
-    }),
+    ...rec,
     spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
     windowDays: days,
     economic: {
