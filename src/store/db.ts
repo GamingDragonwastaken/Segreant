@@ -832,7 +832,7 @@ export class Store {
   /** Record that a session reported making a commit. The first observation of a sha in a session stands. */
   recordObservedCommit(o: ObservedCommit): void {
     prepared(this.db,
-      `INSERT INTO observed_commits (source, session_id, short_sha, branch, subject, ts_epoch_ms, cwd) VALUES (?,?,?,?,?,?,?)
+      `INSERT INTO observed_commits (source, session_id, short_sha, branch, subject, ts_epoch_ms, cwd, extraction) VALUES (?,?,?,?,?,?,?,'output_start')
        ON CONFLICT(source, session_id, short_sha) DO NOTHING`,
     ).run(o.source, o.sessionId, o.shortSha, o.branch, o.subject, Math.trunc(o.tsEpochMs), o.cwd);
     this.activeBatch?.tick();
