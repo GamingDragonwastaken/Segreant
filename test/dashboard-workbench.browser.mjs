@@ -56,7 +56,7 @@ test('the Workbench shows the wire, scales to its data, and opens the session a 
     const top = Number(ticks[ticks.length - 1].replace(/[$,]/g, ''));
     const tallest = Math.max(...wire.buckets.map((b) => b.costUsd));
     assert.ok(top >= tallest, `axis top ${top} reaches the tallest bar ${tallest}`);
-    assert.ok(top < tallest * 2, 'and does not waste half the plot');
+    assert.ok(tallest / top >= 0.77, `and the tallest bar fills at least 77% of the plot (got ${(tallest / top).toFixed(2)})`);
 
     // Point at the costliest bucket: the readout names its total.
     const best = wire.buckets.reduce((bi, b, i, all) => (b.costUsd > all[bi].costUsd ? i : bi), 0);
