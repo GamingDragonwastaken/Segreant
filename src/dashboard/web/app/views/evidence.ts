@@ -15,7 +15,7 @@ import { isPrecise, relative, basisWords, usd, usdFromMicros, count, date, pct }
 import { pageNotice, step, field, errorText, type Say, holdFocus } from '../components/workflow.ts';
 import { actionCard } from './spend.ts';
 import { projectRenderedAxes } from '../core/claimTypes.ts';
-import { residualBoundIsError, residualBoundWords, dayRange } from '../core/reconcileWords.ts';
+import { residualBoundIsError, residualBoundWords, dayRange, quantizationWords } from '../core/reconcileWords.ts';
 
 /**
  * The headline of this card, keyed on the BILLED CLAIM's state.
@@ -582,6 +582,7 @@ function recordedComparisons(d: BillingPayload): Node | null {
             ['Provider side', basisWords(r.providerSourceKind)],
           ]),
           h('p', { class: residualBoundIsError(r.offPathBound) ? 'drawer-error' : 'basis', text: () => residualBoundWords(r.offPathBound, isPrecise()) }),
+          () => { const q = quantizationWords(r.localQuantization, isPrecise()); return q ? h('p', { class: 'basis', text: q }) : null; },
           r.snapshotStability === 'changed_across_observations'
             ? h('p', { class: 'drawer-error', text: 'The provider reported different figures for the same days at different times. This comparison is contradicted.' })
             : null);

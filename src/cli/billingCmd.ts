@@ -5,7 +5,7 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { dbPath, loadConfig } from '../config.ts';
+import { dbPath, isDemo, loadConfig } from '../config.ts';
 import {
   OpenAiCostsPullError,
   previewOpenAiCosts,
@@ -15,14 +15,23 @@ import {
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
 import { assessAssumptionFragility } from '../epistemic/countermodel.ts';
 import { reconciliationCountermodels } from '../billing/countermodels.ts';
-import { describeOffPathBound, displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
+import { describeLocalQuantization, describeOffPathBound, displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
 import { billingEvidenceToCsv } from '../export/billingCsv.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
-import { printJson, cliJsonResponse } from './ui.ts';
+import { printJson as printJsonRaw, cliJsonResponse } from './ui.ts';
+
+/**
+ * Billing JSON names sample data in the payload itself. The bill the demo
+ * carries is generated, and a comparison or export lifted out of the terminal
+ * must still say so; the dashboard's banner does not travel with it.
+ */
+function printJson(value: unknown): void {
+  printJsonRaw(isDemo() && value !== null && typeof value === 'object' && !Array.isArray(value) ? { demo: true, ...(value as Record<string, unknown>) } : value);
+}
 import { stringifyJson } from '../util/json.ts';
 import { moneyToJson } from '../economics/money.ts';
 import { recordedTime } from '../util/time.ts';
@@ -222,6 +231,8 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   for (const line of wrapText(describeOffPathBound(result.offPathBound), 74)) {
     console.log(`    ${line}`);
   }
+  const rounding = describeLocalQuantization(result.localQuantization);
+  if (rounding) for (const line of wrapText(rounding, 74)) console.log(`    ${line}`);
   console.log('');
   console.log(`  Coverage      ${result.coverage.daysWithBoth} day(s) with both sides · ${result.coverage.providerOnlyDays} provider-only · ${result.coverage.localOnlyDays} local-only`);
   console.log(`  Material      ${result.coverage.materialDays} day(s) differ by more than $${result.materialityUsd.toFixed(2)}`);
@@ -811,6 +822,10 @@ function wrapText(text: string, width: number): string[] {
 /** `segreant billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
 export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
+  // The same mark `show` and `home` print: everything below is generated.
+  if (isDemo() && !flags.json && !(action === 'export' && !flags.out)) {
+    console.log('  \u25CF DEMO DATA \u2014 synthetic, isolated in demo.db; this bill and comparison were generated, not received from a provider');
+  }
   if (action === 'scope') {
     cmdScope(flags);
     return;
@@ -903,9 +918,9 @@ export async function cmdBilling(flags: Flags): Promise<void> {
       const records = store.billingEvidenceRecords();
       const summary = store.billingSummary();
       if (flags.json) {
-        writeOrPrint(stringifyJson(cliJsonResponse({ summary, records })) + '\n', flags.out);
+        writeOrPrint(stringifyJson(cliJsonResponse({ ...(isDemo() ? { demo: true } : {}), summary, records })) + '\n', flags.out);
       } else {
-        writeOrPrint(billingEvidenceToCsv(records), flags.out);
+        writeOrPrint(billingEvidenceToCsv(records, isDemo()), flags.out);
       }
       return;
     }

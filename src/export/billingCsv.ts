@@ -20,8 +20,11 @@ const COLUMNS = [
 ];
 
 /** This export is separate from request-ledger CSV and never adds provider totals to metered estimates. */
-export function billingEvidenceToCsv(rows: BillingEvidenceRecord[]): string {
-  const lines = [COLUMNS.map((column) => cell(column)).join(',')];
+export function billingEvidenceToCsv(rows: BillingEvidenceRecord[], demo = false): string {
+  // Sample data adds one last column, so a generated bill cannot be mistaken
+  // for a real one once the file leaves the terminal. A real export keeps its
+  // schema unchanged.
+  const lines = [[...COLUMNS, ...(demo ? ['sample'] : [])].map((column) => cell(column)).join(',')];
   for (const row of rows) {
     lines.push([
       row.sourceSystem, row.billingAccountRef, row.sourceRecordId, row.sourceRecordSha256, row.firstImportId,
@@ -29,6 +32,7 @@ export function billingEvidenceToCsv(rows: BillingEvidenceRecord[]): string {
       new Date(row.observedAtMs).toISOString(), new Date(row.chargePeriodStartMs).toISOString(),
       new Date(row.chargePeriodEndMs).toISOString(), row.chargeType, row.currency, formatUsdMicros(row.amountMicros),
       row.amountMicros, row.usageUnit, row.usageQuantity, row.costBasis, row.trust,
+      ...(demo ? ['generated sample data, not a provider bill'] : []),
     ].map((value, index) => cell(value, ![12, 13, 14, 17, 18].includes(index))).join(','));
   }
   return lines.join('\r\n') + '\r\n';

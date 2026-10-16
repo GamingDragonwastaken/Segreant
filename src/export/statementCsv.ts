@@ -37,6 +37,9 @@ function billedNote(r: StatementBilledRun): string {
   else if (r.offPathBound === 'unknown_local_total_truncated_by_retention') notes.push('retention deleted local rows, so the remainder bounds nothing');
   else if (r.offPathBound === null) notes.push('remainder bound not recorded');
   if (!r.coversWholeMonth) notes.push('figures are for this run\'s own period, not prorated to the month');
+  if (r.localQuantization && r.localQuantization.daysRounded > 0) {
+    notes.push(`local side summed exactly per day; ${r.localQuantization.daysRounded} day total(s) rounded half to even to the microdollar`);
+  }
   return notes.join('; ');
 }
 
