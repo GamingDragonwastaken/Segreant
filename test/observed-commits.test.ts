@@ -29,6 +29,36 @@ test('git commit lines are found in raw log lines, and ordinary brackets are not
   assert.deepEqual(commitObservationsInLine(line('an array [1, 2] and [note] text')), []);
 });
 
+test('a commit line counts only where git output starts, not inside code or prose about one', () => {
+  const line = (text: string) => JSON.stringify({ content: text });
+  // After an escaped newline, and inside a JSON string nested in another one.
+  assert.deepEqual(commitObservationsInLine(line('$ git commit -m x\n[main 1a2b3c4] Fix the import\n')).map((c) => c.shortSha), ['1a2b3c4']);
+  assert.deepEqual(commitObservationsInLine(JSON.stringify({ content: JSON.stringify([{ text: '[main 2b3c4d5] Nested' }]) })).map((c) => c.shortSha), ['2b3c4d5']);
+  // A test fixture an agent read or wrote, a call argument, a comment and inline prose.
+  assert.deepEqual(commitObservationsInLine(line("  content: '[main 3c4d5e6] Fix the import\\n 1 file changed',")), []);
+  assert.deepEqual(commitObservationsInLine(line("commitObservationsInLine(line('[main 4d5e6f7] Point Dependabot'))")), []);
+  assert.deepEqual(commitObservationsInLine(line('// e.g. "[main 5e6f7a8] subject" in the tool result')), []);
+  assert.deepEqual(commitObservationsInLine(line('git prints [main 6f7a8b9] Subject after a commit')), []);
+});
+
+test('commit observations from the loose reader are dropped once when the store opens', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'obs-mig-')), 'test.db');
+  const s = new Store(file);
+  s.recordObservedCommit({ source: 'claude-code', sessionId: 's', shortSha: '7a8b9c0', branch: 'main', subject: 'From a fixture', tsEpochMs: 1, cwd: null });
+  // Recreate the pre-version-4 shape: no extraction column.
+  s.raw().prepare('ALTER TABLE observed_commits DROP COLUMN extraction').run();
+  s.close();
+  const reopened = new Store(file);
+  assert.deepEqual(reopened.observedCommits(), [], 'a row whose context was never judged is not kept');
+  const cols = (reopened.raw().prepare('PRAGMA table_info(observed_commits)').all() as Array<{ name: string }>).map((c) => c.name);
+  assert.ok(cols.includes('extraction'));
+  reopened.recordObservedCommit({ source: 'claude-code', sessionId: 's', shortSha: '8b9c0d1', branch: 'main', subject: 'Real', tsEpochMs: 2, cwd: null });
+  reopened.close();
+  const third = new Store(file);
+  assert.equal(third.observedCommits().length, 1, 'the migration runs once; new rows survive later opens');
+  third.close();
+});
+
 test('Claude Code: a tool result showing a commit records its session, time and directory', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-obs-'));
   const toolResult = JSON.stringify({
@@ -66,7 +96,7 @@ test('a file read by an older reader is read once more, then skipped', async () 
   assert.equal(s.observedCommits().length, 1, 'history is captured on the re-read');
   const again = await importClaudeCode(s, { root });
   assert.equal(again.filesUnchanged, 1);
-  assert.equal(IMPORT_READER_VERSION, 3);
+  assert.equal(IMPORT_READER_VERSION, 4);
   s.close();
 });
 

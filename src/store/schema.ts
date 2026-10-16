@@ -258,6 +258,10 @@ CREATE TABLE IF NOT EXISTS observed_commits (
   subject     TEXT NOT NULL,
   ts_epoch_ms INTEGER NOT NULL,
   cwd         TEXT,
+  -- How the line was recognised. NULL rows came from a reader that matched a
+  -- commit line anywhere, code fixtures included. The migration drops them, and
+  -- the next import re-reads every log under the strict rule.
+  extraction  TEXT,
   PRIMARY KEY (source, session_id, short_sha)
 );
 CREATE INDEX IF NOT EXISTS idx_observed_commits_sha ON observed_commits(short_sha);
@@ -1172,6 +1176,14 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
 
 /** Idempotent schema migrations for DBs created before a column existed. */
 function migrate(db: DatabaseSync): void {
+  // Commit observations made by the loose reader cannot be re-judged: the line
+  // around each match was not kept. They are dropped once, and IMPORT_READER_
+  // VERSION 4 makes the next import read every log again under the strict rule.
+  const observedCols = db.prepare('PRAGMA table_info(observed_commits)').all() as Array<{ name: string }>;
+  if (observedCols.length > 0 && !observedCols.some((c) => c.name === 'extraction')) {
+    db.prepare('ALTER TABLE observed_commits ADD COLUMN extraction TEXT').run();
+    db.prepare('DELETE FROM observed_commits WHERE extraction IS NULL').run();
+  }
   const cols = db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'user')) {
     db.prepare('ALTER TABLE requests ADD COLUMN user TEXT').run();
