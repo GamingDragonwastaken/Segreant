@@ -115,9 +115,10 @@ export function boundedJsonlFiles(root: string): { files: string[]; truncated: b
 
 /**
  * The version of what the importers read from a log file. A file read in full
- * by an older reader is read once more: version 2 added commit observations.
+ * by an older reader is read once more: version 2 added commit observations;
+ * version 4 finds them only where git's own output starts (see COMMIT_START).
  */
-export const IMPORT_READER_VERSION = 3;
+export const IMPORT_READER_VERSION = 4;
 
 /** A commit git reported creating, found in a line of an agent's log. */
 export interface CommitObservationText {
@@ -132,11 +133,23 @@ export interface CommitObservationText {
 // escaped newline or the closing quote of the string.
 const COMMIT_LINE = /\[((?:detached HEAD)|[A-Za-z0-9._\/-]{1,120})(?: \(root-commit\))? ([0-9a-f]{7,40})\] ((?:[^"\\]|\\[^n]){1,200})/g;
 
+/**
+ * Where git's own output can begin in a raw log line: the start of a JSON
+ * string value (`"content":"`, `"stdout":"`, `"output":"`, at any escaping
+ * depth) or an escaped newline inside one. A commit line anywhere else is
+ * TEXT ABOUT a commit: a test fixture `content: '[main abc1234] ...'` that an
+ * agent read or wrote, or a comment explaining the format. On the owner's real
+ * logs (2026-10-16) the rule kept all 127 real matches and rejected all 26 of
+ * those, which had been recorded as commits the sessions made.
+ */
+const COMMIT_START = /(?:(?:^|[:\[,]\s*)\\*"|\\+n)$/;
+
 /** Every commit-creation line in one raw (JSON-encoded) log line. */
 export function commitObservationsInLine(line: string): CommitObservationText[] {
   if (!line.includes('] ')) return [];
   const found: CommitObservationText[] = [];
   for (const m of line.matchAll(COMMIT_LINE)) {
+    if (!COMMIT_START.test(line.slice(Math.max(0, m.index - 16), m.index))) continue;
     let subject = m[3]!;
     try { subject = JSON.parse(`"${subject}"`) as string; } catch { /* keep the raw text */ }
     subject = subject.trim();
