@@ -59,7 +59,7 @@ test('cost centres and the provider scope are finished from their drawers, previ
     await drawer.getByLabel('Name', { exact: true }).fill('Platform Team');
     await drawer.getByLabel('Owner (optional)').fill('Ana');
     await drawer.getByText('adds a new cost centre').waitFor();
-    await drawer.getByText('segreant alloc centre platform-team --name "Platform Team" --owner Ana').waitFor();
+    await drawer.getByText("segreant alloc centre platform-team --name 'Platform Team' --owner Ana").waitFor();
     assert.equal(store.costCentres().length, 0, 'the preview writes nothing');
     await apply(drawer, 'saved');
     assert.deepEqual(store.costCentres().map((c) => [c.costCentreId, c.name, c.owner]), [['platform-team', 'Platform Team', 'Ana']]);
@@ -256,7 +256,7 @@ test('a rule is previewed, saved with its owner and note, and revoked from its d
     await drawer.getByLabel('Owner (optional)').fill('Pat');
     await drawer.getByLabel('Note (optional)').fill('platform work');
     await drawer.getByText('Spend where project app goes to Operations').waitFor();
-    await drawer.getByText('segreant alloc rule app-ops --method direct --centre ops --match-project app --priority 5 --owner Pat --note "platform work"').waitFor();
+    await drawer.getByText("segreant alloc rule app-ops --method direct --centre ops --match-project app --priority 5 --owner Pat --note 'platform work'").waitFor();
     assert.equal(store.allocationRules().length, 0, 'the preview saves nothing');
     await drawer.getByRole('button', { name: 'Apply' }).click();
     await drawer.getByRole('status').getByText('Rule saved').waitFor();
@@ -280,5 +280,65 @@ test('a rule is previewed, saved with its owner and note, and revoked from its d
     await browser?.close();
     server.close();
     store.close?.();
+  }
+});
+
+test('codex review 2026-10-16: literal commands, the strip refreshes after a save, and rebuilt fields keep their values', async () => {
+  const home2 = mkdtempSync(join(tmpdir(), 'segreant-drawers-cr-'));
+  process.env.SEGREANT_HOME = home2;
+  const store = new Store(':memory:');
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'drawer-codex-review' });
+  let browser;
+  try {
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    browser = await chromium.launch({ headless: true, executablePath: process.env.SEGREANT_CHROME || undefined });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('segreant.register', 'plain'); } catch {}
+      window.__ledgerChanged = [];
+      window.addEventListener('segreant:ledger-changed', (e) => window.__ledgerChanged.push(e.detail?.claim));
+    });
+    const open = async (label) => {
+      await page.goto(`${base}/#/system`);
+      const main = page.getByRole('main');
+      await main.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+      const details = main.locator('details.parity-details');
+      if (!(await details.evaluate((el) => el.open))) await details.locator('summary').click();
+      await main.getByRole('button', { name: `Open ${label}`, exact: true }).click();
+      const drawer = page.getByRole('dialog', { name: label });
+      await drawer.waitFor();
+      return drawer;
+    };
+
+    // Finding 1: a name a shell would expand is quoted literally, and one no quoting can carry shows no command.
+    let drawer = await open('Cost centres');
+    const command = drawer.locator('code.cmd');
+    await drawer.getByLabel('Name', { exact: true }).fill('$(whoami)');
+    await page.waitForFunction((el) => el.textContent.includes("--name '$(whoami)'"), await command.elementHandle());
+    await drawer.getByLabel('Name', { exact: true }).fill("Pat's team");
+    await page.waitForFunction((el) => !el.textContent.includes('--name'), await command.elementHandle());
+
+    // Finding 4: a successful drawer save tells the shell, so the four figures re-read it.
+    await drawer.getByLabel('Name', { exact: true }).fill('Platform');
+    await drawer.getByRole('button', { name: 'Apply' }).click();
+    await drawer.getByRole('status').getByText('saved').waitFor();
+    assert.deepEqual(await page.evaluate(() => window.__ledgerChanged), ['allocation']);
+    await page.keyboard.press('Escape');
+
+    // Finding 5: switching to Clear and back shows the values Apply would send.
+    drawer = await open('Declare a provider scope');
+    await drawer.getByLabel('Organisation id').fill('org_original');
+    await drawer.getByLabel('Project id (optional)').fill('proj_original');
+    await drawer.getByLabel('Change').selectOption('clear');
+    await drawer.getByLabel('Change').selectOption('set');
+    assert.equal(await drawer.getByLabel('Organisation id').inputValue(), 'org_original');
+    assert.equal(await drawer.getByLabel('Project id (optional)').inputValue(), 'proj_original');
+  } finally {
+    await browser?.close();
+    server.close();
+    store.close?.();
+    rmSync(home2, { recursive: true, force: true });
   }
 });

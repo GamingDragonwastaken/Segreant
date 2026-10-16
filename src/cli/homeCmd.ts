@@ -95,7 +95,7 @@ export function cmdHome(flags: Flags): void {
   if (!plainList) for (const line of basisLines(basis, '                ')) console.log(color(tty, C.gray, line));
   printPlanLines(tty, plans);
   console.log('');
-  if (kept !== null && kept.kept.units + kept.notKept.units + kept.unknown.units + kept.maturing.units > 0) {
+  if (kept !== null && kept.kept.units + kept.notKept.units + kept.contested.units + kept.unknown.units + kept.maturing.units > 0) {
     const asOf = new Date(stored.generatedAt).toISOString().slice(0, 10);
     console.log(color(tty, C.bold, '  Did the AI work stay in the code?') + color(tty, C.gray, `   commits of the last 90 days, all projects · measured ${asOf}`));
     const row = (label: string, b: { units: number; costUsd: number }, tone: string, what: string) => {
@@ -104,6 +104,7 @@ export function cmdHome(flags: Flags): void {
     };
     row('Kept', kept.kept, C.green, 'still in the code after 14 days, no tracked check failed');
     row('Not kept', kept.notKept, C.yellow, 'rewritten, removed or reverted');
+    row('Disputed', kept.contested, C.gray, 'the checks disagreed; not settled either way');
     row('Unknown', kept.unknown, C.gray, 'not measured');
     row('Maturing', kept.maturing, C.gray, 'younger than 14 days when measured');
     console.log(color(tty, C.gray, '    Refresh: segreant scan --setup · one project in full: segreant realize --repo <path>'));
