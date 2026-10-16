@@ -7,11 +7,11 @@
 **Govern the spend. Not the developer.**
 
 The financial control layer for AI coding agents, running on your own machine.
-Every dollar your agents spend is metered, capped, checked against the
-provider's bill, assigned to the budget it belongs to, and traced to the work
-it produced. And every number tells you exactly how much it can be trusted.
+Your agents' spend is metered, capped before a loop runs away with it, checked
+against the provider's bill, assigned to the budget it belongs to, and traced to
+the work it produced. And every number tells you exactly how much it can be trusted.
 
-`local-first` · `zero runtime dependencies` · `2,300+ tests` · `Node 24+` · `free to use, including at work (BUSL-1.1)`
+`local-first` · `zero runtime dependencies` · `3,000+ tests` · `Node 24+` · `free to use, including at work (BUSL-1.1)`
 
 [![CI](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Segreant/actions/workflows/ci.yml)
 
@@ -87,9 +87,10 @@ No API key, no account, no setup. With Node 24 or newer:
 npx segreant demo --serve   # labelled synthetic data; opens the dashboard
 ```
 
-Open **http://localhost:8091**. You'll see spend by project and model, budget
-controls and governance alerts, the Return on Intelligence view, and a
-review-only cheaper-model trial. It all runs on an isolated `demo.db` and is
+Open **http://localhost:8091**. You'll see a month's statement, spend by
+project and model, caps and alerts, the comparison with a provider bill,
+cost-centre splits, and what the spend produced, with a review-only
+cheaper-model comparison. It all runs on an isolated `demo.db` and is
 labelled as synthetic. Clear it with `segreant demo --clear`.
 
 ## Use it on your real work
@@ -188,8 +189,13 @@ Per-tool recipes (Cursor, aider, opencode, Antigravity, your own SDK scripts):
   monthly split, previewed before it is recorded.
 - **Value**: what the spend produced, with the limits stated.
 
-Every save shows its preview first. The dashboard follows your system's light
-or dark setting, works at phone width, and loads nothing from the internet.
+- **Settings**: choose what you see, from density to which jobs sit in the top
+  bar, and a map of everything Segreant can do. Each capability the dashboard
+  runs opens from that map in one click.
+
+Splits, bill comparisons, imports, adoptions and budget changes show a preview
+before anything is saved. The dashboard follows your system's light or dark
+setting, works at phone width, and loads nothing from the internet.
 
 Every command, flag and design detail is in the **[Segreant guide](docs/GUIDE.md)**.
 
@@ -237,12 +243,14 @@ lives under `~/.segreant`, and the dashboard loads nothing from third parties:
 no CDNs, fonts or analytics. Requests you route through the proxy still go to
 the AI provider you configured, and your API keys pass through without being
 stored. Every other outbound path (price-card refresh, alert webhooks, team
-rollups) is opt-in and listed in [DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md).
+rollups) is opt-in. The privacy statement is [PRIVACY.md](docs/PRIVACY.md), also
+one click from every dashboard page; every path in detail is in
+[DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md).
 
 ## Status
 
 Segreant is **pre-release (0.1.0)**, published on npm as `segreant`. CI covers Linux, macOS and Windows, including a packaged-install
-smoke test, a browser accessibility pass and supply-chain checks.
+smoke test, real-browser tests and supply-chain checks.
 Reconciliation and outcome measurement are implemented and tested but have not
 yet been validated against real provider accounts or with outside users. That
 is what the first users will prove.
@@ -265,10 +273,10 @@ The full index is in [docs/README.md](docs/README.md).
 
 | | |
 |---|---|
-| Product code | ~96,000 lines of strict TypeScript |
-| Tests | ~70,000 lines, 2,300+ test cases across the CLI, dashboard and team server |
+| Product code | ~105,000 lines of strict TypeScript |
+| Tests | ~81,000 lines, 3,000+ test cases across the CLI, dashboard, team server and a real browser |
 | Runtime dependencies | 0 |
-| CI | 11 jobs on every pull request: three operating systems, the team server against real PostgreSQL, a packaged install, supply chain, accessibility, and exact-head verification |
+| CI | 14 checks on every pull request: three operating systems, install paths with spaces and `&`, the team server against real PostgreSQL, a packaged install, supply chain, real-browser tests, and exact-head verification |
 
 ## Development
 
