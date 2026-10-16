@@ -26,8 +26,6 @@ export const NAMED_MODELS = 5;
 /** Past this many days the chart steps by week, so a year stays readable. */
 const MAX_DAY_BUCKETS = 92;
 
-export const OTHER_MODEL = 'other';
-
 /** Context sent with one request: uncached input plus cache reads and writes. */
 export function contextTokens(r: Pick<RequestRow, 'inputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>): number {
   return r.inputTokens + r.cacheReadTokens + r.cacheWriteTokens;
@@ -44,9 +42,19 @@ export function replyKind(statusCode: number | null): 'refused' | 'failed' | nul
   return null;
 }
 
-/** A request whose tokens are known and nonzero: the only kind that says how much context was sent. */
+/** A request that reported tokens: the only kind that says how much context was sent. */
 function measured(r: RequestRow): boolean {
-  return !r.estimated && contextTokens(r) + r.outputTokens > 0;
+  return contextTokens(r) + r.outputTokens > 0;
+}
+
+/**
+ * A reply that went through yet reported no tokens: its usage is unknown. This
+ * is not `estimated`, which says only that the PRICE came from a near match;
+ * such a request may carry complete token counts (Codex review 2026-10-16).
+ * A refused or failed reply with no tokens sent nothing measurable.
+ */
+function usageUnknown(r: RequestRow): boolean {
+  return !measured(r) && (r.statusCode === null || r.statusCode < 400);
 }
 
 function localDay(ts: number): number {
@@ -68,10 +76,16 @@ function localWeek(ts: number): number {
 }
 
 function nextBucket(start: number, step: 'hour' | 'day' | 'week'): number {
+  if (step === 'hour') {
+    const next = localHour(start + HOUR_MS);
+    return next > start ? next : start + HOUR_MS;
+  }
+  // From noon of the bucket's date, so a midnight that a DST change moved to
+  // 01:00 cannot carry 01:00 into every later bucket; each boundary is then
+  // taken afresh as that date's own local midnight (Codex review 2026-10-16).
   const d = new Date(start);
-  if (step === 'hour') d.setHours(d.getHours() + 1);
-  else d.setDate(d.getDate() + (step === 'week' ? 7 : 1));
-  return d.getTime();
+  const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + (step === 'week' ? 7 : 1), 12).getTime();
+  return localDay(noon);
 }
 
 /** Fold a sequence to at most `points` values, each the largest in its slice. */
@@ -121,7 +135,7 @@ export function buildSessions(
   const bucketIndex = new Map<number, number>();
   for (let b = keyOf(from); b < window.endMs && b <= now; b = nextBucket(b, step)) {
     bucketIndex.set(b, buckets.length);
-    buckets.push({ startMs: b, costUsd: 0, requests: 0, byModel: [] });
+    buckets.push({ startMs: b, costUsd: 0, requests: 0, byModel: [], otherUsd: 0 });
   }
   const bucketModel = buckets.map(() => new Map<string, number>());
 
@@ -153,7 +167,8 @@ export function buildSessions(
     if (bi !== undefined) {
       buckets[bi]!.costUsd += r.costUsd;
       buckets[bi]!.requests += 1;
-      add(bucketModel[bi]!, named.has(r.model) ? r.model : OTHER_MODEL, r.costUsd);
+      if (named.has(r.model)) add(bucketModel[bi]!, r.model, r.costUsd);
+      else buckets[bi]!.otherUsd += r.costUsd;
     }
     if (!r.sessionId) {
       totals.unsessionedRequests += 1;
@@ -173,26 +188,47 @@ export function buildSessions(
   totals.sessions = sessions.size;
   totals.tools = tools.size;
   buckets.forEach((b, i) => {
-    const order = [...models, OTHER_MODEL];
-    b.byModel = order.filter((m) => bucketModel[i]!.has(m)).map((m) => ({ model: m, costUsd: bucketModel[i]!.get(m)! }));
+    b.byModel = models.filter((m) => bucketModel[i]!.has(m)).map((m) => ({ model: m, costUsd: bucketModel[i]!.get(m)! }));
   });
 
   // Commits: each session's own log lines, joined to the last value read.
   const report = realizationFromStore(store);
   const units = report.units;
   const observed = new Map<string, ObservedCommit[]>();
+  const seenSha = new Map<string, Set<string>>();
   for (const o of store.observedCommits()) {
     if (!sessions.has(o.sessionId)) continue;
+    const seen = seenSha.get(o.sessionId) ?? new Set<string>();
+    if (seen.has(o.shortSha)) continue;
+    seen.add(o.shortSha);
+    seenSha.set(o.sessionId, seen);
     const list = observed.get(o.sessionId) ?? [];
-    if (!list.some((x) => x.shortSha === o.shortSha)) list.push(o);
+    list.push(o);
     observed.set(o.sessionId, list);
+  }
+  // Indexed once: scanning every unit for every commit stalled the process
+  // that also serves the proxy (Codex review 2026-10-16: 30 s at 10,000).
+  const byHash = new Map<string, (typeof units)[number]>();
+  const byPrefix = new Map<string, Array<(typeof units)[number]>>();
+  for (const u of units) {
+    const h = u.hash.toLowerCase();
+    byHash.set(h, u);
+    if (h.length >= 7) {
+      const list = byPrefix.get(h.slice(0, 7)) ?? [];
+      list.push(u);
+      byPrefix.set(h.slice(0, 7), list);
+    }
   }
   const commitOf = (o: ObservedCommit): SessionCommit => {
     // A log records an abbreviated sha. Only a hex abbreviation of seven or more
-    // characters may stand for a longer hash; anything else must match exactly.
+    // characters may stand for a longer hash, and only when exactly one
+    // measured unit has it: with two, picking either would hand this session
+    // another repository's outcome, so the commit stays unmatched.
     const sha = o.shortSha.toLowerCase();
     const abbreviated = sha.length >= 7 && /^[0-9a-f]+$/.test(sha);
-    const unit = units.find((u) => { const h = u.hash.toLowerCase(); return h === sha || (abbreviated && h.startsWith(sha)); });
+    const exact = byHash.get(sha);
+    const candidates = exact || !abbreviated ? [] : (byPrefix.get(sha.slice(0, 7)) ?? []).filter((u) => u.hash.toLowerCase().startsWith(sha));
+    const unit = exact ?? (candidates.length === 1 ? candidates[0] : undefined);
     const outcome: SessionCommitOutcome = unit ? keptBucketOf(unit) : 'unmeasured';
     const checkMs = unit && outcome === 'maturing' ? unit.tsEpochMs + (unit.checkWindowDays ?? report.windowDays) * DAY_MS : null;
     return { sha: o.shortSha, subject: o.subject, tsEpochMs: o.tsEpochMs, outcome, checkMs };
@@ -206,6 +242,8 @@ export function buildSessions(
     measuredAt: units.length > 0 ? report.generatedAt : null,
   };
 
+  const outcomeMicros: Record<SessionCommitOutcome, number> = { kept: 0, notKept: 0, contested: 0, unknown: 0, maturing: 0, unmeasured: 0 };
+  let noCommitMicros = 0;
   const built: SessionRow[] = [];
   for (const [sessionId, acc] of sessions) {
     const context: number[] = [];
@@ -223,13 +261,17 @@ export function buildSessions(
     const commits = (observed.get(sessionId) ?? []).sort((a, b) => a.tsEpochMs - b.tsEpochMs).map(commitOf);
     const cost = acc.rows.reduce((s, r) => s + r.costUsd, 0);
     if (commits.length === 0) {
-      outcomes.noCommit.costUsd += cost;
+      noCommitMicros += Math.round(cost * 1e6);
       outcomes.noCommit.sessions += 1;
     } else {
-      for (const c of commits) {
-        outcomes[c.outcome].costUsd += cost / commits.length;
+      // Whole microdollars, the remainder to the earliest commits, so the parts
+      // add back to the session's cost after the wire rounds each one.
+      const micros = Math.round(cost * 1e6);
+      const base = Math.floor(micros / commits.length);
+      commits.forEach((c, i) => {
+        outcomeMicros[c.outcome] += base + (i < micros - base * commits.length ? 1 : 0);
         outcomes[c.outcome].commits += 1;
-      }
+      });
     }
     built.push({
       sessionId,
@@ -250,13 +292,15 @@ export function buildSessions(
       contextPeakTokens: context.reduce((m, v) => Math.max(m, v), 0),
       refusedReplies: acc.rows.filter((r) => replyKind(r.statusCode) === 'refused').length,
       failedReplies: acc.rows.filter((r) => replyKind(r.statusCode) === 'failed').length,
-      usageUnknownRequests: acc.rows.filter((r) => r.estimated).length,
+      usageUnknownRequests: acc.rows.filter(usageUnknown).length,
       profile: context.length > 0 ? profile : [],
       marks,
       commits,
     });
   }
   built.sort((a, b) => b.startMs - a.startMs || a.sessionId.localeCompare(b.sessionId));
+  for (const k of Object.keys(outcomeMicros) as SessionCommitOutcome[]) outcomes[k].costUsd = outcomeMicros[k] / 1e6;
+  outcomes.noCommit.costUsd = noCommitMicros / 1e6;
 
   outcomes.basis = 'Metered list cost of the sessions in this range. A session is linked to a commit only when its own log recorded making it;'
     + ' a session that made several commits splits its cost evenly across them. Each commit is filed by the last value read'

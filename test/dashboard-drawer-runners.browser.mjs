@@ -319,6 +319,12 @@ test('codex review 2026-10-16: literal commands, the strip refreshes after a sav
     await page.waitForFunction((el) => el.textContent.includes("--name '$(whoami)'"), await command.elementHandle());
     await drawer.getByLabel('Name', { exact: true }).fill("Pat's team");
     await page.waitForFunction((el) => !el.textContent.includes('--name'), await command.elementHandle());
+    // Codex review 2: PowerShell also ends a single-quoted string on a curly
+    // apostrophe, and a bare leading @ is splatting. Neither may reach the command bare.
+    await drawer.getByLabel('Name', { exact: true }).fill('x’; Write-Output BREAKOUT; #');
+    await page.waitForFunction((el) => !el.textContent.includes('--name'), await command.elementHandle());
+    await drawer.getByLabel('Name', { exact: true }).fill('@ops');
+    await page.waitForFunction((el) => el.textContent.includes("--name '@ops'"), await command.elementHandle());
 
     // Finding 4: a successful drawer save tells the shell, so the four figures re-read it.
     await drawer.getByLabel('Name', { exact: true }).fill('Platform');

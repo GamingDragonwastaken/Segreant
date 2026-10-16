@@ -408,13 +408,14 @@ export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDay
     unknown: { units: 0, costUsd: 0 },
     maturing: { units: 0, costUsd: 0, nextVerdictMs: null },
   };
-  const windowMs = report.windowDays * 24 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
   for (const u of report.units) {
     const cost = Number.isFinite(u.attributedCostUsd) ? u.attributedCostUsd : 0;
     if (u.maturing) {
       out.maturing.units += 1;
       out.maturing.costUsd += cost;
-      const due = u.tsEpochMs + windowMs;
+      // The unit's own window when it recorded one, as the Statement places it.
+      const due = u.tsEpochMs + (u.checkWindowDays ?? report.windowDays) * DAY_MS;
       out.maturing.nextVerdictMs = out.maturing.nextVerdictMs === null ? due : Math.min(out.maturing.nextVerdictMs, due);
       continue;
     }

@@ -26,7 +26,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
       'the working folder a request came from, which is how spend is matched to a project;',
       'the user label a tool reports;',
       'the first line of each commit message it matches to spend;',
-      'proposed code lines, used to check whether AI suggestions were kept. Turn on `metadataOnly` and none are kept.',
+      'proposed code lines, used to check whether AI suggestions were kept. Turning on `metadataOnly` stops new ones being kept; Clear proposals in Settings deletes the ones already kept.',
     ],
   },
   {
@@ -52,7 +52,8 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Keeping and deleting',
     paragraphs: [
-      'Request records are kept for 180 days and captured suggestions for 30 days. You can change both in Settings. Old suggestions are cleared each time Segreant starts; `segreant prune --apply` deletes everything past its period. To remove everything, delete the `.segreant` folder in your home directory.',
+      'Captured suggestions older than 30 days are deleted each time Segreant starts. Request records are not deleted on their own: after 180 days they are due for deletion, and `segreant prune --apply` deletes them along with any expired suggestions. You can change both periods in Settings.',
+      'To remove everything, delete the folder Segreant keeps its data in. That is `.segreant` in your home directory unless you set `SEGREANT_HOME` or `SEGREANT_DB`, in which case delete what those point to as well; `segreant doctor` prints the database path in use.',
       'To take your records with you, `segreant pack export --out <file>` writes them to a file on this machine.',
     ],
   },

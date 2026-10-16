@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { seedDemo } from '../src/demo/seed.ts';
-import { buildSessions, foldProfile, contextTokens, OTHER_MODEL } from '../src/dashboard/sessions.ts';
+import { buildSessions, foldProfile, contextTokens } from '../src/dashboard/sessions.ts';
 import { realizationFromStore, keptBucketOf } from '../src/value/realization.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -39,12 +39,12 @@ test('totals, buckets and sessions each add up to the rows', () => {
     assert.equal(p.totals.requests, rows.length);
     near(p.totals.costUsd, sum(rows.map((r) => r.costUsd)), 'total cost');
     near(sum(p.buckets.map((b) => b.costUsd)), p.totals.costUsd, 'buckets cover every row');
-    for (const b of p.buckets) near(sum(b.byModel.map((m) => m.costUsd)), b.costUsd, 'a bucket is its models');
+    for (const b of p.buckets) near(sum(b.byModel.map((m) => m.costUsd)) + b.otherUsd, b.costUsd, 'a bucket is its named models plus the rest');
     assert.equal(p.totals.sessions, new Set(rows.filter((r) => r.sessionId).map((r) => r.sessionId)).size);
     assert.equal(p.totals.unsessionedRequests, rows.filter((r) => !r.sessionId).length);
     near(sum(p.sessions.map((s) => s.costUsd)) + p.totals.unsessionedCostUsd, p.totals.costUsd, 'sessions plus unsessioned is the total');
     assert.ok(p.models.length <= 5);
-    for (const b of p.buckets) for (const m of b.byModel) assert.ok(p.models.includes(m.model) || m.model === OTHER_MODEL);
+    for (const b of p.buckets) for (const m of b.byModel) assert.ok(p.models.includes(m.model), 'byModel names only the five');
     for (let i = 1; i < p.sessions.length; i += 1) assert.ok(p.sessions[i - 1]!.startMs >= p.sessions[i]!.startMs, 'newest first');
 
     const o = p.outcomes;
@@ -77,7 +77,7 @@ test('context runs first to last over measured requests; refusals and failures a
     store.insertRequest(req({ tsEpochMs: NOW - 1000, inputTokens: 800, cacheReadTokens: 60_000, cacheWriteTokens: 1200 }));
     const s = buildSessions(store, '7d', WEEK, { now: NOW }).sessions[0]!;
     assert.equal(s.requests, 4);
-    assert.equal(s.usageUnknownRequests, 1);
+    assert.equal(s.usageUnknownRequests, 0, 'a failed reply with no tokens sent nothing; it is not missing usage');
     assert.equal(s.contextStartTokens, 2000);
     assert.equal(s.contextEndTokens, 62_000, 'the last REPORTED request, not the unreported failure');
     assert.equal(s.contextPeakTokens, 62_000);
