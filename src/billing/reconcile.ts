@@ -35,7 +35,7 @@
  */
 
 import { usdMicros, formatUsdMicros } from './types.ts';
-import { formatMoneyAmount } from '../economics/money.ts';
+import { formatMoneyAmount, type Money } from '../economics/money.ts';
 import { barredUses, type ClaimUse } from '../epistemic/claim-uses.ts';
 import { claimProfile, type ClaimProfile } from '../epistemic/profile.ts';
 import type { OpenAiCostsObservationLine, OpenAiCostsObservationRun, RequestRow } from '../store/db.ts';
@@ -176,6 +176,13 @@ export interface ReconciliationRun {
    */
   offPathBound: OffPathBound;
   snapshotStability: SnapshotStability;
+  /**
+   * How exact local amounts became provider microdollars. Each request's exact
+   * amount is kept, each UTC day is summed exactly, and only the day total is
+   * rounded half to even: at most half a microdollar per day. `daysRounded` is
+   * how many day totals needed it. Absent on runs recorded before the rule.
+   */
+  localQuantization?: { rule: 'day_total_half_even_micros'; daysRounded: number };
   /** Days whose provider total changed between independent observations. */
   unstableDayStartMs: number[];
   /**
@@ -324,6 +331,73 @@ function refuse(refusal: ReconciliationRefusal, detail: string): ReconciliationR
   return { status: 'refused', refusal, detail };
 }
 
+/**
+ * The rounding a comparison applied to the local side, in words, or null when
+ * it changed nothing. A run recorded before the rule existed rounded nothing
+ * either: it refused any exact amount finer than a microdollar.
+ */
+export function describeLocalQuantization(q: ReconciliationRun['localQuantization']): string | null {
+  if (!q || q.daysRounded === 0) return null;
+  const days = `${q.daysRounded} day total${q.daysRounded === 1 ? '' : 's'}`;
+  return `Local amounts finer than a microdollar were summed exactly for each day; ${days} then rounded to the microdollar, half to even, so the local figure is within $${(q.daysRounded * 0.0000005).toFixed(7)} of the exact sum.`;
+}
+
+/** An exact decimal (coefficient x 10^-scale) as bigint microdollars, rounded half to even. */
+function halfEvenMicrosBig(coefficient: bigint, scale: number): { micros: bigint; rounded: boolean } {
+  const shift = scale - 6;
+  if (shift <= 0) return { micros: coefficient * 10n ** BigInt(-shift), rounded: false };
+  const divisor = 10n ** BigInt(shift);
+  const negative = coefficient < 0n;
+  const abs = negative ? -coefficient : coefficient;
+  let q = abs / divisor;
+  const r = abs % divisor;
+  const twice = r * 2n;
+  if (twice > divisor || (twice === divisor && q % 2n === 1n)) q += 1n;
+  return { micros: negative ? -q : q, rounded: r !== 0n };
+}
+
+/**
+ * An exact amount as an integer coefficient and a decimal scale, read through
+ * `formatMoneyAmount` so this stays a visible monetary read site (the FX
+ * consumer sweep classifies every file that reads Money).
+ */
+function exactParts(value: Money): { coefficient: bigint; scale: number } {
+  const text = formatMoneyAmount(value);
+  const negative = text.startsWith('-');
+  const [whole, fraction = ''] = (negative ? text.slice(1) : text).split('.');
+  const coefficient = BigInt(`${whole}${fraction}`);
+  return { coefficient: negative ? -coefficient : coefficient, scale: fraction.length };
+}
+
+/** bigint microdollars as a number, or null when a number cannot hold them exactly. */
+function safeMicros(micros: bigint): number | null {
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  return micros > max || micros < -max ? null : Number(micros);
+}
+
+/**
+ * An exact USD amount in microdollars, rounded half to even; says whether
+ * rounding changed it. Throws rather than return a number that lost digits.
+ */
+export function halfEvenMicros(value: Money): { micros: number; rounded: boolean } {
+  const { coefficient, scale } = exactParts(value);
+  const { micros, rounded } = halfEvenMicrosBig(coefficient, scale);
+  const n = safeMicros(micros);
+  if (n === null) throw new Error('amount is outside the supported fixed-point range');
+  return { micros: n, rounded };
+}
+
+/** One UTC day's local capture, summed exactly: an integer coefficient at the finest scale seen. */
+interface ExactDay { coefficient: bigint; scale: number; requests: number }
+
+function addExact(day: ExactDay, coefficient: bigint, scale: number): void {
+  if (scale > day.scale) {
+    day.coefficient *= 10n ** BigInt(scale - day.scale);
+    day.scale = scale;
+  }
+  day.coefficient += coefficient * 10n ** BigInt(day.scale - scale);
+}
+
 /** UTC day key for a local ledger row, matching the provider's bucket boundary. */
 function utcDayStart(tsEpochMs: number): number {
   return Math.floor(tsEpochMs / DAY_MS) * DAY_MS;
@@ -421,13 +495,12 @@ export function reconcileOpenAiCosts(input: {
     else providerByDay.set(line.bucketStartMs, [line]);
   }
 
-  const localByDay = new Map<number, { micros: number; requests: number }>();
+  const exactByDay = new Map<number, ExactDay>();
   for (const row of input.requests) {
     if (!isOnDeclaredRoute(row, input.run.declaredScopeId)) continue;
     if (row.tsEpochMs < input.run.periodStartMs || row.tsEpochMs >= input.run.periodEndMs) continue;
     const key = utcDayStart(row.tsEpochMs);
-    const bucket = localByDay.get(key) ?? { micros: 0, requests: 0 };
-    let capturedMicros: number;
+    const bucket = exactByDay.get(key) ?? { coefficient: 0n, scale: 6, requests: 0 };
     if (row.economicAmount !== undefined) {
       if (row.economicAmount.currency !== 'USD') {
         return refuse(
@@ -435,25 +508,33 @@ export function reconcileOpenAiCosts(input: {
           `request ${row.requestId} has an exact local amount in ${row.economicAmount.currency}; this reconciliation has no FX policy`,
         );
       }
-      try {
-        // Preserve the canonical exact amount until the fixed-point boundary.
-        // If it cannot be represented in provider microdollars, refusing is safer
-        // than inventing a rounding mode for a consequential comparison.
-        capturedMicros = usdMicros(formatMoneyAmount(row.economicAmount), `request ${row.requestId} exact amount`);
-      } catch (error) {
-        return refuse(
-          'local_exact_amount_requires_explicit_quantization',
-          `request ${row.requestId} exact local amount cannot be represented in microdollars without an explicit quantization policy: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      // Kept exact until the day is summed. Per-token prices give amounts like
+      // 0.0014008, finer than the provider's microdollars; refusing them here
+      // refused almost every real OpenAI route (found seeding the demo bill,
+      // 2026-10-16). The rule is stated in the result, not invented silently.
+      const parts = exactParts(row.economicAmount);
+      addExact(bucket, parts.coefficient, parts.scale);
     } else {
       // Legacy rows have no exact economic event. Retain their compatibility
-      // projection explicitly as the rate-card estimate documented by the result.
-      capturedMicros = Math.round(row.costUsd * 1_000_000);
+      // projection explicitly as the rate-card estimate documented by the
+      // result, and add it into the same exact sum: rounding the exact part
+      // alone and adding the legacy part after could round a tie the wrong way.
+      addExact(bucket, BigInt(Math.round(row.costUsd * 1_000_000)), 6);
     }
-    bucket.micros += capturedMicros;
     bucket.requests += 1;
-    localByDay.set(key, bucket);
+    exactByDay.set(key, bucket);
+  }
+
+  // Each day's exact sum becomes microdollars once, rounded half to even, and
+  // is checked against the number range before it leaves bigint.
+  let daysRounded = 0;
+  const localByDay = new Map<number, { micros: number; requests: number }>();
+  for (const [key, day] of exactByDay) {
+    const { micros, rounded } = halfEvenMicrosBig(day.coefficient, day.scale);
+    const n = safeMicros(micros);
+    if (n === null) return refuse('local_exact_amount_requires_explicit_quantization', 'a day total is outside the supported fixed-point range');
+    if (rounded) daysRounded += 1;
+    localByDay.set(key, { micros: n, requests: day.requests });
   }
 
   const days: ReconciliationDayLine[] = [];
@@ -531,6 +612,7 @@ export function reconcileOpenAiCosts(input: {
     },
     days,
     snapshotStability,
+    localQuantization: { rule: 'day_total_half_even_micros', daysRounded },
     unstableDayStartMs,
     providerSourceKind: sourceKind,
     // The fifth condition appears only when it is true. A reader who sees four

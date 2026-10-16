@@ -573,6 +573,9 @@ function buildLocalCaptureEvidence(reconciliation: ReconciliationRun, reconcilia
       providerProjectRef: reconciliation.providerProjectRef,
       observationRunId: reconciliation.observationRunId,
       reconciliationRunId,
+      // How the exact local amounts became this microdollar total, when a rule
+      // applied; absent on runs recorded before it, which rounded nothing.
+      ...(reconciliation.localQuantization ? { localQuantization: { ...reconciliation.localQuantization } } : {}),
     },
     scope: scope({ provider: 'openai', declaredScopeId: reconciliation.declaredScopeId, providerProjectRef: reconciliation.providerProjectRef }),
     grain: grain(['provider_project_period']),
@@ -658,6 +661,7 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
         // reader would get a residual with no statement of whether it bounds
         // off-path spend at all.
         offPathBound: input.run.offPathBound,
+        ...(input.run.localQuantization ? { localQuantization: { ...input.run.localQuantization } } : {}),
         snapshotStability: input.run.snapshotStability,
         providerSourceKind: input.run.providerSourceKind,
         ...(input.reconciliationRunId === undefined ? {} : { reconciliationRunId: nonEmpty(input.reconciliationRunId, 'reconciliation run id') }),
