@@ -118,15 +118,24 @@ function modelColours(models: readonly string[]): (model: string) => string {
 const OTHER_COLOUR = 'var(--series-other)';
 
 /** A round axis top and its steps, so every gridline names a value the scale really reaches. */
-export function niceScale(max: number, steps = 4): { top: number; ticks: number[] } {
+export function niceScale(max: number): { top: number; ticks: number[] } {
   if (!(max > 0)) return { top: 1, ticks: [0, 1] };
-  const raw = max / steps;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
-  const top = Math.ceil(max / step - 1e-9) * step;
+  // Every round step (1, 2, 2.5, 5 times a power of ten) that gives three to
+  // six intervals; the lowest top wins, so a $40.20 peak gets a $50 axis, not
+  // the $60 a fixed four-step rule gave it (half the plot left empty).
+  const mag = 10 ** Math.floor(Math.log10(max));
+  let best: { top: number; step: number } | null = null;
+  for (const m of [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5]) {
+    const step = m * mag;
+    const top = Math.ceil(max / step - 1e-9) * step;
+    const intervals = Math.round(top / step);
+    if (intervals < 3 || intervals > 6) continue;
+    if (!best || top < best.top - 1e-9 || (Math.abs(top - best.top) < 1e-9 && step > best.step)) best = { top, step };
+  }
+  const { top, step } = best ?? { top: Math.ceil(max / mag) * mag, step: mag };
   const ticks: number[] = [];
   for (let v = 0; v <= top + step / 2; v += step) ticks.push(Number(v.toFixed(10)));
-  return { top, ticks };
+  return { top: Number(top.toFixed(10)), ticks };
 }
 
 function bucketLabel(ms: number, bucketMs: number): { short: string; long: string } {
