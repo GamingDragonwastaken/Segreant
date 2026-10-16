@@ -38,6 +38,10 @@ import type {
   BillingKernelClaimSummary,
   BillingPayload,
   StatementPayload,
+  SessionsPayload,
+  SessionRow,
+  SessionCommit,
+  SessionCommitOutcome,
   StatementBilledRun,
   StatementAllocatedRun,
   BillingImportSummary,
@@ -112,6 +116,10 @@ export type {
   BillingKernelClaimSummary,
   BillingPayload,
   StatementPayload,
+  SessionsPayload,
+  SessionRow,
+  SessionCommit,
+  SessionCommitOutcome,
   StatementBilledRun,
   StatementAllocatedRun,
   BillingImportSummary,
@@ -282,6 +290,11 @@ export const api = {
   allocation: () => request<AllocationPayload>(routePath('allocation')),
   /** One calendar month, `YYYY-MM`; the four claims side by side, never summed. */
   statement: (month?: string) => request<StatementPayload>(month ? `${routePath('statement')}?month=${encodeURIComponent(month)}` : routePath('statement')),
+  /** The Workbench: the range's sessions, buckets by model, and what their commits came to. */
+  sessions: (range: string, signal?: AbortSignal) => request<SessionsPayload>(
+    `${routePath('sessions')}?range=${encodeURIComponent(range)}`,
+    signal ? { signal } : undefined,
+  ),
   /** A download link, not a fetch: the browser saves the month's CSV. */
   statementCsvHref: (month: string) => `${routePath('statement-csv')}?month=${encodeURIComponent(month)}`,
   allocationRunCsvHref: (allocationRunId: string) => `${routePath('allocation-run-csv')}?id=${encodeURIComponent(allocationRunId)}`,

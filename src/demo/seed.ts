@@ -292,19 +292,21 @@ function addProposal(ctx: Ctx, idx: number, sessionId: string, project: string, 
  * enrich the spend + acceptance surfaces; the realized-value picture is seeded
  * separately as persisted work units (see seedRealizationUnits).
  */
-function codingSession(ctx: Ctx, idx: number, startMs: number): void {
+function codingSession(ctx: Ctx, idx: number, made: CodingCommit): void {
   const sessionId = `demo-sess-code-${idx}`;
-  const project = pick(ctx.rng, PROJECTS);
+  pick(ctx.rng, PROJECTS); // drawn and set aside: the commit names the project, and every later draw stays where it was
+  const project = made.project;
   const user = pick(ctx.rng, NAMED_USERS);
   const source = pick(ctx.rng, ['opencode', 'cursor']);
-  ctx.store.upsertSession(sessionId, project, source, startMs);
-  ctx.sessions += 1;
 
+  // Drawn in the original order, then laid out so the session ends a few
+  // minutes before the commit it made, as a real session's log would show.
   const calls = int(ctx.rng, 6, 12);
-  let t = startMs;
+  const specs: Array<Omit<ReqSpec, 'tsEpochMs'> & { offsetMs: number }> = [];
+  let offset = 0;
   for (let i = 0; i < calls; i++) {
-    addRequest(ctx, {
-      tsEpochMs: t,
+    specs.push({
+      offsetMs: offset,
       model: pick(ctx.rng, [OPUS, SONNET, SONNET]),
       project,
       user,
@@ -315,10 +317,27 @@ function codingSession(ctx: Ctx, idx: number, startMs: number): void {
       cacheWriteTokens: i === 0 ? int(ctx.rng, 8_000, 30_000) : 0,
       cacheReadTokens: i === 0 ? 0 : int(ctx.rng, 10_000, 80_000),
     });
-    t += int(ctx.rng, 2 * 60 * 1000, 25 * 60 * 1000);
+    offset += int(ctx.rng, 2 * 60 * 1000, 25 * 60 * 1000);
   }
+  // A session's cached context only grows as the conversation does, so the
+  // cache reads already drawn are handed out in rising order.
+  const reads = specs.slice(1).map((r) => r.cacheReadTokens ?? 0).sort((a, b) => a - b);
+  specs.slice(1).forEach((r, i) => { r.cacheReadTokens = reads[i]; });
+
+  const lastOffset = specs[specs.length - 1]!.offsetMs;
+  const startMs = made.tsEpochMs - 3 * 60 * 1000 - lastOffset;
+  ctx.store.upsertSession(sessionId, project, source, startMs);
+  ctx.sessions += 1;
+  for (const { offsetMs, ...spec } of specs) addRequest(ctx, { ...spec, tsEpochMs: startMs + offsetMs });
   addProposal(ctx, idx, sessionId, project, startMs + 1000);
+  // The commit as the session's own log reports it: the only link the
+  // Workbench draws between spend and a commit.
+  ctx.store.recordObservedCommit({
+    source, sessionId, shortSha: made.hash, branch: 'main', subject: made.subject, tsEpochMs: made.tsEpochMs, cwd: null,
+  });
 }
+
+interface CodingCommit { hash: string; subject: string; project: string; tsEpochMs: number }
 
 /**
  * A non-coding session (chat / research / drafting): a short burst with no
@@ -447,6 +466,9 @@ const REALIZATION_ROSTER: UnitSpec[] = [
   { project: 'backend-api',   model: 'claude-opus-4-8',   subject: 'feat: per-context frontier',          daysAgo: 5,  costUsd: 1.95, linesAdded: 175, acceptance: 0.83, arch: 'maturing' },
   { project: 'data-pipeline', model: 'gpt-4o',            subject: 'refactor: store-backed realization',  daysAgo: 3,  costUsd: 0.8,  linesAdded: 120, acceptance: 0.60, arch: 'maturing' },
 ];
+
+/** The roster commits the sample's coding sessions made, by subject. */
+const CODING_COMMITS = ['feat: alerts banner rework', 'fix: dark-mode contrast', 'fix: chart axis labels', 'feat: per-context frontier'];
 
 function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string): WorkUnit {
   const arch = ARCHETYPES[spec.arch];
@@ -657,9 +679,15 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
     }
   }
 
-  // Scattered work sessions over the period.
-  const codingStarts = [11, 9, 7, 4].map((d) => now - d * DAY_MS + 10 * HOUR_MS);
-  codingStarts.forEach((startMs, i) => codingSession(ctx, i + 1, startMs));
+  // Four work sessions, each ending in a commit from the measured roster: one
+  // kept, one not kept, two still too new to judge.
+  CODING_COMMITS.forEach((subject, i) => {
+    const at = REALIZATION_ROSTER.findIndex((u) => u.subject === subject);
+    const spec = REALIZATION_ROSTER[at]!;
+    codingSession(ctx, i + 1, {
+      hash: `demo-commit-${at + 1}`, subject, project: spec.project, tsEpochMs: now - Math.floor(spec.daysAgo * DAY_MS),
+    });
+  });
 
   // Non-coding sessions, seeded per-user so the per-user VALUE distribution is
   // real: a spread of extraction across the team (some extract nearly all their

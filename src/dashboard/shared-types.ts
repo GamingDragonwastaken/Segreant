@@ -581,6 +581,109 @@ export interface StatementClose {
   eventCount: number | null;
 }
 
+/** Where a session's commit stands, by the kept-summary rule; `unmeasured` when no value read has measured it. */
+export type SessionCommitOutcome = 'kept' | 'notKept' | 'contested' | 'unknown' | 'maturing' | 'unmeasured';
+
+export interface SessionCommit {
+  sha: string;
+  subject: string;
+  tsEpochMs: number;
+  outcome: SessionCommitOutcome;
+  /** When the survival check falls, for a commit still too new to judge. */
+  checkMs: number | null;
+}
+
+/** One agent session in the range: only its requests inside the range are counted. */
+export interface SessionRow {
+  sessionId: string;
+  startMs: number;
+  endMs: number;
+  /** The tool that sent most of its requests, or null for direct traffic. */
+  source: string | null;
+  project: string;
+  /** The model that cost the most in it. */
+  model: string;
+  models: number;
+  requests: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** Context sent on the first and last request: uncached input plus cache reads and writes. */
+  contextStartTokens: number;
+  contextEndTokens: number;
+  contextPeakTokens: number;
+  /** Replies with status 429: a cap (Segreant's or the provider's) turned the request away. */
+  refusedReplies: number;
+  /** Replies with a 5xx status: the request failed upstream or in the proxy. */
+  failedReplies: number;
+  /** Requests whose usage the provider never reported: their tokens are unknown and stay out of the context figures. */
+  usageUnknownRequests: number;
+  /**
+   * Context per measured request in order, folded to at most 40 points (each
+   * the largest in its slice). A refused or failed reply that carried no tokens
+   * sent no context, so it is not drawn as a drop to zero.
+   */
+  profile: number[];
+  /** Where refusals and failures fell, as indexes into `profile` (the point just before each). */
+  marks: Array<{ at: number; kind: 'refused' | 'failed' }>;
+  commits: SessionCommit[];
+}
+
+export interface SessionOutcomeShare {
+  costUsd: number;
+  commits: number;
+}
+
+/**
+ * `GET /api/sessions?range=`: the Workbench on the Spend page. Metered list
+ * cost only. Commits come from the sessions' own logs; outcomes come from the
+ * last value read, filed by the same rule as the Statement.
+ */
+export interface SessionsPayload {
+  demo: boolean;
+  generatedAt: string;
+  range: string;
+  window: { startMs: number; endMs: number; bucketMs: number };
+  totals: {
+    requests: number;
+    costUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    sessions: number;
+    tools: number;
+    refusedReplies: number;
+    failedReplies: number;
+    /** Requests that carry no session id, so they appear in the chart and totals but in no session row. */
+    unsessionedRequests: number;
+    unsessionedCostUsd: number;
+  };
+  /** The five most expensive models in the range, most expensive first; the rest are `other`. */
+  models: string[];
+  buckets: Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }> }>;
+  /** Newest first, at most `sessionLimit`. */
+  sessions: SessionRow[];
+  sessionLimit: number;
+  /** Sessions in the range beyond the limit, still counted in the totals. */
+  sessionsOmitted: number;
+  outcomes: {
+    kept: SessionOutcomeShare;
+    notKept: SessionOutcomeShare;
+    contested: SessionOutcomeShare;
+    unknown: SessionOutcomeShare;
+    maturing: SessionOutcomeShare;
+    unmeasured: SessionOutcomeShare;
+    /** Session spend with no commit linked to it. */
+    noCommit: { costUsd: number; sessions: number };
+    basis: string;
+    /** When the outcomes were last measured; null when never. */
+    measuredAt: string | null;
+  };
+}
+
 /**
  * `GET /api/statement?month=YYYY-MM`: one calendar month, read as a finance
  * reader would. The four claims sit side by side, each with its own basis and
@@ -1796,6 +1899,7 @@ export interface DashboardResponseMap {
   overview: Overview;
   billing: BillingPayload;
   statement: StatementPayload;
+  sessions: SessionsPayload;
   allocation: AllocationPayload;
   economic: EconomicPayload;
   pricing: PricingPayload;

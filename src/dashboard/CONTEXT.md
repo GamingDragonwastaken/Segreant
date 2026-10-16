@@ -18,6 +18,8 @@ routes.ts            one named handler per endpoint, plus the ROUTES table
 value-cache.ts       in-memory /api/value payload cache (per Store, 8 entries, 10 min TTL,
                      keyed on query, repo HEAD, config hash and ledger change marks).
                      Memory only: it never persists a realization.
+sessions.ts          the Workbench read (`/api/sessions`): sessions, buckets by
+                     model, and the outcomes of the commits each session logged
 static.ts            asset serving and the two HTML entry points
 settings.ts          settings snapshot / patch
 web/
@@ -107,6 +109,15 @@ web/
   `scanComplete` stating whether an older run could exist past the read. The CSV
   keeps the four claims as four sections with no total row and lists every
   project and model (`test/dashboard-statement-csv.test.ts`).
+- **The Workbench joins spend to work only through a session's own log.**
+  `GET /api/sessions?range=` (`sessions.ts`) is metered list cost. A commit is
+  linked to a session only by an `observed_commits` row, and filed by
+  `keptBucketOf`, the rule the Statement uses; a session with several commits
+  splits its cost evenly and the basis says so. Requests with no session id are
+  in the totals and the chart and named as outside any session. Context leaves
+  out requests whose usage is unknown or that carried no tokens, and a 429 is
+  reported as refused, not attributed to a side (`test/dashboard-sessions.test.ts`,
+  `test/dashboard-workbench.browser.mjs`).
 - **Both themes are tested.** `test/dashboard-theme.browser.mjs` runs axe on
   every route in light and dark and checks that an explicit choice overrides
   the system and survives a reload.

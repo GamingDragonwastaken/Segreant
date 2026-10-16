@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "28fdec60332f2c9c6509372cfa48d83fb0d50654400e65ced45c339b34b28e63";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "7e16c25cc9c27f0f290365ab8c1fa7fb6d087b2ede1eb773c5106802500ef4db";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1124,6 +1124,214 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "eventCount",
       "optional": false,
       "type": "number | null"
+    }
+  ],
+  "SessionCommit": [
+    {
+      "name": "sha",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "subject",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "tsEpochMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "outcome",
+      "optional": false,
+      "type": "SessionCommitOutcome"
+    },
+    {
+      "name": "checkMs",
+      "optional": false,
+      "type": "number | null"
+    }
+  ],
+  "SessionRow": [
+    {
+      "name": "sessionId",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "startMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "endMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "source",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "project",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "models",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "inputTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "outputTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "cacheReadTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "cacheWriteTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "contextStartTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "contextEndTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "contextPeakTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "refusedReplies",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "failedReplies",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "usageUnknownRequests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "profile",
+      "optional": false,
+      "type": "number[]"
+    },
+    {
+      "name": "marks",
+      "optional": false,
+      "type": "Array<{ at: number; kind: 'refused' | 'failed' }>"
+    },
+    {
+      "name": "commits",
+      "optional": false,
+      "type": "SessionCommit[]"
+    }
+  ],
+  "SessionOutcomeShare": [
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "commits",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "SessionsPayload": [
+    {
+      "name": "demo",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "generatedAt",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "range",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "window",
+      "optional": false,
+      "type": "{ startMs: number; endMs: number; bucketMs: number }"
+    },
+    {
+      "name": "totals",
+      "optional": false,
+      "type": "{"
+    },
+    {
+      "name": "models",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "buckets",
+      "optional": false,
+      "type": "Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }> }>"
+    },
+    {
+      "name": "sessions",
+      "optional": false,
+      "type": "SessionRow[]"
+    },
+    {
+      "name": "sessionLimit",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "sessionsOmitted",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "outcomes",
+      "optional": false,
+      "type": "{"
     }
   ],
   "StatementPayload": [
@@ -4092,6 +4300,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "statement",
       "optional": false,
       "type": "StatementPayload"
+    },
+    {
+      "name": "sessions",
+      "optional": false,
+      "type": "SessionsPayload"
     },
     {
       "name": "allocation",
