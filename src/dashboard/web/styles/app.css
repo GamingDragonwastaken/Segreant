@@ -38,6 +38,11 @@
      the light theme has to be much darker to stay legible on paper. */
   --gold-text: #e8b33c;
   --gold-soft: rgba(232, 179, 60, 0.14);
+  /* The griffin's own gold, apart from the caution gold above. Beside the ember
+     accent a bright yellow read as a second, competing highlight; this antique
+     gold shares ember's warmth and still reads as gold (7.3:1 on the page).
+     Chosen from six candidates rendered in the live header (2026-10-16). */
+  --brand: #c9963a;
   /* Text on a gold fill. Dark in both themes: the light theme's gold is a
      mid-tone, and its paper-coloured --ink on it fell to about 3:1. */
   --on-gold: #14161d;
@@ -98,6 +103,7 @@
   --gold: #b8842a;
   --gold-text: #846013;
   --gold-soft: rgba(184, 132, 42, 0.12);
+  --brand: #b8842a;
   --accent: #b04a14;
   --accent-text: #a8440f;
   --accent-soft: rgba(176, 74, 20, 0.10);

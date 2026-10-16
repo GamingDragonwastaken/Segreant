@@ -156,7 +156,7 @@ function focusPageHeading(tries = 20): void {
 
 function brandMark(): Node {
   return h('svg', { class: 'brand-mark', viewBox: GRIFFIN_VIEWBOX, 'aria-hidden': 'true' },
-    h('path', { d: GRIFFIN_PATH, transform: GRIFFIN_TRANSFORM, fill: 'var(--gold)', 'fill-rule': 'evenodd' }));
+    h('path', { d: GRIFFIN_PATH, transform: GRIFFIN_TRANSFORM, fill: 'var(--brand)', 'fill-rule': 'evenodd' }));
 }
 
 function firstRun(): Node {
