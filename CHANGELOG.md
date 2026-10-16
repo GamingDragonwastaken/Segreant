@@ -22,6 +22,9 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - **A session's commits are only the ones git reported.**
   - **Before:** text that merely looked like a commit counted as one, for example a test fixture an agent read or wrote, or a comment explaining the format. On the owner's real logs that was 26 of 153 matches.
   - **Now:** a commit line counts only where git's own output starts: the start of a tool result or a new line in it. Commits recorded by the older reader are dropped once, and the next import reads every log again. On a fresh import of the same logs, all 98 recorded commits exist in a local repository.
+- **A cap suggestion now explains itself when all your spend was imported.**
+  - **Before:** someone who only imported agent logs was told by `segreant guide` that the recommendation "uses your observed spend history". `budget --recommend` then said there was not enough history, and the Protect page showed $0.000000 for a typical, busy and worst day.
+  - **Now:** the guide offers the recommendation only when there is spend through the proxy, which is what a cap governs. The advisor states the imported total at list price and why it does not count, and gives the setting that would count it. The Protect page labels the card "no proxied spend", leaves out the zero rows, and shows the command on one line.
 
 - **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
   - **Copied commands stay literal in PowerShell.** PowerShell also ends a quoted value on a curly apostrophe (as in O’Brien), so the rest of a pasted command could run. Such values now show no command, and a value starting with `@` or `-` is quoted or withheld.

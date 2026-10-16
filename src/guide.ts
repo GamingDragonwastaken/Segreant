@@ -48,6 +48,12 @@ export interface GuideFacts {
    */
   requestsRetention?: RetentionCoverage;
   spend30dUsd: number;
+  /**
+   * The last 30 days on the basis a cap governs: proxied requests only, unless
+   * imported spend is opted in. Absent means the caller did not say, and the
+   * guide falls back to `spend30dUsd` as it always did.
+   */
+  capBasisSpend30dUsd?: number;
   dailyCapUsd: number | null;
   /** Outcome signals ever recorded — `report` and `exec` both write these. */
   outcomeSignals: number;
@@ -157,6 +163,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         : ['segreant scan --setup', 'segreant start', ...envHints],
   };
 
+  const capBasisSpend = f.capBasisSpend30dUsd ?? f.spend30dUsd;
   const cap: GuideStep = {
     id: 'cap',
     title: 'Cap it',
@@ -164,11 +171,13 @@ export function buildGuide(f: GuideFacts): GuideReport {
     state: f.dailyCapUsd !== null ? `daily hard cap $${f.dailyCapUsd}` : 'metering only — no enforcement',
     why: 'Metering without enforcement is a report, not governance. The proxy can actually say no.',
     notice:
-      f.spend30dUsd > 0
-        ? 'The recommendation uses your observed spend history.'
-        : 'Set a hard cap and optional soft threshold for governed spend.',
+      capBasisSpend > 0
+        ? 'The recommendation uses your spend through the proxy, which is what a cap governs.'
+        : f.spend30dUsd > 0
+          ? 'Your spend so far was imported from agent logs, and a cap governs requests through the proxy. A recommendation needs a few days of proxied requests; set a cap by hand until then.'
+          : 'Set a hard cap and optional soft threshold for governed spend.',
     commands:
-      f.spend30dUsd > 0
+      capBasisSpend > 0
         ? ['segreant budget --recommend', 'segreant budget --daily 25 --soft 18']
         : ['segreant budget --daily 25 --soft 18'],
   };
