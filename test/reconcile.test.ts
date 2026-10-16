@@ -128,7 +128,7 @@ test('reconcile: compares project-day totals and states the residual rather than
   assert.equal(result.trust, 'scope_conditional_reconciliation');
 });
 
-test('reconcile: uses exact local Money and refuses implicit sub-microdollar quantization', () => {
+test('reconcile: uses exact local Money and rounds sub-microdollar day totals by a declared rule', () => {
   const exact = reconcileOpenAiCosts({
     requestsPrunedBeforeMs: null,
     run: run(),
@@ -149,8 +149,41 @@ test('reconcile: uses exact local Money and refuses implicit sub-microdollar qua
     requests: [req(0, 0, { economicAmount: money('0.0000001', 'USD', 'estimated') })],
     now: NOW,
   });
-  assert.equal(subMicro?.status, 'refused');
-  assert.equal(subMicro?.status === 'refused' && subMicro.refusal, 'local_exact_amount_requires_explicit_quantization');
+  // Never silently: the day total is rounded half to even once, and the
+  // result names the rule and how many day totals it touched.
+  assert.equal(subMicro?.status, 'reconciled_with_residual');
+  if (subMicro?.status !== 'reconciled_with_residual') return;
+  assert.equal(subMicro.localCapturedMicros, 0);
+  assert.deepEqual(subMicro.localQuantization, { rule: 'day_total_half_even_micros', daysRounded: 1 });
+  assert.equal(exact?.status === 'reconciled_with_residual' && exact.localQuantization?.daysRounded, 0, 'a whole-microdollar day is not counted as rounded');
+});
+
+test('reconcile: a day mixing legacy and exact rows is summed exactly and rounded once', () => {
+  // Codex review 2026-10-16: 0.000001 (legacy) + 0.0000005 (exact) is 1.5
+  // microdollars, which rounds half to even to 2. Rounding the exact part
+  // alone and adding the legacy part gave 1, a residual that does not exist.
+  const mixed = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
+    run: run(),
+    observations: [line(0, '0.000002')],
+    requests: [req(0, 0.000001), req(0, 0, { economicAmount: money('0.0000005', 'USD', 'effective') })],
+    now: NOW,
+  });
+  assert.equal(mixed?.status, 'reconciled_with_residual');
+  if (mixed?.status !== 'reconciled_with_residual') return;
+  assert.equal(mixed.localCapturedMicros, 2);
+  assert.equal(mixed.unexplainedVarianceMicros, 0);
+
+  // Digits beyond what a number holds are not dropped before the day total is
+  // known: -9,007,199,254.740992 + 9,007,199,254.740993 is one microdollar.
+  const wide = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
+    run: run(),
+    observations: [line(0, '0.000001')],
+    requests: [req(0, -9007199254.740992), req(0, 0, { economicAmount: money('9007199254.740993', 'USD', 'effective') })],
+    now: NOW,
+  });
+  assert.equal(wide?.status === 'reconciled_with_residual' && wide.localCapturedMicros, 1);
 });
 
 test('reconcile: a day the provider reports and Segreant never saw is named, not averaged away', () => {
@@ -415,11 +448,13 @@ test('reconcile: the store path preserves exact local amounts before the microdo
   }));
 
   const result = store.reconcileOpenAiCosts({ now: NOW });
-  assert.equal(result?.status, 'refused');
-  assert.equal(
-    result?.status === 'refused' && result.refusal,
-    'local_exact_amount_requires_explicit_quantization',
-  );
+  // The exact amount survives the store round-trip to the day sum, and only
+  // that sum is rounded: 2.0000001 becomes 2.000000, by the named rule.
+  assert.equal(result?.status, 'reconciled_with_residual');
+  if (result?.status === 'reconciled_with_residual') {
+    assert.equal(result.localCapturedMicros, 2_000_000);
+    assert.deepEqual(result.localQuantization, { rule: 'day_total_half_even_micros', daysRounded: 1 });
+  }
   store.close();
 });
 

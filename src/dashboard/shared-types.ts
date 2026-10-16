@@ -490,6 +490,8 @@ export interface StatementBilledRun {
   providerSourceKind: 'provider_api_pull' | 'operator_supplied_export' | 'legacy_unknown';
   offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention' | null;
   snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations' | null;
+  /** The rounding applied to the local side; null on runs recorded before the rule, which rounded nothing. */
+  localQuantization: { rule: 'day_total_half_even_micros'; daysRounded: number } | null;
   providerProjectRef: string | null;
   coversWholeMonth: boolean;
 }
@@ -1020,6 +1022,8 @@ export interface ReconciliationRunRecord {
      * like one that did not.
      */
     snapshotStability?: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+    /** The rounding applied to the local side; absent on runs recorded before the rule, which rounded nothing. */
+    localQuantization?: { rule: 'day_total_half_even_micros'; daysRounded: number };
     /** The specific day starts whose provider figure changed between observations. */
     unstableDayStartMs?: number[];
     /**
@@ -1212,6 +1216,7 @@ export interface BillingReconcileResultPayload {
   coverage: { providerDays: number; localDays: number; daysWithBoth: number; providerOnlyDays: number; localOnlyDays: number; materialDays: number };
   offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention';
   snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+  localQuantization?: { rule: 'day_total_half_even_micros'; daysRounded: number };
   providerSourceKind: string;
   conditions: string[];
 }

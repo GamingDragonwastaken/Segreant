@@ -29,6 +29,8 @@ import type { WorkUnit } from '../value/realization.ts';
 import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
 import { classifyTaskType } from '../value/taskType.ts';
 import { boundedLift } from '../value/lift.ts';
+import { parseBillingImportText } from '../billing/importer.ts';
+import { isOnDeclaredRoute } from '../billing/reconcile.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -162,6 +164,8 @@ interface Ctx {
   proposals: number;
   signals: number;
   cost: number;
+  /** The demo's declared OpenAI route: proxied OpenAI rows are captured on it. */
+  openAiScopeId: string | null;
 }
 
 function int(rng: () => number, lo: number, hi: number): number {
@@ -241,6 +245,11 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     durationMs: blocked ? 2 : int(ctx.rng, 600, 9000),
     user: spec.user,
     source: route.source ?? spec.source ?? null,
+    // Proxied OpenAI traffic is captured on the declared route, as a real proxy
+    // marks it, so the sample bill has local rows to be compared against.
+    ...(ctx.openAiScopeId !== null && spec.model.provider === 'openai' && route.via === 'proxy'
+      ? { scopeCaptureStatus: 'declared_unverified' as const, providerScopeDeclarationId: ctx.openAiScopeId }
+      : {}),
   };
   ctx.store.insertRequest(row);
   ctx.requests += 1;
@@ -467,6 +476,91 @@ const REALIZATION_ROSTER: UnitSpec[] = [
   { project: 'data-pipeline', model: 'gpt-4o',            subject: 'refactor: store-backed realization',  daysAgo: 3,  costUsd: 0.8,  linesAdded: 120, acceptance: 0.60, arch: 'maturing' },
 ];
 
+const DEMO_OPENAI_PROJECT = 'proj_demo_sample';
+
+/**
+ * A provider bill for the sample's OpenAI route, imported, adopted and compared
+ * through the same store calls as `segreant billing import`, `openai-costs
+ * adopt` and `reconcile`. The bill is built from the route's own daily list
+ * cost, with most days billed a few percent above it: the gap a real
+ * comparison finds when some usage (a playground, a teammate's key) never
+ * passed through Segreant. It is synthetic and filed as an operator export.
+ */
+function seedBillComparison(ctx: Ctx, now: number, days: number): void {
+  const scopeId = ctx.openAiScopeId;
+  if (scopeId === null) return;
+  // Whole UTC days ending at least 48 hours ago: the comparison refuses a
+  // period the provider may still be adding charges to, as it should.
+  const end = Math.floor((now - 2 * DAY_MS) / DAY_MS) * DAY_MS;
+  const start = end - (days - 1) * DAY_MS;
+  const perDay = new Map<number, number>();
+  for (const r of ctx.store.requestsInRange(start, end)) {
+    if (!isOnDeclaredRoute(r, scopeId)) continue;
+    const day = Math.floor(r.tsEpochMs / DAY_MS) * DAY_MS;
+    perDay.set(day, (perDay.get(day) ?? 0) + Math.round(r.costUsd * 1e6));
+  }
+  const records = [];
+  for (let day = start; day < end; day += DAY_MS) {
+    const local = perDay.get(day) ?? 0;
+    if (local === 0) continue;
+    const uplift = ctx.rng() < 0.7 ? 1 + int(ctx.rng, 1, 7) / 100 : 1;
+    const micros = Math.round(local * uplift);
+    records.push({
+      sourceRecordId: `demo-line-${day}`,
+      chargePeriodStart: new Date(day).toISOString(),
+      chargePeriodEnd: new Date(day + DAY_MS).toISOString(),
+      observedAt: new Date(day + DAY_MS).toISOString(),
+      providerProjectRef: DEMO_OPENAI_PROJECT,
+      chargeType: 'usage', currency: 'USD', amount: (micros / 1e6).toFixed(6), sku: 'model-usage',
+      service: 'api', model: 'mixed', region: null, usageUnit: 'tokens', usageQuantity: '0',
+    });
+  }
+  if (records.length === 0) return;
+  const file = Buffer.from(JSON.stringify({
+    schemaVersion: 1,
+    source: {
+      system: 'operator-export', provider: 'openai', exportId: `demo-export-${start}`,
+      billingAccountRef: 'org_demo_sample', exportedAt: new Date(now).toISOString(),
+      periodStart: new Date(start).toISOString(), periodEnd: new Date(end).toISOString(), coverage: 'complete',
+    },
+    records,
+  }), 'utf8');
+  const imported = ctx.store.applyBillingImport(parseBillingImportText(file, 'openai-costs-sample.segreant.json').input, now);
+  ctx.store.issueBillingImportToKernel(imported.run.importId);
+  const plan = ctx.store.planOpenAiCostsAdoption({ importId: imported.run.importId, declaredScopeId: scopeId, providerProjectRef: DEMO_OPENAI_PROJECT });
+  if (!plan.adoptable) throw new Error(`demo seed: the sample bill could not be adopted (${plan.refusal})`);
+  ctx.store.adoptOpenAiCostsFromImport(plan, now);
+  const result = ctx.store.reconcileOpenAiCosts({ now });
+  if (!result || result.status === 'refused') throw new Error(`demo seed: the sample bill could not be compared (${result ? `${result.refusal}: ${result.detail}` : 'not reconcilable'})`);
+  const runId = ctx.store.saveReconciliationRun(result);
+  if (result.coverage.providerDays > 0) ctx.store.issueOpenAiReconciliationToKernel(runId);
+}
+
+/**
+ * Three cost centres, one direct rule per project, and one recorded split of
+ * the fortnight, through the same calls as `segreant alloc`. Traffic that
+ * never declared a project matches no rule and stays unallocated, which is
+ * the gap the Allocate page exists to show.
+ */
+function seedCostCentres(ctx: Ctx, now: number, days: number): void {
+  const centres: Array<[string, string, string, string]> = [
+    ['platform', 'Platform', 'carol@team', 'backend-api'],
+    ['product', 'Product', 'alice@team', 'web-frontend'],
+    ['data', 'Data', 'bob@team', 'data-pipeline'],
+  ];
+  const at = now - days * DAY_MS;
+  for (const [id, name, owner, project] of centres) {
+    ctx.store.upsertCostCentre({ costCentreId: id, name, owner, createdAtMs: at });
+    ctx.store.saveAllocationRule({
+      ruleId: `${id}-direct`, method: 'direct', match: { project }, targets: [{ costCentreId: id, ratio: 1 }],
+      priority: 100, effectiveFromMs: 0, effectiveToMs: null, revokedAtMs: null, owner, note: `All ${project} spend`, createdAtMs: at,
+    });
+  }
+  const result = ctx.store.allocatePeriod(now - days * DAY_MS, now, now);
+  if (!result.conserves) throw new Error('demo seed: the sample split did not conserve its input');
+  ctx.store.saveAllocationRun(result, now);
+}
+
 /** The roster commits the sample's coding sessions made, by subject. */
 const CODING_COMMITS = ['feat: alerts banner rework', 'fix: dark-mode contrast', 'fix: chart axis labels', 'feat: per-context frontier'];
 
@@ -645,7 +739,14 @@ function seedImportedTail(ctx: Ctx, now: number, days: number): void {
 export function seedDemo(store: Store, opts: { now?: number; days?: number } = {}): SeedResult {
   const now = opts.now ?? Date.now();
   const days = opts.days ?? 14;
-  const ctx: Ctx = { store, rng: mulberry32(0xae915f10), n: 0, requests: 0, blocked: 0, sessions: 0, proposals: 0, signals: 0, cost: 0 };
+  const ctx: Ctx = { store, rng: mulberry32(0xae915f10), n: 0, requests: 0, blocked: 0, sessions: 0, proposals: 0, signals: 0, cost: 0, openAiScopeId: null };
+  // Declared before any traffic, so the whole fortnight's proxied OpenAI rows
+  // fall on the route. No random draw is taken here: every later figure stays put.
+  const declaredAtMs = now - (days + 1) * DAY_MS;
+  ctx.openAiScopeId = store.setOpenAiScope({
+    billingAccountRef: 'org_demo_sample', providerProjectRef: DEMO_OPENAI_PROJECT,
+    upstreamBase: 'https://api.openai.com', declaredAtMs, activatedAtMs: declaredAtMs,
+  }).declarationId;
 
   // Each prior day of the fortnight: light background chatter plus a real block
   // of opus/sonnet work. This establishes a believable active-day baseline (a
@@ -762,6 +863,9 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
   seedImportedTail(ctx, now, days);
 
   const realizationUnits = seedRealizationUnits(ctx, now);
+  // Last, so their random draws come after every other figure's.
+  seedBillComparison(ctx, now, days);
+  seedCostCentres(ctx, now, days);
 
   return {
     requests: ctx.requests,
