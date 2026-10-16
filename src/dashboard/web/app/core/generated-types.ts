@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 7e16c25cc9c27f0f290365ab8c1fa7fb6d087b2ede1eb773c5106802500ef4db */
+/** Source SHA-256: ca3bc68e090b50079f685880a9ff55836bff68a38f08e162765954f44d80c259 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -583,7 +583,7 @@ export interface StatementClose {
   eventCount: number | null;
 }
 
-/** Where a session's commit stands, by the kept-summary rule; `unmeasured` when no value read has measured it. */
+/** Where a session's commit stands, by the kept-summary rule; `unmeasured` when no single measured commit matches its sha. */
 export type SessionCommitOutcome = 'kept' | 'notKept' | 'contested' | 'unknown' | 'maturing' | 'unmeasured';
 
 export interface SessionCommit {
@@ -663,9 +663,14 @@ export interface SessionsPayload {
     unsessionedRequests: number;
     unsessionedCostUsd: number;
   };
-  /** The five most expensive models in the range, most expensive first; the rest are `other`. */
+  /** The five most expensive models in the range, most expensive first. */
   models: string[];
-  buckets: Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }> }>;
+  /**
+   * `byModel` holds only the named models. Every other model's cost is
+   * `otherUsd`: a field of its own, so no real model id (a model may be named
+   * "other") can collide with the aggregate.
+   */
+  buckets: Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }>; otherUsd: number }>;
   /** Newest first, at most `sessionLimit`. */
   sessions: SessionRow[];
   sessionLimit: number;

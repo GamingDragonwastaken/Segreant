@@ -16,7 +16,6 @@ import { api, type SessionsPayload, type SessionRow, type SessionCommitOutcome }
 import { period } from '../core/period.ts';
 import { usd, count, share, isPrecise } from '../core/fmt.ts';
 
-const OTHER = 'other';
 /** Rows shown before "Show all". */
 const FIRST_ROWS = 12;
 
@@ -26,12 +25,12 @@ const OUTCOME_WORDS: Record<SessionCommitOutcome | 'noCommit', { label: string; 
   contested: { label: 'Results disagree', plain: 'one check both passed and failed', cls: 'oc-contested' },
   unknown: { label: 'No signal', plain: 'old enough, but survival was not measured', cls: 'oc-unknown' },
   maturing: { label: 'Too early to tell', plain: 'the survival check has not come round yet', cls: 'oc-maturing' },
-  unmeasured: { label: 'Not measured yet', plain: 'no value read has looked at this commit', cls: 'oc-unmeasured' },
+  unmeasured: { label: 'Not matched', plain: 'no measured commit, or more than one, matches its sha', cls: 'oc-unmeasured' },
   noCommit: { label: 'No commit linked', plain: 'the session log records no commit', cls: 'oc-none' },
 };
 /** The table's narrow column takes the short word; the full one is in the title and the detail panel. */
 const SHORT_WORDS: Record<SessionCommitOutcome, string> = {
-  kept: 'Kept', notKept: 'Not kept', contested: 'Disputed', unknown: 'No signal', maturing: 'Too early', unmeasured: 'Unmeasured',
+  kept: 'Kept', notKept: 'Not kept', contested: 'Disputed', unknown: 'No signal', maturing: 'Too early', unmeasured: 'Not matched',
 };
 const OUTCOME_ORDER: Array<SessionCommitOutcome | 'noCommit'> = ['kept', 'notKept', 'contested', 'unknown', 'maturing', 'unmeasured', 'noCommit'];
 
@@ -109,23 +108,34 @@ function tiles(d: SessionsPayload): Node {
 
 /* ---------- Cost over time, by model ----------------------------------- */
 
+/** A named model's series colour; any model outside the five takes the "other" colour. */
 function modelColours(models: readonly string[]): (model: string) => string {
   return (model) => {
     const i = models.indexOf(model);
-    return model === OTHER || i < 0 ? 'var(--series-other)' : `var(--series-${i + 1})`;
+    return i < 0 ? 'var(--series-other)' : `var(--series-${i + 1})`;
   };
 }
+const OTHER_COLOUR = 'var(--series-other)';
 
 /** A round axis top and its steps, so every gridline names a value the scale really reaches. */
-export function niceScale(max: number, steps = 4): { top: number; ticks: number[] } {
+export function niceScale(max: number): { top: number; ticks: number[] } {
   if (!(max > 0)) return { top: 1, ticks: [0, 1] };
-  const raw = max / steps;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
-  const top = Math.ceil(max / step - 1e-9) * step;
+  // Every round step (1, 2, 2.5, 5 times a power of ten) that gives three to
+  // six intervals; the lowest top wins, so a $40.20 peak gets a $50 axis, not
+  // the $60 a fixed four-step rule gave it (half the plot left empty).
+  const mag = 10 ** Math.floor(Math.log10(max));
+  let best: { top: number; step: number } | null = null;
+  for (const m of [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5]) {
+    const step = m * mag;
+    const top = Math.ceil(max / step - 1e-9) * step;
+    const intervals = Math.round(top / step);
+    if (intervals < 3 || intervals > 6) continue;
+    if (!best || top < best.top - 1e-9 || (Math.abs(top - best.top) < 1e-9 && step > best.step)) best = { top, step };
+  }
+  const { top, step } = best ?? { top: Math.ceil(max / mag) * mag, step: mag };
   const ticks: number[] = [];
   for (let v = 0; v <= top + step / 2; v += step) ticks.push(Number(v.toFixed(10)));
-  return { top, ticks };
+  return { top: Number(top.toFixed(10)), ticks };
 }
 
 function bucketLabel(ms: number, bucketMs: number): { short: string; long: string } {
@@ -150,8 +160,12 @@ function chart(
   const { top, ticks } = niceScale(max);
   const every = d.buckets.length > 16 ? Math.ceil(d.buckets.length / 10) : 1;
   const unit = d.window.bucketMs <= 60 * 60 * 1000 ? 'hour' : d.window.bucketMs > 24 * 60 * 60 * 1000 ? 'week' : 'day';
-  const legendModels = [...d.models, ...(d.buckets.some((b) => b.byModel.some((m) => m.model === OTHER)) ? [OTHER] : [])];
   const modelTotal = (m: string): number => d.buckets.reduce((s, b) => s + (b.byModel.find((x) => x.model === m)?.costUsd ?? 0), 0);
+  const otherTotal = d.buckets.reduce((s, b) => s + b.otherUsd, 0);
+  const legend: Array<{ name: string; colour: string; total: number }> = [
+    ...d.models.map((m) => ({ name: m, colour: colour(m), total: modelTotal(m) })),
+    ...(otherTotal > 0 ? [{ name: 'other models', colour: OTHER_COLOUR, total: otherTotal }] : []),
+  ];
 
   // The most expensive session that ran in a bucket: what clicking the bar opens.
   const sessionIn = (i: number): SessionRow | undefined => {
@@ -164,7 +178,7 @@ function chart(
     const i = focusBucket();
     if (i === null) return `${usd(d.totals.costUsd)} over the range. Point at a ${unit} for its split; choose one to open its costliest session.`;
     const b = d.buckets[i]!;
-    const parts = b.byModel.map((m) => `${m.model} ${usd(m.costUsd)}`).join(' · ');
+    const parts = [...b.byModel.map((m) => `${m.model} ${usd(m.costUsd)}`), ...(b.otherUsd > 0 ? [`other models ${usd(b.otherUsd)}`] : [])].join(' · ');
     return `${bucketLabel(b.startMs, d.window.bucketMs).long}: ${usd(b.costUsd)}, ${count(b.requests)} requests${parts ? ` (${parts})` : ''}`;
   };
 
@@ -172,10 +186,10 @@ function chart(
     h('div', { class: 'card-head' },
       h('h2', { class: 'card-title', text: `List cost by ${unit}, by model` })),
     h('div', { class: 'wb-legend' },
-      ...legendModels.map((m) => h('span', { class: 'wb-legend-item' },
-        h('span', { class: 'wb-swatch', style: `background:${colour(m)}`, 'aria-hidden': 'true' }),
-        h('span', { class: 'wb-legend-name', text: m === OTHER ? 'other models' : m }),
-        h('span', { class: 'wb-legend-value num', text: usd(modelTotal(m)) })))),
+      ...legend.map((m) => h('span', { class: 'wb-legend-item' },
+        h('span', { class: 'wb-swatch', style: `background:${m.colour}`, 'aria-hidden': 'true' }),
+        h('span', { class: 'wb-legend-name', text: m.name }),
+        h('span', { class: 'wb-legend-value num', text: usd(m.total) })))),
     h('p', { class: 'wb-readout', role: 'status', text: readout }),
     h('div', { class: 'wb-plot' },
       h('div', { class: 'wb-yaxis', 'aria-hidden': 'true' },
@@ -196,10 +210,11 @@ function chart(
             onclick: () => { if (target) { select(target.sessionId); document.getElementById(rowId(target.sessionId))?.scrollIntoView({ block: 'nearest' }); } },
           },
             h('span', { class: 'wb-stack', style: `height:${top > 0 ? (b.costUsd / top) * 100 : 0}%` },
-              ...[...b.byModel].reverse().map((m) => h('span', {
-                class: 'wb-seg',
-                style: `flex-grow:${m.costUsd};background:${colour(m.model)}`,
-              }))),
+              // Top to bottom: other models, then the named ones from cheapest to costliest.
+              ...[
+                ...(b.otherUsd > 0 ? [{ grow: b.otherUsd, fill: OTHER_COLOUR }] : []),
+                ...[...b.byModel].reverse().map((m) => ({ grow: m.costUsd, fill: colour(m.model) })),
+              ].map((seg) => h('span', { class: 'wb-seg', style: `flex-grow:${seg.grow};background:${seg.fill}` }))),
             h('span', { class: 'wb-xtick', 'aria-hidden': 'true', text: i % every === 0 ? label.short : '' }));
         }))),
     d.totals.unsessionedRequests > 0
@@ -290,7 +305,7 @@ function sessionTable(
       h('td', { class: 'wb-who' },
         h('span', { class: 'wb-tool', text: s.source ?? 'direct' }),
         h('span', { class: 'wb-model' },
-          h('span', { class: 'wb-swatch', style: `background:${colour(d.models.includes(s.model) ? s.model : OTHER)}`, 'aria-hidden': 'true' }),
+          h('span', { class: 'wb-swatch', style: `background:${colour(s.model)}`, 'aria-hidden': 'true' }),
           h('span', { text: s.models > 1 ? `${s.model} +${s.models - 1}` : s.model }))),
       h('td', { class: 'num' },
         h('span', { class: 'wb-req', text: count(s.requests) }),
@@ -418,7 +433,7 @@ export function hints(s: SessionRow, d: Pick<SessionsPayload, 'outcomes'>): stri
   if (s.usageUnknownRequests > 0) out.push(`${count(s.usageUnknownRequests)} request${s.usageUnknownRequests === 1 ? '' : 's'} never reported usage, so this session's cost is a floor.`);
   if (s.commits.length === 0) out.push('No commit is linked. If this session produced work, its tool did not log the commit, so the outcome stays unknown rather than guessed.');
   if (s.commits.some((c) => c.outcome === 'notKept')) out.push('A commit from this session was not kept. Its cost is on the Value page under work that did not last.');
-  if (s.commits.some((c) => c.outcome === 'unmeasured') && d.outcomes.measuredAt !== null) out.push('A commit here has not been measured yet. The next value read from the Value page will file it.');
+  if (s.commits.some((c) => c.outcome === 'unmeasured') && d.outcomes.measuredAt !== null) out.push('A commit here matches no single measured commit: it is newer than the last value read, or its short sha fits more than one. A value read from the Value page files a new one.');
   if (out.length === 0) out.push('Nothing stands out: context stayed level, the cache did its work, and nothing was refused.');
   return out;
 }
