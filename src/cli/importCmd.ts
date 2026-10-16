@@ -155,12 +155,13 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
 function keptLine(tty: boolean, d: DiscoveredResult): string {
   if (!d.measured) return color(tty, C.gray, d.skipped === 'no-spend' ? 'no priced spend' : 'not measured in this run');
   const k = d.kept;
-  if (k === undefined || k.kept.units + k.notKept.units + k.unknown.units === 0) {
+  if (k === undefined || k.kept.units + k.notKept.units + k.contested.units + k.unknown.units === 0) {
     return color(tty, C.gray, k !== undefined && k.maturing.units > 0 ? 'maturing (commits under 14 days)' : 'no commits to judge');
   }
   const parts: string[] = [];
   if (k.kept.costUsd >= 0.005) parts.push(color(tty, C.green, `kept ${usd(k.kept.costUsd)}`));
   if (k.notKept.costUsd >= 0.005) parts.push(color(tty, C.yellow, `not kept ${usd(k.notKept.costUsd)}`));
+  if (k.contested.costUsd >= 0.005) parts.push(color(tty, C.gray, `disputed ${usd(k.contested.costUsd)}`));
   if (k.unknown.costUsd >= 0.005) parts.push(color(tty, C.gray, `not measured yet ${usd(k.unknown.costUsd)}`));
   if (k.maturing.costUsd >= 0.005) parts.push(color(tty, C.gray, `maturing ${usd(k.maturing.costUsd)}`));
   if (parts.length === 0) return color(tty, C.gray, 'no spend on its commits');

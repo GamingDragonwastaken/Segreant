@@ -124,6 +124,12 @@ function signalPolarity(signals: GateSignalRow[], kind: string): EpistemicState 
 export interface WorkUnit extends CommitAttribution {
   ageDays: number;
   maturing: boolean;
+  /**
+   * The survival window this unit was measured with, in days. Absent on units
+   * persisted before it was recorded: their check date is then not known, and
+   * a reader that needs it must say it assumed the default.
+   */
+  checkWindowDays?: number;
   survivalRatio: number;
   reverted: boolean;
   hadProposal: boolean;
@@ -374,6 +380,8 @@ export interface PeriodCoverage {
 export interface KeptSummary {
   kept: { units: number; costUsd: number };
   notKept: { units: number; costUsd: number };
+  /** The evidence disagreed (a gate both passed and failed) and nothing failed outright: not settled either way. */
+  contested: { units: number; costUsd: number };
   unknown: { units: number; costUsd: number };
   maturing: { units: number; costUsd: number; nextVerdictMs: number | null };
 }
@@ -382,6 +390,7 @@ export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDay
   const out: KeptSummary = {
     kept: { units: 0, costUsd: 0 },
     notKept: { units: 0, costUsd: 0 },
+    contested: { units: 0, costUsd: 0 },
     unknown: { units: 0, costUsd: 0 },
     maturing: { units: 0, costUsd: 0, nextVerdictMs: null },
   };
@@ -396,10 +405,16 @@ export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDay
       continue;
     }
     const survived = u.funnel.results.find((r) => r.gate === 'survived')?.verdict;
-    const anyFailed = u.funnel.results.some((r) => r.verdict === 'fail');
-    const bucket = u.reverted || anyFailed
+    // A fail projected from contradictory evidence is not a refutation: the
+    // waste rollup already files it under 'conflicted', and calling it "not
+    // kept" here settled what the evidence left open.
+    const definiteFail = u.funnel.results.some((r) => r.verdict === 'fail' && r.polarity !== 'conflicted');
+    const contested = (u.funnel.conflicts?.length ?? 0) > 0;
+    const bucket = u.reverted || definiteFail
       ? out.notKept
-      : survived === 'pass'
+      : contested
+        ? out.contested
+        : survived === 'pass'
         ? out.kept
         : out.unknown;
     bucket.units += 1;
@@ -874,6 +889,7 @@ export async function computeRealization(
       ...a,
       ageDays,
       maturing,
+      checkWindowDays: windowDays,
       survivalRatio,
       reverted: isReverted,
       hadProposal,

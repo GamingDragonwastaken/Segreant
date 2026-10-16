@@ -513,24 +513,30 @@ export function handleStatementCsv({ res, url, store }: RouteContext): void {
  */
 export function realizedForMonth(store: Store, startMs: number, endMs: number): StatementRealized {
   const report = realizationFromStore(store);
-  const windowMs = report.windowDays * 24 * 60 * 60 * 1000;
-  const due = (u: { tsEpochMs: number }): number => u.tsEpochMs + windowMs;
+  // Each unit is placed by the window it was measured with. Units persisted
+  // before that was recorded fall back to the default, and the reason says so.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const due = (u: { tsEpochMs: number; checkWindowDays?: number }): number => u.tsEpochMs + (u.checkWindowDays ?? report.windowDays) * DAY_MS;
   const judged = report.units.filter((u) => !u.maturing && due(u) >= startMs && due(u) < endMs);
   const waiting = report.units.filter((u) => u.maturing && u.tsEpochMs < endMs && due(u) >= startMs);
   const k = keptSummary({ units: judged, windowDays: report.windowDays });
   const cost = (us: Array<{ attributedCostUsd: number }>): number => us.reduce((s, u) => s + (Number.isFinite(u.attributedCostUsd) ? u.attributedCostUsd : 0), 0);
   const measuredAt = report.units.length > 0 ? report.generatedAt : null;
+  const assumed = [...judged, ...waiting].filter((u) => u.checkWindowDays === undefined).length;
   return {
     standing: judged.length > 0 ? 'judged_in_month' : 'none_judged',
     windowDays: report.windowDays,
+    assumedWindowUnits: assumed,
     measuredAt,
     kept: k.kept,
     notKept: k.notKept,
+    contested: k.contested,
     unknown: k.unknown,
     tooEarly: { units: waiting.length, costUsd: cost(waiting), nextCheckMs: waiting.length > 0 ? Math.min(...waiting.map(due)) : null },
     reason: measuredAt === null
       ? 'No outcomes have been measured on this machine yet. Run a value read from the Value page.'
-      : `Work is counted in the month its ${report.windowDays}-day check falls, as last measured. The dollars are the list cost of that work, not its value; a value needs an hourly rate and is on the Value page.`,
+      : `Work is counted in the month its survival check falls, as last measured. The dollars are the list cost of that work, not its value; a value needs an hourly rate and is on the Value page.`
+        + (assumed > 0 ? ` ${assumed} ${assumed === 1 ? 'piece was' : 'pieces were'} measured before Segreant recorded each check's window, so ${assumed === 1 ? 'it is' : 'they are'} placed by the ${report.windowDays}-day default.` : ''),
   };
 }
 

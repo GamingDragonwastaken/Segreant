@@ -93,6 +93,7 @@ export function statementToCsv(s: StatementPayload): string {
   };
   kept('kept', s.realized.kept);
   kept('not kept', s.realized.notKept);
+  kept('results disagree', s.realized.contested);
   kept('no signal', s.realized.unknown);
   kept('too early to tell', s.realized.tooEarly);
   rows.push(['close', s.close.status, '', '', '', 'economic period close', ...month, '', '', s.close.activeFinalizationId ?? '', '']);
