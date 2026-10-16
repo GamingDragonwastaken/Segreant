@@ -386,6 +386,20 @@ export interface KeptSummary {
   maturing: { units: number; costUsd: number; nextVerdictMs: number | null };
 }
 
+/** Where one unit falls in the kept summary. The one rule, shared by every reader that files units. */
+export type KeptBucket = 'kept' | 'notKept' | 'contested' | 'unknown' | 'maturing';
+
+export function keptBucketOf(u: Pick<WorkUnit, 'maturing' | 'reverted' | 'funnel'>): KeptBucket {
+  if (u.maturing) return 'maturing';
+  const survived = u.funnel.results.find((r) => r.gate === 'survived')?.verdict;
+  // A fail projected from contradictory evidence is not a refutation: the
+  // waste rollup already files it under 'conflicted', and calling it "not
+  // kept" here settled what the evidence left open.
+  const definiteFail = u.funnel.results.some((r) => r.verdict === 'fail' && r.polarity !== 'conflicted');
+  const contested = (u.funnel.conflicts?.length ?? 0) > 0;
+  return u.reverted || definiteFail ? 'notKept' : contested ? 'contested' : survived === 'pass' ? 'kept' : 'unknown';
+}
+
 export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDays'>): KeptSummary {
   const out: KeptSummary = {
     kept: { units: 0, costUsd: 0 },
@@ -404,19 +418,7 @@ export function keptSummary(report: Pick<RealizationReport, 'units' | 'windowDay
       out.maturing.nextVerdictMs = out.maturing.nextVerdictMs === null ? due : Math.min(out.maturing.nextVerdictMs, due);
       continue;
     }
-    const survived = u.funnel.results.find((r) => r.gate === 'survived')?.verdict;
-    // A fail projected from contradictory evidence is not a refutation: the
-    // waste rollup already files it under 'conflicted', and calling it "not
-    // kept" here settled what the evidence left open.
-    const definiteFail = u.funnel.results.some((r) => r.verdict === 'fail' && r.polarity !== 'conflicted');
-    const contested = (u.funnel.conflicts?.length ?? 0) > 0;
-    const bucket = u.reverted || definiteFail
-      ? out.notKept
-      : contested
-        ? out.contested
-        : survived === 'pass'
-        ? out.kept
-        : out.unknown;
+    const bucket = out[keptBucketOf(u) as Exclude<KeptBucket, 'maturing'>];
     bucket.units += 1;
     bucket.costUsd += cost;
   }

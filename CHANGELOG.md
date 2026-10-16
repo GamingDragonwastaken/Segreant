@@ -11,6 +11,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The Spend page now shows its sessions.** A Workbench sits above the breakdown, for the chosen range:
+  - **Six figures across the top:** list cost, requests (with sessions and tools), context sent, the share read from cache, replies refused (429) or failed (5xx), and spend outside any session.
+  - **A day-by-day chart, stacked by model.** It uses one scale whose gridlines are values the axis reaches, a legend with each model's total, and a readout that names a day's split when you point at it. Choosing a bar opens that day's costliest session.
+  - **What the session spend came to:** kept, not kept, disputed, too early to tell, not measured yet, or no commit linked. The same rule files each commit here and on the Statement. A session reaches a commit only through its own log, and a session with several commits splits its cost evenly. The card says both.
+  - **Every session in one table:** requests, the context the first and last requests sent (drawn on one scale for every row), list cost and outcome. Beside it, the chosen session's context request by request, with marks where a request was refused or failed. Also listed: the commits it made, and observations drawn only from its own figures.
+  - **Read from the new `GET /api/sessions`.** Requests with no session id count in the chart and totals, and the page names them. Requests whose usage was never reported stay out of the context figures.
+  - **The sample data's four coding sessions each end in a commit from the measured work,** so the page shows a kept, a not-kept and a too-early commit. They now send context that grows as a real session does.
+
 - **Fixes from an independent review of the last eleven PRs.** Codex (`gpt-6.1-sol`) reviewed #110 to #120 read-only. Each finding was checked against the code and pinned by a test:
   - **Copied commands are literal.** A drawer's "same thing, as a command" quoted values for JSON. Pasted into a shell, a name like `$(whoami)` ran as a command, so it saved a different value from Apply. Values are now single-quoted, and a value no quoting can carry shows no command at all.
   - **Each piece of work is placed by its own check.** The Statement assumed every measurement used the 14-day window. Measurements now record their window. Older ones are placed by the default, and the card says how many.

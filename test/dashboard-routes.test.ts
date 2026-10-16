@@ -197,6 +197,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/market': 'GET, HEAD',
   '/api/statement': 'GET, HEAD',
   '/api/statement.csv': 'GET, HEAD',
+  '/api/sessions': 'GET, HEAD',
   '/api/allocation/run.csv': 'GET, HEAD',
 };
 
