@@ -16,6 +16,7 @@ import { usd, count, isPrecise, register, share } from '../core/fmt.ts';
 import { capability } from '../core/registry.ts';
 import { openAction } from '../components/drawer.ts';
 import { actionSpec, hasRunner } from '../core/actions.ts';
+import { workbench } from './workbench.ts';
 
 type Axis = 'project' | 'model' | 'source';
 
@@ -80,9 +81,6 @@ export function spendView(): Node {
       const d = data();
       if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Reading the ledger…' }));
 
-      const rows = (axis() === 'project' ? d.byProject : axis() === 'model' ? d.byModel : d.bySource) ?? [];
-      const meta = AXES.find((a) => a.id === axis());
-
       // WHAT THE WINDOW LOST, BESIDE THE TOTAL IT LOST IT FROM (D-175). The
       // server's claim support already reports coverage `partial` and carries
       // the reason in its note, but that note lives in the Claim Inspector
@@ -100,8 +98,20 @@ export function spendView(): Node {
           ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
               ? `retention deleted ${lost.rowsRemoved} request row(s) from before ${typeof lost.prunedBeforeMs === 'number' && Number.isFinite(lost.prunedBeforeMs) && lost.prunedBeforeMs > 0 && lost.prunedBeforeMs <= 8.64e15 ? new Date(lost.prunedBeforeMs).toISOString() : 'unknown'}; this window covers what survived, not everything metered in it`
               : 'Some requests in this range were deleted by your retention setting, so these totals cover what is left rather than everything we measured.') })
-          : null,
+          : null);
+    },
 
+    // Its own read, outside the overview region, so an overview refresh does
+    // not throw away the session the reader has open.
+    workbench(),
+
+    () => {
+      const d = data();
+      if (!d || error()) return null;
+      const rows = (axis() === 'project' ? d.byProject : axis() === 'model' ? d.byModel : d.bySource) ?? [];
+      const meta = AXES.find((a) => a.id === axis());
+      return h('section', { class: 'section' },
+        h('h2', { class: 'section-title', text: 'The whole range, broken down' }),
         h('div', { class: 'axisbar', role: 'group', 'aria-label': 'Break down by' },
           h('span', { class: 'axisbar-label', text: 'Break down by' }),
           ...AXES.map((a) => h('button', {

@@ -77,6 +77,11 @@
      default grey bar inside a gold-on-ink table read as unfinished. */
   --scroll-thumb: #2b3142;
   --scroll-thumb-hover: #3b4357;
+  /* Chart series, in fixed order: the five costliest models, then the rest.
+     Checked for colour-blind separation against each theme's panel; identity
+     never rests on the hue alone (a legend and a readout name every one). */
+  --series-1: #3987e5; --series-2: #199e70; --series-3: #9085e9; --series-4: #d55181; --series-5: #008300;
+  --series-other: #5b6275;
   color-scheme: dark;
 }
 
@@ -104,6 +109,8 @@
   --shadow: 0 18px 48px rgba(60, 50, 30, 0.14);
   --scroll-thumb: #cfc8b6;
   --scroll-thumb-hover: #b9b19c;
+  --series-1: #2a78d6; --series-2: #1baf7a; --series-3: #6250d6; --series-4: #e87ba4; --series-5: #008300;
+  --series-other: #aaa595;
   color-scheme: light;
 }
 
@@ -1156,3 +1163,161 @@ tfoot td { border-top: 1px solid var(--line); font-weight: 500; }
 }
 .parity-table .parity-open:hover, .parity-table .parity-open:focus-visible { color: var(--text); }
 .parity-table td:last-child code { white-space: nowrap; }
+
+/* ---------- Workbench (Spend) -------------------------------------------- */
+
+/* Dense by design: the reader lives on this page. Ember marks what can be
+   chosen; gold stays for the brand and for "look at this". */
+.wb { margin-bottom: var(--s8); }
+.wb-body { display: flex; flex-direction: column; gap: var(--s4); }
+.wb-pair { display: grid; gap: var(--s4); grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
+.wb-pair-sessions { grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); }
+@media (max-width: 1180px) { .wb-pair, .wb-pair-sessions { grid-template-columns: minmax(0, 1fr); } }
+.wb-head-note { font-size: 12px; color: var(--faint); }
+
+.wb-tiles {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r);
+}
+.wb-tile { display: flex; flex-direction: column; gap: 3px; padding: var(--s3) var(--s4); min-width: 0; border-left: 1px solid var(--line-soft); }
+.wb-tile:first-child { border-left: 0; }
+.wb-tile-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+.wb-tile-value { font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; color: var(--text); }
+.wb-tile-sub { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.wb-tile-caution .wb-tile-value { color: var(--gold-text); }
+@media (max-width: 1000px) {
+  .wb-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .wb-tile:nth-child(3n + 1) { border-left: 0; }
+  .wb-tile:nth-child(n + 4) { border-top: 1px solid var(--line-soft); }
+}
+@media (max-width: 560px) {
+  .wb-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wb-tile { border-left: 0; border-top: 1px solid var(--line-soft); }
+  .wb-tile:nth-child(even) { border-left: 1px solid var(--line-soft); }
+  .wb-tile:nth-child(-n + 2) { border-top: 0; }
+}
+
+/* The chart. HTML rather than SVG, so labels stay crisp at any width. One
+   scale: every gridline is a value the axis really reaches. */
+.wb-legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-bottom: var(--s2); }
+.wb-legend-item { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.wb-legend-value { color: var(--text); }
+.wb-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; display: inline-block; }
+.wb-readout { font-size: 12.5px; color: var(--muted); min-height: 3em; margin-bottom: var(--s3); font-variant-numeric: tabular-nums; }
+.wb-plot { display: grid; grid-template-columns: 3.6rem minmax(0, 1fr); height: 210px; padding-bottom: 20px; }
+.wb-yaxis { position: relative; }
+.wb-ytick {
+  position: absolute; right: var(--s2); transform: translateY(50%);
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.wb-bars {
+  position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: clamp(1px, 0.4vw, 5px); align-items: end; border-bottom: 1px solid var(--line);
+}
+.wb-grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--line-soft); pointer-events: none; }
+.wb-bar {
+  position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
+  background: none; border: 0; padding: 0; cursor: pointer; min-width: 0;
+}
+.wb-bar:disabled { cursor: default; }
+.wb-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wb-stack { display: flex; flex-direction: column; width: 100%; max-width: 34px; margin: 0 auto; border-radius: 3px 3px 0 0; overflow: hidden; }
+.wb-seg { display: block; min-height: 1px; flex-basis: 0; }
+.wb-seg + .wb-seg { border-top: 1px solid var(--panel); }
+.wb-bars:has(.wb-bar.is-focus) .wb-bar:not(.is-focus) .wb-stack { opacity: 0.45; }
+.wb-xtick {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap;
+}
+
+/* Outcomes. Words carry the state; colour only repeats it. */
+.wb-split { display: flex; gap: 2px; height: 10px; border-radius: 3px; overflow: hidden; margin-bottom: var(--s3); }
+.wb-split-seg { display: block; flex-basis: 0; background: currentColor; }
+.wb-oc-rows { display: flex; flex-direction: column; }
+.wb-oc-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem 5.5rem 3rem; gap: var(--s3); align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px;
+}
+.wb-oc-key { display: inline-flex; align-items: center; gap: var(--s2); }
+.wb-oc-key > span:last-child { color: var(--text); }
+.wb-oc-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.wb-oc-n { color: var(--muted); font-size: 12px; }
+.wb-oc-share { color: var(--faint); font-size: 12px; }
+.oc-kept { color: var(--mint); }
+.oc-notkept { color: var(--coral); }
+.oc-contested { color: var(--gold-text); }
+.oc-unknown { color: var(--faint); }
+.oc-maturing { color: var(--sky); }
+.oc-unmeasured { color: var(--violet); }
+.oc-none { color: var(--faint); }
+.wb-split-seg.oc-none { background: repeating-linear-gradient(135deg, var(--line) 0 3px, transparent 3px 6px); }
+.wb-oc-key.oc-none .wb-oc-dot { background: none; border: 1px solid var(--faint); }
+
+/* Sessions. */
+.wb-table { font-size: 12.5px; }
+.wb-table td { padding-top: 6px; padding-bottom: 6px; vertical-align: middle; }
+.wb-row { cursor: pointer; }
+.wb-row:hover td { background: var(--panel-2); }
+.wb-row.is-selected td { background: var(--accent-soft); }
+.wb-row.is-selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.wb-when { text-align: left; }
+.wb-open { color: var(--accent-text); text-decoration: none; font-size: 12px; }
+.wb-open:hover, .wb-open:focus-visible { color: var(--text); text-decoration: underline; }
+.wb-who { min-width: 0; }
+.wb-tool { display: block; color: var(--text); }
+.wb-model { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.wb-cost { color: var(--text); }
+.wb-ctx { white-space: nowrap; }
+.wb-dumbbell { position: relative; display: inline-block; width: 5.5rem; height: 12px; vertical-align: middle; margin-right: var(--s2); }
+.wb-db-track { position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line); }
+.wb-db-span { position: absolute; top: calc(50% - 1px); height: 2px; background: var(--accent); }
+.wb-db-span.is-down { background: var(--sky); }
+.wb-db-start, .wb-db-end {
+  position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%; transform: translate(-50%, -50%);
+}
+.wb-db-start { background: var(--panel); border: 1.5px solid var(--accent); }
+.wb-db-end { background: var(--accent); }
+.wb-db-peak { position: absolute; top: 1px; bottom: 1px; width: 0; border-left: 1px solid var(--faint); }
+.wb-ctx-text { font-size: 11.5px; color: var(--muted); }
+.wb-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.wb-chip {
+  display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.02em; white-space: nowrap;
+}
+.wb-none { font-size: 11.5px; color: var(--muted); }
+.wb-more { margin-top: var(--s3); color: var(--accent-text); }
+.wb-more:hover, .wb-more:focus-visible { color: var(--text); }
+
+/* Inside one session. */
+.wb-detail { position: sticky; top: var(--s4); }
+.wb-detail-who { font-size: 13px; color: var(--muted); margin-bottom: var(--s3); }
+.wb-detail-who strong { color: var(--text); font-weight: 600; }
+.wb-profile { display: flex; align-items: flex-end; gap: 2px; height: 84px; border-bottom: 1px solid var(--line); padding-top: 10px; }
+.wb-pbar { position: relative; flex: 1 1 0; min-width: 2px; background: var(--accent); opacity: 0.85; border-radius: 2px 2px 0 0; }
+.wb-pbar.has-mark::after {
+  content: ""; position: absolute; left: 50%; top: -9px; width: 6px; height: 6px; transform: translateX(-50%) rotate(45deg);
+}
+.wb-pbar.mark-refused::after { background: var(--gold); }
+.wb-pbar.mark-failed::after, .wb-pbar.mark-both::after { background: var(--coral); }
+.wb-profile-axis { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.wb-profile-key { font-size: 11.5px; color: var(--muted); margin-top: var(--s2); }
+.wb-mark-key { display: inline-block; width: 6px; height: 6px; transform: rotate(45deg); margin: 0 2px 1px 0; }
+.wb-mark-key.mark-refused { background: var(--gold); }
+.wb-mark-key.mark-failed { background: var(--coral); }
+.wb-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px var(--s4); margin: var(--s4) 0; }
+.wb-fact { display: flex; justify-content: space-between; gap: var(--s2); border-bottom: 1px solid var(--line-soft); padding: 3px 0; font-size: 12.5px; min-width: 0; }
+.wb-fact dt { color: var(--muted); }
+.wb-fact dd { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.wb-sub { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin: var(--s4) 0 var(--s2); font-weight: 400; }
+.wb-commit-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.wb-commit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--s2); font-size: 12.5px; }
+.wb-sha { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.wb-subject { color: var(--text); flex: 1 1 10rem; min-width: 0; }
+.wb-check { font-size: 11px; color: var(--faint); }
+.wb-hints { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); max-width: 60ch; }
+.wb-hints li::marker { color: var(--accent); }
+@media (max-width: 1180px) { .wb-detail { position: static; } }
+
+.wb-req { display: block; }
+.wb-req-note { display: block; font-size: 10.5px; color: var(--gold-text); }
+.wb-table th, .wb-table td { padding-left: var(--s2); padding-right: var(--s2); }

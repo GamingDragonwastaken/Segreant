@@ -44,6 +44,7 @@ import { loadRealization, realizeDiscoveredProjects, realizationFromStore, keptS
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
 import { valueReport } from '../value/report.ts';
+import { buildSessions } from './sessions.ts';
 import { recordReportedOutcome, type OutcomeInput } from '../value/selfReported.ts';
 import { buildMarketReport, loadMarket } from '../market/market.ts';
 import { projectName, resolveCommit } from '../git/correlate.ts';
@@ -446,6 +447,18 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
   const safe = valid.includes(range) ? range : 'today';
   try {
     return json(res, 200, buildOverview(store, config, safe));
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
+export function handleSessions({ res, url, store }: RouteContext): void {
+  const range = (url.searchParams.get('range') as RangeKey) ?? '7d';
+  const valid: RangeKey[] = ['today', '7d', '30d', 'all'];
+  const safe = valid.includes(range) ? range : '7d';
+  try {
+    const now = Date.now();
+    return json(res, 200, buildSessions(store, safe, resolveRange(safe, now), { now }));
   } catch (err) {
     return json(res, 500, { error: String(err) });
   }
@@ -1942,6 +1955,7 @@ export const ROUTES: readonly Route[] = [
   // POST carries the CSRF gate.
   apiRoute('scan', handleScan),
   apiRoute('overview', handleOverview),
+  apiRoute('sessions', handleSessions),
   apiRoute('billing', handleBilling),
   apiRoute('statement', handleStatement),
   apiRoute('statement-csv', handleStatementCsv),
