@@ -59,6 +59,18 @@ export function residualBoundWords(bound: string | undefined, precise: boolean):
   return precise ? words.precise : words.plain;
 }
 
+/**
+ * The rounding a comparison applied to our side, or null when it changed
+ * nothing. Runs recorded before the rule rounded nothing: they refused instead.
+ */
+export function quantizationWords(q: { daysRounded: number } | null | undefined, precise: boolean): string | null {
+  if (!q || q.daysRounded === 0) return null;
+  const days = `${q.daysRounded} day total${q.daysRounded === 1 ? '' : 's'}`;
+  return precise
+    ? `local exact amounts summed per UTC day; ${days} rounded half to even to the microdollar (each within $0.0000005)`
+    : `Our measurement had amounts smaller than a millionth of a dollar. Each day was added up exactly, then ${days} rounded to the nearest millionth.`;
+}
+
 /** The days a provider period covers; it ends at an exclusive UTC midnight. */
 export function dayRange(startMs: number | undefined, endMs: number | undefined): string {
   if (startMs === undefined || endMs === undefined) return '—';

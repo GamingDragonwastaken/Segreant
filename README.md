@@ -87,11 +87,11 @@ No API key, no account, no setup. With Node 24 or newer:
 npx segreant demo --serve   # labelled synthetic data; opens the dashboard
 ```
 
-Open **http://localhost:8091**. You'll see a month's statement, spend by
-project and model with each session and what its commits came to, caps and
-alerts, and what the spend produced, with a review-only cheaper-model
-comparison. The bill comparison and cost-centre pages open empty, ready for
-your own invoice and budgets. It all runs on an isolated `demo.db` and is
+Open **http://localhost:8091**. You'll see a month's statement with all four
+figures, spend by project and model with each session and what its commits
+came to, caps and alerts, a comparison with a generated provider bill,
+cost-centre splits, and what the spend produced, with a review-only
+cheaper-model comparison. It all runs on an isolated `demo.db` and is
 labelled as synthetic. Clear it with `segreant demo --clear`.
 
 ## Use it on your real work

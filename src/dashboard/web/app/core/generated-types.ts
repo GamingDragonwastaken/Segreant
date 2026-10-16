@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: ca3bc68e090b50079f685880a9ff55836bff68a38f08e162765954f44d80c259 */
+/** Source SHA-256: 064e6098f5b08fe6d68bce7dd8b9f01d5b5f29f9748c3a779a8caf173a81893c */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -492,6 +492,8 @@ export interface StatementBilledRun {
   providerSourceKind: 'provider_api_pull' | 'operator_supplied_export' | 'legacy_unknown';
   offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention' | null;
   snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations' | null;
+  /** The rounding applied to the local side; null on runs recorded before the rule, which rounded nothing. */
+  localQuantization: { rule: 'day_total_half_even_micros'; daysRounded: number } | null;
   providerProjectRef: string | null;
   coversWholeMonth: boolean;
 }
@@ -1022,6 +1024,8 @@ export interface ReconciliationRunRecord {
      * like one that did not.
      */
     snapshotStability?: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+    /** The rounding applied to the local side; absent on runs recorded before the rule, which rounded nothing. */
+    localQuantization?: { rule: 'day_total_half_even_micros'; daysRounded: number };
     /** The specific day starts whose provider figure changed between observations. */
     unstableDayStartMs?: number[];
     /**
@@ -1214,6 +1218,7 @@ export interface BillingReconcileResultPayload {
   coverage: { providerDays: number; localDays: number; daysWithBoth: number; providerOnlyDays: number; localOnlyDays: number; materialDays: number };
   offPathBound: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider' | 'unknown_local_total_truncated_by_retention';
   snapshotStability: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+  localQuantization?: { rule: 'day_total_half_even_micros'; daysRounded: number };
   providerSourceKind: string;
   conditions: string[];
 }

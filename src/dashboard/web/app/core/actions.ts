@@ -12,7 +12,7 @@ import { api, type AllocationPayload, type BillingPayload } from './api.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
 import { isPrecise, usd, usdFromMicros, share, count, basisWords } from './fmt.ts';
-import { residualBoundWords, dayRange } from './reconcileWords.ts';
+import { residualBoundWords, dayRange, quantizationWords } from './reconcileWords.ts';
 import { localMidnightIso, dayAfterIso, monthRange, REASON_WORDS } from './periods.ts';
 import { slug } from './slug.ts';
 import { ruleFields, describeRule, type RuleDraft } from '../components/ruleFields.ts';
@@ -836,6 +836,7 @@ const BUILDERS: Record<string, Builder> = {
           ],
           notes: [
             residualBoundWords(r.offPathBound, isPrecise()),
+            ...[quantizationWords(r.localQuantization, isPrecise())].filter((q): q is string => q !== null),
             ...(contradicted ? ['The provider reported different figures for the same days at different times. This comparison would be contradicted.'] : []),
             ...r.conditions.map((c) => c.replace(/_/g, ' ')),
           ],

@@ -11,6 +11,15 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The bill comparison now works on real OpenAI traffic.**
+  - **Before:** a request through Segreant records its exact price, and per-token prices often go finer than a millionth of a dollar (gpt-4.1-mini, 1,234 tokens in and 567 out, is $0.0014008). The comparison refused the whole route on the first such request, so almost no real user could compare a bill. Seeding the sample bill found this.
+  - **Now:** each day is added up exactly, and only the day's total is rounded to the millionth (half to even). The comparison says so wherever it appears: the terminal, the Close page, the Statement and its CSV, and the recorded evidence.
+- **The sample data now has a provider bill and a cost-centre split.**
+  - **The bill:** a generated export for its OpenAI route, compared with what Segreant measured.
+  - **The split:** three cost centres with a rule each, and one recorded split of the fortnight.
+  - **The Statement:** all four figures are now filled, each with its own basis.
+  - **Labelled as generated:** billing output in the terminal and the billing CSV say the figures are sample data.
+
 - **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
   - **Copied commands stay literal in PowerShell.** PowerShell also ends a quoted value on a curly apostrophe (as in O’Brien), so the rest of a pasted command could run. Such values now show no command, and a value starting with `@` or `-` is quoted or withheld.
   - **The Spend page stays fast on a long history.** Matching ten thousand logged commits took about 30 seconds; it now takes well under one.

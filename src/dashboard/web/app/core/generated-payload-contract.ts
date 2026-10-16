@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ca3bc68e090b50079f685880a9ff55836bff68a38f08e162765954f44d80c259";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "064e6098f5b08fe6d68bce7dd8b9f01d5b5f29f9748c3a779a8caf173a81893c";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -898,6 +898,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "snapshotStability",
       "optional": false,
       "type": "'single_observation' | 'stable_across_observations' | 'changed_across_observations' | null"
+    },
+    {
+      "name": "localQuantization",
+      "optional": false,
+      "type": "{ rule: 'day_total_half_even_micros'; daysRounded: number } | null"
     },
     {
       "name": "providerProjectRef",
@@ -2826,6 +2831,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "snapshotStability",
       "optional": false,
       "type": "'single_observation' | 'stable_across_observations' | 'changed_across_observations'"
+    },
+    {
+      "name": "localQuantization",
+      "optional": true,
+      "type": "{ rule: 'day_total_half_even_micros'; daysRounded: number }"
     },
     {
       "name": "providerSourceKind",

@@ -596,6 +596,7 @@ function buildStatement(store: Store, raw: string | null, top: number | null): S
         providerSourceKind: r.result.providerSourceKind,
         offPathBound: r.result.offPathBound ?? null,
         snapshotStability: r.result.snapshotStability ?? null,
+        localQuantization: r.result.localQuantization ?? null,
         providerProjectRef: r.result.providerProjectRef ?? null,
         coversWholeMonth: covers(r.result.periodStartMs, r.result.periodEndMs),
       }));

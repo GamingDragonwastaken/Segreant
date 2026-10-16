@@ -16,6 +16,7 @@ import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type StatementPayload, type StatementBilledRun, type StatementAllocatedRun } from '../core/api.ts';
 import { isPrecise, usd, usdFromMicros, count, pct, share, date, relative } from '../core/fmt.ts';
+import { quantizationWords } from '../core/reconcileWords.ts';
 import { meteredBasisLine } from '../core/claimLayers.ts';
 import { errorText } from '../components/workflow.ts';
 
@@ -156,7 +157,8 @@ function billedRunLine(r: StatementBilledRun, period: StatementPayload['period']
     h('p', { text: `Provider billed ${usdFromMicros(r.providerReportedMicros)}; we measured ${usdFromMicros(r.localCapturedMicros)}; ${usdFromMicros(r.unexplainedVarianceMicros)} not explained${r.providerReportedMicros > 0 ? ` (${pct(r.unexplainedVarianceMicros / r.providerReportedMicros)})` : ''}.` }),
     ...runWarnings(r).map((w) => h('p', { class: 'drawer-error', text: w })),
     h('span', { class: 'basis', text: `${coverWords(r.coversWholeMonth, r.periodStartMs, r.periodEndMs, period, r.computedAtMs, 'UTC')} · project ${r.providerProjectRef ?? 'not recorded'} · ${r.providerSourceKind === 'operator_supplied_export' ? 'from an export you supplied' : r.providerSourceKind === 'provider_api_pull' ? 'read from the provider' : 'source not recorded'} · recorded ${relative(r.computedAtMs)}` }),
-    conditions ? h('span', { class: 'basis', text: conditions }) : null);
+    conditions ? h('span', { class: 'basis', text: conditions }) : null,
+    () => { const q = quantizationWords(r.localQuantization, isPrecise()); return q ? h('span', { class: 'basis', text: q }) : null; });
 }
 
 /**
