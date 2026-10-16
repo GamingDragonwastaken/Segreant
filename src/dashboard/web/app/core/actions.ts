@@ -42,8 +42,13 @@ class UnquotableValue extends Error {}
  * literal in both, so the command is withheld instead of shown wrong.
  */
 function shellWord(text: string): string {
-  if (/^[A-Za-z0-9._:/@-]+$/.test(text)) return text;
-  if (!text.includes("'")) return `'${text}'`;
+  // Bare only when no shell gives the first character a meaning: a leading
+  // `@` is splatting in PowerShell, and a leading `-` would read as a flag.
+  if (/^[A-Za-z0-9._:/][A-Za-z0-9._:/@-]*$/.test(text)) return text;
+  // PowerShell closes a single-quoted string on the curly quotes too
+  // (U+2018, U+2019, U+201A, U+201B), so a name like O\u2019Brien broke out of
+  // the quoting and anything after it ran (Codex review 2026-10-16).
+  if (!/['\u2018\u2019\u201A\u201B]/.test(text) && !text.startsWith('-')) return `'${text}'`;
   throw new UnquotableValue();
 }
 

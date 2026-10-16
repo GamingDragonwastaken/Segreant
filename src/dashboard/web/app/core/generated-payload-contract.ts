@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "7e16c25cc9c27f0f290365ab8c1fa7fb6d087b2ede1eb773c5106802500ef4db";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ca3bc68e090b50079f685880a9ff55836bff68a38f08e162765954f44d80c259";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1311,7 +1311,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "buckets",
       "optional": false,
-      "type": "Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }> }>"
+      "type": "Array<{ startMs: number; costUsd: number; requests: number; byModel: Array<{ model: string; costUsd: number }>; otherUsd: number }>"
     },
     {
       "name": "sessions",

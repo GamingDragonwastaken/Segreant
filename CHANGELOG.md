@@ -11,10 +11,26 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
+  - **Copied commands stay literal in PowerShell.** PowerShell also ends a quoted value on a curly apostrophe (as in O’Brien), so the rest of a pasted command could run. Such values now show no command, and a value starting with `@` or `-` is quoted or withheld.
+  - **The Spend page stays fast on a long history.** Matching ten thousand logged commits took about 30 seconds; it now takes well under one.
+  - **A short commit id that fits two measured commits matches neither,** instead of borrowing another repository's outcome.
+  - **Days after a midnight clock change stay on the chart.**
+  - **A request priced by a near-match rate still shows its context.** Only a reply that went through with no token counts is treated as unknown.
+  - **A model actually named "other" is listed as a model.** Other models are a separate figure.
+  - **Split costs add back exactly,** to the microdollar.
+  - **`segreant home` and `segreant value` give each piece of work its own next-check date.**
+  - **The privacy statement is exact:**
+    - old requests are deleted by `segreant prune`, not automatically;
+    - `metadataOnly` stops new code captures, and Clear proposals removes old ones;
+    - deleting everything includes any `SEGREANT_HOME` or `SEGREANT_DB` location.
+  - **The README says the demo's bill comparison and cost-centre pages open empty.**
+- **The griffin has its own antique gold in the dark theme,** chosen to sit beside the ember accent rather than compete with it.
+
 - **The Spend page now shows its sessions.** A Workbench sits above the breakdown, for the chosen range:
   - **Six figures across the top:** list cost, requests (with sessions and tools), context sent, the share read from cache, replies refused (429) or failed (5xx), and spend outside any session.
   - **A day-by-day chart, stacked by model.** It uses one scale whose gridlines are values the axis reaches, a legend with each model's total, and a readout that names a day's split when you point at it. Choosing a bar opens that day's costliest session.
-  - **What the session spend came to:** kept, not kept, disputed, too early to tell, not measured yet, or no commit linked. The same rule files each commit here and on the Statement. A session reaches a commit only through its own log, and a session with several commits splits its cost evenly. The card says both.
+  - **What the session spend came to:** kept, not kept, disputed, too early to tell, not matched to a measurement, or no commit linked. The same rule files each commit here and on the Statement. A session reaches a commit only through its own log, and a session with several commits splits its cost evenly. The card says both.
   - **Every session in one table:** requests, the context the first and last requests sent (drawn on one scale for every row), list cost and outcome. Beside it, the chosen session's context request by request, with marks where a request was refused or failed. Also listed: the commits it made, and observations drawn only from its own figures.
   - **Read from the new `GET /api/sessions`.** Requests with no session id count in the chart and totals, and the page names them. Requests whose usage was never reported stay out of the context figures.
   - **The sample data's four coding sessions each end in a commit from the measured work,** so the page shows a kept, a not-kept and a too-early commit. They now send context that grows as a real session does.
