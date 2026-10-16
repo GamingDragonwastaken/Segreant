@@ -19,6 +19,9 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **The split:** three cost centres with a rule each, and one recorded split of the fortnight.
   - **The Statement:** all four figures are now filled, each with its own basis.
   - **Labelled as generated:** billing output in the terminal and the billing CSV say the figures are sample data.
+- **A session's commits are only the ones git reported.**
+  - **Before:** text that merely looked like a commit counted as one, for example a test fixture an agent read or wrote, or a comment explaining the format. On the owner's real logs that was 26 of 153 matches.
+  - **Now:** a commit line counts only where git's own output starts: the start of a tool result or a new line in it. Commits recorded by the older reader are dropped once, and the next import reads every log again. On a fresh import of the same logs, all 98 recorded commits exist in a local repository.
 
 - **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
   - **Copied commands stay literal in PowerShell.** PowerShell also ends a quoted value on a curly apostrophe (as in O’Brien), so the rest of a pasted command could run. Such values now show no command, and a value starting with `@` or `-` is quoted or withheld.
