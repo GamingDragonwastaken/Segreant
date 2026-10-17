@@ -176,6 +176,13 @@ export function cmdEgress(flags: Flags): void {
     const failures = validateEgressRule(candidate);
     if (failures.length) {
       console.error('  Rule refused: ' + failures.join('; '));
+      // Git Bash (MSYS) rewrites an argument that starts with "/" into a Windows
+      // path before Segreant sees it, so "/v1/" arrives as "C:/Program Files/Git/v1/".
+      const prefix = flags['path-prefix'];
+      if (typeof prefix === 'string' && /^[A-Za-z]:[\\/]/.test(prefix)) {
+        console.error('  --path-prefix arrived as "' + prefix + '". Git Bash turns arguments that start with / into Windows paths.');
+        console.error('  Put MSYS_NO_PATHCONV=1 in front of the command, or run it from PowerShell or cmd.');
+      }
       process.exitCode = 1;
       return;
     }
