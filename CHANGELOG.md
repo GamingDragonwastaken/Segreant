@@ -11,6 +11,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Models missing from the rate card get real prices.** Segreant priced any model its card did not know at a generic $3 in / $15 out per million tokens. For claude-haiku-5-5 (list price $0.10 / $0.50) that read 30 times too high; for a premium model it read too low, including against a budget cap. Each request is now priced by the first of these that knows its model:
+  - **A price you set.** `segreant pricing set <model>` takes a rate, `--like` another model, or `--free` for a local model. It is shown as "your price", never as list price.
+  - **The rate card.** The bundled card now carries the 63 models the public price list had and it lacked, including claude-haiku-5-5 and the gpt-5.x-codex models.
+  - **A lookup on first sight.** The first time a running Segreant meets a model the card does not know, it downloads the public price list: at most once an hour, never in the request's path, sending nothing about you. New requests then get the list price. Requests already recorded keep their estimate until `segreant reprice --apply`.
+  - **The nearest model, then the generic rate,** both marked as estimates, as before.
+  - **`segreant pricing unknown`** lists the models still priced by a guess. `segreant pricing --auto off` turns the lookup off.
+- **The default egress lock lets Segreant download its own price list.** `local_locked` refused every non-loopback address, so in a default install the rate card could never update, not even with `segreant pricing --refresh`. It now permits exactly one more request: a GET of the public price-list file, receipted like any cloud route. `controlled_cloud` still needs an exact rule for it, and provider routes are unchanged.
 - **Four first-run snags on Windows, found by a usability panel of agents using Segreant for the first time.**
   - **A busy port:** `segreant start` crashed with Node's unhandled-error stack trace when a port was taken, usually by a Segreant already running. It now names the port, says how to check for a running Segreant, gives the flag for another port and exits 1.
   - **A config file saved from Windows PowerShell:** `Set-Content -Encoding utf8` writes a byte-order mark, and Segreant refused the file as invalid JSON. The mark is now skipped.
