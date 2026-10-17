@@ -60,7 +60,9 @@ test('unpriced models: skip and all three declarations; re-price previews, confi
     await drawer.getByLabel('Exact card model for private-like', { exact: true }).fill('not-on-card');
     await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
     await drawer.getByRole('status').getByText(/not an exact rate-card match/).waitFor();
-    await drawer.getByLabel('Exact card model for private-like', { exact: true }).fill('claude-haiku-4-5');
+    await drawer.getByLabel('Exact card model for private-like', { exact: true }).fill('  claude-haiku-4-5 ');
+    assert.equal(await drawer.locator('code.cmd').textContent(), 'segreant pricing set private-like --like claude-haiku-4-5',
+      'the shown command uses the same trimmed target Apply sends (PR #146 review)');
     await save('private-like');
     await drawer.getByLabel('Price for private-rate', { exact: true }).selectOption('rate');
     await drawer.getByLabel('Input for private-rate (USD per 1M tokens)', { exact: true }).fill('2');

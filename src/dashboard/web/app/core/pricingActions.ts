@@ -83,7 +83,9 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       const model = word(d.model);
       if (!model) return null;
       if (d.mode() === 'free') return `segreant pricing set ${model} --free`;
-      if (d.mode() === 'like') return word(d.like()) ? `segreant pricing set ${model} --like ${d.like()}` : null;
+      // The same trimmed target the request body sends (PR #146 review).
+      const like = d.like().trim();
+      if (d.mode() === 'like') return word(like) ? `segreant pricing set ${model} --like ${like}` : null;
       const read = d.cacheRead().trim();
       const write = d.cacheWrite().trim();
       if ((read !== '' && !decimal(read)) || (write !== '' && !decimal(write))) return null;

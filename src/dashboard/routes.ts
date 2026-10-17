@@ -69,7 +69,7 @@ import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { modelNameError, removePriceOverride, type PriceOverrideInput } from '../cost/overrides.ts';
 import { summarizeBasis } from '../cost/basis.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
-import { loadPriceOverrides } from '../cost/overrides.ts';
+import { activePriceOverrides } from '../cost/overrides.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
@@ -996,7 +996,8 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
   try {
     const payload: DashboardResponseFor<'pricing-unknown'> = {
       models: unknownModels(store), demo: isDemo(),
-      declared: Object.entries(loadPriceOverrides().models).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
+      // Sample data shows no real declarations (activePriceOverrides is empty in demo mode).
+      declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
         model, kind: price.kind, declaredAt: price.declaredAt,
         summary: price.kind === 'free' ? 'free (local model)'
           : price.kind === 'like' ? `like ${price.like}`
