@@ -6,9 +6,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
+import http from 'node:http';
+import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { liveBudget } from '../src/proxy/server.ts';
+import { liveBudget, createProxyServer, BudgetConfigUnavailable } from '../src/proxy/server.ts';
+import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 
 function setup() {
@@ -85,8 +88,78 @@ test('the file is not re-read faster than the interval', () => {
       intervalMs: 60_000, path: () => file, load: () => { loads += 1; return structuredClone(DEFAULT_CONFIG); },
     });
     for (let i = 0; i < 100; i++) budget();
-    assert.equal(loads, 0, 'an unchanged file is never re-parsed');
+    assert.equal(loads, 1, 'read once on the first check, then never re-parsed while unchanged');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the first check reads the file, so an edit made before the proxy started still governs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'live-budget-'));
+  try {
+    const file = join(dir, 'config.json');
+    writeFileSync(file, '{}');
+    const stale = structuredClone(DEFAULT_CONFIG); // what start loaded: no cap
+    const onDisk = structuredClone(DEFAULT_CONFIG);
+    onDisk.budget.dailyUsd = 4; // written while start awaited its pricing refresh
+    const budget = liveBudget(stale, { intervalMs: 0, path: () => file, load: () => structuredClone(onDisk) });
+    assert.equal(budget().dailyUsd, 4);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a stat failure other than a missing file fails closed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'live-budget-'));
+  try {
+    // A NUL byte makes stat fail with a non-ENOENT error on every platform.
+    const budget = liveBudget(structuredClone(DEFAULT_CONFIG), {
+      intervalMs: 0, path: () => join(dir, 'config\u0000.json'), load: () => structuredClone(DEFAULT_CONFIG),
+    });
+    assert.throws(() => budget(), BudgetConfigUnavailable, 'an unreadable path is not a deletion');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the running proxy refuses while config is invalid and resumes once it is repaired, without a restart', async () => {
+  const upstream = http.createServer(async (req, res) => {
+    req.resume();
+    await once(req, 'end');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 2 } }));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.upstreams.anthropic = `http://127.0.0.1:${(upstream.address() as { port: number }).port}`;
+  let broken = true;
+  const store = new Store(':memory:');
+  const proxy = createProxyServer({ store, config, budget: () => {
+    if (broken) throw new BudgetConfigUnavailable(new Error('budget.dailyUsd must be null or a finite non-negative USD value'));
+    return config.budget;
+  } });
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const base = `http://127.0.0.1:${(proxy.address() as { port: number }).port}`;
+  const send = () => fetch(`${base}/v1/messages`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  try {
+    const refused = await send();
+    assert.equal(refused.status, 503);
+    await refused.text();
+    broken = false;
+    const resumed = await send();
+    assert.equal(resumed.status, 200, 'a repaired file resumes forwarding: config failures do not latch');
+    await resumed.text();
+  } finally {
+    proxy.closeAllConnections?.();
+    await new Promise<void>((r) => proxy.close(() => r()));
+    upstream.closeAllConnections?.();
+    await new Promise<void>((r) => upstream.close(() => r()));
+    store.close();
   }
 });

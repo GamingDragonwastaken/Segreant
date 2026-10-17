@@ -35,7 +35,7 @@ test('every dispatched command is in `help all`, or is a named alias of one that
 });
 
 test('every dispatched command appears in GUIDE.md as `segreant <command>`', () => {
-  const inGuide = (verb: string) => verb === 'help' || verb === '--version'
+  const inGuide = (verb: string) => (verb === '--version' && /segreant --version\b/.test(guide))
     || (verb === '(no command)' ? /^segreant +Bare:/m.test(guide) : new RegExp(`segreant (?:[a-z-]+ \\| )*${verb}\\b`).test(guide));
   const missing = dispatched.filter((verb) => !inGuide(ALIASES[verb] ?? verb));
   assert.deepEqual(missing, [], `not in GUIDE: ${missing.join(', ')}`);

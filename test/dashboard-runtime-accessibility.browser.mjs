@@ -59,7 +59,20 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await skip.focus();
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'main', 'skip link must move focus to main without routing');
+    // CI (Linux, headless Chromium) twice found focus on nothing here while 16
+    // local runs, four in parallel, never did. Wait briefly for focus to land,
+    // and if it does not, say where it went, so the next failure diagnoses itself.
+    const landed = await page.waitForFunction(() => document.activeElement?.id === 'main', null, { timeout: 3000 }).then(() => true, () => false);
+    const where = landed ? null : await page.evaluate(() => {
+      const a = document.activeElement;
+      return {
+        active: a ? `${a.tagName.toLowerCase()}#${a.id}.${a.className}` : 'none',
+        skipConnected: document.querySelector('a.skip')?.isConnected ?? false,
+        mainConnected: document.getElementById('main')?.isConnected ?? false,
+        hash: location.hash,
+      };
+    });
+    assert.equal(landed ? 'main' : JSON.stringify(where), 'main', 'skip link must move focus to main without routing');
 
     const dialogCountBefore = await page.getByRole('dialog').count();
     assert.equal(dialogCountBefore, 0, 'first-run dialog must be removed after registration');

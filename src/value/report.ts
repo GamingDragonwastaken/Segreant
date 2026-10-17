@@ -43,6 +43,7 @@
  *                     directly, so no surface can re-derive an input its own way.
  */
 
+import { capBasisSpend } from '../budget/guard.ts';
 import type { Store } from '../store/db.ts';
 import { isDemo, DEFAULT_CONFIG, type SegreantConfig } from '../config.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
@@ -419,9 +420,12 @@ export function budgetAdvice(
   // just none the cap governs. "Not enough spend history" would contradict
   // every other page, so name the basis and the two ways forward instead.
   if (liveOnly && rec.status === 'cold_start') {
+    // "No requests went through the proxy" is a claim about requests, so it
+    // is decided by counting them, on the guard's own projection (review 4, F3).
+    const live = capBasisSpend(store, config.budget, startMs, endMs);
     const liveUsd = series.reduce((a, s) => a + s.costUsd, 0);
     const importedUsd = store.economicSeries(startMs, endMs, DAY_MS, false).reduce((a, s) => a + s.costUsd, 0) - liveUsd;
-    if (importedUsd >= 0.005) {
+    if (live.requests === 0 && importedUsd >= 0.005) {
       rec.rationale = [
         `No requests went through Segreant's proxy in the last ${days} days. The $${importedUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} at list price in that time was imported from agent logs: it is observed, but a cap only governs proxied requests, so it does not count toward one. Route a tool through the proxy for a few active days, or count imported spend toward the cap with: segreant budget --include-imported on`,
       ];
