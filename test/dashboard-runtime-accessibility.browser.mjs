@@ -51,6 +51,10 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
     assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('look after the money')), true, 'Escape must return focus to the first choice');
     await precise.click();
     await page.locator('#main').waitFor({ state: 'visible' });
+    // The choice routes to a page that then loads its data and re-renders.
+    // Testing the skip link before that settles raced the render: CI on PR
+    // #134 saw focus land on nothing (6 of 6 local runs passed).
+    await page.waitForLoadState('networkidle');
 
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await skip.focus();
