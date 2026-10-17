@@ -23,7 +23,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   /** A declared price is edited in place: a model already on the card, or whose guessed rows were re-priced, never returns to the list above. */
   const declaredKey = (model: string): string => JSON.stringify(['declared', model]);
   function draft(model: { model: string }) {
-    return { model: model.model, mode: signal('skip'), like: signal(''), input: signal(''), output: signal('') };
+    return { model: model.model, mode: signal('skip'), like: signal(''), input: signal(''), output: signal(''), cacheRead: signal(''), cacheWrite: signal('') };
   }
   const load = async (): Promise<UnknownPricingPayload> => {
     if (!read) read = api.pricingUnknown().then((payload) => {
@@ -44,8 +44,16 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
     switch (d.mode.peek()) {
       case 'free': return { model: d.model, kind: 'free' };
       case 'like': return d.like.peek().trim() ? { model: d.model, kind: 'like', like: d.like.peek().trim() } : null;
-      case 'rate': return decimal(d.input.peek()) && decimal(d.output.peek())
-        ? { model: d.model, kind: 'rate', input: d.input.peek(), output: d.output.peek() } : null;
+      case 'rate': {
+        // Cache prices are optional; left blank, the engine's defaults apply
+        // (reads at 0.1x input, writes at 1.25x). A filled one must be valid.
+        const read = d.cacheRead.peek().trim();
+        const write = d.cacheWrite.peek().trim();
+        if (!decimal(d.input.peek()) || !decimal(d.output.peek())) return null;
+        if ((read !== '' && !decimal(read)) || (write !== '' && !decimal(write))) return null;
+        return { model: d.model, kind: 'rate', input: d.input.peek(), output: d.output.peek(),
+          ...(read === '' ? {} : { cacheRead: read }), ...(write === '' ? {} : { cacheWrite: write }) };
+      }
       default: return null;
     }
   };
@@ -63,7 +71,12 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       if (!model) return null;
       if (d.mode() === 'free') return `segreant pricing set ${model} --free`;
       if (d.mode() === 'like') return word(d.like()) ? `segreant pricing set ${model} --like ${d.like()}` : null;
-      return decimal(d.input()) && decimal(d.output()) ? `segreant pricing set ${model} --input ${d.input()} --output ${d.output()}` : null;
+      const read = d.cacheRead().trim();
+      const write = d.cacheWrite().trim();
+      if ((read !== '' && !decimal(read)) || (write !== '' && !decimal(write))) return null;
+      return decimal(d.input()) && decimal(d.output())
+        ? `segreant pricing set ${model} --input ${d.input()} --output ${d.output()}${read ? ` --cache-read ${read}` : ''}${write ? ` --cache-write ${write}` : ''}`
+        : null;
     },
     fields: () => h('div', null,
       h('p', { class: 'drawer-note', text: 'Choose one model and review its price below. Skip keeps its estimate. Prices apply to future requests; re-pricing history is a separate step.' }),
@@ -96,7 +109,9 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
             ? input(`Exact card model for ${model.model}`, 'like', d.like, 'claude-haiku-4-5')
             : d.mode() === 'rate' ? h('div', null,
               input(`Input for ${model.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
-              input(`Output for ${model.model} (USD per 1M tokens)`, 'output', d.output, '3.00')) : null);
+              input(`Output for ${model.model} (USD per 1M tokens)`, 'output', d.output, '3.00'),
+              input(`Cache read for ${model.model}, optional (USD per 1M tokens)`, 'read', d.cacheRead, '0.10 x input if blank'),
+              input(`Cache write for ${model.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank')) : null);
       }) ?? null,
       () => (data()?.declared.length ?? 0) > 0 ? h('section', { class: 'pricing-declared' },
         h('h3', { class: 'drawer-h3', text: 'Your prices' }),
@@ -133,7 +148,9 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
               ? field(`Exact card model for ${p.model}`, 'like', d.like, 'claude-haiku-4-5')
               : d.mode() === 'rate' ? h('div', null,
                 field(`New input for ${p.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
-                field(`New output for ${p.model} (USD per 1M tokens)`, 'output', d.output, '3.00')) : null);
+                field(`New output for ${p.model} (USD per 1M tokens)`, 'output', d.output, '3.00'),
+                field(`New cache read for ${p.model}, optional (USD per 1M tokens)`, 'read', d.cacheRead, '0.10 x input if blank'),
+                field(`New cache write for ${p.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank')) : null);
         })) : null,
       h('div', { role: 'status', 'aria-live': 'polite' }, () => saved() ? h('div', null,
         h('p', { class: 'drawer-note', text: AFTER_DECLARATION }),
@@ -153,7 +170,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       const d = choice();
       const description = !body ? '' : body.kind === 'free' ? 'Free (local model): $0 your price per request.'
         : body.kind === 'like' ? `Your price follows ${body.like}, an exact model on the current card.`
-        : `Your price: input $${body.input}, output $${body.output} USD per 1M tokens.`;
+        : `Your price: input $${body.input}, output $${body.output}${body.cacheRead ? `, cache read $${body.cacheRead}` : ''}${body.cacheWrite ? `, cache write $${body.cacheWrite}` : ''} USD per 1M tokens.`;
       return {
         applicable: !payload.demo && body !== null,
         summary: body ? `Save your price for ${d!.model}. ${description}`

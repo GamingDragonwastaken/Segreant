@@ -11,6 +11,36 @@ export interface RepriceModel {
   afterBasis: 'list price' | 'your price';
 }
 
+/**
+ * What priced the replacement amounts, from every row that will change: a
+ * report built from the first row alone claimed "local rate card only" for a
+ * batch that also held prices the user typed (PR #146 review).
+ */
+function repriceEvidence(updates: readonly RepriceUpdate[]) {
+  if (updates.length === 0) return null;
+  const sources = new Map<string, { costBasis: string; rateCardSha256: string | null; rateCardSourceKind: string; rows: number }>();
+  for (const u of updates) {
+    const key = JSON.stringify([u.pricing.costBasis, u.pricing.rateCardSha256, u.pricing.rateCardSourceKind]);
+    const s = sources.get(key) ?? { costBasis: u.pricing.costBasis, rateCardSha256: u.pricing.rateCardSha256, rateCardSourceKind: u.pricing.rateCardSourceKind, rows: 0 };
+    s.rows += 1;
+    sources.set(key, s);
+  }
+  const list = [...sources.values()].sort((a, b) => b.rows - a.rows);
+  const declaredRows = list.filter((s) => s.costBasis === 'user_declared_price').reduce((n, s) => n + s.rows, 0);
+  const cards = [...new Set(list.filter((s) => s.rateCardSha256 !== null).map((s) => `${s.rateCardSourceKind} ${s.rateCardSha256}`))];
+  const onlyCard = declaredRows === 0 && cards.length === 1 ? list.find((s) => s.rateCardSha256 !== null)! : null;
+  return {
+    localRateCardOnly: declaredRows === 0,
+    cardSha256: onlyCard?.rateCardSha256 ?? null,
+    sourceKind: onlyCard?.rateCardSourceKind ?? (declaredRows === updates.length ? 'none' : 'mixed'),
+    declaredRows,
+    sources: list,
+    note: declaredRows === 0
+      ? 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.'
+      : `${declaredRows} of ${updates.length} rows take a price you set (your price, not a list price); the rest are local list prices. None is a provider invoice, discount, tax, credit, or reconciliation.`,
+  };
+}
+
 export function previewReprice(store: Store) {
   const rows = store.estimatedRequestRows();
   const updates: RepriceUpdate[] = [];
@@ -37,12 +67,7 @@ export function previewReprice(store: Store) {
     applied: false, estimatedRows: rows.length, repriceable: updates.length, stillEstimated,
     totalBeforeUsd: [...byModel.values()].reduce((a, v) => a + v.beforeUsd, 0),
     totalAfterUsd: [...byModel.values()].reduce((a, v) => a + v.afterUsd, 0),
-    priceEvidence: updates.length ? {
-      localRateCardOnly: true,
-      cardSha256: updates[0]!.pricing.rateCardSha256,
-      sourceKind: updates[0]!.pricing.rateCardSourceKind,
-      note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
-    } : null,
+    priceEvidence: repriceEvidence(updates),
     byModel: [...byModel.values()],
     // Internal write plan; never expose the exact bigint money objects on the JSON wire.
     updates,

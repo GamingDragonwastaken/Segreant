@@ -491,12 +491,7 @@ export function cmdReprice(flags: Flags): void {
       printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
         stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
-        priceEvidence: updates.length ? {
-          localRateCardOnly: true,
-          cardSha256: updates[0]!.pricing.rateCardSha256,
-          sourceKind: updates[0]!.pricing.rateCardSourceKind,
-          note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
-        } : null,
+        priceEvidence: report.priceEvidence,
         byModel: [...byModel.entries()].map(([key, v]) => {
           const [provider, model] = JSON.parse(key) as [string, string];
           return { provider, model, rows: v.n, beforeUsd: v.before, afterUsd: v.after };
@@ -514,14 +509,15 @@ export function cmdReprice(flags: Flags): void {
       return;
     }
     console.log(`  Estimated rows       ${num(rows.length)}`);
-    console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(current card has an exact rate for these models)')}`);
+    console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(the current card, or a price you set, gives these models an exact rate)')}`);
     if (stillEstimated) console.log(`  Still estimates      ${num(stillEstimated)}  ${color(tty, C.gray, 'left untouched — a new guess is not more honest than the old one')}`);
     if (updates.length) {
       console.log('');
       for (const [model, v] of [...byModel.entries()].sort((a, b) => b[1].after - a[1].after).slice(0, 10)) {
         const delta = v.after - v.before;
         const dc = delta > 0 ? C.red : C.green;
-        console.log(`  ${model.padEnd(40)} ${num(v.n).padStart(6)} rows  ${usd(v.before).padStart(10)} → ${usd(v.after).padStart(10)}  ${color(tty, dc, (delta >= 0 ? '+' : '') + usd(delta))}`);
+        const [provider, name] = JSON.parse(model) as [string, string];
+        console.log(`  ${`${provider}/${name}`.padEnd(40)} ${num(v.n).padStart(6)} rows  ${usd(v.before).padStart(10)} → ${usd(v.after).padStart(10)}  ${color(tty, dc, (delta >= 0 ? '+' : '') + usd(delta))}`);
       }
       console.log('');
       console.log(`  Total                ${usd(before)} → ${usd(after)}  ${color(tty, after - before >= 0 ? C.red : C.green, (after - before >= 0 ? '+' : '') + usd(after - before))}`);

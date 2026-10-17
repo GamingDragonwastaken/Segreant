@@ -65,7 +65,9 @@ test('unpriced models: skip and all three declarations; re-price previews, confi
     await drawer.getByLabel('Price for private-rate', { exact: true }).selectOption('rate');
     await drawer.getByLabel('Input for private-rate (USD per 1M tokens)', { exact: true }).fill('2');
     await drawer.getByLabel('Output for private-rate (USD per 1M tokens)', { exact: true }).fill('3');
+    await drawer.getByLabel('Cache read for private-rate, optional (USD per 1M tokens)', { exact: true }).fill('0.2');
     await save('private-rate');
+    assert.equal(loadPriceOverrides().models['private-rate']?.cacheRead, '0.2', 'the dashboard saves a cache price (PR #146 review)');
     await drawer.getByLabel('Price for local-model', { exact: true }).selectOption('free');
     await save('local-model');
     assert.deepEqual(Object.keys(loadPriceOverrides().models).sort(), ['local-model', 'private-like', 'private-rate']);
