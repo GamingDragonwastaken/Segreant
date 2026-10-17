@@ -22,10 +22,11 @@
  */
 
 import http from 'node:http';
+import { statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
-import type { SegreantConfig } from '../config.ts';
+import { configPath, loadConfig, type BudgetConfig, type SegreantConfig } from '../config.ts';
 import { BudgetGuard, unverifiedBasis, type GuardDecision } from '../budget/guard.ts';
 import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
@@ -295,6 +296,8 @@ export interface ProxyDeps {
   store: Store;
   config: SegreantConfig;
   onLog?: (row: RequestRow, decision: GuardDecision) => void;
+  /** The enforced budget; defaults to liveBudget(config), which follows config.json. */
+  budget?: () => BudgetConfig;
 }
 
 interface ProxyRuntimeState {
@@ -302,12 +305,59 @@ interface ProxyRuntimeState {
   accountingFailure: boolean;
 }
 
+/**
+ * The budget the running proxy enforces, kept in step with config.json.
+ *
+ * Dashboard Settings mutates the shared config object in place, but
+ * `segreant budget --daily N` and a hand edit write the FILE from another
+ * process. Before this, a cap set from the terminal was printed as "Budget
+ * updated" and not enforced until a restart (verified 2026-10-17: two requests
+ * over a $0.05 cap went through), and an invalid budget written while running
+ * kept forwarding. The file is checked at most every `intervalMs`; a changed
+ * file is re-read and validated, and only its budget is taken (ports and
+ * upstreams still need a restart). An unreadable or invalid file THROWS, which
+ * the pre-flight check turns into a fail-closed 503, and is retried at the next
+ * check rather than cached, so a half-written file does not stick. A missing
+ * file keeps the budget in force: deleting config.json never lifts a cap.
+ */
+export function liveBudget(
+  config: SegreantConfig,
+  opts: { intervalMs?: number; path?: () => string; load?: () => SegreantConfig } = {},
+): () => BudgetConfig {
+  const intervalMs = opts.intervalMs ?? 500;
+  const path = opts.path ?? configPath;
+  const load = opts.load ?? loadConfig;
+  let checkedAt = -Infinity;
+  let seenMtimeMs: number | null = null;
+  let failure: unknown = null;
+  try { seenMtimeMs = statSync(path()).mtimeMs; } catch { seenMtimeMs = null; }
+  return () => {
+    const now = Date.now();
+    if (now - checkedAt >= intervalMs) {
+      checkedAt = now;
+      let mtimeMs: number | null = null;
+      try { mtimeMs = statSync(path()).mtimeMs; } catch { mtimeMs = null; }
+      if (mtimeMs !== null && (mtimeMs !== seenMtimeMs || failure !== null)) {
+        try {
+          config.budget = load().budget;
+          seenMtimeMs = mtimeMs;
+          failure = null;
+        } catch (error) {
+          failure = error;
+        }
+      }
+    }
+    if (failure !== null) throw failure;
+    return config.budget;
+  };
+}
+
 export function createProxyServer(deps: ProxyDeps): http.Server {
   const { store, config } = deps;
-  // Dashboard Settings mutates the shared config object after persisting it.
   // Resolve budget at each pre-flight check so a newly chosen cap actually
-  // governs the already-running proxy, rather than merely looking saved in UI.
-  const guard = new BudgetGuard(store, () => config.budget);
+  // governs the already-running proxy, whether it was saved from Settings (the
+  // shared object) or from the CLI or an editor (the file; see liveBudget).
+  const guard = new BudgetGuard(store, deps.budget ?? liveBudget(config));
   const state: ProxyRuntimeState = { accountingFailure: false };
 
   const server = http.createServer((req, res) => {

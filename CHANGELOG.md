@@ -11,6 +11,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **A cap set from the terminal now stops a running proxy.**
+  - **Before:** `segreant budget --daily N` printed "Budget updated", but a proxy that was already running kept forwarding until it was restarted. Only a cap saved in the dashboard took effect at once. A budget made invalid by hand while the proxy ran was not noticed either. Found by an end-to-end test against a local stub provider: two requests over a $0.05 cap went through.
+  - **Now:** the proxy re-reads the budget within half a second of `config.json` changing, whoever changed it. While the file is invalid, every request is refused without being sent; deleting the file keeps the cap in force.
+  - **Under load:** 50 concurrent streams went past a cap by 42 requests ($0.031) before the rest were refused, because requests already in flight still finish. The docs now state that bound.
 - **Every command is in the help and the guide.** `segreant help all` was missing `alloc` (cost-centre allocation) and `statusline`, and `docs/GUIDE.md` was missing ten commands, among them `plan`, `quota`, `launch`, `market` and `outcome`. Both said bare `segreant` shows `guide`; it shows this month, your plans and what stayed in the code. A test now fails if a command is added without both.
 - **The bill comparison now works on real OpenAI traffic.**
   - **Before:** a request through Segreant records its exact price, and per-token prices often go finer than a millionth of a dollar (gpt-4.1-mini, 1,234 tokens in and 567 out, is $0.0014008). The comparison refused the whole route on the first such request, so almost no real user could compare a bill. Seeding the sample bill found this.
