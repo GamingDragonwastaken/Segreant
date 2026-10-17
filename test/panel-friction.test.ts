@@ -229,4 +229,18 @@ test('PR #142 review: the closing line tells weak assurance apart from no winner
   assert.doesNotMatch(favoursNew, /does not show it/, 'must not contradict a proven verdict');
   assert.match(budgetClosingLine(false, { status: 'proven_dominant', action: 'keep_current' }), /current setting does better/);
   assert.match(budgetClosingLine(false, { status: 'undetermined' }), /this data does not show it/);
+  assert.match(budgetClosingLine(false, { status: 'undetermined' }, true), /already has this cap/, 'equal caps are not a missing proof (PR #142 review)');
+});
+
+test('a long-running flag with no command is reported, not swallowed by the home view (PR #142 review)', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-watch-'));
+  try {
+    for (const flag of ['--watch', '--serve']) {
+      const r = await cli([flag], home);
+      assert.equal(r.code, 2, `${flag}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, new RegExp(`${flag} does nothing for "segreant home"`));
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
