@@ -38,6 +38,7 @@ export const BASIS_COHORTS = [
   'list_exact',
   'list_family',
   'user_declared',
+  'user_free',
   'fallback',
   'tool_reported',
   'demo',
@@ -91,6 +92,10 @@ const TEXT: Record<BasisCohortId, { label: string; meaning: string }> = {
     label: 'your price',
     meaning: 'a price you set with segreant pricing set; Segreant has not checked it against a price list',
   },
+  user_free: {
+    label: 'free, your setting',
+    meaning: 'a model you marked free with segreant pricing set --free (a local model); every request costs nothing',
+  },
   fallback: {
     label: 'fallback rate',
     meaning: 'the model is not on the rate card; priced at a generic mid-tier rate, a rough estimate',
@@ -124,7 +129,7 @@ export function cohortOf(row: Pick<BasisRow, 'costBasis' | 'rateMatchKind'>): Ba
         ? 'list_exact'
         : 'list_family';
     case 'fallback_estimate': return 'fallback';
-    case 'user_declared_price': return 'user_declared';
+    case 'user_declared_price': return row.rateMatchKind === 'user_declared_free' ? 'user_free' : 'user_declared';
     case 'tool_reported_unverified': return 'tool_reported';
     case 'synthetic_demo': return 'demo';
     case 'unpriced': return 'unpriced';
@@ -174,10 +179,10 @@ export function summarizeBasis(rows: readonly BasisRow[]): BasisSummary {
       ? 'sample_cost'
       : only('tool_reported', 'unpriced') && has('tool_reported')
         ? 'tool_reported_cost'
-        : only('list_exact', 'list_family', 'unpriced', 'user_declared') && (has('list_exact') || has('list_family'))
-            // Only a free (local) declaration prices at exactly zero; any paid
-            // declaration, however small, is not list price (PR #146 review).
-            && (by.get('user_declared')?.costUsd ?? 0) === 0
+        // A model marked free does not turn list prices into an estimate; any
+        // paid declaration does, whatever its amount, because the declaration
+        // itself is retained, not inferred from a zero (PR #146 review).
+        : only('list_exact', 'list_family', 'unpriced', 'user_free') && (has('list_exact') || has('list_family'))
           ? 'list_cost'
           : 'estimated_cost';
   const exact = by.get('list_exact')?.costUsd ?? 0;

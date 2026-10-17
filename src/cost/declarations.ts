@@ -23,7 +23,7 @@ export function unknownModels(store: Store): ReturnType<Store['unresolvedModels'
   const models = new Map<string, (typeof recorded)[number]>();
   for (const row of recorded) {
     const match = rateFor(row.provider as Provider, row.model).pricing.rateMatchKind;
-    if (match === 'exact_provider' || match === 'exact_cross_provider' || match === 'user_declared') continue;
+    if (match === 'exact_provider' || match === 'exact_cross_provider' || match === 'user_declared' || match === 'user_declared_free') continue;
     const key = JSON.stringify([row.provider, row.model]);
     const prior = models.get(key);
     if (prior) {
