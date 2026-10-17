@@ -8,7 +8,8 @@
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig, isDemo, DemoWriteBlockedError } from '../config.ts';
-import { pricingStatus } from '../cost/pricing.ts';
+import { pricingStatus, refreshPricing } from '../cost/pricing.ts';
+import { priceCheckDue } from '../cost/firstSight.ts';
 import {
   realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS, SCAN_VALUE_BUDGET_MS,
   type DiscoveredResult,
@@ -536,7 +537,21 @@ export async function cmdScan(flags: Flags): Promise<void> {
   // Imported rows keep the price they were recorded at, so a stale card turns
   // every model newer than it into a fallback estimate for good (until a
   // reprice). Say so BEFORE the import, where it can still be avoided.
-  const prices = pricingStatus(loadConfig().pricing.maxAgeDays);
+  const pricingCfg = loadConfig().pricing;
+  let prices = pricingStatus(pricingCfg.maxAgeDays);
+  // Imported rows keep the price they are recorded at, so the best moment to
+  // learn new models is before the import, not after it. Only when someone is
+  // at the terminal: a scripted import does not gain a network call it did not
+  // ask for (the running proxy still looks models up on first sight).
+  if (flags.setup && !flags.json && tty && !isDemo() && pricingCfg.lookupUnknownModels && priceCheckDue(prices)) {
+    console.log(color(tty, C.gray, '  Checking the public price list so imported requests get current prices (sends nothing about you)…'));
+    const checked = await refreshPricing(pricingCfg.manifestUrl);
+    console.log(checked.ok
+      ? color(tty, C.gray, `  Prices current: ${num(checked.modelCount ?? 0)} models on the card.`)
+      : color(tty, C.yellow, `  Price check skipped: ${checked.error ?? 'the price list could not be read'}.`));
+    prices = pricingStatus(pricingCfg.maxAgeDays);
+    console.log('');
+  }
   if (prices.stale && !flags.json) {
     const age = prices.ageDays === null ? 'of unknown age' : `${num(prices.ageDays)} days old`;
     console.log(color(tty, C.yellow, `  Prices are ${age}: models released since then will be priced by a fallback estimate.`));
