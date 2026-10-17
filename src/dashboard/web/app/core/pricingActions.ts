@@ -20,12 +20,15 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   const drafts = new Map<string, ReturnType<typeof draft>>();
   let read: Promise<UnknownPricingPayload> | null = null;
   const key = (model: UnknownPricingModel): string => JSON.stringify([model.provider, model.model]);
-  function draft(model: UnknownPricingModel) {
+  /** A declared price is edited in place: a model already on the card, or whose guessed rows were re-priced, never returns to the list above. */
+  const declaredKey = (model: string): string => JSON.stringify(['declared', model]);
+  function draft(model: { model: string }) {
     return { model: model.model, mode: signal('skip'), like: signal(''), input: signal(''), output: signal('') };
   }
   const load = async (): Promise<UnknownPricingPayload> => {
     if (!read) read = api.pricingUnknown().then((payload) => {
       for (const model of payload.models) if (!drafts.has(key(model))) drafts.set(key(model), draft(model));
+      for (const declared of payload.declared) if (!drafts.has(declaredKey(declared.model))) drafts.set(declaredKey(declared.model), draft(declared));
       data.set(payload);
       return payload;
     }).catch((error: unknown) => { read = null; throw error; });
@@ -97,16 +100,41 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       }) ?? null,
       () => (data()?.declared.length ?? 0) > 0 ? h('section', { class: 'pricing-declared' },
         h('h3', { class: 'drawer-h3', text: 'Your prices' }),
-        h('p', { class: 'drawer-note', text: 'To change one, remove it here; the model then comes back in the list above to price again.' }),
-        ...data()!.declared.map((p, i) => h('div', { class: 'pricing-model' },
-          h('label', { class: 'drawer-h3', for: `declared-${i}-mode`, text: `${p.model}: ${p.summary}` }),
-          h('select', { id: `declared-${i}-mode`, class: 'drawer-input', onchange: (event: Event) => {
-            const remove = (event.target as HTMLSelectElement).value === 'remove';
-            removal.set(remove ? p.model : removal.peek() === p.model ? null : removal.peek());
-            if (remove) selected.set(null);
-          } },
-            h('option', { value: 'keep', selected: removal.peek() !== p.model, text: 'Keep' }),
-            h('option', { value: 'remove', selected: removal.peek() === p.model, text: 'Remove price' }))))) : null,
+        h('p', { class: 'drawer-note', text: 'Change or remove a price you set. Apply saves the one you changed last.' }),
+        ...data()!.declared.map((p, i) => {
+          const id = declaredKey(p.model);
+          const d = drafts.get(id) ?? draft(p);
+          if (!drafts.has(id)) drafts.set(id, d);
+          const field = (label: string, suffix: string, sig: typeof d.input, placeholder: string) => h('div', null,
+            h('label', { class: 'drawer-h3', for: `declared-${i}-${suffix}`, text: label }),
+            h('input', { id: `declared-${i}-${suffix}`, class: 'drawer-input', type: 'text',
+              inputmode: suffix === 'like' ? 'text' : 'decimal', maxlength: suffix === 'like' ? '200' : '20',
+              value: sig.peek(), placeholder, oninput: (event: Event) => { sig.set((event.target as HTMLInputElement).value); selected.set(id); removal.set(null); } }));
+          return h('div', { class: 'pricing-model' },
+            h('label', { class: 'drawer-h3', for: `declared-${i}-mode`, text: `${p.model}: ${p.summary}` }),
+            h('select', { id: `declared-${i}-mode`, class: 'drawer-input', onchange: (event: Event) => {
+              const mode = (event.target as HTMLSelectElement).value;
+              if (mode === 'remove') {
+                d.mode.set('skip');
+                removal.set(p.model);
+                selected.set(null);
+                return;
+              }
+              if (removal.peek() === p.model) removal.set(null);
+              d.mode.set(mode === 'keep' ? 'skip' : mode);
+              selected.set(mode === 'keep' ? (selected.peek() === id ? null : selected.peek()) : id);
+            } },
+              h('option', { value: 'keep', selected: removal.peek() !== p.model && d.mode.peek() === 'skip', text: 'Keep' }),
+              h('option', { value: 'like', selected: d.mode.peek() === 'like', text: 'Change: price like…' }),
+              h('option', { value: 'rate', selected: d.mode.peek() === 'rate', text: 'Change: set a price' }),
+              h('option', { value: 'free', selected: d.mode.peek() === 'free', text: 'Change: free (local model)' }),
+              h('option', { value: 'remove', selected: removal.peek() === p.model, text: 'Remove price' })),
+            () => d.mode() === 'like'
+              ? field(`Exact card model for ${p.model}`, 'like', d.like, 'claude-haiku-4-5')
+              : d.mode() === 'rate' ? h('div', null,
+                field(`New input for ${p.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
+                field(`New output for ${p.model} (USD per 1M tokens)`, 'output', d.output, '3.00')) : null);
+        })) : null,
       h('div', { role: 'status', 'aria-live': 'polite' }, () => saved() ? h('div', null,
         h('p', { class: 'drawer-note', text: AFTER_DECLARATION }),
         h('button', { class: 'btn-ghost', text: 'Re-price recorded requests', onclick: () => openAction(repriceAction(capability('reprice')!)) })) : null)),
@@ -147,6 +175,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       const body = priceBody();
       if (!body) return { ok: false, message: 'Choose a price for one model first.' };
       const result = await api.write.pricingDeclare(body);
+      choice()?.mode.set('skip');
       saved.set(true);
       selected.set(null);
       read = null;

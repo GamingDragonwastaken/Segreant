@@ -83,7 +83,7 @@ export function meteredBasisLine(basis: Basis | undefined): string {
         ? "list prices (some models at the nearest model's price)"
         : "list prices: each model's own published price";
     default: {
-      const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'user_declared' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+      const weak = basis.cohorts.filter((c) => (c.id === 'user_declared' ? c.costUsd > 0 : (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005));
       // With no weak part above a cent, the "estimated" headline comes from the
       // mix itself (sample rows beside priced ones, or unpriced requests). It
       // used to print "0% priced without the model's own rate ()".
@@ -114,7 +114,7 @@ export function meteredBasisParts(basis: Basis | undefined): string {
   return basis.cohorts.map((c) => {
     if (c.id === 'unpriced') return `${c.requests} request(s) not priced (${modelsOf(c)})`;
     if (c.id === 'not_sent') return `${c.requests} request(s) refused before reaching the provider (no charge)`;
-    if (c.id === 'user_declared' && c.costUsd < 0.005) return `${c.requests} request(s) on models you marked free (${modelsOf(c)})`;
+    if (c.id === 'user_declared' && c.costUsd === 0) return `${c.requests} request(s) on models you marked free (${modelsOf(c)})`;
     if (c.id === 'tool_reported' && c.costUsd < 0.005) return `${c.requests} request(s) the tool reported at no charge (${modelsOf(c)})`;
     const which = c.id === 'list_exact' || c.id === 'demo' || c.id === 'tool_reported' ? '' : ` (${modelsOf(c)})`;
     return `${money(c.costUsd)} ${c.label}${which}`;
