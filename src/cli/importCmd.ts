@@ -21,6 +21,7 @@ import { type ImportSummary } from '../connect/importShared.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
 import { askPlanPrices } from './planCmd.ts';
+import { askModelPrices } from './askModelPrices.ts';
 import { summarizeBasis } from '../cost/basis.ts';
 import { basisLines } from './basisLines.ts';
 
@@ -669,6 +670,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
     console.log('');
     if (await askPlanPrices(tty) > 0) console.log(color(tty, C.gray, '  Saved. segreant month now shows each plan beside the work it did.'));
+    await askModelPrices(tty);
     if (present.some((t) => t.id === 'claude-code')) {
       console.log(color(tty, C.gray, '  Claude\'s live usage meter: segreant statusline --setup shows the one line to add to Claude Code.'));
     }
