@@ -103,6 +103,7 @@ export function meteredBasisParts(basis: Basis | undefined): string {
   if (!basis || basis.cohorts.length === 0) return 'no recorded requests in this period';
   return basis.cohorts.map((c) => {
     if (c.id === 'unpriced') return `${c.requests} request(s) not priced (${modelsOf(c)})`;
+    if (c.id === 'not_sent') return `${c.requests} request(s) refused before reaching the provider (no charge)`;
     if (c.id === 'tool_reported' && c.costUsd < 0.005) return `${c.requests} request(s) the tool reported at no charge (${modelsOf(c)})`;
     const which = c.id === 'list_exact' || c.id === 'demo' || c.id === 'tool_reported' ? '' : ` (${modelsOf(c)})`;
     return `${money(c.costUsd)} ${c.label}${which}`;

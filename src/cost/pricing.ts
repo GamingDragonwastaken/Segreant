@@ -88,6 +88,7 @@ export const COST_BASES = [
   'tool_reported_unverified',
   'synthetic_demo',
   'unpriced',
+  'not_sent',
   'legacy_unknown',
 ] as const;
 export type CostBasis = (typeof COST_BASES)[number];
@@ -107,6 +108,7 @@ export const RATE_MATCH_KINDS = [
   'fallback',
   'reported',
   'unpriced',
+  'not_sent',
   'legacy_unknown',
 ] as const;
 export type RateMatchKind = (typeof RATE_MATCH_KINDS)[number];
@@ -906,6 +908,23 @@ export function unpricedPricingEvidence(): RequestPricingEvidence {
     rateCardSha256: null,
     rateCardSourceKind: 'none',
     rateMatchKind: 'unpriced',
+    rateMatchProvider: null,
+    rateMatchModel: null,
+  };
+}
+
+/**
+ * A request Segreant refused before it reached the provider (a budget block, an
+ * egress refusal). Its cost is not unknown: nothing was sent, so nothing was
+ * charged. Recording it as `unpriced` made every cap refusal read as a missing
+ * price ("1 of 835 requests in this window are unpriced").
+ */
+export function notSentPricingEvidence(): RequestPricingEvidence {
+  return {
+    costBasis: 'not_sent',
+    rateCardSha256: null,
+    rateCardSourceKind: 'none',
+    rateMatchKind: 'not_sent',
     rateMatchProvider: null,
     rateMatchModel: null,
   };

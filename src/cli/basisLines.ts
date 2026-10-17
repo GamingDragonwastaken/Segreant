@@ -14,6 +14,10 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
       out.push(`${indent}${num(c.requests)} requests not priced: ${cohortModels(c)} (no rate applies)`);
       continue;
     }
+    if (c.id === 'not_sent') {
+      out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests refused before reaching the provider (no charge)`);
+      continue;
+    }
     if (c.id === 'tool_reported' && c.costUsd < 0.005) {
       // A free model is a real answer ("the tool said $0"), not a missing price.
       out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests the tool reported at no charge: ${cohortModels(c)}`);
