@@ -79,7 +79,8 @@ function readLedger<T>(empty: T, read: (store: Store) => T): T {
   try { return read(store); } finally { store.close(); }
 }
 
-function unknownModels(): ReturnType<Store['unresolvedModels']> {
+/** Models still priced by a guess under the current card and declarations, costliest first. */
+export function unknownModels(): ReturnType<Store['unresolvedModels']> {
   const recorded = readLedger<ReturnType<Store['unresolvedModels']>>([], (store) => store.unresolvedModels());
   const models = new Map<string, (typeof recorded)[number]>();
   for (const row of recorded) {
