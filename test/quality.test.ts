@@ -85,6 +85,47 @@ test('AI Yield = surviving lines per dollar of attributed spend', async () => {
   }
 });
 
+for (const [label, floor] of [
+  ['part of the window', '2026-01-02T09:15:00Z'],
+  ['every request', '2026-01-03T00:00:00Z'],
+] as const) {
+  test(`yield withholds per-dollar figures when retention pruned ${label} (PR #135 review)`, async () => {
+    const dir = makeRepo();
+    const store = new Store(':memory:');
+    try {
+      commit(dir, 'seed.txt', 'seed\n', 'feat: base', '2026-01-01T10:00:00+00:00');
+      commit(dir, 'work.txt', Array.from({ length: 10 }, (_, i) => `L${i}`).join('\n') + '\n', 'feat: ten', '2026-01-02T10:00:00+00:00');
+      for (const [id, iso] of [['early', '2026-01-02T09:00:00Z'], ['late', '2026-01-02T09:30:00Z']] as const) {
+        store.insertRequest({
+          requestId: id, sessionId: null, tsEpochMs: Date.parse(iso),
+          provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
+          inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+          costUsd: 2.0, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+        });
+      }
+      store.prune(Date.parse(floor));
+
+      const report = await computeQuality(store, dir, { limit: 10, windowDays: 14 });
+      const ten = report.commits.find((c) => c.subject === 'feat: ten');
+      assert.ok(ten, 'commit present');
+      assert.equal(ten!.spendWindowTruncated, true);
+      // The surviving $2 (or $0) is not the cost of the work: no yield is derived from it.
+      assert.equal(ten!.aiYield, null);
+      assert.equal(ten!.costPerSurvivingLine, null);
+      assert.equal(report.matured.aiYield, null);
+      assert.equal(report.matured.costPerSurvivingLine, null);
+      assert.equal(report.matured.effectiveSpendRatio, null);
+      assert.equal(report.matured.totalCostUsd, 0);
+      assert.ok(report.matured.spendWindowTruncatedCommits >= 1);
+      // Git observations are unaffected by request retention.
+      assert.equal(ten!.survivingLines, 10);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 function head(dir: string, rev = 'HEAD'): string {
   return execFileSync('git', ['rev-parse', rev], { cwd: dir }).toString().trim();
 }

@@ -98,6 +98,14 @@ node --test --experimental-strip-types --test-name-pattern="realized" test/value
 `dist/` tree rather than the source. Invoking `node --test` on a single file
 skips that — rebuild first if it is one of them.
 
+Every test file that can reach `segreantHome()` (the proxy, egress receipts,
+market caches, the dashboard) sets `process.env.SEGREANT_HOME` to a temporary
+directory. Until 2026-10-17 five files did not, and each run wrote egress
+receipts and market caches into the developer's real `~/.segreant`.
+`scripts/run-tests.mjs` now points `HOME`/`USERPROFILE` at a scratch folder and
+fails the run if anything lands under its `.segreant`. A single-file
+`node --test` run has no such net, so the file's own override is what protects you.
+
 `pretest` is the **full** `node scripts/build.mjs`, not the `--web` shortcut it
 used to be (`d23245f` changed it). That matters more than it sounds: it means
 nothing in the ordinary workflow exercises `--web`, so `--web` broke at `e00f7f9`

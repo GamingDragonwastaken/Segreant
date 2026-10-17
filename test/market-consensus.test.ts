@@ -11,6 +11,13 @@ import { parseCsv, readZipEntries } from '../src/market/zip.ts';
 import { parseEpoch } from '../src/market/sources.ts';
 import { buildMarketReport, type LoadedMarket } from '../src/market/market.ts';
 import { FEATURE_DEFAULTS } from '../src/config.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// buildMarketReport caches fitted curves under the Segreant home; keep them out
+// of the developer's real ~/.segreant.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-consensus-home-'));
 
 const sig = (x: number) => 1 / (1 + Math.exp(-x));
 const DIFFICULTY: Record<string, number> = { 'SWE-Bench verified': 0.5, 'Terminal Bench': -1.2, DeepSWE: 1.6, 'GSO-Bench': 0 };
