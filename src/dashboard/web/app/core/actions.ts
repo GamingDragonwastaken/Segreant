@@ -1060,12 +1060,14 @@ export function actionSpec(cap: Capability): ActionSpec {
     capability: cap,
     preview: async (): Promise<PreviewResult> => ({
       applicable: false,
+      // Say what works now, not what might be built: "not built yet" is a
+      // promise, and a shipped screen that promises is a placeholder (L1).
       blockedReason: cap.coverage === 'planned'
-        ? 'This does not have a screen yet — run the command below.'
-        : 'This part is not wired into the GUI yet — run the command below.',
+        ? 'This runs from the command line. Copy the command below into a terminal.'
+        : 'This part runs from the command line. Copy the command below into a terminal.',
       summary: cap.consequence === 'read'
-        ? `${cap.plain} Reading this from the GUI is not built yet; the command below does it.`
-        : `${cap.plain} Running this from the GUI is not built yet; the command below does it.`,
+        ? `${cap.plain} You read this from the command line, with the command below.`
+        : `${cap.plain} You do this from the command line, with the command below.`,
       notes: ['The System section lists exactly which capabilities the GUI covers and which it does not.'],
     }),
   };
