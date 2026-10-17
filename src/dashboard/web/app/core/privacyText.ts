@@ -38,10 +38,12 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'What leaves this machine',
     paragraphs: [
-      'Your AI requests go to the provider you configured. Everything else is off until you turn it on, and `segreant egress status` lists what is allowed:',
+      'Your AI requests go to the provider you configured.',
+      "Segreant keeps its own price list current by itself. The first time it prices a request for a model its rate card does not know, a running Segreant downloads the public price list (LiteLLM's `model_prices_and_context_window.json` on GitHub), at most once an hour. It is a plain download of a public file: it sends nothing about you, your requests or your usage, and nothing is stored anywhere but on this machine. GitHub, which hosts the file, sees the download as it would any other. `segreant pricing --auto off` stops it, and the start banner says when it is on.",
+      'Everything else is off until you turn it on, and `segreant egress status` lists what is allowed:',
     ],
     items: [
-      'refreshing the public price list or market data, which sends nothing about you;',
+      'refreshing market data, which sends nothing about you;',
       'downloading a baseline from an address you give;',
       'alert summaries to a webhook you set, never prompts, code or keys;',
       'pulling your costs from OpenAI with an admin key, read from your environment for that one request and never stored;',
