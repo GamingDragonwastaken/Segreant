@@ -260,18 +260,19 @@ export function buildSessions(
       .filter((m) => { const k = `${m.at}:${m.kind}`; if (seen.has(k)) return false; seen.add(k); return true; });
     const commits = (observed.get(sessionId) ?? []).sort((a, b) => a.tsEpochMs - b.tsEpochMs).map(commitOf);
     const cost = acc.rows.reduce((s, r) => s + r.costUsd, 0);
+    // Exact (fractional) microdollars here; each category is rounded once, at
+    // the end, against the rounded total. Rounding every session first let a
+    // thousand $0.0014008 sessions add up to $1.401 of outcomes for $1.4008 of
+    // spend (review 4, F1).
     if (commits.length === 0) {
-      noCommitMicros += Math.round(cost * 1e6);
+      noCommitMicros += cost * 1e6;
       outcomes.noCommit.sessions += 1;
     } else {
-      // Whole microdollars, the remainder to the earliest commits, so the parts
-      // add back to the session's cost after the wire rounds each one.
-      const micros = Math.round(cost * 1e6);
-      const base = Math.floor(micros / commits.length);
-      commits.forEach((c, i) => {
-        outcomeMicros[c.outcome] += base + (i < micros - base * commits.length ? 1 : 0);
+      const share = (cost * 1e6) / commits.length;
+      for (const c of commits) {
+        outcomeMicros[c.outcome] += share;
         outcomes[c.outcome].commits += 1;
-      });
+      }
     }
     built.push({
       sessionId,
@@ -299,8 +300,23 @@ export function buildSessions(
     });
   }
   built.sort((a, b) => b.startMs - a.startMs || a.sessionId.localeCompare(b.sessionId));
-  for (const k of Object.keys(outcomeMicros) as SessionCommitOutcome[]) outcomes[k].costUsd = outcomeMicros[k] / 1e6;
-  outcomes.noCommit.costUsd = noCommitMicros / 1e6;
+  // Largest remainder: whole microdollars per category that add up to the
+  // rounded sum of the exact parts, so the breakdown partitions the spend.
+  const parts: Array<[SessionCommitOutcome | 'noCommit', number]> = [
+    ...(Object.keys(outcomeMicros) as SessionCommitOutcome[]).map((k): [SessionCommitOutcome, number] => [k, outcomeMicros[k]]),
+    ['noCommit', noCommitMicros],
+  ];
+  const whole = parts.map(([k, v]) => ({ k, floor: Math.floor(v), rem: v - Math.floor(v) }));
+  let left = Math.round(parts.reduce((s, [, v]) => s + v, 0)) - whole.reduce((s, w) => s + w.floor, 0);
+  for (const w of [...whole].sort((a, b) => b.rem - a.rem)) {
+    if (left <= 0) break;
+    w.floor += 1;
+    left -= 1;
+  }
+  for (const w of whole) {
+    if (w.k === 'noCommit') outcomes.noCommit.costUsd = w.floor / 1e6;
+    else outcomes[w.k].costUsd = w.floor / 1e6;
+  }
 
   outcomes.basis = 'Metered list cost of the sessions in this range. A session is linked to a commit only when its own log recorded making it;'
     + ' a session that made several commits splits its cost evenly across them. Each commit is filed by the last value read'

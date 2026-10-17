@@ -38,7 +38,7 @@ import { moneyToJson } from '../economics/money.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
-import { resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
+import { capBasisSpend, resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
 import { driftDetectability } from '../value/drift.ts';
 import { loadRealization, realizeDiscoveredProjects, realizationFromStore, keptSummary } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
@@ -1085,8 +1085,10 @@ export function handleGuide({ res, store, config }: RouteContext): void {
         requestsAllTime: store.summary(0, now + 1000).requests,
         requestsRetention: store.retentionFloor(),
         spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
-        capBasisSpend30dUsd: store.economicSeries(now - 30 * day, now + 1000, day, !config.budget.capIncludesImported)
-          .reduce((a, s) => a + s.costUsd, 0),
+        ...(() => {
+          const capBasis = capBasisSpend(store, config.budget, now - 30 * day, now + 1000);
+          return { capBasisSpend30dUsd: capBasis.usd, capBasis: capBasis.basis };
+        })(),
         dailyCapUsd: config.budget.dailyUsd,
         outcomeSignals: store.countSignals(),
         realizationUnits: store.countRealizationUnits(),
