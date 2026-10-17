@@ -323,6 +323,21 @@ test('the metered claim states how each part was priced, and never calls a match
   assert.equal(clean!.basis, "list prices: each model's own published price");
 });
 
+test('a price you set is named as yours, never as "priced without the model\'s own rate" (PR #146 review)', () => {
+  const base = anOverview(100, 10);
+  const withRows = (rows: Parameters<typeof summarizeBasis>[0]) => ({ ...base, pricing: { ...base.pricing, basis: summarizeBasis(rows) } });
+  const listed = { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 6, costUsd: 60 } as const;
+  const mine = { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', requests: 2, costUsd: 25 } as const;
+  const guessed = { provider: 'openai', model: 'gpt-6.9-new', costBasis: 'fallback_estimate', rateMatchKind: 'fallback', requests: 2, costUsd: 15 } as const;
+
+  const [onlyMine] = buildClaimLayers({ ...NOTHING, overview: withRows([{ ...mine, costUsd: 100 }]) }, '30d');
+  assert.equal(onlyMine!.basis, 'estimated: 100% at prices you set');
+  const [listAndMine] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, mine]) }, '30d');
+  assert.equal(listAndMine!.basis, 'estimated: 29% at prices you set');
+  const [all] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, mine, guessed]) }, '30d');
+  assert.equal(all!.basis, "estimated: 15% priced without the model's own rate (fallback rate); 25% at prices you set");
+});
+
 test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {
   const week = buildClaimLayers({ ...NOTHING, overview: anOverview(5, 2) }, '7d');
   assert.deepEqual(week.map((l) => [l.id, l.period]), [
