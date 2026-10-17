@@ -41,6 +41,7 @@ export const BASIS_COHORTS = [
   'tool_reported',
   'demo',
   'unpriced',
+  'not_sent',
   'unrecorded',
 ] as const;
 export type BasisCohortId = (typeof BASIS_COHORTS)[number];
@@ -101,6 +102,10 @@ const TEXT: Record<BasisCohortId, { label: string; meaning: string }> = {
     label: 'not priced',
     meaning: 'no rate applies (for example a custom provider); counted in requests, not in dollars',
   },
+  not_sent: {
+    label: 'refused, not sent',
+    meaning: 'stopped by Segreant before it reached the provider (a cap or an egress rule); nothing was charged',
+  },
   unrecorded: {
     label: 'basis not recorded',
     meaning: 'recorded before Segreant kept how each amount was priced',
@@ -117,6 +122,7 @@ export function cohortOf(row: Pick<BasisRow, 'costBasis' | 'rateMatchKind'>): Ba
     case 'tool_reported_unverified': return 'tool_reported';
     case 'synthetic_demo': return 'demo';
     case 'unpriced': return 'unpriced';
+    case 'not_sent': return 'not_sent';
     default: return 'unrecorded';
   }
 }
@@ -153,8 +159,10 @@ export function summarizeBasis(rows: readonly BasisRow[]): BasisSummary {
     return [c];
   });
   const has = (id: BasisCohortId): boolean => by.has(id);
-  const only = (...ids: BasisCohortId[]): boolean => cohorts.length > 0 && cohorts.every((c) => ids.includes(c.id));
-  const headline: BasisHeadline = cohorts.length === 0
+  // Refused requests carry no money, so they never decide what the total is called.
+  const priced = cohorts.filter((c) => c.id !== 'not_sent');
+  const only = (...ids: BasisCohortId[]): boolean => priced.length > 0 && priced.every((c) => ids.includes(c.id));
+  const headline: BasisHeadline = priced.length === 0
     ? 'no_cost'
     : only('demo')
       ? 'sample_cost'
