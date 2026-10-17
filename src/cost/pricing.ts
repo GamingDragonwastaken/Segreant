@@ -18,6 +18,8 @@ import { egressFetch, EgressError } from '../egress/transport.ts';
 import { dirname, join } from 'node:path';
 import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
+import { priceOverrideFor, type PriceOverride } from './overrides.ts';
+import { money } from '../economics/money.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +91,7 @@ export const COST_BASES = [
   'synthetic_demo',
   'unpriced',
   'not_sent',
+  'user_declared_price',
   'legacy_unknown',
 ] as const;
 export type CostBasis = (typeof COST_BASES)[number];
@@ -109,6 +112,7 @@ export const RATE_MATCH_KINDS = [
   'reported',
   'unpriced',
   'not_sent',
+  'user_declared',
   'legacy_unknown',
 ] as const;
 export type RateMatchKind = (typeof RATE_MATCH_KINDS)[number];
@@ -868,7 +872,7 @@ function activeRateCardSourceKind(): Exclude<RateCardSourceKind, 'none'> {
 
 function resolved(
   rate: ModelRate,
-  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback'>,
+  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback' | 'user_declared'>,
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
 ): ResolvedRate {
@@ -877,9 +881,11 @@ function resolved(
   const card = loadPricing();
   return {
     rate,
-    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider',
+    // A declared price is resolved, not guessed: it is the price the user said
+    // this model costs. It keeps its own basis so it is never shown as list price.
+    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider' && rateMatchKind !== 'user_declared',
     pricing: {
-      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : 'local_list_price',
+      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : rateMatchKind === 'user_declared' ? 'user_declared_price' : 'local_list_price',
       rateCardSha256: pricingCardHash(card),
       rateCardSourceKind: activeRateCardSourceKind(),
       rateMatchKind,
@@ -947,9 +953,50 @@ export function syntheticPricingEvidence(cost: CostBreakdown): RequestPricingEvi
   return { ...cost.pricing, costBasis: 'synthetic_demo' };
 }
 
+/** The rate-card rate a `like` declaration points at: exact matches only, never another guess. */
+function exactCardRate(pricing: PricingFile, model: string): { provider: string; rate: ModelRate } | null {
+  for (const p of Object.keys(pricing.providers)) {
+    const r = pricing.providers[p]?.models[model];
+    if (r) return { provider: p, rate: r };
+  }
+  return null;
+}
+
+/** USD per 1M tokens as a decimal string, back to the card's number form. */
+function declaredRate(o: Extract<PriceOverride, { kind: 'rate' }>): ModelRate {
+  const exact: ExactModelRate = {
+    input: o.input,
+    output: o.output,
+    ...(o.cacheRead === undefined ? {} : { cache_read: o.cacheRead }),
+    ...(o.cacheWrite === undefined ? {} : { cache_write_5m: o.cacheWrite, cache_write_1h: o.cacheWrite }),
+  };
+  return {
+    input: Number(o.input),
+    output: Number(o.output),
+    ...(o.cacheRead === undefined ? {} : { cache_read: Number(o.cacheRead) }),
+    ...(o.cacheWrite === undefined ? {} : { cache_write_5m: Number(o.cacheWrite), cache_write_1h: Number(o.cacheWrite) }),
+    exact,
+  };
+}
+
+/** A free (local) model: every rate is zero, cache rates included. */
+const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
+
 export function rateFor(provider: Provider, model: string): ResolvedRate {
   const pricing = loadPricing();
   const here = pricing.providers[provider]?.models;
+
+  // 0) A price the user declared for this exact model name wins: it is the one
+  //    place a private, fine-tuned or local model can get a real price. A `like`
+  //    that no longer resolves exactly on the card is ignored, so the request
+  //    falls to the ordinary ladder rather than to a guess built on a guess.
+  const declared = priceOverrideFor(model);
+  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared', null, model);
+  if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
+  if (declared?.kind === 'like') {
+    const target = exactCardRate(pricing, declared.like);
+    if (target) return resolved(target.rate, 'user_declared', target.provider, declared.like);
+  }
 
   // 1) Exact id in the named provider — the price we're surest about.
   const exact = here?.[model];
@@ -985,6 +1032,11 @@ export function exactRateFromModelRate(rate: ModelRate): ExactModelRate | null {
   return rate.exact === undefined ? null : validateExactModelRate(rate.exact);
 }
 
+function zeroExactCost(): ExactCostBreakdown {
+  const zero = money('0', 'USD', 'estimated');
+  return Object.freeze({ total: zero, components: Object.freeze({ input: zero, output: zero, cacheWrite: zero, cacheRead: zero }) });
+}
+
 function per(tokens: number, rate: number | undefined): number {
   if (!tokens || !rate) return 0;
   return (tokens / 1_000_000) * rate;
@@ -1013,9 +1065,12 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
   const costUsd =
     components.input + components.output + components.cacheWrite + components.cacheRead;
 
-  const exactRate = exactRateFromModelRate(rate);
-  const exact = exactRate === null
-    ? undefined
-    : computeExactCost(exactRate, usage, estimated ? 'estimated' : 'list');
+  const declared = pricing.rateMatchKind === 'user_declared';
+  const exactRate = rate === FREE_RATE ? null : exactRateFromModelRate(rate);
+  const exact = rate === FREE_RATE
+    ? zeroExactCost()
+    : exactRate === null
+      ? undefined
+      : computeExactCost(exactRate, usage, estimated || declared ? 'estimated' : 'list');
   return { costUsd, estimated, pricing, rate, components, ...(exact === undefined ? {} : { exact }) };
 }

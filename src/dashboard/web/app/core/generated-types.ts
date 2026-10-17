@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 22918f50dde0aaaf68e687fa800f2932876d013583af7f995f0038bc5863162b */
+/** Source SHA-256: d01d37905b00ee1d28ffa83fc5a31a1002a658482f232117941bd1079fabfa38 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -213,7 +213,7 @@ export interface BasisSummaryPayload {
   headline: 'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost';
   headlineLabel: string;
   cohorts: Array<{
-    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'not_sent' | 'unrecorded';
+    id: 'list_exact' | 'list_family' | 'user_declared' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'not_sent' | 'unrecorded';
     costUsd: number;
     requests: number;
     label: string;
