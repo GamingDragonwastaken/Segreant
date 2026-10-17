@@ -126,6 +126,11 @@ export function doctorPricingLine(basis: BasisSummary): string {
     parts.push(`${usd(weak.reduce((s, c) => s + c.costUsd, 0))} of 30d spend priced without the model's own rate (${weak.map((c) => c.label).join(', ')}) — see "segreant month"`);
   }
   if (declared) parts.push(`${usd(declared.costUsd)} at prices you set (not checked against a price list)`);
+  const free = basis.cohorts.find((c) => c.id === 'user_free');
+  if (free && !basis.cohorts.some((c) => c.id === 'list_exact' || c.id === 'list_family')) {
+    // Only free models: no rate card priced any of it (PR #146 review).
+    parts.push(`${num(free.requests)} requests on models you marked free (no charge)`);
+  }
   return parts.length > 0 ? parts.join('; ') : "30d spend priced at each model's own list rate (an estimate, not a bill)";
 }
 

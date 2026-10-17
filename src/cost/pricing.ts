@@ -1067,6 +1067,11 @@ export function withoutDeclaredPrices<T>(fn: () => T): T {
  * the life of the process and changes only by a refresh in this process,
  * which cannot run inside a synchronous plan.
  */
+/** Run `fn` against declarations read earlier (a proxied request keeps the ones it was checked against). */
+export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: () => T): T {
+  return withDeclarationSource((model) => models[model] ?? null, fn);
+}
+
 export function withPricingSnapshot<T>(fn: () => T): T {
   if (declarationSource !== null) return fn();
   const models = activePriceOverrides();

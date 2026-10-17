@@ -63,6 +63,42 @@ test('a broken declarations file stops forwarding before the provider is called,
   }
 });
 
+test('a request is priced from the declarations it was checked against, even if the file breaks while it is in flight (PR #146 review)', async () => {
+  setPriceOverride('acme-inflight', { kind: 'rate', input: '2', output: '8' });
+  const upstream = http.createServer((_req, res) => {
+    // Someone breaks the file while the provider is answering.
+    writeFileSync(overridesPath(), '{ "version": 1, "models": { "x": { "kind": "rate" } } }');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'acme-inflight', usage: { prompt_tokens: 1000, completion_tokens: 0 } }));
+  });
+  const upstreamBase = await listen(upstream);
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.upstreams.openai = upstreamBase;
+  const store = new Store(join(home, 'inflight.db'));
+  const proxy = createProxyServer({ store, config });
+  const proxyBase = await listen(proxy);
+  try {
+    const response = await fetch(`${proxyBase}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'acme-inflight', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+    assert.equal(response.status, 200, 'the answer the provider charged for reaches the client');
+    await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const recorded = store.pricingEvidenceByModel(0, Date.now() + 60_000);
+    assert.equal(recorded.length, 1, 'the charged request is in the ledger');
+    assert.equal(recorded[0]!.requests, 1);
+    assert.equal(recorded[0]!.costBasis, 'user_declared_price');
+    assert.ok(Math.abs(recorded[0]!.costUsd - 0.002) < 1e-9, 'priced at the declaration it was checked against');
+  } finally {
+    await close(proxy);
+    await close(upstream);
+    store.close();
+    rmSync(overridesPath(), { force: true });
+  }
+});
+
 test('the sample data is priced from the card, whatever the user declared (PR #146 review)', () => {
   const now = Date.parse('2026-10-15T12:00:00Z');
   const seed = (name: string) => {
