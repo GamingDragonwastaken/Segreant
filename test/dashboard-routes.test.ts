@@ -30,6 +30,10 @@ import { createDashboardServer } from '../src/dashboard/server.ts';
 import { ROUTES, handleHealth, type RouteContext } from '../src/dashboard/routes.ts';
 import { serveStatic, STATIC_TYPES, WEB_ROOT } from '../src/dashboard/static.ts';
 
+// Everything this file writes (egress receipts, caches) goes to a scratch home,
+// never the developer's real ~/.segreant.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-routes-home-'));
+
 /**
  * Every route that writes to the store or reaches the network. Hard-coded on
  * purpose: deriving it from the table would make the table agree with itself.
