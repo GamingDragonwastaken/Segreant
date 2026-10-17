@@ -1911,6 +1911,9 @@ export interface DeclaredPrice {
   /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
   summary: string;
   declaredAt: string;
+  /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
+  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string };
+  like?: string;
 }
 
 export interface UnknownPricingPayload {

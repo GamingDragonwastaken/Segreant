@@ -999,7 +999,13 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
         model, kind: price.kind, declaredAt: price.declaredAt,
         summary: price.kind === 'free' ? 'free (local model)'
           : price.kind === 'like' ? `like ${price.like}`
-          : `input $${price.input}, output $${price.output} per 1M tokens`,
+          : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''} per 1M tokens`,
+        ...(price.kind === 'rate' ? { rate: {
+          input: price.input, output: price.output,
+          ...(price.cacheRead === undefined ? {} : { cacheRead: price.cacheRead }),
+          ...(price.cacheWrite === undefined ? {} : { cacheWrite: price.cacheWrite }),
+        } } : {}),
+        ...(price.kind === 'like' ? { like: price.like } : {}),
       })),
       boundary: 'Recorded cost (estimated). Declaring a price leaves recorded requests unchanged until you re-price them.',
     };
