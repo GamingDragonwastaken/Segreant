@@ -26,7 +26,7 @@ export function previewReprice(store: Store) {
     const key = JSON.stringify([r.provider, r.model]);
     const agg = byModel.get(key) ?? {
       provider: r.provider, model: r.model, rows: 0, beforeUsd: 0, afterUsd: 0,
-      afterBasis: c.pricing.rateMatchKind === 'user_declared' ? 'your price' : 'list price',
+      afterBasis: c.pricing.rateMatchKind === 'user_declared' || c.pricing.rateMatchKind === 'user_declared_free' ? 'your price' : 'list price',
     };
     agg.rows++;
     agg.beforeUsd += r.costUsd;

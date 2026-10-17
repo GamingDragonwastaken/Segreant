@@ -16,7 +16,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { segreantHome } from '../config.ts';
+import { acquireConfigMutationLock, segreantHome } from '../config.ts';
 
 export type PriceOverride =
   | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; declaredAt: string }
@@ -156,23 +156,44 @@ function writeOverrides(file: PriceOverridesFile): void {
 }
 
 /** Validate and store one declaration. Throws PriceOverridesError with the reason when it is not valid. */
+/**
+ * One read-modify-write at a time, across processes: two writers that each
+ * loaded the same file would otherwise both succeed while the later rename
+ * dropped the other's declaration (PR #146 review). The configuration lock is
+ * shared, so a price edit also never interleaves with a config edit; a second
+ * writer is refused with the reason rather than waiting or losing data.
+ */
+function withOverridesLock<T>(mutate: () => T): T {
+  const lock = acquireConfigMutationLock();
+  try {
+    cache = null;
+    return mutate();
+  } finally {
+    lock.release();
+  }
+}
+
 export function setPriceOverride(model: string, input: PriceOverrideInput, now: Date = new Date()): PriceOverride {
   const declared = { ...input, declaredAt: now.toISOString() } as PriceOverride;
   const error = overrideError(model, declared, true);
   if (error) throw new PriceOverridesError(error);
-  const file = loadPriceOverrides();
-  const models: Record<string, PriceOverride> = { ...file.models, [model]: declared };
-  if (Object.keys(models).length > MAX_MODELS) throw new PriceOverridesError(`at most ${MAX_MODELS} declared prices`);
-  writeOverrides({ version: 1, models });
-  return declared;
+  return withOverridesLock(() => {
+    const file = loadPriceOverrides();
+    const models: Record<string, PriceOverride> = { ...file.models, [model]: declared };
+    if (Object.keys(models).length > MAX_MODELS) throw new PriceOverridesError(`at most ${MAX_MODELS} declared prices`);
+    writeOverrides({ version: 1, models });
+    return declared;
+  });
 }
 
 /** Remove a declaration. Returns false when there was none. */
 export function removePriceOverride(model: string): boolean {
-  const file = loadPriceOverrides();
-  if (!(model in file.models)) return false;
-  const models: Record<string, PriceOverride> = {};
-  for (const [name, entry] of Object.entries(file.models)) if (name !== model) models[name] = entry;
-  writeOverrides({ version: 1, models });
-  return true;
+  return withOverridesLock(() => {
+    const file = loadPriceOverrides();
+    if (!(model in file.models)) return false;
+    const models: Record<string, PriceOverride> = {};
+    for (const [name, entry] of Object.entries(file.models)) if (name !== model) models[name] = entry;
+    writeOverrides({ version: 1, models });
+    return true;
+  });
 }

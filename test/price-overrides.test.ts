@@ -30,6 +30,8 @@ test('a declared rate prices the model exactly, under its own basis', () => {
   assert.equal(c.estimated, false, 'a declared price is resolved, not a guess');
   assert.equal(c.pricing.costBasis, 'user_declared_price');
   assert.equal(c.pricing.rateMatchKind, 'user_declared');
+  assert.equal(c.pricing.rateCardSha256, null, 'a typed price is not from any card (PR #146 review)');
+  assert.equal(c.pricing.rateCardSourceKind, 'none');
   assert.equal(c.costUsd, 1.0);
   assert.equal(formatMoneyAmount(c.exact!.total), '1');
   assert.equal(c.exact!.total.basis, 'estimated', 'never recorded as a list price');
@@ -39,6 +41,7 @@ test('a "like" declaration follows the named model on the card, and only an exac
   setPriceOverride('acme-haiku-proxy', { kind: 'like', like: 'claude-haiku-4-5' });
   const like = rateFor('anthropic', 'acme-haiku-proxy');
   assert.equal(like.pricing.rateMatchKind, 'user_declared');
+  assert.match(like.pricing.rateCardSha256 ?? '', /^[0-9a-f]{64}$/, 'a like follows a card revision, so it names that card');
   assert.equal(like.pricing.rateMatchModel, 'claude-haiku-4-5');
   assert.equal(like.rate.input, rateFor('anthropic', 'claude-haiku-4-5').rate.input);
   setPriceOverride('acme-ghost', { kind: 'like', like: 'no-such-model-anywhere' });
@@ -56,7 +59,8 @@ test('a free (local) model costs exactly zero and does not turn a list total int
     { provider: 'openai', model: 'llama3.1:8b', costBasis: c.pricing.costBasis, rateMatchKind: c.pricing.rateMatchKind, costUsd: 0, requests: 3 },
   ]);
   assert.equal(summary.headline, 'list_cost');
-  assert.ok(summary.cohorts.some((x) => x.id === 'user_declared' && x.requests === 3));
+  assert.equal(c.pricing.rateMatchKind, 'user_declared_free');
+  assert.ok(summary.cohorts.some((x) => x.id === 'user_free' && x.requests === 3));
 });
 
 test('a nonzero declared price makes the headline an estimate, never "list cost"', () => {
@@ -80,6 +84,32 @@ test('a paid declaration under half a cent is still not list price (PR #146 revi
     { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', costUsd: 0.001, requests: 1 },
   ]);
   assert.equal(summary.headline, 'estimated_cost');
+});
+
+test('a paid declaration whose requests captured no tokens is still not free (PR #146 review)', () => {
+  const listed = computeCost('anthropic', 'claude-haiku-4-5', usage);
+  const summary = summarizeBasis([
+    { provider: 'anthropic', model: 'claude-haiku-4-5', costBasis: listed.pricing.costBasis, rateMatchKind: listed.pricing.rateMatchKind, costUsd: 1, requests: 1 },
+    { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', costUsd: 0, requests: 2 },
+  ]);
+  assert.equal(summary.headline, 'estimated_cost');
+  assert.ok(summary.cohorts.some((x) => x.id === 'user_declared'), 'grouped as your price, not as free');
+});
+
+test('a second writer is refused while another holds the lock, never silently overwritten (PR #146 review)', async () => {
+  const { acquireConfigMutationLock } = await import('../src/config.ts');
+  setPriceOverride('acme-kept', { kind: 'rate', input: '1', output: '2' });
+  const held = acquireConfigMutationLock();
+  try {
+    assert.throws(() => setPriceOverride('acme-other', { kind: 'free' }), /already active/);
+    assert.throws(() => removePriceOverride('acme-kept'), /already active/);
+  } finally {
+    held.release();
+  }
+  assert.ok(loadPriceOverrides().models['acme-kept'], 'the earlier declaration survives');
+  assert.equal(loadPriceOverrides().models['acme-other'], undefined);
+  setPriceOverride('acme-other', { kind: 'free' });
+  assert.ok(loadPriceOverrides().models['acme-other'], 'once the lock is free the write goes through');
 });
 
 test('invalid declarations are refused with the reason', () => {

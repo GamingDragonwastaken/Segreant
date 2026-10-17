@@ -114,6 +114,7 @@ export const RATE_MATCH_KINDS = [
   'unpriced',
   'not_sent',
   'user_declared',
+  'user_declared_free',
   'legacy_unknown',
 ] as const;
 export type RateMatchKind = (typeof RATE_MATCH_KINDS)[number];
@@ -909,22 +910,28 @@ function activeRateCardSourceKind(): Exclude<RateCardSourceKind, 'none'> {
 
 function resolved(
   rate: ModelRate,
-  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback' | 'user_declared'>,
+  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback' | 'user_declared' | 'user_declared_free'>,
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
 ): ResolvedRate {
   // rateFor always loads the active card first, so the card identity and source
   // describe this exact local computation rather than a later refresh.
   const card = loadPricing();
+  const declared = rateMatchKind === 'user_declared' || rateMatchKind === 'user_declared_free';
+  // A rate or free declaration is priced by the declaration alone: stamping it
+  // with the active card's hash made a card refresh look like a price change
+  // for requests whose price had not moved (PR #146 review). Only `like`
+  // depends on the card, and it names the card model it follows.
+  const fromCard = !declared || rateMatchProvider !== null;
   return {
     rate,
     // A declared price is resolved, not guessed: it is the price the user said
     // this model costs. It keeps its own basis so it is never shown as list price.
-    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider' && rateMatchKind !== 'user_declared',
+    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider' && !declared,
     pricing: {
-      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : rateMatchKind === 'user_declared' ? 'user_declared_price' : 'local_list_price',
-      rateCardSha256: pricingCardHash(card),
-      rateCardSourceKind: activeRateCardSourceKind(),
+      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : declared ? 'user_declared_price' : 'local_list_price',
+      rateCardSha256: fromCard ? pricingCardHash(card) : null,
+      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : 'none',
       rateMatchKind,
       rateMatchProvider,
       rateMatchModel,
@@ -1028,7 +1035,7 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
   const declared = priceOverrideFor(model);
-  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared', null, model);
+  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model);
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);
@@ -1102,7 +1109,7 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
   const costUsd =
     components.input + components.output + components.cacheWrite + components.cacheRead;
 
-  const declared = pricing.rateMatchKind === 'user_declared';
+  const declared = pricing.rateMatchKind === 'user_declared' || pricing.rateMatchKind === 'user_declared_free';
   const exactRate = rate === FREE_RATE ? null : exactRateFromModelRate(rate);
   const exact = rate === FREE_RATE
     ? zeroExactCost()
