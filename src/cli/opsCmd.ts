@@ -13,7 +13,7 @@ import { buildGuide, type GuideFacts } from '../guide.ts';
 import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
-import { summarizeBasis } from '../cost/basis.ts';
+import { summarizeBasis, type BasisSummary } from '../cost/basis.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { C, color, usd, num, printNotAGitRepo, printJson } from './ui.ts';
@@ -112,6 +112,23 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   if (alerts.some((a) => a.severity === 'critical')) process.exitCode = 1;
   store.close();
 }
+/**
+ * How the last 30 days were priced, in one line. A price you set is not a list
+ * price and was never checked against one, so it is named on its own rather
+ * than folded into "each model's own list rate" (PR #146 review).
+ */
+export function doctorPricingLine(basis: BasisSummary): string {
+  if (basis.cohorts.length === 0) return 'no priced requests in 30d';
+  const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+  const declared = basis.cohorts.find((c) => c.id === 'user_declared');
+  const parts: string[] = [];
+  if (weak.length > 0) {
+    parts.push(`${usd(weak.reduce((s, c) => s + c.costUsd, 0))} of 30d spend priced without the model's own rate (${weak.map((c) => c.label).join(', ')}) — see "segreant month"`);
+  }
+  if (declared) parts.push(`${usd(declared.costUsd)} at prices you set (not checked against a price list)`);
+  return parts.length > 0 ? parts.join('; ') : "30d spend priced at each model's own list rate (an estimate, not a bill)";
+}
+
 export async function cmdDoctor(flags: Flags = { _: [] }): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const cfg = loadConfig();
@@ -160,13 +177,7 @@ export async function cmdDoctor(flags: Flags = { _: [] }): Promise<void> {
       : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "segreant start"`);
   console.log(`  ${mark(proxyUp)} Proxy       ${proxyMessage}`);
   console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "segreant budget --daily N")')}`);
-  const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
-  const weakUsd = weak.reduce((s, c) => s + c.costUsd, 0);
-  console.log(`  ${mark(estShare <= 0.2)} Pricing     ${basis.cohorts.length === 0
-    ? 'no priced requests in 30d'
-    : weak.length === 0
-      ? "30d spend priced at each model's own list rate (an estimate, not a bill)"
-      : `${usd(weakUsd)} of 30d spend priced without the model's own rate (${weak.map((c) => c.label).join(', ')}) — see "segreant month"`}`);
+  console.log(`  ${mark(estShare <= 0.2)} Pricing     ${doctorPricingLine(basis)}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
   const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
   const priceEvidence = price.source === 'cache'

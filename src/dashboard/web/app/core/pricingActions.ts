@@ -28,6 +28,15 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
     return { model: model.model, mode: signal('skip'), like: signal(model.like ?? ''), input: signal(r?.input ?? ''), output: signal(r?.output ?? ''),
       cacheRead: signal(r?.cacheRead ?? ''), cacheWrite: signal(r?.cacheWrite ?? '') };
   }
+  /**
+   * Any other model by name: one already on the card (a negotiated rate, a
+   * fine-tune billed differently) has no guessed rows and no declaration, so
+   * without this the GUI could not do what `pricing set` does (PR #146 review).
+   */
+  const OTHER = JSON.stringify(['other']);
+  const other = draft({ model: '' });
+  drafts.set(OTHER, other);
+  const otherName = signal('');
   const load = async (): Promise<UnknownPricingPayload> => {
     if (!read) read = api.pricingUnknown().then((payload) => {
       for (const model of payload.models) if (!drafts.has(key(model))) drafts.set(key(model), draft(model));
@@ -43,7 +52,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   };
   const priceBody = (): Record<string, unknown> | null => {
     const d = choice();
-    if (!d) return null;
+    if (!d || d.model.trim() === '') return null;
     switch (d.mode.peek()) {
       case 'free': return { model: d.model, kind: 'free' };
       case 'like': return d.like.peek().trim() ? { model: d.model, kind: 'like', like: d.like.peek().trim() } : null;
@@ -63,6 +72,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   return {
     capability: cap,
     command: () => {
+      otherName();
       const id = selected();
       const d = id ? drafts.get(id) : undefined;
       const removing = removal();
@@ -155,6 +165,38 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
                 field(`New cache read for ${p.model}, optional (USD per 1M tokens)`, 'read', d.cacheRead, '0.10 x input if blank'),
                 field(`New cache write for ${p.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank')) : null);
         })) : null,
+      h('section', { class: 'pricing-other' },
+        h('h3', { class: 'drawer-h3', text: 'Another model' }),
+        h('p', { class: 'drawer-note', text: 'Set your own price for any model, including one already on the price list (a negotiated rate, a fine-tune). Your price is used instead of the list price.' }),
+        h('label', { class: 'drawer-h3', for: 'other-name', text: 'Model name' }),
+        h('input', { id: 'other-name', class: 'drawer-input', type: 'text', maxlength: '200', placeholder: 'gpt-4o',
+          value: other.model, oninput: (event: Event) => {
+            other.model = (event.target as HTMLInputElement).value.trim();
+            otherName.set(other.model);
+            if (other.mode.peek() !== 'skip') { selected.set(OTHER); removal.set(null); }
+          } }),
+        h('label', { class: 'drawer-h3', for: 'other-mode', text: 'Price for another model' }),
+        h('select', { id: 'other-mode', class: 'drawer-input', onchange: (event: Event) => {
+          other.mode.set((event.target as HTMLSelectElement).value);
+          selected.set(other.mode.peek() === 'skip' ? (selected.peek() === OTHER ? null : selected.peek()) : OTHER);
+          if (other.mode.peek() !== 'skip') removal.set(null);
+        } },
+          h('option', { value: 'skip', selected: other.mode.peek() === 'skip', text: 'Skip' }), h('option', { value: 'like', text: 'Price like…' }),
+          h('option', { value: 'rate', text: 'Set a price' }), h('option', { value: 'free', text: 'Free (local model)' })),
+        () => {
+          const field = (label: string, suffix: string, sig: typeof other.input, placeholder: string) => h('div', null,
+            h('label', { class: 'drawer-h3', for: `other-${suffix}`, text: label }),
+            h('input', { id: `other-${suffix}`, class: 'drawer-input', type: 'text',
+              inputmode: suffix === 'like' ? 'text' : 'decimal', maxlength: suffix === 'like' ? '200' : '20',
+              value: sig.peek(), placeholder, oninput: (event: Event) => { sig.set((event.target as HTMLInputElement).value); selected.set(OTHER); removal.set(null); } }));
+          return other.mode() === 'like'
+            ? field('Exact card model for another model', 'like', other.like, 'claude-haiku-4-5')
+            : other.mode() === 'rate' ? h('div', null,
+              field('Input for another model (USD per 1M tokens)', 'input', other.input, '1.00'),
+              field('Output for another model (USD per 1M tokens)', 'output', other.output, '3.00'),
+              field('Cache read for another model, optional (USD per 1M tokens)', 'read', other.cacheRead, '0.10 x input if blank'),
+              field('Cache write for another model, optional (USD per 1M tokens)', 'write', other.cacheWrite, '1.25 x input if blank')) : null;
+        }),
       h('div', { role: 'status', 'aria-live': 'polite' }, () => saved() ? h('div', null,
         h('p', { class: 'drawer-note', text: AFTER_DECLARATION }),
         h('button', { class: 'btn-ghost', text: 'Re-price recorded requests', onclick: () => openAction(repriceAction(capability('reprice')!)) })) : null)),
@@ -179,7 +221,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
         summary: body ? `Save your price for ${d!.model}. ${description}`
           : payload.models.length ? `${count(payload.models.length)} models still use guessed prices. Choose a price for one model to review it here.`
           : 'No unpriced models remain. Recorded requests may still need re-pricing.',
-        blockedReason: payload.demo ? 'Sample data: start without --demo to save a price.' : 'Choose a price for one model. A rate needs positive input and output prices; Price like needs an exact card model name.',
+        blockedReason: payload.demo ? 'Sample data: start without --demo to save a price.' : 'Choose a price for one model. A rate needs positive input and output prices; Price like needs an exact card model name; another model needs its name.',
         notes: [payload.boundary, 'The most recently changed model is the one Apply saves. Other choices stay here until you apply them.'],
       };
     },

@@ -121,6 +121,17 @@ test('unpriced models: skip and all three declarations; re-price previews, confi
     const changed = loadPriceOverrides().models['private-rate'];
     assert.ok(changed?.kind === 'rate' && changed.input === '4' && changed.output === '5');
     assert.equal(changed.cacheRead, '0.2', 'changing the input price keeps the cache price');
+
+    // A model already on the card has no guessed rows and no declaration, but
+    // can still be given your price by name (PR #146 review).
+    await drawer.getByLabel('Model name', { exact: true }).fill('gpt-4o');
+    await drawer.getByLabel('Price for another model', { exact: true }).selectOption('rate');
+    await drawer.getByLabel('Input for another model (USD per 1M tokens)', { exact: true }).fill('1.5');
+    await drawer.getByLabel('Output for another model (USD per 1M tokens)', { exact: true }).fill('6');
+    await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
+    await drawer.getByRole('status').getByText('Saved your price for gpt-4o.').waitFor();
+    const negotiated = loadPriceOverrides().models['gpt-4o'];
+    assert.ok(negotiated?.kind === 'rate' && negotiated.input === '1.5' && negotiated.output === '6');
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
   } finally {
