@@ -63,7 +63,7 @@ export interface ObservedCommit {
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
-import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } from '../billing/reconcile.ts';
+import { quantizeLocalDays, type ReconciliationCoverage, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
 import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/mapping.ts';
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
@@ -2970,6 +2970,23 @@ export class Store {
       // (D-173).
       this.retentionFloor().requestsPrunedBeforeMs,
     );
+  }
+
+  /**
+   * Everything Segreant metered in [startMs, endMs), every provider and route,
+   * under the reconciliation's own day quantization, so a comparison's local
+   * figure can be stated as a share of it without the two rounding apart.
+   * Null when an amount cannot be quantized (a non-USD exact amount).
+   */
+  meteredMicrosLikeReconciliation(startMs: number, endMs: number): number | null {
+    const quantized = quantizeLocalDays(
+      this.reconciliationRequestsInRange(startMs, endMs),
+      (row) => row.tsEpochMs >= startMs && row.tsEpochMs < endMs,
+    );
+    if ('refusal' in quantized) return null;
+    let total = 0;
+    for (const day of quantized.localByDay.values()) total += day.micros;
+    return total;
   }
 
   /** Persist a computed reconciliation as an immutable derived record. */

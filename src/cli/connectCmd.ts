@@ -391,6 +391,11 @@ function connectGenericApi(cfg: SegreantConfig, flags: Flags, tty: boolean): voi
   console.log(color(tty, C.gray, `  Segreant forwards these requests to ${cfg.upstreams.openai}. For another`));
   console.log(color(tty, C.gray, '  OpenAI-compatible provider (OpenRouter, Azure, a local server), set'));
   console.log(color(tty, C.gray, '  "upstreams": { "openai": "<base URL>" } in config.json; docs/INTEGRATIONS.md has examples.'));
+  // The proxy appends the client's path to the upstream base, so a version
+  // segment in both places doubles it (/v1/v1/chat/completions) and 404s.
+  console.log(color(tty, C.gray, '  If that base URL already ends in its version (an Ollama base ending in /v1),'));
+  console.log(color(tty, C.gray, `  point the client at http://localhost:${port} without /v1. A remote upstream also`));
+  console.log(color(tty, C.gray, '  needs its own egress rule; segreant egress help shows the form.'));
   console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
   console.log(color(tty, C.green, '    segreant sources'));

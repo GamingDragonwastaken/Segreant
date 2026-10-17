@@ -116,7 +116,7 @@ test('billing status reports the recorded comparison and how much of the period 
     assert.match(run.stdout, /1 recorded comparison\(s\); latest: proj_demo_sample/);
     assert.match(run.stdout, /covers \$[\d.]+ of the \$[\d.]+ Segreant metered across all providers in that period \(\d+%\)/);
     const runs = await cli(['alloc', 'runs', '--demo'], home);
-    assert.match(runs.stdout, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}Z → \d{4}-\d{2}-\d{2} \d{2}:\d{2}Z \(end exclusive\)/,
+    assert.match(runs.stdout, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d{3})?)?Z → \d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d{3})?)?Z \(end exclusive\)/,
       'a split that does not start at midnight keeps its times');
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -146,6 +146,43 @@ test('budget --recommend gives a plain verdict; the full decision record is behi
     assert.match(plain.stdout, /segreant budget --recommend --detail/);
     const detail = await cli(['budget', '--recommend', '--demo', '--detail'], home, 120_000);
     assert.match(detail.stdout, /Decision — budget-cap:daily/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('PR #142 review: coverage uses the comparison\'s day quantization, so a share never exceeds the whole', async () => {
+  const { quantizeLocalDays } = await import('../src/billing/reconcile.ts');
+  const day = 86_400_000;
+  // Two days, each one sub-microdollar request: a period total rounded once from
+  // floats is 1 micro, while the comparison's per-day rule gives 2.
+  const rows = [0, 1].map((d) => ({ requestId: `r${d}`, tsEpochMs: 20_000 * day + d * day + 1, costUsd: 0.0000006 })) as never[];
+  const all = quantizeLocalDays(rows, () => true);
+  assert.ok(!('refusal' in all));
+  const total = [...all.localByDay.values()].reduce((s, x) => s + x.micros, 0);
+  assert.equal(total, 2);
+  assert.ok(total >= Math.round(0.0000012 * 1e6), 'never below the subset a comparison would report');
+});
+
+test('PR #142 review: single-dash commandless tokens are not swallowed into the home view', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-singledash-'));
+  try {
+    const bogus = await cli(['-bogus'], home);
+    assert.notEqual(bogus.code, 0);
+    assert.match(bogus.stderr, /Unknown command: -bogus/);
+    const help = await cli(['-h'], home);
+    assert.equal(help.code, 0);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('PR #142 review: connect api warns about a doubled version segment', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-connect-v1-'));
+  try {
+    const run = await cli(['connect', 'api'], home);
+    assert.match(run.stdout, /already ends in its version/);
+    assert.match(run.stdout, /without \/v1/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
