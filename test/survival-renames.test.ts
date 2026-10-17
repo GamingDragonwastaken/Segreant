@@ -51,7 +51,7 @@ test('a commit that renames and edits a file keeps credit for the lines it added
     const hash = git('rev-parse', 'HEAD');
     clearBlameCache();
     const result = await survivingLines(repo, hash);
-    assert.deepEqual(result, { added: 1, surviving: 1, measured: true });
+    assert.deepEqual(result, { added: 1, surviving: 1, measured: true, filesWithAdditions: 1 });
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
