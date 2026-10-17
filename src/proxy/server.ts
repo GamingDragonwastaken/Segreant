@@ -28,7 +28,7 @@ import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
 import { configPath, loadConfig, type BudgetConfig, type SegreantConfig } from '../config.ts';
 import { BudgetGuard, unverifiedBasis, type GuardDecision } from '../budget/guard.ts';
-import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
+import { computeCost, unpricedPricingEvidence, notSentPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
   StreamUsageAccumulator,
   normalizeAnthropicUsage,
@@ -554,7 +554,8 @@ async function handle(
       ? 'Segreant cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Segreant.'
       : decision.reason ?? 'Budget limit reached.';
     res.end(unavailable ? providerBudgetUnavailableBody(provider, message) : providerErrorBody(provider, message));
-    // Log the blocked attempt at zero cost for the audit trail.
+    // Log the blocked attempt at zero cost for the audit trail. Nothing was
+    // sent, so the cost is known to be zero, not unknown.
     safeLog(deps, {
       requestId: randomUUID(),
       sessionId,
@@ -574,7 +575,7 @@ async function handle(
       reasoningTokens: 0,
       costUsd: 0,
       estimated: false,
-      pricing: unpricedPricingEvidence(),
+      pricing: notSentPricingEvidence(),
       streamed: parsed.stream,
       statusCode: unavailable ? 503 : 429,
       durationMs: 0,
@@ -645,7 +646,13 @@ async function handle(
       reasoningTokens: 0,
       costUsd: 0,
       estimated: false,
-      pricing: unpricedPricingEvidence(),
+      // Only a policy or DNS refusal is certainly decided before the dial. A
+      // receipt failure can come after the provider answered (the response
+      // receipt), and a timeout or dropped connection may have reached it, so
+      // those keep an unknown cost (PR #143 review).
+      pricing: egressRefusal !== null && (egressRefusal.code === 'policy_denied' || egressRefusal.code === 'dns_denied')
+        ? notSentPricingEvidence()
+        : unpricedPricingEvidence(),
       streamed: parsed.stream,
       statusCode: status,
       durationMs: Date.now() - startedAt,
