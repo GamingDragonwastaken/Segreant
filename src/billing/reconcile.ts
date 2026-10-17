@@ -398,6 +398,61 @@ function addExact(day: ExactDay, coefficient: bigint, scale: number): void {
   day.coefficient += coefficient * 10n ** BigInt(day.scale - scale);
 }
 
+/**
+ * Local capture per UTC day under the reconciliation's one rule: each row's
+ * exact amount (or, for a legacy row, its rate-card projection) is summed
+ * exactly per day, and only the day total is rounded to the microdollar, half
+ * to even. Anything that compares itself with a reconciliation's local figure
+ * uses this, so the two cannot disagree by a rounding: a period total rounded
+ * once from floats could come out below the per-day sum of a subset of it.
+ */
+export function quantizeLocalDays(
+  rows: readonly RequestRow[],
+  accept: (row: RequestRow) => boolean,
+): { localByDay: Map<number, { micros: number; requests: number }>; daysRounded: number } | { refusal: { code: 'local_exact_amount_is_not_usd' | 'local_exact_amount_requires_explicit_quantization'; message: string } } {
+  const exactByDay = new Map<number, ExactDay>();
+  for (const row of rows) {
+    if (!accept(row)) continue;
+    const key = utcDayStart(row.tsEpochMs);
+    const bucket = exactByDay.get(key) ?? { coefficient: 0n, scale: 6, requests: 0 };
+    if (row.economicAmount !== undefined) {
+      if (row.economicAmount.currency !== 'USD') {
+        return { refusal: {
+          code: 'local_exact_amount_is_not_usd',
+          message: `request ${row.requestId} has an exact local amount in ${row.economicAmount.currency}; this reconciliation has no FX policy`,
+        } };
+      }
+      // Kept exact until the day is summed. Per-token prices give amounts like
+      // 0.0014008, finer than the provider's microdollars; refusing them here
+      // refused almost every real OpenAI route (found seeding the demo bill,
+      // 2026-10-16). The rule is stated in the result, not invented silently.
+      const parts = exactParts(row.economicAmount);
+      addExact(bucket, parts.coefficient, parts.scale);
+    } else {
+      // Legacy rows have no exact economic event. Retain their compatibility
+      // projection explicitly as the rate-card estimate documented by the
+      // result, and add it into the same exact sum: rounding the exact part
+      // alone and adding the legacy part after could round a tie the wrong way.
+      addExact(bucket, BigInt(Math.round(row.costUsd * 1_000_000)), 6);
+    }
+    bucket.requests += 1;
+    exactByDay.set(key, bucket);
+  }
+
+  // Each day's exact sum becomes microdollars once, rounded half to even, and
+  // is checked against the number range before it leaves bigint.
+  let daysRounded = 0;
+  const localByDay = new Map<number, { micros: number; requests: number }>();
+  for (const [key, day] of exactByDay) {
+    const { micros, rounded } = halfEvenMicrosBig(day.coefficient, day.scale);
+    const n = safeMicros(micros);
+    if (n === null) return { refusal: { code: 'local_exact_amount_requires_explicit_quantization', message: 'a day total is outside the supported fixed-point range' } };
+    if (rounded) daysRounded += 1;
+    localByDay.set(key, { micros: n, requests: day.requests });
+  }
+  return { localByDay, daysRounded };
+}
+
 /** UTC day key for a local ledger row, matching the provider's bucket boundary. */
 function utcDayStart(tsEpochMs: number): number {
   return Math.floor(tsEpochMs / DAY_MS) * DAY_MS;
@@ -495,47 +550,13 @@ export function reconcileOpenAiCosts(input: {
     else providerByDay.set(line.bucketStartMs, [line]);
   }
 
-  const exactByDay = new Map<number, ExactDay>();
-  for (const row of input.requests) {
-    if (!isOnDeclaredRoute(row, input.run.declaredScopeId)) continue;
-    if (row.tsEpochMs < input.run.periodStartMs || row.tsEpochMs >= input.run.periodEndMs) continue;
-    const key = utcDayStart(row.tsEpochMs);
-    const bucket = exactByDay.get(key) ?? { coefficient: 0n, scale: 6, requests: 0 };
-    if (row.economicAmount !== undefined) {
-      if (row.economicAmount.currency !== 'USD') {
-        return refuse(
-          'local_exact_amount_is_not_usd',
-          `request ${row.requestId} has an exact local amount in ${row.economicAmount.currency}; this reconciliation has no FX policy`,
-        );
-      }
-      // Kept exact until the day is summed. Per-token prices give amounts like
-      // 0.0014008, finer than the provider's microdollars; refusing them here
-      // refused almost every real OpenAI route (found seeding the demo bill,
-      // 2026-10-16). The rule is stated in the result, not invented silently.
-      const parts = exactParts(row.economicAmount);
-      addExact(bucket, parts.coefficient, parts.scale);
-    } else {
-      // Legacy rows have no exact economic event. Retain their compatibility
-      // projection explicitly as the rate-card estimate documented by the
-      // result, and add it into the same exact sum: rounding the exact part
-      // alone and adding the legacy part after could round a tie the wrong way.
-      addExact(bucket, BigInt(Math.round(row.costUsd * 1_000_000)), 6);
-    }
-    bucket.requests += 1;
-    exactByDay.set(key, bucket);
-  }
-
-  // Each day's exact sum becomes microdollars once, rounded half to even, and
-  // is checked against the number range before it leaves bigint.
-  let daysRounded = 0;
-  const localByDay = new Map<number, { micros: number; requests: number }>();
-  for (const [key, day] of exactByDay) {
-    const { micros, rounded } = halfEvenMicrosBig(day.coefficient, day.scale);
-    const n = safeMicros(micros);
-    if (n === null) return refuse('local_exact_amount_requires_explicit_quantization', 'a day total is outside the supported fixed-point range');
-    if (rounded) daysRounded += 1;
-    localByDay.set(key, { micros: n, requests: day.requests });
-  }
+  const quantized = quantizeLocalDays(
+    input.requests,
+    (row) => isOnDeclaredRoute(row, input.run.declaredScopeId)
+      && row.tsEpochMs >= input.run.periodStartMs && row.tsEpochMs < input.run.periodEndMs,
+  );
+  if ('refusal' in quantized) return refuse(quantized.refusal.code, quantized.refusal.message);
+  const { localByDay, daysRounded } = quantized;
 
   const days: ReconciliationDayLine[] = [];
   const allDays = [...new Set([...providerByDay.keys(), ...localByDay.keys()])].sort((a, b) => a - b);
