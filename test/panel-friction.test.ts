@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spendBesideCap } from '../src/budget/guard.ts';
 import { listenOrExplain } from '../src/cli/runCmd.ts';
+import { coveragePercent } from '../src/cli/billingCmd.ts';
 
 process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-panel-home-'));
 
@@ -29,10 +30,21 @@ function cli(args: string[], home: string, timeoutMs = 30_000): Promise<{ code: 
 
 test('a refusal never rounds spend that crossed the cap into the cap', () => {
   assert.equal(spendBesideCap(5.004, 5), '$5.004');
-  assert.equal(spendBesideCap(5.0000004, 5), '$5.000000', 'stops at the microdollar');
+  assert.equal(spendBesideCap(5.0000004, 5), 'just over $5.000000', 'below the microdollar it says so in words (PR #142 review)');
+  assert.equal(spendBesideCap(4.9999996, 5), 'just under $5.000000');
   assert.equal(spendBesideCap(5.5, 5), '$5.50');
   assert.equal(spendBesideCap(5, 5), '$5.00');
   assert.equal(spendBesideCap(4.999, 5), '$4.999');
+});
+
+test('a partial coverage share never reads 100% or 0% (PR #142 review)', () => {
+  assert.equal(coveragePercent(996, 1000), '99.6');
+  assert.equal(coveragePercent(999_999, 1_000_000), '99.9');
+  assert.equal(coveragePercent(1000, 1000), '100');
+  assert.equal(coveragePercent(1, 1_000_000), '<0.1');
+  assert.equal(coveragePercent(5, 1000), '0.5');
+  assert.equal(coveragePercent(424, 1000), '42');
+  assert.equal(coveragePercent(0, 1000), '0');
 });
 
 test('config.json written by Windows PowerShell (UTF-8 with a byte-order mark) loads', async () => {
