@@ -3,19 +3,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  applyPricingManifest,
-  computeCost,
-  loadPricing,
-  MAX_PRICING_MANIFEST_BYTES,
-  pricingStatus,
-  pricingCardProvenance,
-  rateFor,
-  refreshPricing,
-  refreshPricingFromResponses,
-  transformLiteLLMManifest,
-} from '../src/cost/pricing.ts';
-import { Store } from '../src/store/db.ts';
 
 // These exercise the refresh/override path against an isolated SEGREANT_HOME so the
 // real ~/.segreant is never touched. node's test runner isolates each FILE in
@@ -27,6 +14,21 @@ function freshHome(): string {
   process.env.SEGREANT_HOME = dir;
   return dir;
 }
+
+freshHome();
+const {
+  applyPricingManifest,
+  computeCost,
+  loadPricing,
+  MAX_PRICING_MANIFEST_BYTES,
+  pricingStatus,
+  pricingCardProvenance,
+  rateFor,
+  refreshPricing,
+  refreshPricingFromResponses,
+  transformLiteLLMManifest,
+} = await import('../src/cost/pricing.ts');
+const { Store } = await import('../src/store/db.ts');
 
 function manifest(opusInput: number, updated = '2020-01-01'): string {
   return JSON.stringify({
@@ -112,6 +114,16 @@ function litellmFeed(extra: Record<string, unknown> = {}): string {
   return JSON.stringify(models);
 }
 
+const firstPartyEntries = {
+  'deepseek/deepseek-chat': { litellm_provider: 'deepseek', mode: 'chat', input_cost_per_token: 0.28e-6, output_cost_per_token: 0.42e-6 },
+  'mistral/mistral-small-latest': { litellm_provider: 'mistral', mode: 'chat', input_cost_per_token: 0.1e-6, output_cost_per_token: 0.3e-6 },
+  'xai/grok-4.20-multi-agent-beta-0309': { litellm_provider: 'xai', mode: 'responses', input_cost_per_token: 1.25e-6, output_cost_per_token: 2.5e-6 },
+  'dashscope/qwen-plus': { litellm_provider: 'dashscope', mode: 'chat', input_cost_per_token: 0.4e-6, output_cost_per_token: 1.2e-6 },
+  'zai/glm-5': { litellm_provider: 'zai', mode: 'chat', input_cost_per_token: 1e-6, output_cost_per_token: 3.2e-6 },
+  'perplexity/sonar': { litellm_provider: 'perplexity', mode: 'chat', input_cost_per_token: 1e-6, output_cost_per_token: 1e-6 },
+  'command-r-08-2024': { litellm_provider: 'cohere_chat', mode: 'chat', input_cost_per_token: 0.15e-6, output_cost_per_token: 0.6e-6 },
+};
+
 test('litellm: per-token costs transform to exact per-1M rates, provider-mapped and prefix-stripped', () => {
   freshHome();
   const t = transformLiteLLMManifest(litellmFeed());
@@ -139,6 +151,109 @@ test('litellm: applyPricingManifest auto-detects the feed and the cache then pri
   assert.ok((res.modelCount ?? 0) >= 10);
   assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 5);
   assert.equal(pricingStatus().source, 'cache');
+});
+
+test('litellm: first-party makers survive with bare model keys and unverified list prices', () => {
+  freshHome();
+  const transformed = transformLiteLLMManifest(litellmFeed(firstPartyEntries));
+  assert.equal(transformed.ok, true);
+  const expected = [
+    ['deepseek', 'deepseek-chat', { input: 0.28, output: 0.42 }],
+    ['mistral', 'mistral-small-latest', { input: 0.1, output: 0.3 }],
+    ['xai', 'grok-4.20-multi-agent-beta-0309', { input: 1.25, output: 2.5 }],
+    ['dashscope', 'qwen-plus', { input: 0.4, output: 1.2 }],
+    ['zai', 'glm-5', { input: 1, output: 3.2 }],
+    ['perplexity', 'sonar', { input: 1, output: 1 }],
+    ['cohere', 'command-r-08-2024', { input: 0.15, output: 0.6 }],
+  ] as const;
+  for (const [provider, model, rate] of expected) {
+    assert.deepEqual(transformed.file!.providers[provider]?.models[model], rate, `${provider}/${model}`);
+    assert.equal(transformed.file!.providers[provider]!.verified, false);
+  }
+  assert.equal(transformed.file!.providers.cohere_chat, undefined);
+});
+
+test('litellm: reseller and host prices, including Fireworks routes, are excluded', () => {
+  freshHome();
+  const hosts = [
+    'fireworks_ai', 'together_ai', 'bedrock', 'bedrock_converse', 'azure', 'azure_ai',
+    'openrouter', 'deepinfra', 'novita', 'vertex_ai', 'vertex_ai-language-models', 'groq',
+  ];
+  const entries = Object.fromEntries(hosts.map((host) => [
+    `${host}/accounts/host/models/${host}-host-only`,
+    { litellm_provider: host, mode: 'chat', input_cost_per_token: 9e-6, output_cost_per_token: 9e-6 },
+  ]));
+  const transformed = transformLiteLLMManifest(litellmFeed({ ...firstPartyEntries, ...entries }));
+  assert.equal(transformed.ok, true);
+  for (const host of hosts) {
+    assert.equal(transformed.file!.providers[host], undefined);
+    assert.equal(Object.values(transformed.file!.providers).some((p) => `${host}-host-only` in p.models), false);
+  }
+});
+
+test('litellm: provider order and big-three collision priority are independent of feed key order', () => {
+  const shadowRate = { litellm_provider: 'deepseek', mode: 'chat', input_cost_per_token: 99e-6, output_cost_per_token: 99e-6 };
+  const entries = Object.entries(JSON.parse(litellmFeed({
+    ...firstPartyEntries,
+    'deepseek/claude-opus-4-8': shadowRate,
+    'deepseek/gpt-4o': shadowRate,
+    'deepseek/gemini-2.5-pro': shadowRate,
+  })) as Record<string, unknown>);
+  const expectedOrder = ['anthropic', 'openai', 'google', 'cohere', 'dashscope', 'deepseek', 'mistral', 'perplexity', 'xai', 'zai'];
+  for (const ordered of [entries, [...entries].reverse()]) {
+    freshHome();
+    const raw = JSON.stringify(Object.fromEntries(ordered));
+    const transformed = transformLiteLLMManifest(raw);
+    assert.equal(transformed.ok, true);
+    assert.deepEqual(Object.keys(transformed.file!.providers), expectedOrder);
+    assert.equal(applyPricingManifest(raw).ok, true);
+    assert.deepEqual(pricingStatus().providers, expectedOrder);
+    for (const [route, model, provider, input] of [
+      ['openai', 'claude-opus-4-8', 'anthropic', 5],
+      ['anthropic', 'gpt-4o', 'openai', 2.5],
+      ['openai', 'gemini-2.5-pro', 'google', 1.25],
+    ] as const) {
+      const resolved = rateFor(route, model);
+      assert.equal(resolved.pricing.rateMatchKind, 'exact_cross_provider');
+      assert.equal(resolved.pricing.rateMatchProvider, provider);
+      assert.equal(resolved.rate.input, input);
+    }
+  }
+});
+
+test('litellm: DeepSeek on the OpenAI route resolves exactly against the transformed card', () => {
+  freshHome();
+  const applied = applyPricingManifest(litellmFeed(firstPartyEntries));
+  assert.equal(applied.ok, true);
+  assert.equal(applied.sourceKind, 'litellm_transformed');
+  const resolved = rateFor('openai', 'deepseek-chat');
+  assert.deepEqual(resolved.rate, { input: 0.28, output: 0.42 });
+  assert.equal(resolved.estimated, false);
+  assert.equal(resolved.pricing.costBasis, 'local_list_price');
+  assert.equal(resolved.pricing.rateMatchKind, 'exact_cross_provider');
+  assert.equal(resolved.pricing.rateMatchProvider, 'deepseek');
+  assert.equal(resolved.pricing.rateMatchModel, 'deepseek-chat');
+  assert.equal(resolved.pricing.rateCardSourceKind, 'litellm_transformed');
+  assert.equal(resolved.pricing.rateCardSha256, applied.cardSha256);
+});
+
+test('litellm: unchanged cross-provider family matching prices an R1 distill as DeepSeek R1', () => {
+  freshHome();
+  const applied = applyPricingManifest(litellmFeed({
+    'deepseek/deepseek-r1': { litellm_provider: 'deepseek', mode: 'chat', input_cost_per_token: 0.55e-6, output_cost_per_token: 2.19e-6 },
+    'fireworks_ai/accounts/fireworks/models/deepseek-r1-distill-qwen-32b': {
+      litellm_provider: 'fireworks_ai', mode: 'chat', input_cost_per_token: 0.9e-6, output_cost_per_token: 0.9e-6,
+    },
+  }));
+  assert.equal(applied.ok, true);
+  // A distinct distilled model still contains the maker's short key. This
+  // characterizes the existing heuristic; it does not endorse the guessed rate.
+  const resolved = rateFor('openai', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B');
+  assert.deepEqual(resolved.rate, { input: 0.55, output: 2.19 });
+  assert.equal(resolved.estimated, true);
+  assert.equal(resolved.pricing.rateMatchKind, 'family_cross_provider');
+  assert.equal(resolved.pricing.rateMatchProvider, 'deepseek');
+  assert.equal(resolved.pricing.rateMatchModel, 'deepseek-r1');
 });
 
 test('litellm: a shape-shifted feed is refused and never touches the table', () => {

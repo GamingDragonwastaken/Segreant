@@ -447,11 +447,22 @@ export type PricingRefreshFailureCode =
  */
 export const DEFAULT_MANIFEST_URL = DEFAULT_PRICE_LIST_URL;
 
-/** LiteLLM providers we carry, mapped onto our table's provider keys. */
+/**
+ * First-party model makers, mapped onto our table's provider keys. Hosts and
+ * resellers are excluded: their rates price the host's route, which a bare
+ * model name cannot identify.
+ */
 const LITELLM_PROVIDER_MAP: Record<string, string> = {
   anthropic: 'anthropic',
   openai: 'openai',
   gemini: 'google',
+  cohere_chat: 'cohere',
+  dashscope: 'dashscope',
+  deepseek: 'deepseek',
+  mistral: 'mistral',
+  perplexity: 'perplexity',
+  xai: 'xai',
+  zai: 'zai',
 };
 
 /** Fewer matched models than this means the feed shape changed — refuse, keep the current table. */
@@ -474,7 +485,7 @@ function perMillion(perToken: number): number {
 /**
  * Convert a LiteLLM price file into our manifest schema. Pure and total: bad
  * input yields `{ ok: false }`, never a throw. Only chat-capable entries from
- * providers we meter are carried; `verified` is false because the rates are
+ * first-party makers are carried; `verified` is false because the rates are
  * community-maintained; the conservative `unknown` fallback comes from the
  * CURRENT table, so a feed can never weaken it.
  */
@@ -521,12 +532,21 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     return { ok: false, error: `feed shape not recognized (only ${total} usable models found) — keeping the current table` };
   }
 
+  // Cross-provider lookups use insertion order: keep the big three ahead of
+  // other makers on name collisions, regardless of the upstream key order.
+  const primaryProviders = ['anthropic', 'openai', 'google'];
+  const providerOrder = [
+    ...primaryProviders,
+    ...Object.keys(providers).filter((provider) => !primaryProviders.includes(provider)).sort(),
+  ];
   const file: PricingFile = {
     schema_version: 1,
     updated: new Date().toISOString().slice(0, 10),
     currency: 'USD',
     unit: 'per_million_tokens',
-    providers,
+    providers: Object.fromEntries(providerOrder
+      .filter((provider) => providers[provider] !== undefined)
+      .map((provider) => [provider, providers[provider]!])),
     fallbacks: loadPricing().fallbacks,
   };
   return { ok: true, file };
