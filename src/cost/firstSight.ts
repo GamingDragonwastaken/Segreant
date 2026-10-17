@@ -18,6 +18,8 @@ import { pricingStatus, rateFor, type Provider, type RateMatchKind, type Refresh
 export const FIRST_SIGHT_MIN_INTERVAL_MS = 60 * 60 * 1000;
 
 const GUESSED: ReadonlySet<RateMatchKind> = new Set(['family_provider', 'family_cross_provider', 'fallback']);
+/** What the refreshed card itself answers; a price the user declared meanwhile is not the list's answer (PR #146 review). */
+const CARD_EXACT: ReadonlySet<RateMatchKind> = new Set(['exact_provider', 'exact_cross_provider']);
 
 /** Whether the card's last check of the price list is older than the interval (or never happened). */
 export function priceCheckDue(status: { lastCheckedAt: string | null; fetchedAt: string | null }, now: number = Date.now()): boolean {
@@ -88,7 +90,7 @@ export function createFirstSightWatcher(options: FirstSightOptions): FirstSightW
         // again until the next interval.
         const answered = [...pending.values()];
         pending.clear();
-        const learned = answered.filter(({ provider, model }) => !rateFor(provider, model).estimated);
+        const learned = answered.filter(({ provider, model }) => CARD_EXACT.has(rateFor(provider, model).pricing.rateMatchKind));
         if (learned.length > 0) options.onLearned?.(learned);
       } catch (error) {
         options.onFailed?.(error instanceof Error ? error.message : String(error));

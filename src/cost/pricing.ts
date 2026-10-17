@@ -1037,6 +1037,23 @@ function withExactCompanion(rate: ModelRate): ModelRate {
 }
 
 /** A free (local) model: every rate is zero, cache rates included. */
+/** Depth of withoutDeclaredPrices scopes; while above zero the user's declarations are not consulted. */
+let declarationsSuspended = 0;
+
+/**
+ * Run `fn` pricing from the card alone. The demo is fixed sample data: a real
+ * declaration (say, gpt-4o marked free) must not change its spend, evidence or
+ * comparisons (PR #146 review).
+ */
+export function withoutDeclaredPrices<T>(fn: () => T): T {
+  declarationsSuspended += 1;
+  try {
+    return fn();
+  } finally {
+    declarationsSuspended -= 1;
+  }
+}
+
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
@@ -1047,7 +1064,7 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    place a private, fine-tuned or local model can get a real price. A `like`
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
-  const declared = priceOverrideFor(model);
+  const declared = declarationsSuspended > 0 ? null : priceOverrideFor(model);
   if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model);
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
   if (declared?.kind === 'like') {
