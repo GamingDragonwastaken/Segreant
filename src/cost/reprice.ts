@@ -1,6 +1,6 @@
 /** One synchronous read model for CLI and dashboard; guesses never replace guesses. */
 import type { Store, RepriceUpdate } from '../store/db.ts';
-import { computeCost, type Provider } from './pricing.ts';
+import { computeCost, withPricingSnapshot, type Provider } from './pricing.ts';
 
 export interface RepriceModel {
   provider: string;
@@ -42,6 +42,11 @@ function repriceEvidence(updates: readonly RepriceUpdate[]) {
 }
 
 export function previewReprice(store: Store) {
+  // Every row of one plan is priced from the same declarations.
+  return withPricingSnapshot(() => planReprice(store));
+}
+
+function planReprice(store: Store) {
   const rows = store.estimatedRequestRows();
   const updates: RepriceUpdate[] = [];
   const byModel = new Map<string, RepriceModel>();
@@ -76,7 +81,7 @@ export function previewReprice(store: Store) {
 }
 
 /** Compute once, write exactly that plan through the Store's audited transaction. */
-export function applyReprice(store: Store): ReturnType<typeof previewReprice> {
+export function applyReprice(store: Store): ReturnType<typeof planReprice> {
   const preview = previewReprice(store);
   const realizationSync = preview.updates.length ? store.applyRepricedCosts(preview.updates) : null;
   return { ...preview, applied: true, realizationSync };

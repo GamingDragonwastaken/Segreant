@@ -19,7 +19,7 @@ import { DEFAULT_PRICE_LIST_URL } from '../egress/policy.ts';
 import { dirname, join } from 'node:path';
 import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
-import { priceOverrideFor, type PriceOverride } from './overrides.ts';
+import { loadPriceOverrides, priceOverrideFor, type PriceOverride } from './overrides.ts';
 import { money } from '../economics/money.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1037,8 +1037,18 @@ function withExactCompanion(rate: ModelRate): ModelRate {
 }
 
 /** A free (local) model: every rate is zero, cache rates included. */
-/** Depth of withoutDeclaredPrices scopes; while above zero the user's declarations are not consulted. */
-let declarationsSuspended = 0;
+/** Where rateFor reads declarations; null reads the file (re-read when it changes). */
+let declarationSource: ((model: string) => PriceOverride | null) | null = null;
+
+function withDeclarationSource<T>(source: (model: string) => PriceOverride | null, fn: () => T): T {
+  const previous = declarationSource;
+  declarationSource = source;
+  try {
+    return fn();
+  } finally {
+    declarationSource = previous;
+  }
+}
 
 /**
  * Run `fn` pricing from the card alone. The demo is fixed sample data: a real
@@ -1046,12 +1056,21 @@ let declarationsSuspended = 0;
  * comparisons (PR #146 review).
  */
 export function withoutDeclaredPrices<T>(fn: () => T): T {
-  declarationsSuspended += 1;
-  try {
-    return fn();
-  } finally {
-    declarationsSuspended -= 1;
-  }
+  return withDeclarationSource(() => null, fn);
+}
+
+/**
+ * Run `fn` against one read of the declarations. A plan priced row by row
+ * re-read the file at each row, so a `pricing set` from another process midway
+ * gave earlier and later rows of the same model different prices in one
+ * correction (PR #146 review). The card needs no snapshot: it is cached for
+ * the life of the process and changes only by a refresh in this process,
+ * which cannot run inside a synchronous plan.
+ */
+export function withPricingSnapshot<T>(fn: () => T): T {
+  if (declarationSource !== null) return fn();
+  const models = loadPriceOverrides().models;
+  return withDeclarationSource((model) => models[model] ?? null, fn);
 }
 
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
@@ -1064,7 +1083,7 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    place a private, fine-tuned or local model can get a real price. A `like`
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
-  const declared = declarationsSuspended > 0 ? null : priceOverrideFor(model);
+  const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
   if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model);
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
   if (declared?.kind === 'like') {

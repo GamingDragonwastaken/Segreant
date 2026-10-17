@@ -83,3 +83,44 @@ test('the sample data is priced from the card, whatever the user declared (PR #1
 });
 
 test.after(() => rmSync(home, { recursive: true, force: true }));
+
+test('a period priced by your own prices is not claimed as complete list-price support (PR #146 review)', async () => {
+  const { buildOverview } = await import('../src/dashboard/routes.ts');
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  setPriceOverride('acme-support-7b', { kind: 'rate', input: '2', output: '8' });
+  const store = new Store(join(home, 'support.db'));
+  try {
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+    const c = computeCost('openai', 'acme-support-7b', usage);
+    assert.equal(c.estimated, false, 'a declared price is resolved, so a reprice can write it');
+    store.insertRequest({
+      requestId: 'declared-1', sessionId: null, tsEpochMs: Date.now() - 60_000, provider: 'openai', model: 'acme-support-7b',
+      project: 'p', taskWeight: 1, ...usage, costUsd: c.costUsd, estimated: c.estimated, streamed: false, statusCode: 200, durationMs: 1,
+      pricing: c.pricing,
+    });
+    const support = buildOverview(store, structuredClone(DEFAULT_CONFIG), '30d').claimSupport;
+    assert.equal(support.profile.monetaryBasis, 'mixed');
+    assert.equal(support.profile.coverage, 'partial');
+  } finally {
+    store.close();
+    removePriceOverride('acme-support-7b');
+  }
+});
+
+test('one reprice plan prices every row from the same declarations, even if the file changes midway (PR #146 review)', async () => {
+  const { withPricingSnapshot, computeCost } = await import('../src/cost/pricing.ts');
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  setPriceOverride('acme-snap', { kind: 'rate', input: '2', output: '8' });
+  try {
+    const [first, second] = withPricingSnapshot(() => {
+      const a = computeCost('openai', 'acme-snap', usage).costUsd;
+      setPriceOverride('acme-snap', { kind: 'rate', input: '5', output: '8' }); // another process, midway
+      return [a, computeCost('openai', 'acme-snap', usage).costUsd];
+    });
+    assert.equal(first, 2);
+    assert.equal(second, 2, 'the plan keeps the declarations it started with');
+    assert.equal(computeCost('openai', 'acme-snap', usage).costUsd, 5, 'the next plan reads the new price');
+  } finally {
+    removePriceOverride('acme-snap');
+  }
+});
