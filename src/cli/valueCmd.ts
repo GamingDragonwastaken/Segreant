@@ -85,6 +85,19 @@ function plainCapVerdict(decision: BudgetCapDecision, canonical: DecisionKernelI
   return [verdict, '  Full decision record, with each assumption and what would settle it: segreant budget --recommend --detail'];
 }
 
+/** The last line of the budget advice when nothing is applied: why, in the reader's terms. */
+export function budgetClosingLine(
+  applyPermitted: boolean,
+  dominance: { status: string; action?: string | null } | null,
+): string {
+  if (applyPermitted) return '  Re-run with --apply to write these to your config.';
+  if (dominance?.status === 'proven_dominant' && dominance.action === 'apply_recommended') {
+    return '  No cap written: the evidence favours the new cap, but its inputs are not verified enough to change spend. --detail lists what is missing.';
+  }
+  if (dominance?.status === 'proven_dominant') return '  No cap written: on this evidence your current setting does better.';
+  return '  No cap written: --apply needs evidence that the new cap does better, and this data does not show it. --detail lists what is missing.';
+}
+
 export async function cmdYield(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const limit = flags.limit ? Number(flags.limit) : 30;
@@ -844,9 +857,11 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `  Recorded the decision certificate the cap was set under: ${issued.certificateBundle.id} — it does not authorize spend, route, or provider changes.`));
   } else {
     console.log('');
-    console.log(color(tty, C.gray, decision && applyPermitted
-      ? '  Re-run with --apply to write these to your config.'
-      : '  No cap written: --apply needs evidence that the new cap does better, and this data does not show it. --detail lists what is missing.'));
+    // Three different reasons, said differently: the evidence picks no winner,
+    // it picks the current cap, or it picks the new cap but its inputs are not
+    // verified enough to change spend (PR #142 review).
+    const dominance = canonicalDecision?.certificateBundle.dominance;
+    console.log(color(tty, C.gray, budgetClosingLine(decision !== null && applyPermitted, dominance ?? null)));
   }
   console.log('');
   store.close();
