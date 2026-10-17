@@ -14,6 +14,10 @@ import { liveBudget, createProxyServer, BudgetConfigUnavailable } from '../src/p
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 
+// Everything this file writes (egress receipts, caches) goes to a scratch home,
+// never the developer's real ~/.segreant.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-live-budget-home-'));
+
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'live-budget-'));
   const file = join(dir, 'config.json');

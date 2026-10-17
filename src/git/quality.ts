@@ -533,6 +533,13 @@ export interface ArtifactPersistenceReport {
     aiYield: number | null; // retained artifact lines per $ across matured AI commits
     costPerSurvivingLine: number | null;
     effectiveSpendRatio: number | null; // cost associated with retained commits / total cost
+    /**
+     * Matured commits whose attribution window lost request rows to retention,
+     * or whose coverage is unknown. Their surviving cost understates the work,
+     * so they are left out of every cost-based figure above rather than
+     * flattering it (PR #135 review).
+     */
+    spendWindowTruncatedCommits: number;
   };
 }
 
@@ -570,6 +577,9 @@ export async function computeArtifactPersistence(
     const ageDays = (now - a.tsEpochMs) / (24 * 60 * 60 * 1000);
     const maturing = now - a.tsEpochMs < windowMs;
     const cost = a.attributedCostUsd;
+    // A window retention emptied reports the surviving spend, which is not the
+    // cost of the work, so no per-dollar figure is derived from it.
+    const spendKnown = a.spendWindowTruncated === false;
     const isReverted = reverted.has(a.hash.slice(0, 7));
 
     commits.push({
@@ -582,8 +592,8 @@ export async function computeArtifactPersistence(
       reverted: isReverted,
       ageDays,
       maturing,
-      aiYield: cost > 0 ? surviving / cost : null,
-      costPerSurvivingLine: surviving > 0 ? cost / surviving : null,
+      aiYield: spendKnown && cost > 0 ? surviving / cost : null,
+      costPerSurvivingLine: spendKnown && surviving > 0 ? cost / surviving : null,
     });
   }
 
@@ -602,7 +612,10 @@ export async function computeArtifactPersistence(
 
   // Legacy AI Yield/effective-spend projections only count commits with AI cost,
   // so pure-human commits do not pad the retained-lines-per-dollar numerator.
-  const aiCommits = mature.filter((c) => c.attributedCostUsd > 0);
+  // Commits whose spend window retention pruned are withheld from every
+  // cost-based figure: their surviving cost would understate the denominator.
+  const spendTruncated = mature.filter((c) => c.spendWindowTruncated !== false);
+  const aiCommits = mature.filter((c) => c.spendWindowTruncated === false && c.attributedCostUsd > 0);
   const aiCost = aiCommits.reduce((s, c) => s + c.attributedCostUsd, 0);
   const aiSurviving = aiCommits.reduce((s, c) => s + c.survivingLines, 0);
   const costOnDurable = aiCommits
@@ -629,6 +642,7 @@ export async function computeArtifactPersistence(
       aiYield: aiCost > 0 ? aiSurviving / aiCost : null,
       costPerSurvivingLine: aiSurviving > 0 ? aiCost / aiSurviving : null,
       effectiveSpendRatio: aiCost > 0 ? costOnDurable / aiCost : null,
+      spendWindowTruncatedCommits: spendTruncated.length,
     },
   };
 }
