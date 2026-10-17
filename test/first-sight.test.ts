@@ -11,6 +11,17 @@ process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-first-sight-'))
 const { createFirstSightWatcher, FIRST_SIGHT_MIN_INTERVAL_MS } = await import('../src/cost/firstSight.ts');
 const { setPriceOverride, removePriceOverride } = await import('../src/cost/overrides.ts');
 const { loadConfig, DEFAULT_CONFIG } = await import('../src/config.ts');
+const { applyPricingManifest } = await import('../src/cost/pricing.ts');
+
+/** Stand-in for a refreshed card: the public list now prices these models exactly. */
+function cardKnows(...models: string[]): void {
+  const applied = applyPricingManifest(JSON.stringify({
+    schema_version: 1, updated: '2026-10-01', currency: 'USD', unit: 'per_million_tokens',
+    providers: { openai: { verified: false, models: Object.fromEntries(models.map((m) => [m, { input: 0.1, output: 0.5 }])) } },
+    fallbacks: { unknown: { input: 3, output: 15 } },
+  }));
+  assert.equal(applied.ok, true, applied.error ?? 'manifest refused');
+}
 
 function harness(opts: { enabled?: boolean; lastChecked?: number | null; ok?: boolean; learn?: string } = {}) {
   let clock = 1_000_000_000_000;
@@ -23,8 +34,7 @@ function harness(opts: { enabled?: boolean; lastChecked?: number | null; ok?: bo
     lastCheckedMs: () => opts.lastChecked ?? null,
     refresh: async () => {
       calls.push(clock);
-      // Stand-in for a refreshed card that now knows the model.
-      if (opts.learn) setPriceOverride(opts.learn, { kind: 'rate', input: '0.1', output: '0.5' });
+      if (opts.learn) cardKnows(opts.learn);
       return opts.ok === false ? { ok: false, error: 'network unreachable' } : { ok: true };
     },
     onLearned: (models) => learned.push(models.map((m) => m.model)),
@@ -49,7 +59,6 @@ test('a guessed price triggers one lookup, and the learned model is reported', a
   await h.watcher.idle();
   assert.equal(h.calls.length, 1, 'one lookup for a burst of sightings');
   assert.deepEqual(h.learned, [['acme-new-1']], 'only the model the list now knows is reported');
-  removePriceOverride('acme-new-1');
 });
 
 test('at most one lookup an hour, and none right after a recent card check', async () => {
@@ -88,7 +97,7 @@ test('a model first seen while a lookup runs is answered by that lookup (PR #146
     refresh: async () => {
       calls += 1;
       await gate;
-      setPriceOverride('acme-during', { kind: 'rate', input: '0.1', output: '0.5' });
+      cardKnows('acme-during');
       return { ok: true };
     },
     onLearned: (models) => learned.push(models.map((m) => m.model)),
@@ -99,7 +108,26 @@ test('a model first seen while a lookup runs is answered by that lookup (PR #146
   await watcher.idle();
   assert.equal(calls, 1);
   assert.deepEqual(learned, [['acme-during']], 'the model sighted mid-lookup is reported once the card prices it');
-  removePriceOverride('acme-during');
+});
+
+test('a price declared while a lookup runs is not announced as the public list knowing it (PR #146 review)', async () => {
+  const learned: string[][] = [];
+  const watcher = createFirstSightWatcher({
+    enabled: () => true,
+    lastCheckedMs: () => null,
+    refresh: async () => {
+      // The user declares a price meanwhile; the refreshed card still lacks the model.
+      setPriceOverride('acme-mine', { kind: 'rate', input: '1', output: '2' });
+      cardKnows('acme-listed');
+      return { ok: true };
+    },
+    onLearned: (models) => learned.push(models.map((m) => m.model)),
+  });
+  watcher.note('openai', 'acme-mine', 'fallback');
+  watcher.note('openai', 'acme-listed', 'fallback');
+  await watcher.idle();
+  assert.deepEqual(learned, [['acme-listed']], 'only a card match is the list\'s answer');
+  removePriceOverride('acme-mine');
 });
 
 test('a failed lookup is reported and leaves the estimate standing', async () => {
