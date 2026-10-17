@@ -211,7 +211,7 @@ export interface BasisSummaryPayload {
   headline: 'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost';
   headlineLabel: string;
   cohorts: Array<{
-    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'unrecorded';
+    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'not_sent' | 'unrecorded';
     costUsd: number;
     requests: number;
     label: string;
