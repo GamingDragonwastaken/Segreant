@@ -60,7 +60,8 @@ function cmdHelpShort(): void {
   Usage: segreant <command> [options]
 
   Get started
-    guide                 Where you are and the single next step (bare "segreant")
+    (no command)          This month, your plans, what stayed in the code, and the next step
+    guide                 Where you are and the single next step
     scan                  Find the AI tools and git repos on this machine and preview
                           a setup plan; --setup imports and correlates them
     demo --serve          Every screen on clearly-labeled synthetic data, no API key
@@ -89,8 +90,10 @@ function cmdHelp(): void {
   Usage: segreant <command> [options]
 
   Commands
+    (no command)          Bare "segreant": this month, your plans, how much of the
+                          AI work stayed in the code, and the next step
     guide                 Where you are + the single next step, read from your
-                          actual state — also what bare "segreant" shows (--json)
+                          actual state — the full checklist (--json)
     start                 Start the proxy + local dashboard
     egress                Inspect/verify Segreant-process egress; plan exact cloud
                           rules without mutation, then persist only with:
@@ -116,6 +119,8 @@ function cmdHelp(): void {
     today | week | month  Show spend for a window      (--json)
     plan                  Plans, prices you set, and the list-price work they did
     quota                 Vendor usage meters and the pace to their reset
+    statusline            Claude Code status line: records its live usage meter
+                          on every refresh (--setup prints the line to add)
     economic              Inspect exact economic events, roles, bases, and legacy coverage
                           (--days N | --all, --target-currency UNIT, --as-of <ISO>,
                           --effective-at <ISO>, --json). Period controls use canonical
@@ -136,6 +141,13 @@ function cmdHelp(): void {
                           sec: --every N). Files unchanged since their last full
                           import are skipped; --rescan reads them again.
                           (--root <dir>, --days N, --json)
+    alloc <action>        Cost-centre allocation: who has DECIDED owns the money.
+                          alloc centre <id> --name N [--owner O]; alloc rule <id>
+                          --method direct|fixed_split|proportional_to_direct
+                          --centre C --match-project P; alloc run --from <date>
+                          --to <date> previews a split, --apply records it (--json).
+                          alloc centres | rules | runs list them; alloc revoke <id>
+                          closes a rule; alloc export <run-id> --out <csv>.
     billing <action>     Import, inspect, or export LOCAL operator-supplied
                           provider billing evidence. V1 accepts a strict OpenAI
                           evidence JSON only; it never overwrites metered estimates
