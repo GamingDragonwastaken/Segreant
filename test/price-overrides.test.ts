@@ -129,3 +129,18 @@ test('a hand-edited file that is broken is refused, not half-read', () => {
   writeFileSync(overridesPath(), '﻿' + JSON.stringify({ version: 1, models: {} }));
   assert.deepEqual(Object.keys(loadPriceOverrides().models), [], 'a byte-order mark from Windows PowerShell is fine');
 });
+
+test('a like target from a card without decimal companions still prices exactly (PR #146 review)', async () => {
+  const { applyPricingManifest } = await import('../src/cost/pricing.ts');
+  const applied = applyPricingManifest(JSON.stringify({
+    schema_version: 1, updated: '2026-10-01', currency: 'USD', unit: 'per_million_tokens',
+    providers: { openai: { verified: false, models: { 'acme-card-noexact': { input: 0.3, output: 1.2, cache_read: 0.03 } } } },
+    fallbacks: { unknown: { input: 3, output: 15 } },
+  }));
+  assert.equal(applied.ok, true, applied.error ?? 'manifest refused');
+  setPriceOverride('acme-like-noexact', { kind: 'like', like: 'acme-card-noexact' });
+  const c = computeCost('openai', 'acme-like-noexact', usage);
+  assert.equal(c.pricing.rateMatchKind, 'user_declared');
+  assert.deepEqual(c.rate.exact, { input: '0.3', output: '1.2', cache_read: '0.03' });
+  assert.equal(formatMoneyAmount(c.exact!.total), '1.5', 'an exact amount exists, so a reprice can write it');
+});

@@ -35,3 +35,26 @@ test('previewReprice and cmdReprice agree; apply writes the shared preview once'
     assert.equal(applyReprice(store).repriceable, 0);
   } finally { store.close(); rmSync(home, { recursive: true, force: true }); }
 });
+
+test('reprice evidence names every source: list prices and your prices, never the first row alone (PR #146 review)', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-reprice-evidence-'));
+  process.env.SEGREANT_HOME = home;
+  process.env.SEGREANT_DB = join(home, 'ledger.db');
+  process.env.SEGREANT_DEMO = '';
+  const store = new Store(process.env.SEGREANT_DB);
+  try {
+    const base = { costUsd: 9, sessionId: null, tsEpochMs: 1000, project: 'p', taskWeight: 1, inputTokens: 1_000_000, outputTokens: 0,
+      cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, estimated: true, streamed: false, statusCode: 200, durationMs: 1 };
+    store.insertRequest({ ...base, requestId: 'card', provider: 'anthropic', model: 'claude-opus-4-8' });
+    store.insertRequest({ ...base, requestId: 'mine', provider: 'openai', model: 'acme-evidence-model' });
+    const { setPriceOverride } = await import('../src/cost/overrides.ts');
+    setPriceOverride('acme-evidence-model', { kind: 'rate', input: '2', output: '4' });
+    const { previewReprice } = await import('../src/cost/reprice.ts');
+    const evidence = previewReprice(store).priceEvidence!;
+    assert.equal(evidence.localRateCardOnly, false);
+    assert.equal(evidence.declaredRows, 1);
+    assert.equal(evidence.sources.length, 2);
+    assert.equal(evidence.sourceKind, 'mixed');
+    assert.match(evidence.note, /1 of 2 rows take a price you set/);
+  } finally { store.close(); rmSync(home, { recursive: true, force: true }); }
+});

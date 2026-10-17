@@ -1023,6 +1023,19 @@ function declaredRate(o: Extract<PriceOverride, { kind: 'rate' }>): ModelRate {
   };
 }
 
+/** The rate with decimal companions for any it lacks, written from its own numbers. */
+function withExactCompanion(rate: ModelRate): ModelRate {
+  if (rate.exact !== undefined) return rate;
+  const exact: { input: string; output: string; cache_write_5m?: string; cache_write_1h?: string; cache_read?: string } = {
+    input: plainDecimal(rate.input),
+    output: plainDecimal(rate.output),
+  };
+  if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
+  if (rate.cache_write_1h !== undefined) exact.cache_write_1h = plainDecimal(rate.cache_write_1h);
+  if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
+  return { ...rate, exact };
+}
+
 /** A free (local) model: every rate is zero, cache rates included. */
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
@@ -1039,7 +1052,10 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);
-    if (target) return resolved(target.rate, 'user_declared', target.provider, declared.like);
+    // A card entry without decimal companions (a hand-written manifest may omit
+    // them) would leave a reprice with no exact replacement and roll it back
+    // (PR #146 review); the companion is the card's own stated numbers.
+    if (target) return resolved(withExactCompanion(target.rate), 'user_declared', target.provider, declared.like);
   }
 
   // 1) Exact id in the named provider — the price we're surest about.
