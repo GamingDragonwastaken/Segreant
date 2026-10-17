@@ -11,6 +11,10 @@ import {
 import { refreshMarketSource, refreshMarketSourceFrom } from '../src/market/refresh.ts';
 import { matchPrice, parseAider, parseArenaPage, parseLiteLLM, grantCommand } from '../src/market/sources.ts';
 
+// Everything this file writes (egress receipts, caches) goes to a scratch home,
+// never the developer's real ~/.segreant.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-market-home-'));
+
 function isolated<T>(fn: (home: string) => T): T {
   const previous = process.env.SEGREANT_HOME;
   const home = mkdtempSync(join(tmpdir(), 'segreant-market-'));
