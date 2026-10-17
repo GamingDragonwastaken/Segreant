@@ -672,16 +672,22 @@ export async function computeRealization(
     const scanned = !gitBudgetSpent();
     const survival = scanned
       ? await survivingLines(repoPath, a.hash, gitDeadlineMs, blameSinceSec, passHead)
-      : { added: 0, surviving: 0, measured: false };
+      : { added: 0, surviving: 0, measured: false, filesWithAdditions: 0 };
     const { added, surviving } = survival;
     const survivalRatio = added > 0 ? Math.min(1, surviving / added) : 0;
     if (!survival.measured) unmeasuredSurvival += 1;
     const isReverted = reverted.has(a.hash) || reverted.has(a.hash.slice(0, 7));
 
-    // proxy gates: proposals captured in this commit's attribution window
-    const addedByFile = scanned ? await addedLinesByFile(repoPath, a.hash) : new Map<string, string[]>();
-    const committedPaths = [...addedByFile.keys()];
+    // proxy gates: proposals captured in this commit's attribution window.
+    // The full diff is read only when there is a proposal to compare it with:
+    // every use below is gated on one. Reading it for every commit cost one
+    // serial `git show` per unit (1,126 of them, about 56 s on Windows, for a
+    // ledger with no captured proposals at all).
     const winProposals = store.proposalsInWindow(project, a.windowStartMs, a.windowEndMs);
+    const addedByFile = scanned && winProposals.length > 0
+      ? await addedLinesByFile(repoPath, a.hash)
+      : new Map<string, string[]>();
+    const committedPaths = [...addedByFile.keys()];
     const proposalCaptureCoverage: ProposalCaptureCoverage = !scanned || winProposals.length === 0
       // Without this unit's committed paths there is nothing to match a proposal
       // against, so capture coverage is unknown for the same reason an empty
@@ -791,7 +797,7 @@ export async function computeRealization(
         'committed',
         'supported',
         scanned
-          ? `${added} lines in ${committedPaths.length || a.filesChanged} files`
+          ? `${added} lines in ${survival.filesWithAdditions || a.filesChanged} files`
           : `${a.filesChanged} files; line counts unmeasured (scan budget exhausted)`,
       ),
       tested: gate('tested', signalPolarity(signals, 'tested'), 'CI/test signal'),

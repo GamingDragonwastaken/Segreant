@@ -32,6 +32,30 @@ import { C, color, usd, num, pct, gateGlyph, noteSource, printNotAGitRepo, print
 import { type Flags } from './flags.ts';
 import { retentionNotice } from './retention.ts';
 
+/**
+ * With no request recorded there is no AI spend for git history to be measured
+ * against. The value commands used to walk every commit of the last 90 days
+ * anyway (54-87 s on a real repository) and then print 0% realized, an RoI of
+ * 0 and $0.00 per commit: a zero where the honest answer is "nothing to
+ * measure yet". Returns true when it has answered for the caller.
+ */
+function answeredNothingSpent(store: Store, flags: Flags): boolean {
+  if (store.earliestRequestMs() !== null) return false;
+  const next = ['segreant scan --setup', 'segreant demo --serve'];
+  if (flags.json) {
+    printJson({ status: 'no_spend_recorded', measured: false, next });
+  } else {
+    const tty = process.stdout.isTTY ?? false;
+    console.log('');
+    console.log('  No AI spend is recorded yet, so there is nothing to measure against this repository.');
+    console.log(color(tty, C.gray, `  Import what your tools already logged:  ${next[0]}`));
+    console.log(color(tty, C.gray, `  Or see every figure on sample data:     ${next[1]}`));
+    console.log('');
+  }
+  store.close();
+  return true;
+}
+
 export async function cmdYield(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const limit = flags.limit ? Number(flags.limit) : 30;
@@ -42,6 +66,7 @@ export async function cmdYield(flags: Flags): Promise<void> {
     return;
   }
   const store = new Store(dbPath());
+  if (answeredNothingSpent(store, flags)) return;
   const report = await computeArtifactPersistence(store, repo, { limit, windowDays, persist: true });
 
   if (flags.json) {
@@ -150,6 +175,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   const limit = flags.limit ? Number(flags.limit) : undefined;
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
+  if (answeredNothingSpent(store, flags)) return;
   // Without --limit: every commit of the last 90 days, so the answer covers
   // the same period the spend does.
   const loaded = await loadRealization(store, repo, {
@@ -416,6 +442,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const windowDays = flags.window ? Number(flags.window) : 14;
   const cfg = loadConfig();
   const store = new Store(dbPath());
+  if (answeredNothingSpent(store, flags)) return;
   // The whole composition — realization, this project's resolved baseline, the
   // Lift source, the money inputs, RoI, the drift streams, sensitivity — is one
   // sequence in src/value/report.ts, shared with `/api/value`. The three inputs
@@ -782,6 +809,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
+  if (answeredNothingSpent(store, flags)) return;
   const loaded = await loadRealization(store, repo, {
     windowDays, persist: true, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
   });
