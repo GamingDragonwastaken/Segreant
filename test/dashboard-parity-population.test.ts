@@ -36,7 +36,7 @@
  * exactly there, so the state cannot become a place to file anything awkward.
  *
  * WHY THE DRAWER WAS NOT TAUGHT THIS STATE. `core/actions.ts` has a fallback
- * blocked reason that says "This does not have a screen yet", which is false
+ * blocked reason that says "This runs from the command line", which is false
  * for `not_applicable`. Teaching it the new state would have been a branch no
  * caller reaches: `actionCard()` is invoked with explicit ids in the six views
  * and none of the six commands added here is among them, so the drawer never

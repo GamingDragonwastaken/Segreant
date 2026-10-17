@@ -83,7 +83,7 @@ export function systemView(): Node {
       h('h1', { class: 'view-title', text: 'Settings' }),
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Local configuration, rate cards, maintenance, and the CLI/GUI parity map rendered from the same registry the GUI routes through.'
-        : 'Settings for this machine, plus an honest list of everything Segreant can do and whether this web interface can do it yet.' })),
+        : 'Settings for this machine, plus a list of everything Segreant can do and whether it is done here or from the command line.' })),
 
     // The settings come first: this is the page someone opens to change one.
     // The parity map used to lead, a 60-row table that made this the longest page
