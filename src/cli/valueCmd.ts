@@ -114,14 +114,24 @@ export async function cmdYield(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `  No commits older than ${windowDays}d yet — retention needs time to mature.`));
     console.log(color(tty, C.gray, '  Recent commits below are provisional (retention still settling).'));
   } else {
-    const yieldStr = m.aiYield === null ? 'n/a (no AI cost attributed)' : `${m.aiYield.toFixed(1)} retained lines / $`;
+    const withheld = m.aiYield === null && m.spendWindowTruncatedCommits > 0;
+    const yieldStr = m.aiYield !== null
+      ? `${m.aiYield.toFixed(1)} retained lines / $`
+      : withheld ? 'withheld (retention deleted the spend records)' : 'n/a (no AI cost attributed)';
     console.log(`  Retained lines / $  ${color(tty, C.green, yieldStr)}`);
     console.log(`  Effective spend     ${m.effectiveSpendRatio === null ? '—' : color(tty, m.effectiveSpendRatio > 0.5 ? C.green : C.yellow, pct(m.effectiveSpendRatio))}   ${color(tty, C.gray, 'of $ associated with retained artifacts')}`);
     console.log(`  Artifact retention   ${color(tty, m.survivalRatio > 0.7 ? C.green : C.yellow, pct(m.survivalRatio))}   ${color(tty, C.gray, `non-retained ${pct(m.churnRatio)}`)}`);
     console.log(`  Revert rate         ${color(tty, m.revertRate < 0.05 ? C.green : C.red, pct(m.revertRate))}`);
-    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, `${num(m.survivingLines)} retained lines`)}`);
+    const costScope = m.spendWindowTruncatedCommits > 0
+      ? `${num(m.survivingLines)} retained lines · excludes ${m.spendWindowTruncatedCommits} commit(s) with pruned spend`
+      : `${num(m.survivingLines)} retained lines`;
+    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, costScope)}`);
     if (m.costPerSurvivingLine !== null) {
       console.log(`  Cost / retained line ${usd(m.costPerSurvivingLine)}`);
+    }
+    if (m.spendWindowTruncatedCommits > 0) {
+      console.log(color(tty, C.yellow, `  ● ${m.spendWindowTruncatedCommits} matured commit(s) lost spend records to retention inside their window.`));
+      console.log(color(tty, C.yellow, '    What remains understates what that work cost, so they are left out of AI cost and every per-dollar figure.'));
     }
   }
 
@@ -136,11 +146,13 @@ export async function cmdYield(flags: Flags): Promise<void> {
     const yld = c.aiYield === null ? '—' : c.aiYield.toFixed(0);
     const status = c.reverted
       ? color(tty, C.red, 'REVERTED')
-      : c.maturing
+      : c.spendWindowTruncated !== false
+        ? color(tty, C.yellow, 'spend pruned')
+        : c.maturing
         ? color(tty, C.yellow, 'maturing')
         : color(tty, C.green, 'matured');
     console.log(
-      `  ${short}  ${age.padStart(4)}  ${usd(c.attributedCostUsd).padStart(9)}  ${String(c.linesAdded).padStart(6)}  ${surv.padStart(9)}  ${churn.padStart(5)}  ${yld.padStart(5)}   ${status}`,
+      `  ${short}  ${age.padStart(4)}  ${(c.spendWindowTruncated !== false ? 'pruned' : usd(c.attributedCostUsd)).padStart(9)}  ${String(c.linesAdded).padStart(6)}  ${surv.padStart(9)}  ${churn.padStart(5)}  ${yld.padStart(5)}   ${status}`,
     );
   }
   console.log('');

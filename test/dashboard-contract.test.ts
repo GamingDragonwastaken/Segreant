@@ -33,7 +33,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type http from 'node:http';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
@@ -41,6 +42,10 @@ import { createDashboardServer } from '../src/dashboard/server.ts';
 import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS, checkInterfaceShape, type DashboardPayloadContract } from '../src/dashboard/contracts.ts';
 import { DASHBOARD_INTERFACE_CONTRACTS, DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 } from '../src/dashboard/web/app/core/generated-payload-contract.ts';
 import { seedDemo } from '../src/demo/seed.ts';
+
+// Everything this file writes (egress receipts, caches) goes to a scratch home,
+// never the developer's real ~/.segreant.
+process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-contract-home-'));
 
 const API_SRC = join(
   import.meta.dirname,
