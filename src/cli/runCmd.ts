@@ -17,6 +17,7 @@ import { startOfLocalDay } from '../budget/guard.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
+import { createFirstSightWatcher } from '../cost/firstSight.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 import { capConfigured } from './launchCmd.ts';
@@ -104,10 +105,26 @@ export async function cmdStart(flags: Flags): Promise<void> {
   // started with `segreant launch` then finds no proxy, warns that it is
   // unmetered and goes direct, as it does whenever Segreant is not running.
   const demo = isDemo();
+  // A model priced by a guess sends one lookup to the public price list (never
+  // in the request's path). Rows are not rewritten: the user is told, and
+  // `segreant reprice` previews the correction.
+  const firstSight = createFirstSightWatcher({
+    enabled: () => cfg.pricing.lookupUnknownModels,
+    refresh: () => refreshPricing(cfg.pricing.manifestUrl),
+    onLearned: (models) => {
+      const names = models.map((m) => m.model).join(', ');
+      console.log(color(tty, C.green, `  ↻ the public price list knows ${names}: new requests are priced at its list price.`));
+      console.log(color(tty, C.gray, '    Requests already recorded keep their estimate until you run: segreant reprice (preview), then segreant reprice --apply'));
+    },
+    onFailed: (error) => {
+      console.log(color(tty, C.yellow, `  ↻ price lookup skipped: ${error}. Estimated prices stand; segreant pricing set <model> gives one yourself.`));
+    },
+  });
   const proxy = demo ? null : createProxyServer({
     store,
     config: cfg,
     onLog: (row) => {
+      if (row.pricing) firstSight.note(row.provider as Provider, row.model, row.pricing.rateMatchKind);
       if (row.statusCode === 429) {
         console.log(color(tty, C.red, `  ⛔ blocked  ${row.provider}/${row.model}  (budget)`));
         return;
@@ -190,6 +207,11 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
     line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: segreant budget --daily N)')}`);
   } else {
     line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
+  }
+  // The one request Segreant makes on its own: said where the user starts it.
+  if (cfg.pricing.lookupUnknownModels) {
+    line(color(tty, C.gray, 'Prices     a model missing from the rate card is looked up in the public price list'));
+    line(color(tty, C.gray, '           (a plain download; sends nothing about you). Off: segreant pricing --auto off'));
   }
   console.log('');
   line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));
@@ -297,14 +319,17 @@ export async function cmdPricing(flags: Flags): Promise<void> {
   // file — nothing about the user). `--auto off` turns it back off.
   if (flags['auto'] !== undefined) {
     const enable = flags['auto'] !== 'off' && flags['auto'] !== 'false';
-    const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable } }));
+    // One switch for both: the age-based refresh and the first-sight lookup.
+    const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable, lookupUnknownModels: enable } }));
     console.log('');
     if (enable) {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "segreant start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "segreant start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d,`);
+      console.log('    and a running Segreant looks up a model the card does not know the first time it sees it.');
       console.log(`  ${color(on, C.dim, `Source: ${updated.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
       console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: segreant pricing --auto off')}`);
     } else {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "segreant pricing --refresh".`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "segreant pricing --refresh",`);
+      console.log('    and a model the card does not know stays at an estimate until you refresh or run segreant pricing set.');
     }
     console.log('');
     return;
