@@ -320,6 +320,18 @@ interface ProxyRuntimeState {
  * check rather than cached, so a half-written file does not stick. A missing
  * file keeps the budget in force: deleting config.json never lifts a cap.
  */
+/**
+ * The persisted budget could not be read or validated. Requests fail closed
+ * while it lasts, but unlike a ledger failure it is not latched: repairing
+ * config.json resumes enforcement without a restart.
+ */
+export class BudgetConfigUnavailable extends Error {
+  constructor(cause: unknown) {
+    super(`budget configuration unavailable: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'BudgetConfigUnavailable';
+  }
+}
+
 export function liveBudget(
   config: SegreantConfig,
   opts: { intervalMs?: number; path?: () => string; load?: () => SegreantConfig } = {},
@@ -328,22 +340,31 @@ export function liveBudget(
   const path = opts.path ?? configPath;
   const load = opts.load ?? loadConfig;
   let checkedAt = -Infinity;
+  // No mtime is recorded up front: the file may have changed between the
+  // caller's loadConfig() and this point (start awaits a pricing refresh), so
+  // the first check always re-reads what is on disk now (PR #133 review).
   let seenMtimeMs: number | null = null;
-  let failure: unknown = null;
-  try { seenMtimeMs = statSync(path()).mtimeMs; } catch { seenMtimeMs = null; }
+  let failure: BudgetConfigUnavailable | null = null;
   return () => {
     const now = Date.now();
     if (now - checkedAt >= intervalMs) {
       checkedAt = now;
       let mtimeMs: number | null = null;
-      try { mtimeMs = statSync(path()).mtimeMs; } catch { mtimeMs = null; }
+      try {
+        mtimeMs = statSync(path()).mtimeMs;
+      } catch (error) {
+        // Only a missing file is a deletion, which keeps the cap in force.
+        // Any other stat failure (permissions, I/O) means the persisted
+        // budget cannot be verified, and that fails closed.
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') failure = new BudgetConfigUnavailable(error);
+      }
       if (mtimeMs !== null && (mtimeMs !== seenMtimeMs || failure !== null)) {
         try {
           config.budget = load().budget;
           seenMtimeMs = mtimeMs;
           failure = null;
         } catch (error) {
-          failure = error;
+          failure = new BudgetConfigUnavailable(error);
         }
       }
     }
@@ -498,9 +519,11 @@ async function handle(
   let budgetFailure = false;
   try {
     decision = guard.evaluate({ sessionId });
-  } catch {
+  } catch (error) {
     budgetFailure = true;
-    state.accountingFailure = true;
+    // A ledger or accounting failure latches; an unreadable or invalid
+    // config.json does not, so repairing the file resumes enforcement.
+    if (!(error instanceof BudgetConfigUnavailable)) state.accountingFailure = true;
     decision = {
       action: 'block',
       reason: 'budget_enforcement_unavailable',

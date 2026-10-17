@@ -4,6 +4,7 @@
  * gatherGuideFacts is exported for the CLI/dashboard guidance contract tests.
  */
 
+import { capBasisSpend } from '../budget/guard.ts';
 import { Store } from '../store/db.ts';
 import { loadConfig, mutateConfig, dbPath, configPath, isDemo } from '../config.ts';
 import { attributeCommits, isGitRepo } from '../git/correlate.ts';
@@ -245,8 +246,7 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
   const all = store.summary(0, now + 1000);
   const sum30 = store.summary(now - 30 * day, now + 1000);
   const outcomeSignals = store.countSignals();
-  const capBasisSpend30dUsd = store.economicSeries(now - 30 * day, now + 1000, day, !cfg.budget.capIncludesImported)
-    .reduce((a, s) => a + s.costUsd, 0);
+  const capBasis = capBasisSpend(store, cfg.budget, now - 30 * day, now + 1000);
   const realizationUnits = store.countRealizationUnits();
   // Read before the store closes: without it `requestsAllTime` is a count of
   // survivors presented as a count of everything (D-170).
@@ -264,7 +264,8 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
     requestsAllTime: all.requests,
     requestsRetention,
     spend30dUsd: sum30.costUsd,
-    capBasisSpend30dUsd,
+    capBasisSpend30dUsd: capBasis.usd,
+    capBasis: capBasis.basis,
     dailyCapUsd: cfg.budget.dailyUsd,
     outcomeSignals,
     realizationUnits,

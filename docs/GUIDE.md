@@ -165,6 +165,9 @@ Operations:
 ```
 segreant init                  Write default config + print setup steps
 segreant doctor                First-run health check — config, DB, proxy, caps, pricing
+segreant help [all]            The short list of commands; `help all` prints every
+                                command and flag
+segreant --version             Print the installed version
 segreant config                Show config and file paths      (--json)
 segreant features              List optional subsystems and their switches;
                                 features on|off <key> previews, --apply saves

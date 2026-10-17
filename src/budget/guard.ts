@@ -205,6 +205,25 @@ export function resolveEnforcedSpend(
 }
 
 /** One clause naming the basis, appended to whatever refusal or warning states the number. */
+/**
+ * Spend on the basis a cap governs, over [startMs, endMs), projected exactly
+ * as the guard projects it (resolveEnforcedSpend), with the number of requests
+ * behind it. The guide and the budget advisor read this rather than a series
+ * of their own: a separate series could say "no proxied spend" while the guard
+ * was blocking on it (review 4, F3).
+ */
+export function capBasisSpend(
+  store: Pick<Store, 'spendBetween'> & Partial<Pick<Store, 'exactSpendBetween'>>,
+  budget: Pick<BudgetConfig, 'capIncludesImported'>,
+  startMs: number,
+  endMs: number,
+): { usd: number; requests: number | null; basis: 'live_proxy' | 'all_observed' } {
+  const liveOnly = !budget.capIncludesImported;
+  const exact = typeof store.exactSpendBetween === 'function' ? store.exactSpendBetween(startMs, endMs, liveOnly) : null;
+  const resolved = resolveEnforcedSpend(exact, store.spendBetween(startMs, endMs, liveOnly));
+  return { usd: resolved.usd, requests: exact?.requestCount ?? null, basis: liveOnly ? 'live_proxy' : 'all_observed' };
+}
+
 export function describeSpendBasis(basis: SpendBasis): string {
   if (basis.enforcedAgainst === 'rate_card_float' && basis.exactResolvedUsd === null) {
     return 'Basis: local rate-card estimates, with no exact economic projection available.';
