@@ -229,7 +229,10 @@ test('PR #142 review: the closing line tells weak assurance apart from no winner
   assert.doesNotMatch(favoursNew, /does not show it/, 'must not contradict a proven verdict');
   assert.match(budgetClosingLine(false, { status: 'proven_dominant', action: 'keep_current' }), /current setting does better/);
   assert.match(budgetClosingLine(false, { status: 'undetermined' }), /this data does not show it/);
-  assert.match(budgetClosingLine(false, { status: 'undetermined' }, true), /already has this cap/, 'equal caps are not a missing proof (PR #142 review)');
+  assert.match(budgetClosingLine(false, { status: 'undetermined' }, { softRecommended: 5, softMatches: true }), /already has this cap and soft warning/, 'equal caps are not a missing proof (PR #142 review)');
+  const softOnly = budgetClosingLine(false, { status: 'undetermined' }, { softRecommended: 5, softMatches: false });
+  assert.match(softOnly, /segreant budget --soft 5\.00/, 'a different soft warning is a change, not "no change" (PR #145 review)');
+  assert.doesNotMatch(softOnly, /No change needed/);
 });
 
 test('a long-running flag with no command is reported, not swallowed by the home view (PR #142 review)', async () => {
