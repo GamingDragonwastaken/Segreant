@@ -39,8 +39,10 @@ another.** Most defects in this repo have been a version of that collapse.
    explicit scope. The GUI talks to the local dashboard only — no CDN, fonts, or
    analytics — but this is not a machine-wide firewall or provider-retention
    guarantee.
-7. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
-   devDependencies. Adding a runtime dependency is a decision, not a convenience.
+7. **Zero runtime dependencies.** `dependencies` is empty. The devDependencies
+   are `typescript` and `@types/node` for the build, plus `playwright` and
+   `@axe-core/playwright` for the browser suites; none of them ship. Adding a
+   runtime dependency is a decision, not a convenience.
 8. **The repo is public.** Scan for credentials, personal data, and local
    filesystem paths before every push.
 

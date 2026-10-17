@@ -210,6 +210,12 @@ Usually the `/v1` double-version gotcha: if your client already appends
 `/chat/completions`, point it at `http://localhost:8090` **without** `/v1`. See
 [INTEGRATIONS.md](INTEGRATIONS.md).
 
+**`egress` refuses `--path-prefix /v1/` in Git Bash on Windows.**
+Git Bash rewrites any argument that starts with `/` into a Windows path, so
+Segreant receives `C:/Program Files/Git/v1/` and refuses it (the refusal names
+the value it received). Put `MSYS_NO_PATHCONV=1` in front of the command, or run
+it from PowerShell or cmd, where `/v1/` arrives unchanged.
+
 **`doctor` says the rate card is stale.**
 `segreant pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of

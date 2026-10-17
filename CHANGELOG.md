@@ -11,6 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **An egress rule refused in Git Bash now says why.** Git Bash rewrites `--path-prefix /v1/` into `C:/Program Files/Git/v1/` before Segreant sees it, and the refusal only said the prefix was malformed. It now shows the value it received and says to put `MSYS_NO_PATHCONV=1` in front of the command or use PowerShell or cmd. The FAQ has the same entry.
 - **A cap set from the terminal now stops a running proxy.**
   - **Before:** `segreant budget --daily N` printed "Budget updated", but a proxy that was already running kept forwarding until it was restarted. Only a cap saved in the dashboard took effect at once. A budget made invalid by hand while the proxy ran was not noticed either. Found by an end-to-end test against a local stub provider: two requests over a $0.05 cap went through.
   - **Now:** the proxy re-reads the budget within half a second of `config.json` changing, whoever changed it. While the file is invalid, every request is refused without being sent; deleting the file keeps the cap in force.
