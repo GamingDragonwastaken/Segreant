@@ -36,3 +36,25 @@ for (const command of ['realize', 'roi', 'frontier', 'yield']) {
     }
   });
 }
+
+test('a path that is not a repository is reported as such, even on an empty ledger', () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-nospend-'));
+  try {
+    const missing = join(home, 'no-such-repo');
+    let status = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, ['bin/segreant.mjs', 'realize', '--repo', missing], {
+        cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, SEGREANT_HOME: home, NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      const e = error as { status: number; stdout: string; stderr: string };
+      status = e.status;
+      output = `${e.stdout}${e.stderr}`;
+    }
+    assert.equal(status, 1);
+    assert.match(output, /Not a git repository/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

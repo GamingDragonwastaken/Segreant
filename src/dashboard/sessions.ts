@@ -152,9 +152,15 @@ export function buildSessions(
     sessions: 0, tools: 0, refusedReplies: 0, failedReplies: 0, unsessionedRequests: 0, unsessionedCostUsd: 0,
   };
   const tools = new Set<string>();
+  // Spend is added once, as whole nanodollars, and every total below is read
+  // from these integers. Summing floats in different groupings let the
+  // outcome breakdown round to 1,440 µ$ against a 1,439 µ$ total (PR #135 review).
+  const nano = (usd: number): number => Math.round(usd * 1e9);
+  let totalNano = 0;
+  let unsessionedNano = 0;
   for (const r of rows) {
     totals.requests += 1;
-    totals.costUsd += r.costUsd;
+    totalNano += nano(r.costUsd);
     totals.inputTokens += r.inputTokens;
     totals.outputTokens += r.outputTokens;
     totals.cacheReadTokens += r.cacheReadTokens;
@@ -172,7 +178,7 @@ export function buildSessions(
     }
     if (!r.sessionId) {
       totals.unsessionedRequests += 1;
-      totals.unsessionedCostUsd += r.costUsd;
+      unsessionedNano += nano(r.costUsd);
       continue;
     }
     let acc = sessions.get(r.sessionId);
@@ -185,6 +191,8 @@ export function buildSessions(
     add(acc.project, r.projectCanonical ?? r.project, r.costUsd + 1e-12);
     add(acc.model, r.model, r.costUsd + 1e-12);
   }
+  totals.costUsd = totalNano / 1e9;
+  totals.unsessionedCostUsd = unsessionedNano / 1e9;
   totals.sessions = sessions.size;
   totals.tools = tools.size;
   buckets.forEach((b, i) => {
@@ -259,16 +267,17 @@ export function buildSessions(
       .map((m) => ({ at: sliceOf(m.at), kind: m.kind }))
       .filter((m) => { const k = `${m.at}:${m.kind}`; if (seen.has(k)) return false; seen.add(k); return true; });
     const commits = (observed.get(sessionId) ?? []).sort((a, b) => a.tsEpochMs - b.tsEpochMs).map(commitOf);
-    const cost = acc.rows.reduce((s, r) => s + r.costUsd, 0);
+    const costNano = acc.rows.reduce((s, r) => s + nano(r.costUsd), 0);
+    const cost = costNano / 1e9;
     // Exact (fractional) microdollars here; each category is rounded once, at
     // the end, against the rounded total. Rounding every session first let a
     // thousand $0.0014008 sessions add up to $1.401 of outcomes for $1.4008 of
     // spend (review 4, F1).
     if (commits.length === 0) {
-      noCommitMicros += cost * 1e6;
+      noCommitMicros += costNano / 1000;
       outcomes.noCommit.sessions += 1;
     } else {
-      const share = (cost * 1e6) / commits.length;
+      const share = costNano / 1000 / commits.length;
       for (const c of commits) {
         outcomeMicros[c.outcome] += share;
         outcomes[c.outcome].commits += 1;
@@ -307,11 +316,18 @@ export function buildSessions(
     ['noCommit', noCommitMicros],
   ];
   const whole = parts.map(([k, v]) => ({ k, floor: Math.floor(v), rem: v - Math.floor(v) }));
-  let left = Math.round(parts.reduce((s, [, v]) => s + v, 0)) - whole.reduce((s, w) => s + w.floor, 0);
+  // The target is the sessioned spend, rounded once from the exact integer sum.
+  let left = Math.round((totalNano - unsessionedNano) / 1000) - whole.reduce((s, w) => s + w.floor, 0);
   for (const w of [...whole].sort((a, b) => b.rem - a.rem)) {
     if (left <= 0) break;
     w.floor += 1;
     left -= 1;
+  }
+  // Float error in the fractional parts can leave the floors a microdollar
+  // over the target; take it back from the smallest remainders.
+  for (const w of [...whole].sort((a, b) => a.rem - b.rem)) {
+    if (left >= 0) break;
+    if (w.floor > 0) { w.floor -= 1; left += 1; }
   }
   for (const w of whole) {
     if (w.k === 'noCommit') outcomes.noCommit.costUsd = w.floor / 1e6;
