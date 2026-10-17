@@ -54,6 +54,8 @@ export interface GuideFacts {
    * guide falls back to `spend30dUsd` as it always did.
    */
   capBasisSpend30dUsd?: number;
+  /** Which spend that is: proxied only, or all observed when imported spend is opted in. */
+  capBasis?: 'live_proxy' | 'all_observed';
   dailyCapUsd: number | null;
   /** Outcome signals ever recorded — `report` and `exec` both write these. */
   outcomeSignals: number;
@@ -172,7 +174,9 @@ export function buildGuide(f: GuideFacts): GuideReport {
     why: 'Metering without enforcement is a report, not governance. The proxy can actually say no.',
     notice:
       capBasisSpend > 0
-        ? 'The recommendation uses your spend through the proxy, which is what a cap governs.'
+        ? f.capBasis === 'all_observed'
+          ? 'The recommendation uses all observed spend, imported included, which is what your cap counts.'
+          : 'The recommendation uses your spend through the proxy, which is what a cap governs.'
         : f.spend30dUsd > 0
           ? 'Your spend so far was imported from agent logs, and a cap governs requests through the proxy. A recommendation needs a few days of proxied requests; set a cap by hand until then.'
           : 'Set a hard cap and optional soft threshold for governed spend.',

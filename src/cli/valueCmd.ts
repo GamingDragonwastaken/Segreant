@@ -41,6 +41,10 @@ import { retentionNotice } from './retention.ts';
  */
 function answeredNothingSpent(store: Store, flags: Flags): boolean {
   if (store.earliestRequestMs() !== null) return false;
+  // No surviving request is not "nothing spent" once retention has pruned
+  // rows or a realization snapshot is stored: the stored report is the answer
+  // then, and the command must reach it (review 4, F2).
+  if (store.retentionFloor().requestsPrunedBeforeMs !== null || store.countRealizationUnits() > 0) return false;
   const next = ['segreant scan --setup', 'segreant demo --serve'];
   if (flags.json) {
     printJson({ status: 'no_spend_recorded', measured: false, next });
