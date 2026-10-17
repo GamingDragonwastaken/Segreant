@@ -819,6 +819,21 @@ function wrapText(text: string, width: number): string[] {
   return lines;
 }
 
+/**
+ * A part's share of a whole, as a percentage label. Only the whole itself
+ * reads 100 and only nothing reads 0: rounding 99.6% up to 100% told the user
+ * the comparison covered everything when it did not (PR #142 review).
+ */
+export function coveragePercent(part: number, whole: number): string {
+  if (part >= whole) return '100';
+  if (part <= 0) return '0';
+  const share = (part / whole) * 100;
+  if (share < 0.1) return '<0.1';
+  if (share < 1) return share.toFixed(1);
+  if (share >= 99.5) return Math.min(99.9, Math.floor(share * 10) / 10).toFixed(1);
+  return String(Math.round(share));
+}
+
 /** `segreant billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
 export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
@@ -925,8 +940,7 @@ export async function cmdBilling(flags: Flags): Promise<void> {
           if (metered !== null && metered.onRouteMicros !== run.localCapturedMicros) {
             console.log('                coverage withheld: the ledger has changed for that period since this comparison was recorded; re-run segreant billing reconcile');
           } else if (metered !== null && metered.allMicros > 0) {
-            const share = (run.localCapturedMicros / metered.allMicros) * 100;
-            console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(metered.allMicros)} Segreant metered across all providers in that period (${share < 1 ? share.toFixed(1) : Math.round(share)}%)`);
+            console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(metered.allMicros)} Segreant metered across all providers in that period (${coveragePercent(run.localCapturedMicros, metered.allMicros)}%)`);
           }
           console.log('                Details: segreant billing reconcile');
         }
