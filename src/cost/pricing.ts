@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkS
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
+import { DEFAULT_PRICE_LIST_URL } from '../egress/policy.ts';
 import { dirname, join } from 'node:path';
 import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
@@ -444,8 +445,7 @@ export type PricingRefreshFailureCode =
  * scraping provider pricing pages (brittle HTML that needs a parser which
  * itself rots). The GET fetches a public file and sends nothing about the user.
  */
-export const DEFAULT_MANIFEST_URL =
-  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
+export const DEFAULT_MANIFEST_URL = DEFAULT_PRICE_LIST_URL;
 
 /** LiteLLM providers we carry, mapped onto our table's provider keys. */
 const LITELLM_PROVIDER_MAP: Record<string, string> = {
