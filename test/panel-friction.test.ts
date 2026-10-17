@@ -187,3 +187,34 @@ test('PR #142 review: connect api warns about a doubled version segment', async 
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('PR #142 review: coverage is withheld once the ledger has moved since the comparison was recorded', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-coverage-moved-'));
+  try {
+    assert.equal((await cli(['demo'], home, 120_000)).code, 0);
+    const before = await cli(['billing', '--demo'], home);
+    assert.match(before.stdout, /covers \$/);
+    // Prune into the recorded period: the comparison's saved local figure no
+    // longer matches what the ledger holds now.
+    const { Store } = await import('../src/store/db.ts');
+    const store = new Store(join(home, 'demo.db'));
+    const run = store.reconciliationRuns(1)[0]!.result;
+    store.prune(run.periodStartMs + 3 * 86_400_000);
+    store.close();
+    const after = await cli(['billing', '--demo'], home);
+    assert.doesNotMatch(after.stdout, /covers \$/, 'no share mixing a recorded figure with a live one');
+    assert.match(after.stdout, /coverage withheld: the ledger has changed/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('PR #142 review: the closing line tells weak assurance apart from no winner', async () => {
+  const { budgetClosingLine } = await import('../src/cli/valueCmd.ts');
+  assert.match(budgetClosingLine(true, null), /Re-run with --apply/);
+  const favoursNew = budgetClosingLine(false, { status: 'proven_dominant', action: 'apply_recommended' });
+  assert.match(favoursNew, /favours the new cap, but its inputs are not verified enough/);
+  assert.doesNotMatch(favoursNew, /does not show it/, 'must not contradict a proven verdict');
+  assert.match(budgetClosingLine(false, { status: 'proven_dominant', action: 'keep_current' }), /current setting does better/);
+  assert.match(budgetClosingLine(false, { status: 'undetermined' }), /this data does not show it/);
+});

@@ -921,10 +921,12 @@ export async function cmdBilling(flags: Flags): Promise<void> {
           // actually covers: one project's bill is not the month's spend.
           // Same day quantization as the comparison itself, so the share
           // cannot exceed the whole (PR #142 review).
-          const meteredMicros = store.meteredMicrosLikeReconciliation(run.periodStartMs, run.periodEndMs);
-          if (meteredMicros !== null && meteredMicros > 0) {
-            const share = Math.min(100, (run.localCapturedMicros / meteredMicros) * 100);
-            console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(meteredMicros)} Segreant metered across all providers in that period (${share < 1 ? share.toFixed(1) : Math.round(share)}%)`);
+          const metered = store.meteredMicrosLikeReconciliation(run.periodStartMs, run.periodEndMs, run.declaredScopeId);
+          if (metered !== null && metered.onRouteMicros !== run.localCapturedMicros) {
+            console.log('                coverage withheld: the ledger has changed for that period since this comparison was recorded; re-run segreant billing reconcile');
+          } else if (metered !== null && metered.allMicros > 0) {
+            const share = (run.localCapturedMicros / metered.allMicros) * 100;
+            console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(metered.allMicros)} Segreant metered across all providers in that period (${share < 1 ? share.toFixed(1) : Math.round(share)}%)`);
           }
           console.log('                Details: segreant billing reconcile');
         }
