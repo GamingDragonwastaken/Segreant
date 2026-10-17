@@ -237,9 +237,14 @@ contractual discount, credit, tax, or reconciliation result.
 **How does pricing stay correct as new models launch?**
 Three layers, in order: the refreshed community feed above (170+ models across
 Anthropic, OpenAI, Google); substring family-matching when an exact name is
-missing (a new `-preview` variant prices as its family); and a conservative
-flat fallback that marks every such request `~est` — surfaced in `doctor` as
-"% of spend on estimated rates", so pricing drift is measured, never silent.
+missing (a new `-preview` variant prices as its family); and a flat mid-tier
+fallback ($3 in, $15 out per million tokens) that marks every such request
+`~est` — surfaced in `doctor` as "% of spend on estimated rates", so pricing
+drift is measured, never silent. The fallback is not an upper bound: about a
+third of the models on the card cost more, up to $30 / $180. A premium model
+the card does not know yet reads lower than it costs, and so does its weight
+against a budget cap. Refresh the card (`segreant pricing --refresh`) when you
+start using a new model.
 
 **Nothing shows under value / RoI.**
 Attach a git repo (`--repo .`) and let the maturity window elapse, or report outcomes

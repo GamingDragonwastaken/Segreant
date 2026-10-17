@@ -226,7 +226,7 @@ function cmdHelp(): void {
                           --include-imported on|off: whether imported subscription
                           spend counts toward cap ENFORCEMENT (default off — the
                           cap governs live proxy traffic, the spend it can block)
-    budget --recommend    Suggest a value-aware budget from usage + realized value
+    budget --recommend    Suggest a value-aware budget from usage + realized value (--detail: full decision record)
                           (--repo <path> for value-based, --apply to write, --json)
     budget --control      Evaluate one bounded autonomous daily-cap control step
                           from a versioned JSON policy (--policy <file>, --repo <path>,
@@ -322,12 +322,21 @@ async function main(): Promise<void> {
   // Bare `segreant` opens the home view, not the reference: what was spent this
   // month, what stayed in the code, and the next step (or, on a new machine, the
   // one command that reads the logs). `guide` keeps the full checklist.
-  const cmd = argv[0] ?? 'home';
+  // Flags with no command (`segreant --demo`) are flags for the home view; the
+  // help text says --demo works on any read command, and bare `segreant` is one.
+  // --help/-h and --version/-v stay commands of their own.
+  // Only long options qualify: parseFlags reads `--name` alone, so a single-dash
+  // token here would be swallowed as a positional and `segreant -bogus` would
+  // render the home view and exit 0 (PR #142 review).
+  const flagsOnly = argv[0] !== undefined && argv[0].startsWith('--')
+    && !['--help', '--version', '--'].includes(argv[0]);
+  const cmd = flagsOnly ? 'home' : argv[0] ?? 'home';
+  const rest = flagsOnly ? argv : argv.slice(1);
   // `exec` wraps another command: everything after the bare `--` belongs to the
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
   const wraps = cmd === 'exec' || cmd === 'launch';
-  const tracked = trackFlags(parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : argv.slice(1)));
+  const tracked = trackFlags(parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : rest));
   const flags = tracked.flags;
   const wrapped = wraps && sep !== -1 ? argv.slice(sep + 1) : [];
 

@@ -236,6 +236,17 @@ export function describeSpendBasis(basis: SpendBasis): string {
   return `Basis: ${which}, a lower bound — ${basis.unresolvedRequests} of ${basis.requestCount} requests in this window are unpriced.`;
 }
 
+/**
+ * Spend beside the cap it crossed. Two decimals hid the overshoot: $5.004
+ * against a $5 cap read "$5.00 of $5.00". When the two would round alike but
+ * differ, add digits (to the microdollar) until they do not.
+ */
+export function spendBesideCap(spendUsd: number, capUsd: number): string {
+  let digits = 2;
+  while (digits < 6 && spendUsd !== capUsd && spendUsd.toFixed(digits) === capUsd.toFixed(digits)) digits += 1;
+  return '$' + spendUsd.toFixed(digits);
+}
+
 export function startOfLocalDay(now: number = Date.now()): number {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
@@ -364,7 +375,7 @@ export class BudgetGuard {
         ...base,
         action: 'block',
         reason:
-          `Daily budget reached: $${daySpend.toFixed(2)} of $${dailyLimit!.toFixed(2)} cap` +
+          `Daily budget reached: ${spendBesideCap(daySpend, dailyLimit!)} of $${dailyLimit!.toFixed(2)} cap` +
           (liveOnly ? ' (live proxy spend; imported spend excluded). ' : ' (includes imported spend). ') +
           describeSpendBasis(day.basis),
       };
@@ -373,7 +384,7 @@ export class BudgetGuard {
       return {
         ...base,
         action: 'block',
-        reason: `Session budget reached: $${session.usd.toFixed(2)} of $${cfg.sessionUsd!.toFixed(2)} cap. `
+        reason: `Session budget reached: ${spendBesideCap(session.usd, cfg.sessionUsd!)} of $${cfg.sessionUsd!.toFixed(2)} cap. `
           + describeSpendBasis(session.basis),
       };
     }

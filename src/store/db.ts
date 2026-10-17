@@ -63,7 +63,7 @@ export interface ObservedCommit {
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
-import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } from '../billing/reconcile.ts';
+import { isOnDeclaredRoute, quantizeLocalDays, type ReconciliationCoverage, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
 import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/mapping.ts';
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
@@ -2984,6 +2984,31 @@ export class Store {
       // (D-173).
       this.retentionFloor().requestsPrunedBeforeMs,
     );
+  }
+
+  /**
+   * Everything Segreant metered in [startMs, endMs), every provider and route,
+   * under the reconciliation's own day quantization, so a comparison's local
+   * figure can be stated as a share of it without the two rounding apart.
+   * Null when an amount cannot be quantized (a non-USD exact amount).
+   */
+  meteredMicrosLikeReconciliation(startMs: number, endMs: number, declaredScopeId: string): { allMicros: number; onRouteMicros: number } | null {
+    // Both figures from one read of the ledger as it is now. The on-route part
+    // is what the comparison recorded as its local figure; when it no longer
+    // matches the record, the ledger has moved (a prune, a repricing) and a
+    // share of the live total would mix two snapshots (PR #142 review).
+    const rows = this.reconciliationRequestsInRange(startMs, endMs);
+    const inPeriod = (row: RequestRow) => row.tsEpochMs >= startMs && row.tsEpochMs < endMs;
+    const all = quantizeLocalDays(rows, inPeriod);
+    const onRoute = quantizeLocalDays(rows, (row) => inPeriod(row) && isOnDeclaredRoute(row, declaredScopeId));
+    if ('refusal' in all || 'refusal' in onRoute) return null;
+    const sum = (q: typeof all) => {
+      if ('refusal' in q) return 0;
+      let total = 0;
+      for (const day of q.localByDay.values()) total += day.micros;
+      return total;
+    };
+    return { allMicros: sum(all), onRouteMicros: sum(onRoute) };
   }
 
   /** Persist a computed reconciliation as an immutable derived record. */
