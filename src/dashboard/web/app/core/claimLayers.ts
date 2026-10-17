@@ -83,17 +83,25 @@ export function meteredBasisLine(basis: Basis | undefined): string {
         ? "list prices (some models at the nearest model's price)"
         : "list prices: each model's own published price";
     default: {
-      const weak = basis.cohorts.filter((c) => c.id === 'user_declared' || ((c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005));
-      // With no weak part above a cent, the "estimated" headline comes from the
+      const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+      // A declared price IS the model's own rate, the one its operator set, so
+      // it is named on its own rather than counted as "priced without" a rate
+      // (PR #146 review). It still makes the total an estimate: it is not a
+      // published list price.
+      const declared = basis.cohorts.find((c) => c.id === 'user_declared');
+      // With no weak or declared part, the "estimated" headline comes from the
       // mix itself (sample rows beside priced ones, or unpriced requests). It
       // used to print "0% priced without the model's own rate ()".
-      if (weak.length === 0) {
+      if (weak.length === 0 && !declared) {
         if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the price list';
         if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'list prices; some requests have no price';
         return "API list price from the rate card";
       }
-      const share = basis.totalUsd > 0 ? Math.round((weak.reduce((s, c) => s + c.costUsd, 0) / basis.totalUsd) * 100) : 0;
-      return `estimated: ${share}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`;
+      const pct = (usd: number): number => (basis.totalUsd > 0 ? Math.round((usd / basis.totalUsd) * 100) : 0);
+      const parts: string[] = [];
+      if (weak.length > 0) parts.push(`${pct(weak.reduce((s, c) => s + c.costUsd, 0))}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`);
+      if (declared) parts.push(`${pct(declared.costUsd)}% at prices you set`);
+      return `estimated: ${parts.join('; ')}`;
     }
   }
 }
