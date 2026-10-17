@@ -316,7 +316,11 @@ test('segreant budget --recommend shows the decision review-only, and --apply is
     } finally {
       seed.close();
     }
-    const preview = await runCli(['budget', '--recommend'], dbPath);
+    // The default output is a plain verdict; the record asserted here is --detail.
+    const plain = await runCli(['budget', '--recommend'], dbPath);
+    assert.match(plain.stdout, /segreant budget --recommend --detail/);
+    assert.doesNotMatch(plain.stdout, /minimax regret/i);
+    const preview = await runCli(['budget', '--recommend', '--detail'], dbPath);
     assert.equal(preview.code, 0, preview.stderr);
     assert.match(preview.stdout, /Recommended daily cap/);
     assert.match(preview.stdout, /Decision/);

@@ -105,3 +105,48 @@ test('flags with no command apply to the home view: segreant --demo', async () =
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('billing status reports the recorded comparison and how much of the period it covers', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-billing-status-'));
+  try {
+    assert.equal((await cli(['demo'], home, 120_000)).code, 0);
+    const run = await cli(['billing', '--demo'], home);
+    assert.equal(run.code, 0, run.stderr);
+    assert.doesNotMatch(run.stdout, /not yet scope-comparable/);
+    assert.match(run.stdout, /1 recorded comparison\(s\); latest: proj_demo_sample/);
+    assert.match(run.stdout, /covers \$[\d.]+ of the \$[\d.]+ Segreant metered across all providers in that period \(\d+%\)/);
+    const runs = await cli(['alloc', 'runs', '--demo'], home);
+    assert.match(runs.stdout, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}Z → \d{4}-\d{2}-\d{2} \d{2}:\d{2}Z \(end exclusive\)/,
+      'a split that does not start at midnight keeps its times');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('connect api says where requests go and how to change it', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-connect-api-'));
+  try {
+    const run = await cli(['connect', 'api'], home);
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /Segreant forwards these requests to https:\/\/api\.openai\.com/);
+    assert.match(run.stdout, /"upstreams": \{ "openai": "<base URL>" \}/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('budget --recommend gives a plain verdict; the full decision record is behind --detail', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-budget-verdict-'));
+  try {
+    assert.equal((await cli(['demo'], home, 120_000)).code, 0);
+    const plain = await cli(['budget', '--recommend', '--demo'], home, 120_000);
+    assert.equal(plain.code, 0, plain.stderr);
+    assert.match(plain.stdout, /Is \$[\d.]+ better than (your current \$[\d.]+|having no cap)\?|On this evidence/);
+    assert.doesNotMatch(plain.stdout, /claim:budget:cap:input|DAL-\d|Minimax regret/, 'no internal claim ids by default');
+    assert.match(plain.stdout, /segreant budget --recommend --detail/);
+    const detail = await cli(['budget', '--recommend', '--demo', '--detail'], home, 120_000);
+    assert.match(detail.stdout, /Decision — budget-cap:daily/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

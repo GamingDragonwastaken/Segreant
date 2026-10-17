@@ -128,7 +128,8 @@ segreant team push --url <u>   Cross-machine: sign + push this window's per-proj
                                 <name>, --json)
 segreant budget --recommend    Evidence-limited cap recommendation from usage +
                                 realized value (applies a cap only; no routing or
-                                budget reallocation)
+                                budget reallocation); --detail prints the full
+                                decision record behind the verdict
 segreant alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
                                 Deliver to your webhook: --set-webhook <url>, then --notify

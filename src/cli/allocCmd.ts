@@ -168,7 +168,14 @@ export function cmdAlloc(flags: Flags): void {
       console.log('');
       if (runs.length === 0) console.log(color(tty, C.gray, '  No recorded splits. Record one: segreant alloc run --from <ISO> --to <ISO> --apply'));
       for (const r of runs) {
-        const period = `${new Date(r.result.periodStartMs).toISOString().slice(0, 10)} – ${new Date(r.result.periodEndMs).toISOString().slice(0, 10)}`;
+        // A bound that is not midnight UTC keeps its time: printing the date
+        // alone made a split ending at 06:48 read as covering the whole day,
+        // and re-running those dates gave a different total.
+        const bound = (ms: number) => {
+          const iso = new Date(ms).toISOString();
+          return iso.slice(11, 19) === '00:00:00' ? iso.slice(0, 10) : `${iso.slice(0, 10)} ${iso.slice(11, 16)}Z`;
+        };
+        const period = `${bound(r.result.periodStartMs)} → ${bound(r.result.periodEndMs)} (end exclusive)`;
         const share = r.result.totalMicros > 0 ? `${((r.result.allocatedMicros / r.result.totalMicros) * 100).toFixed(1)}% allocated` : 'nothing to allocate';
         console.log(`  ${r.allocationRunId}  ${period}  ${displayUsd(r.result.totalMicros)}  ${color(tty, C.gray, share)}`);
       }
