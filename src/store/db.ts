@@ -1581,16 +1581,19 @@ export class Store {
   }
 
   /** Health counts for governance alerts: blocked (429) requests and estimated-priced spend. */
-  healthStats(startMs: number, endMs: number): { blocked: number; estimatedCostUsd: number; totalCostUsd: number } {
+  healthStats(startMs: number, endMs: number): { blocked: number; estimatedCostUsd: number; declaredCostUsd: number; totalCostUsd: number } {
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END),0) AS blocked,
                 COALESCE(SUM(CASE WHEN estimated = 1 THEN cost_usd ELSE 0 END),0) AS estCost,
+                COALESCE(SUM(CASE WHEN estimated = 0 AND cost_basis = 'user_declared_price' THEN cost_usd ELSE 0 END),0) AS declaredCost,
                 COALESCE(SUM(cost_usd),0) AS total
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
       )
-      .get(startMs, endMs) as { blocked: number; estCost: number; total: number };
-    return { blocked: row.blocked, estimatedCostUsd: row.estCost, totalCostUsd: row.total };
+      .get(startMs, endMs) as { blocked: number; estCost: number; declaredCost: number; total: number };
+    // A declared price is resolved (so `estimated` is 0 and a reprice can write
+    // it) but it is not a list price; claim support counts it apart (PR #146 review).
+    return { blocked: row.blocked, estimatedCostUsd: row.estCost, declaredCostUsd: row.declaredCost, totalCostUsd: row.total };
   }
 
   /**

@@ -123,7 +123,10 @@ export async function cmdStart(flags: Flags): Promise<void> {
     refresh: () => refreshPricing(cfg.pricing.manifestUrl),
     onLearned: (models) => {
       const names = models.map((m) => m.model).join(', ');
-      console.log(color(tty, C.green, `  ↻ the public price list knows ${names}: new requests are priced at its list price.`));
+      // Named from the source the refresh read: an operator may point
+      // pricing.manifestUrl at their own card (PR #146 review).
+      const source = cfg.pricing.manifestUrl === DEFAULT_MANIFEST_URL ? 'the public price list' : `your price source (${cfg.pricing.manifestUrl})`;
+      console.log(color(tty, C.green, `  ↻ ${source} now prices ${names}: new requests use that price.`));
       console.log(color(tty, C.gray, '    Requests already recorded keep their estimate until you run: segreant reprice (preview), then segreant reprice --apply'));
     },
     onFailed: (error) => {

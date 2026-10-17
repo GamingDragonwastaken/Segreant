@@ -224,7 +224,8 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
     // in the browser, which answered `complete` for a window with no spend in it.
     claimSupport: meteredClaimSupport({
       totalCostUsd: pricingWindow.totalCostUsd,
-      estimatedCostUsd: pricingWindow.estimatedCostUsd,
+      // Prices you set are not list prices, so they never count as list support.
+      estimatedCostUsd: pricingWindow.estimatedCostUsd + pricingWindow.declaredCostUsd,
       retention,
     }),
     retention,
@@ -650,7 +651,7 @@ function buildStatement(store: Store, raw: string | null, top: number | null): S
         requests: summary.requests,
         claimSupport: meteredClaimSupport({
           totalCostUsd: pricingWindow.totalCostUsd,
-          estimatedCostUsd: pricingWindow.estimatedCostUsd,
+          estimatedCostUsd: pricingWindow.estimatedCostUsd + pricingWindow.declaredCostUsd,
           retention,
         }),
         basis,
