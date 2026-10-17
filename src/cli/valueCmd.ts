@@ -39,8 +39,12 @@ import { retentionNotice } from './retention.ts';
  * 0 and $0.00 per commit: a zero where the honest answer is "nothing to
  * measure yet". Returns true when it has answered for the caller.
  */
-function answeredNothingSpent(store: Store, flags: Flags): boolean {
+async function answeredNothingSpent(store: Store, flags: Flags, repo: string): Promise<boolean> {
   if (store.earliestRequestMs() !== null) return false;
+  // A path that is not a repository is the user's real problem, and the
+  // command's own check reports it with a failing status; answering "nothing
+  // spent" first hid that behind exit 0 (PR #131 review).
+  if (!(await isGitRepo(repo))) return false;
   // No surviving request is not "nothing spent" once retention has pruned
   // rows or a realization snapshot is stored: the stored report is the answer
   // then, and the command must reach it (review 4, F2).
@@ -70,7 +74,7 @@ export async function cmdYield(flags: Flags): Promise<void> {
     return;
   }
   const store = new Store(dbPath());
-  if (answeredNothingSpent(store, flags)) return;
+  if (await answeredNothingSpent(store, flags, repo)) return;
   const report = await computeArtifactPersistence(store, repo, { limit, windowDays, persist: true });
 
   if (flags.json) {
@@ -179,7 +183,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   const limit = flags.limit ? Number(flags.limit) : undefined;
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
-  if (answeredNothingSpent(store, flags)) return;
+  if (await answeredNothingSpent(store, flags, repo)) return;
   // Without --limit: every commit of the last 90 days, so the answer covers
   // the same period the spend does.
   const loaded = await loadRealization(store, repo, {
@@ -446,7 +450,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const windowDays = flags.window ? Number(flags.window) : 14;
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  if (answeredNothingSpent(store, flags)) return;
+  if (await answeredNothingSpent(store, flags, repo)) return;
   // The whole composition — realization, this project's resolved baseline, the
   // Lift source, the money inputs, RoI, the drift streams, sensitivity — is one
   // sequence in src/value/report.ts, shared with `/api/value`. The three inputs
@@ -813,7 +817,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
   const store = new Store(dbPath());
-  if (answeredNothingSpent(store, flags)) return;
+  if (await answeredNothingSpent(store, flags, repo)) return;
   const loaded = await loadRealization(store, repo, {
     windowDays, persist: true, sinceDays: CLI_PERIOD_DAYS, gitScanBudgetMs: CLI_GIT_BUDGET_MS,
   });

@@ -1062,9 +1062,10 @@ export function actionSpec(cap: Capability): ActionSpec {
       applicable: false,
       // Say what works now, not what might be built: "not built yet" is a
       // promise, and a shipped screen that promises is a placeholder (L1).
-      blockedReason: cap.coverage === 'planned'
-        ? 'This runs from the command line. Copy the command below into a terminal.'
-        : 'This part runs from the command line. Copy the command below into a terminal.',
+      // A command with <placeholders> is not runnable as shown: in a POSIX
+      // shell `<kind>` is an input redirection (PR #134 review).
+      blockedReason: `${cap.coverage === 'planned' ? 'This runs' : 'This part runs'} from the command line. ${
+        cap.command.includes('<') ? 'Copy the command below, replace each part in angle brackets with your own value, then run it in a terminal.' : 'Copy the command below into a terminal.'}`,
       summary: cap.consequence === 'read'
         ? `${cap.plain} You read this from the command line, with the command below.`
         : `${cap.plain} You do this from the command line, with the command below.`,

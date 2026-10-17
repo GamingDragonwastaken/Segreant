@@ -43,6 +43,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **A ledger whose requests were pruned is not "no spend recorded".** The value commands now reach the stored report instead.
   - **The cap guidance reads the spend the cap actually enforces.** It could say no request had gone through the proxy while the cap was blocking on proxied spend; it now uses the guard's own figure and counts requests.
   - **With imported spend counted toward the cap, the guide says so** instead of calling it proxy spend.
+  - **Follow-ups from review comments on #131 to #135:**
+    - The outcome breakdown and the totals now come from one exact sum, so even interleaved fine-grained prices add back to the reported total.
+    - A cap edited while the proxy was starting is read on the first request.
+    - An unreadable or invalid `config.json` refuses requests only until it is repaired, without a restart.
+    - A filesystem error reading it fails closed rather than being treated as a deleted file.
+    - `realize`, `roi` and `frontier` report a path that is not a repository before anything else.
+    - A command containing placeholders says to fill them in before running it.
+    - The guide now documents `help` and `--version`.
 
 - **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
   - **Copied commands stay literal in PowerShell.** PowerShell also ends a quoted value on a curly apostrophe (as in O’Brien), so the rest of a pasted command could run. Such values now show no command, and a value starting with `@` or `-` is quoted or withheld.

@@ -93,3 +93,18 @@ test('F4: with imported spend counted toward the cap, the guide says so', () => 
   assert.match(g.next.notice ?? '', /all observed spend, imported included/);
   assert.doesNotMatch(g.next.notice ?? '', /through the proxy/);
 });
+
+test('F1 (follow-up): interleaved fine-grained prices still add back to the reported total', () => {
+  const store = new Store(':memory:');
+  try {
+    const prices = [0.000001, 0.0001317, 0.0008591, 0.0004477];
+    prices.forEach((costUsd, i) => store.insertRequest(req({ sessionId: i % 2 === 0 ? 'a' : 'b', tsEpochMs: NOW - DAY + i, costUsd })));
+    const p = buildSessions(store, '7d', { startMs: NOW - 7 * DAY, endMs: NOW + 1000, bucketMs: DAY }, { now: NOW });
+    const o = p.outcomes;
+    const outcomeMicros = Math.round((o.noCommit.costUsd + o.kept.costUsd + o.notKept.costUsd + o.contested.costUsd
+      + o.unknown.costUsd + o.maturing.costUsd + o.unmeasured.costUsd) * 1e6);
+    assert.equal(outcomeMicros, Math.round(p.totals.costUsd * 1e6));
+  } finally {
+    store.close();
+  }
+});
