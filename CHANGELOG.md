@@ -11,6 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Every command is in the help and the guide.** `segreant help all` was missing `alloc` (cost-centre allocation) and `statusline`, and `docs/GUIDE.md` was missing ten commands, among them `plan`, `quota`, `launch`, `market` and `outcome`. Both said bare `segreant` shows `guide`; it shows this month, your plans and what stayed in the code. A test now fails if a command is added without both.
 - **The bill comparison now works on real OpenAI traffic.**
   - **Before:** a request through Segreant records its exact price, and per-token prices often go finer than a millionth of a dollar (gpt-4.1-mini, 1,234 tokens in and 567 out, is $0.0014008). The comparison refused the whole route on the first such request, so almost no real user could compare a bill. Seeding the sample bill found this.
   - **Now:** each day is added up exactly, and only the day's total is rounded to the millionth (half to even). The comparison says so wherever it appears: the terminal, the Close page, the Statement and its CSV, and the recorded evidence.
