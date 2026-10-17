@@ -9,7 +9,8 @@ web
 ## Stack
 
 Existing codebase. Strict TypeScript on Node 24, **zero runtime dependencies** —
-`typescript` and `@types/node` are the only entries in `devDependencies`. Build
+`devDependencies` holds `typescript` and `@types/node` for the build and
+`playwright` with `@axe-core/playwright` for the browser suites. Build
 is `tsc` into `dist/` plus a copy of the web assets (`scripts/build.mjs`). SQLite
 via `node:sqlite`; tests via `node:test`.
 
