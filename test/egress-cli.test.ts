@@ -29,6 +29,25 @@ const RULE = [
   '--path-prefix', '/v1/',
 ];
 
+test('a path prefix rewritten by Git Bash is refused and the refusal names the cause', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-egress-msys-'));
+  try {
+    const mangled = RULE.map((arg) => (arg === '/v1/' ? 'C:/Program Files/Git/v1/' : arg));
+    const plan = await run(['plan', ...mangled], home);
+    assert.equal(plan.code, 1);
+    assert.match(plan.stderr, /Rule refused: pathPrefix/);
+    assert.match(plan.stderr, /arrived as "C:\/Program Files\/Git\/v1\/"/);
+    assert.match(plan.stderr, /MSYS_NO_PATHCONV=1/);
+    assert.equal(existsSync(join(home, 'config.json')), false);
+
+    const ordinary = await run(['plan', ...RULE.map((arg) => (arg === '/v1/' ? '/v1/../x' : arg))], home);
+    assert.equal(ordinary.code, 1);
+    assert.doesNotMatch(ordinary.stderr, /MSYS_NO_PATHCONV/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('egress CLI plans without mutation and requires an explicit apply acknowledgement', async () => {
   const home = mkdtempSync(join(tmpdir(), 'segreant-egress-cli-'));
   try {
