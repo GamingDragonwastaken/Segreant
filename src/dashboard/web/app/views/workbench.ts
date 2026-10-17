@@ -40,6 +40,14 @@ export function workbench(): Node {
   const selected = signal<string | null>(null);
   const focusBucket = signal<number | null>(null);
   const showAll = signal(false);
+  // Choose a session and make sure its row is on the page: a bar can point at
+  // a session past the first rows, and the costliest session need not be in
+  // them either. Without this the detail opened with no row selected and
+  // nothing to scroll to.
+  const reveal = (sessions: readonly SessionRow[], id: string | null): void => {
+    if (id !== null && sessions.findIndex((s) => s.sessionId === id) >= FIRST_ROWS) showAll.set(true);
+    selected.set(id);
+  };
 
   scopedEffect(() => {
     const r = period();
@@ -55,7 +63,7 @@ export function workbench(): Node {
         data.set(payload);
         // Open on the session that cost the most: the first question on this page.
         const top = [...payload.sessions].sort((a, b) => b.costUsd - a.costUsd)[0];
-        selected.set(top ? top.sessionId : null);
+        reveal(payload.sessions, top ? top.sessionId : null);
       })
       .catch((e: unknown) => {
         if (!current || controller.signal.aborted) return;
@@ -75,7 +83,7 @@ export function workbench(): Node {
       return h('div', { class: 'wb-body' },
         tiles(d),
         h('div', { class: 'wb-pair' },
-          chart(d, colour, focusBucket, (id) => selected.set(id)),
+          chart(d, colour, focusBucket, (id) => reveal(d.sessions, id)),
           outcomes(d)),
         h('div', { class: 'wb-pair wb-pair-sessions' },
           sessionTable(d, colour, selected, showAll),

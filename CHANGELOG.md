@@ -29,6 +29,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   - **Speed:** `realize`, `roi` and `frontier` took about a minute each on a real repository, because they read the full diff of every commit. That diff is now read only when there is a captured proposal to compare it with. On 1,126 commits they now take 11 to 16 seconds and give the same results; `discover` went from 86 to 33 seconds.
   - **No spend yet:** before any AI spend was recorded, the same commands still read 90 days of git history and printed 0% realized, an RoI of 0 and $0.00 per commit. They now say there is nothing to measure yet and name `segreant scan --setup` and the demo.
   - **Commit evidence:** 147 commits said "N lines in 0 files"; the file count now comes from the same record as the line count.
+- **A bar on the Spend chart always shows the session it opens.** When the costliest session in that stretch was past the first twelve rows, it opened with no row selected; the list now expands to show it, as it also does for the session the page opens on.
 - **Dollar amounts in the terminal are grouped and signed correctly:** $4,195.19 rather than $4195.19, and a $5 credit reads -$5.00 rather than $-5.000000.
 
 - **Fixes from a second independent review** (Codex `gpt-6.1-sol`, PRs #121 to #124). Each finding was checked against the code and pinned by a test:
