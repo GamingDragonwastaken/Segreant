@@ -71,6 +71,18 @@ test('unpriced models: skip and all three declarations; re-price previews, confi
     assert.deepEqual(Object.keys(loadPriceOverrides().models).sort(), ['local-model', 'private-like', 'private-rate']);
     assert.deepEqual(store.requestPriceEvents('r0'), []);
 
+    // A price you set is listed and can be removed, preview first (PR #146 review).
+    await drawer.getByText('Your prices', { exact: true }).waitFor();
+    const keepOrRemove = drawer.getByLabel('local-model: free (local model)', { exact: true });
+    await keepOrRemove.selectOption('remove');
+    await drawer.getByText(/Remove your price for local-model/).waitFor();
+    assert.ok(loadPriceOverrides().models['local-model'], 'choosing Remove previews; it does not write');
+    await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
+    await drawer.getByRole('status').getByText('Removed your price for local-model.').waitFor();
+    assert.equal(loadPriceOverrides().models['local-model'], undefined);
+    await drawer.getByLabel('Price for local-model', { exact: true }).selectOption('free');
+    await save('local-model');
+
     await drawer.getByRole('button', { name: 'Re-price recorded requests', exact: true }).click();
     drawer = page.getByRole('dialog', { name: 'Reprice history' });
     await drawer.getByText(/3 requests can be re-priced/).waitFor();

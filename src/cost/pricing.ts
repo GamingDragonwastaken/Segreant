@@ -477,6 +477,13 @@ interface LiteLLMEntry {
   cache_read_input_token_cost?: number;
 }
 
+/** A per-1M rate as a plain decimal string, never exponent notation (1e-7 is "0.0000001"). */
+function plainDecimal(n: number): string {
+  const s = String(n);
+  if (!/e/i.test(s)) return s;
+  return n.toFixed(20).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 /** Per-token → per-1M, trimmed of float noise (3e-6/token → 3 $/1M exactly). */
 function perMillion(perToken: number): number {
   return Number((perToken * 1e6).toPrecision(10));
@@ -524,6 +531,16 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     if (typeof e.cache_read_input_token_cost === 'number' && e.cache_read_input_token_cost > 0) {
       rate.cache_read = perMillion(e.cache_read_input_token_cost);
     }
+    // The decimal companion, so a model learned from the feed reprices to an
+    // exact amount: without it `reprice --apply` refused a first-sight model
+    // that had been recorded against the bundled card's exact fallback (PR #146 review).
+    const exact: { input: string; output: string; cache_write_5m?: string; cache_read?: string } = {
+      input: plainDecimal(rate.input),
+      output: plainDecimal(rate.output),
+    };
+    if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
+    if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
+    rate.exact = exact;
     bucket.models[name] = rate;
   }
 

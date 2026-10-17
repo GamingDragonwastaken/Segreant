@@ -69,6 +69,7 @@ import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { modelNameError, removePriceOverride, type PriceOverrideInput } from '../cost/overrides.ts';
 import { summarizeBasis } from '../cost/basis.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { loadPriceOverrides } from '../cost/overrides.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
@@ -994,6 +995,12 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
   try {
     const payload: DashboardResponseFor<'pricing-unknown'> = {
       models: unknownModels(store), demo: isDemo(),
+      declared: Object.entries(loadPriceOverrides().models).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
+        model, kind: price.kind, declaredAt: price.declaredAt,
+        summary: price.kind === 'free' ? 'free (local model)'
+          : price.kind === 'like' ? `like ${price.like}`
+          : `input $${price.input}, output $${price.output} per 1M tokens`,
+      })),
       boundary: 'Recorded cost (estimated). Declaring a price leaves recorded requests unchanged until you re-price them.',
     };
     json(res, 200, payload);

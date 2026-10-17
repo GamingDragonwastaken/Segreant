@@ -1905,8 +1905,18 @@ export interface UnknownPricingModel {
   rateMatchKind: string;
 }
 
+export interface DeclaredPrice {
+  model: string;
+  kind: 'rate' | 'like' | 'free';
+  /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
+  summary: string;
+  declaredAt: string;
+}
+
 export interface UnknownPricingPayload {
   models: UnknownPricingModel[];
+  /** Prices the user set, so they can be reviewed and removed from the same drawer. */
+  declared: DeclaredPrice[];
   boundary: string;
   demo: boolean;
 }

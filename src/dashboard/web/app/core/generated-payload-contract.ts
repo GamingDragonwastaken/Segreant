@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "6fdd02e03fd430a2b974ef8b9b0ded8b6097690a51b48e4b717190893a56a53b";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "354aef3cb0fabb142fcdc5ac3e6189e71387c16dbdba5006e13ffc76b204c0cd";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -4297,11 +4297,38 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string"
     }
   ],
+  "DeclaredPrice": [
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "kind",
+      "optional": false,
+      "type": "'rate' | 'like' | 'free'"
+    },
+    {
+      "name": "summary",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "declaredAt",
+      "optional": false,
+      "type": "string"
+    }
+  ],
   "UnknownPricingPayload": [
     {
       "name": "models",
       "optional": false,
       "type": "UnknownPricingModel[]"
+    },
+    {
+      "name": "declared",
+      "optional": false,
+      "type": "DeclaredPrice[]"
     },
     {
       "name": "boundary",
