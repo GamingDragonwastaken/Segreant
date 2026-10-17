@@ -16,7 +16,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { acquireConfigMutationLock, segreantHome } from '../config.ts';
+import { acquireConfigMutationLock, DemoReadOnlyError, isDemo, segreantHome } from '../config.ts';
 
 export type PriceOverride =
   | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; declaredAt: string }
@@ -140,8 +140,17 @@ export function loadPriceOverrides(): PriceOverridesFile {
   return safe;
 }
 
+/**
+ * The declarations that price requests: none while showing sample data. The
+ * demo is advertised as isolated, so a real negotiated rate or private model
+ * name must never change or appear in it (PR #146 review).
+ */
+export function activePriceOverrides(): Record<string, PriceOverride> {
+  return isDemo() ? Object.create(null) as Record<string, PriceOverride> : loadPriceOverrides().models;
+}
+
 export function priceOverrideFor(model: string): PriceOverride | null {
-  return loadPriceOverrides().models[model] ?? null;
+  return activePriceOverrides()[model] ?? null;
 }
 
 function writeOverrides(file: PriceOverridesFile): void {
@@ -164,6 +173,7 @@ function writeOverrides(file: PriceOverridesFile): void {
  * writer is refused with the reason rather than waiting or losing data.
  */
 function withOverridesLock<T>(mutate: () => T): T {
+  if (isDemo()) throw new DemoReadOnlyError();
   const lock = acquireConfigMutationLock();
   try {
     cache = null;

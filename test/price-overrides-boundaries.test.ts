@@ -125,6 +125,32 @@ test('one reprice plan prices every row from the same declarations, even if the 
   }
 });
 
+test('sample data never reads, shows or writes your real prices (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { activePriceOverrides } = await import('../src/cost/overrides.ts');
+  const { handlePricingUnknown } = await import('../src/dashboard/routes.ts');
+  setPriceOverride('acme-negotiated', { kind: 'rate', input: '0.5', output: '1' });
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  const store = new Store(join(home, 'demo-route.db'));
+  process.env.SEGREANT_DEMO = '1';
+  try {
+    assert.deepEqual(Object.keys(activePriceOverrides()), []);
+    assert.notEqual(computeCost('openai', 'acme-negotiated', usage).pricing.rateMatchKind, 'user_declared');
+    let body = '';
+    const res = { writeHead() { return this; }, setHeader() {}, end(chunk?: string) { body = chunk ?? ''; } };
+    handlePricingUnknown({ res, store } as never);
+    const payload = JSON.parse(body) as { declared: unknown[]; demo: boolean };
+    assert.equal(payload.demo, true);
+    assert.deepEqual(payload.declared, [], 'no real model name or rate reaches the sample screen');
+    assert.throws(() => setPriceOverride('acme-demo-write', { kind: 'free' }), /Demo mode only shows sample data/);
+  } finally {
+    delete process.env.SEGREANT_DEMO;
+    store.close();
+  }
+  assert.equal(computeCost('openai', 'acme-negotiated', usage).pricing.rateMatchKind, 'user_declared', 'outside the demo the price applies again');
+  removePriceOverride('acme-negotiated');
+});
+
 // Last: it replaces the active card for this process.
 test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
   const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');

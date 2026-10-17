@@ -19,7 +19,7 @@ import { DEFAULT_PRICE_LIST_URL } from '../egress/policy.ts';
 import { dirname, join } from 'node:path';
 import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
-import { loadPriceOverrides, priceOverrideFor, type PriceOverride } from './overrides.ts';
+import { activePriceOverrides, priceOverrideFor, type PriceOverride } from './overrides.ts';
 import { money } from '../economics/money.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1069,7 +1069,7 @@ export function withoutDeclaredPrices<T>(fn: () => T): T {
  */
 export function withPricingSnapshot<T>(fn: () => T): T {
   if (declarationSource !== null) return fn();
-  const models = loadPriceOverrides().models;
+  const models = activePriceOverrides();
   return withDeclarationSource((model) => models[model] ?? null, fn);
 }
 
