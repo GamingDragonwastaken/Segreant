@@ -77,6 +77,8 @@ const overviewIn = signal<Overview | null | undefined>(undefined);
 const billingIn = signal<BillingPayload | null | undefined>(undefined);
 const allocationIn = signal<AllocationPayload | null | undefined>(undefined);
 const valueIn = signal<ValuePayload | null | undefined>(undefined);
+/** Re-pricing changes metered costs without changing the selected period. */
+const pricingRevision = signal(0);
 const chainInputs = computed(() => ({
   overview: overviewIn() ?? null,
   billing: billingIn() ?? null,
@@ -310,6 +312,7 @@ function boot(): void {
   };
   effect(() => {
     const r = period();
+    pricingRevision();
     const controller = new AbortController();
     overviewIn.set(undefined);
     void api.overview(r, controller.signal).then(
@@ -328,6 +331,10 @@ function boot(): void {
     }
     if (claim === 'billing') {
       void api.billing().then((b) => { billingIn.set(b); lastReadAt.set(Date.now()); }, () => undefined);
+    }
+    if (claim === 'pricing') {
+      pricingRevision.update((revision) => revision + 1);
+      void api.value().then((v) => { valueIn.set(v); lastReadAt.set(Date.now()); }, () => undefined);
     }
   });
 
@@ -398,7 +405,7 @@ function boot(): void {
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
-        h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider and the other routes you set up.' }),
+        h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider, the public price list, and the other routes you set up.' }),
         h('span', { class: 'shellfoot-links' },
           h('a', { href: '#/privacy', text: 'Privacy' }),
           h('a', { href: '/classic', text: 'Classic dashboard' }))));

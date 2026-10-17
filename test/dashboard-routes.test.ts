@@ -47,6 +47,9 @@ const MUTATING = [
   '/api/judge',
   '/api/settings/update',
   '/api/settings/clear-proposals',
+  '/api/pricing/declare',
+  '/api/pricing/unset',
+  '/api/reprice',
 ];
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
@@ -155,6 +158,10 @@ const HISTORICAL_ALLOW: Record<string, string> = {
   '/api/outcome/record': 'POST',
   '/api/allocation/write': 'POST',
   '/api/billing/write': 'POST',
+  '/api/pricing/unknown': 'GET',
+  '/api/pricing/declare': 'POST',
+  '/api/pricing/unset': 'POST',
+  '/api/reprice': 'POST',
 };
 
 /**

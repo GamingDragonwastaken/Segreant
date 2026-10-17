@@ -2,10 +2,10 @@
 import { existsSync } from 'node:fs';
 import { dbPath, isDemo } from '../config.ts';
 import {
-  modelNameError, PriceOverridesError, removePriceOverride, setPriceOverride,
+  modelNameError, PriceOverridesError, removePriceOverride,
   type PriceOverride, type PriceOverrideInput,
 } from '../cost/overrides.ts';
-import { loadPricing, rateFor, type Provider } from '../cost/pricing.ts';
+import { declarePrice as declare, unknownModels } from '../cost/declarations.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 import { printJson, usd } from './ui.ts';
@@ -46,20 +46,6 @@ function priceInput(flags: Flags): PriceOverrideInput {
   };
 }
 
-function declare(model: string, input: PriceOverrideInput): PriceOverride {
-  if (isDemo()) throw new PriceOverridesError('Demo mode only shows sample data; run without --demo to declare a price.');
-  if (input.kind === 'like') {
-    const error = modelNameError(input.like);
-    if (error) throw new PriceOverridesError(`--like: ${error}`);
-    // A declaration or family guess is insufficient, even if rateFor resolves
-    // it: a like must point directly at a named entry in the active card.
-    if (!Object.values(loadPricing().providers).some((p) => Object.hasOwn(p.models, input.like))) {
-      throw new PriceOverridesError(`${input.like} is not an exact rate-card match; segreant pricing --coverage lists models seen.`);
-    }
-  }
-  return setPriceOverride(model, input);
-}
-
 function storedLine(model: string, price: PriceOverride): string {
   if (price.kind === 'free') return `Stored user-declared price for ${model}: free ($0 per request).`;
   if (price.kind === 'like') return `Stored user-declared price for ${model}: like ${price.like} (exact rate-card model).`;
@@ -79,25 +65,6 @@ function readLedger<T>(empty: T, read: (store: Store) => T): T {
   try { return read(store); } finally { store.close(); }
 }
 
-/** Models still priced by a guess under the current card and declarations, costliest first. */
-export function unknownModels(): ReturnType<Store['unresolvedModels']> {
-  const recorded = readLedger<ReturnType<Store['unresolvedModels']>>([], (store) => store.unresolvedModels());
-  const models = new Map<string, (typeof recorded)[number]>();
-  for (const row of recorded) {
-    const match = rateFor(row.provider as Provider, row.model).pricing.rateMatchKind;
-    if (match === 'exact_provider' || match === 'exact_cross_provider' || match === 'user_declared') continue;
-    const key = JSON.stringify([row.provider, row.model]);
-    const prior = models.get(key);
-    if (prior) {
-      prior.requests += row.requests;
-      prior.costUsd += row.costUsd;
-    } else {
-      models.set(key, { ...row, rateMatchKind: match });
-    }
-  }
-  return [...models.values()].sort((a, b) => b.costUsd - a.costUsd || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
-}
-
 /** `flags._` includes the action. Input refusals are one line and exit 2. */
 export function cmdPricingDeclare(action: 'set' | 'unset' | 'unknown', flags: Flags): void {
   try {
@@ -106,7 +73,7 @@ export function cmdPricingDeclare(action: 'set' | 'unset' | 'unknown', flags: Fl
     if (unsupported) throw new PriceOverridesError(`--${unsupported} does nothing for segreant pricing ${action}.`);
     if (action === 'unknown') {
       if (flags._.length !== 1) throw new PriceOverridesError('Usage: segreant pricing unknown [--json]');
-      const models = unknownModels();
+      const models = readLedger<ReturnType<Store['unresolvedModels']>>([], unknownModels);
       if (flags.json) {
         printJson({ models, costBasis: 'recorded cost (estimated)', nextStep: SET_WAYS, demo: isDemo() });
       } else {

@@ -16,6 +16,7 @@ import { residualBoundWords, dayRange, quantizationWords } from './reconcileWord
 import { localMidnightIso, dayAfterIso, monthRange, REASON_WORDS } from './periods.ts';
 import { slug } from './slug.ts';
 import { ruleFields, describeRule, type RuleDraft } from '../components/ruleFields.ts';
+import { pricingUnknownAction, repriceAction } from './pricingActions.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
@@ -71,6 +72,8 @@ function enteredUsd(raw: string): number | null {
 }
 
 const BUILDERS: Record<string, Builder> = {
+  'pricing-unknown': pricingUnknownAction,
+  reprice: repriceAction,
   'clear-proposals': (cap) => ({
     capability: cap,
     preview: async (): Promise<PreviewResult> => {

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: d01d37905b00ee1d28ffa83fc5a31a1002a658482f232117941bd1079fabfa38 */
+/** Source SHA-256: 6fdd02e03fd430a2b974ef8b9b0ded8b6097690a51b48e4b717190893a56a53b */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1899,6 +1899,53 @@ export interface ClearProposalsPayload {
   removed: number;
 }
 
+export interface UnknownPricingModel {
+  provider: string;
+  model: string;
+  requests: number;
+  costUsd: number;
+  rateMatchKind: string;
+}
+
+export interface UnknownPricingPayload {
+  models: UnknownPricingModel[];
+  boundary: string;
+  demo: boolean;
+}
+
+export interface PricingDeclarePayload {
+  ok: boolean;
+  model: string;
+  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; like?: string };
+}
+
+export interface PricingUnsetPayload {
+  ok: boolean;
+  model: string;
+  removed: boolean;
+}
+
+export interface RepriceModelPayload {
+  provider: string;
+  model: string;
+  rows: number;
+  beforeUsd: number;
+  afterUsd: number;
+  afterBasis: 'list price' | 'your price';
+}
+
+export interface RepricePayload {
+  applied: boolean;
+  demo: boolean;
+  estimatedRows: number;
+  repriceable: number;
+  stillEstimated: number;
+  totalBeforeUsd: number;
+  totalAfterUsd: number;
+  byModel: RepriceModelPayload[];
+  realizationSync: { resynced: number; unresolvable: number; costUsdBefore: number; costUsdAfter: number } | null;
+}
+
 export type Range = 'today' | '7d' | '30d' | 'all';
 
 /** Compile-time response map shared by server adapters and the browser client. */
@@ -1915,6 +1962,10 @@ export interface DashboardResponseMap {
   allocation: AllocationPayload;
   economic: EconomicPayload;
   pricing: PricingPayload;
+  'pricing-unknown': UnknownPricingPayload;
+  'pricing-declare': PricingDeclarePayload;
+  'pricing-unset': PricingUnsetPayload;
+  reprice: RepricePayload;
   realization: RealizationPayload;
   guide: GuidePayload;
   judge: JudgePayload;

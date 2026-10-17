@@ -243,8 +243,10 @@ Segreant has no hosted service and sends no telemetry by default. The ledger
 lives under `~/.segreant`, and the dashboard loads nothing from third parties:
 no CDNs, fonts or analytics. Requests you route through the proxy still go to
 the AI provider you configured, and your API keys pass through without being
-stored. Every other outbound path (price-card refresh, alert webhooks, team
-rollups) is opt-in. The privacy statement is [PRIVACY.md](docs/PRIVACY.md), also
+stored. Segreant also downloads the public price list when it meets a model
+its rate card does not know; that download sends nothing about you, and
+`segreant pricing --auto off` stops it. Every other outbound path (alert
+webhooks, team rollups) is opt-in. The privacy statement is [PRIVACY.md](docs/PRIVACY.md), also
 one click from every dashboard page; every path in detail is in
 [DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md).
 

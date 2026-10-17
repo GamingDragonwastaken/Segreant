@@ -7,15 +7,16 @@
 
 import { join } from 'node:path';
 import type { Server } from 'node:http';
-import { Store, type RepriceUpdate } from '../store/db.ts';
+import { Store } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type SegreantConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo, type SeedResult } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
+import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
-import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
+import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
 import { createFirstSightWatcher } from '../cost/firstSight.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
@@ -468,40 +469,16 @@ export function cmdReprice(flags: Flags): void {
   const store = new Store(dbPath());
   const tty = process.stdout.isTTY ?? false;
   try {
-    const rows = store.estimatedRequestRows();
-    const updates: RepriceUpdate[] = [];
-    const byModel = new Map<string, { n: number; before: number; after: number }>();
-    let stillEstimated = 0;
-
-    for (const r of rows) {
-      const c = computeCost(r.provider as Provider, r.model, {
-        inputTokens: r.inputTokens,
-        outputTokens: r.outputTokens,
-        cacheWriteTokens: r.cacheWriteTokens,
-        cacheReadTokens: r.cacheReadTokens,
-      });
-      if (c.estimated) {
-        stillEstimated++;
-        continue; // still a guess — keep the original guess rather than churn numbers
-      }
-      updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
-      // Tuple key, not a delimiter join (D-217/D-241): a model name may carry '/'.
-      const key = JSON.stringify([r.provider, r.model]);
-      const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
-      agg.n++;
-      agg.before += r.costUsd;
-      agg.after += c.costUsd;
-      byModel.set(key, agg);
-    }
-
-    const before = [...byModel.values()].reduce((a, v) => a + v.before, 0);
-    const after = [...byModel.values()].reduce((a, v) => a + v.after, 0);
+    const report = flags.apply ? applyReprice(store) : previewReprice(store);
+    const { updates, stillEstimated, totalBeforeUsd: before, totalAfterUsd: after } = report;
+    const rows = { length: report.estimatedRows };
+    const byModel = new Map(report.byModel.map((v) => [JSON.stringify([v.provider, v.model]), { n: v.rows, before: v.beforeUsd, after: v.afterUsd }]));
 
     if (flags.json) {
       // Write BEFORE serializing, so the payload can report what the reprice did
       // to the stored realized-value snapshots rather than describing the request
       // rows alone and leaving the snapshots' state to be discovered elsewhere.
-      const sync = flags.apply && updates.length ? store.applyRepricedCosts(updates) : null;
+      const sync = report.realizationSync;
       printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
         stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
@@ -540,7 +517,7 @@ export function cmdReprice(flags: Flags): void {
       console.log('');
       console.log(`  Total                ${usd(before)} → ${usd(after)}  ${color(tty, after - before >= 0 ? C.red : C.green, (after - before >= 0 ? '+' : '') + usd(after - before))}`);
       if (flags.apply) {
-        const sync = store.applyRepricedCosts(updates);
+        const sync = report.realizationSync!;
         console.log(color(tty, C.green, `  ✓ Applied — ${num(updates.length)} rows re-costed, estimated flag cleared.`));
         if (sync.resynced) {
           const delta = sync.costUsdAfter - sync.costUsdBefore;
