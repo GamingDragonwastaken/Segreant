@@ -118,9 +118,9 @@ test('the blame cache follows HEAD: a later rewrite is seen in the same process'
     commit(dir, 'a.txt', 'a1\na2\na3\na4\n', 'feat: four', '2026-01-01T10:00:00+00:00');
     const first = head(dir);
     commit(dir, 'a.txt', 'a1\na2\nb3\nb4\n', 'fix: two', '2026-01-02T10:00:00+00:00');
-    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 2, measured: true });
+    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 2, measured: true, filesWithAdditions: 1 });
     commit(dir, 'a.txt', 'c1\na2\nb3\nb4\n', 'fix: one more', '2026-01-03T10:00:00+00:00');
-    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 1, measured: true });
+    assert.deepEqual(await survivingLines(dir, first), { added: 4, surviving: 1, measured: true, filesWithAdditions: 1 });
     // An abbreviated hash finds the same lines.
     assert.equal((await survivingLines(dir, first.slice(0, 12))).surviving, 1);
   } finally {
@@ -144,8 +144,8 @@ test('prefetching changes speed, never the answer, and never measures past the d
     const warm = [await survivingLines(dir, c1), await survivingLines(dir, c2)];
     assert.deepEqual(warm, cold);
     assert.deepEqual(cold, [
-      { added: 4, surviving: 3, measured: true },
-      { added: 2, surviving: 2, measured: true },
+      { added: 4, surviving: 3, measured: true, filesWithAdditions: 1 },
+      { added: 2, surviving: 2, measured: true, filesWithAdditions: 1 },
     ]);
 
     // An expired deadline: the prefetch starts nothing, and the measuring pass
@@ -153,7 +153,7 @@ test('prefetching changes speed, never the answer, and never measures past the d
     clearBlameCache();
     const past = Date.now() - 1;
     await prefetchSurvival(dir, [c1], past);
-    assert.deepEqual(await survivingLines(dir, c1, past), { added: 4, surviving: 0, measured: false });
+    assert.deepEqual(await survivingLines(dir, c1, past), { added: 4, surviving: 0, measured: false, filesWithAdditions: 1 });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

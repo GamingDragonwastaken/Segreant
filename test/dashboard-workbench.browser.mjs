@@ -72,8 +72,14 @@ test('the Workbench shows the wire, scales to its data, and opens the session a 
     assert.equal((await detail.locator('.wb-head-note').innerText()).trim(), money(expected.costUsd));
     assert.equal(await page.locator('.wb-row.is-selected').count(), 1);
 
-    // Another row opens its own session.
-    const other = wire.sessions.find((s) => s.sessionId !== expected.sessionId && s.commits.length > 0) ?? wire.sessions[1];
+    // Another row opens its own session. Only rows the page shows can be
+    // clicked: the table lists the first twelve until "Show all" (which bar
+    // selection may already have opened). Picking from the whole payload made
+    // this test depend on the time of day the demo was seeded.
+    const shownIds = new Set(await page.locator('.wb-row').evaluateAll((rows) => rows.map((r) => r.id)));
+    const shown = wire.sessions.filter((s) => shownIds.has(`wb-row-${s.sessionId.replace(/[^A-Za-z0-9_-]/g, '_')}`));
+    const other = shown.find((s) => s.sessionId !== expected.sessionId && s.commits.length > 0)
+      ?? shown.find((s) => s.sessionId !== expected.sessionId);
     await page.locator(`#wb-row-${other.sessionId.replace(/[^A-Za-z0-9_-]/g, '_')}`).click();
     assert.equal((await detail.locator('.wb-head-note').innerText()).trim(), money(other.costUsd));
     if (other.commits.length > 0) assert.equal(await detail.locator('.wb-commit').count(), other.commits.length);
