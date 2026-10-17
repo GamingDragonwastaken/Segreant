@@ -125,7 +125,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
       const names = models.map((m) => m.model).join(', ');
       // Named from the source the refresh read: an operator may point
       // pricing.manifestUrl at their own card (PR #146 review).
-      const source = cfg.pricing.manifestUrl === DEFAULT_MANIFEST_URL ? 'the public price list' : `your price source (${cfg.pricing.manifestUrl})`;
+      const source = pricingSourceLabel(cfg.pricing.manifestUrl);
       console.log(color(tty, C.green, `  ↻ ${source} now prices ${names}: new requests use that price.`));
       console.log(color(tty, C.gray, '    Requests already recorded keep their estimate until you run: segreant reprice (preview), then segreant reprice --apply'));
     },
@@ -230,6 +230,16 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
   line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));
   line(color(tty, C.gray, 'Segreant is stopped; unset the two variables, or use segreant launch, to go direct.'));
   console.log('');
+}
+
+/**
+ * The source a price refresh reads, in words. The built-in list is spelled two
+ * ways, no URL configured or its own URL; both are the public price list (PR #146 review).
+ */
+export function pricingSourceLabel(manifestUrl: string | null | undefined): string {
+  return manifestUrl === null || manifestUrl === undefined || manifestUrl === DEFAULT_MANIFEST_URL
+    ? 'the public price list'
+    : `your price source (${manifestUrl})`;
 }
 
 export async function cmdDemo(flags: Flags): Promise<void> {

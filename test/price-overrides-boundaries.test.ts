@@ -124,3 +124,35 @@ test('one reprice plan prices every row from the same declarations, even if the 
     removePriceOverride('acme-snap');
   }
 });
+
+// Last: it replaces the active card for this process.
+test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
+  const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');
+  const { previewReprice, applyReprice } = await import('../src/cost/reprice.ts');
+  const store = new Store(join(home, 'reprice-exact.db'));
+  try {
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+    const guess = computeCost('openai', 'acme-custom-1', usage);
+    assert.equal(guess.pricing.rateMatchKind, 'fallback');
+    assert.ok(guess.exact, 'a proxied guess carries an exact economic amount');
+    store.insertRequest({
+      requestId: 'exact-guess', sessionId: null, tsEpochMs: Date.now() - 60_000, provider: 'openai', model: 'acme-custom-1',
+      project: 'p', taskWeight: 1, ...usage, costUsd: guess.costUsd, estimated: true, streamed: false, statusCode: 200, durationMs: 1,
+      pricing: guess.pricing, economicAmount: guess.exact!.total,
+    });
+    // A custom card that knows the model but states no decimal companions.
+    const applied = applyPricingManifest(JSON.stringify({
+      schema_version: 1, updated: '2026-10-01', currency: 'USD', unit: 'per_million_tokens',
+      providers: { openai: { verified: false, models: { 'acme-custom-1': { input: 0.3, output: 1.2 } } } },
+      fallbacks: { unknown: { input: 3, output: 15 } },
+    }));
+    assert.equal(applied.ok, true, applied.error ?? 'manifest refused');
+    assert.equal(computeCost('openai', 'acme-custom-1', usage).exact, undefined);
+    const plan = previewReprice(store);
+    assert.equal(plan.repriceable, 0);
+    assert.equal(plan.stillEstimated, 1);
+    assert.doesNotThrow(() => applyReprice(store), 'apply writes exactly what the preview promised');
+  } finally {
+    store.close();
+  }
+});

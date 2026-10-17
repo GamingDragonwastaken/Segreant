@@ -142,3 +142,11 @@ test('the lookup is on by default, and a config without the key gets the default
   assert.equal(DEFAULT_CONFIG.pricing.lookupUnknownModels, true);
   assert.equal(loadConfig().pricing.lookupUnknownModels, true);
 });
+
+test('the learned notice names the built-in list however it is configured (PR #146 review)', async () => {
+  const { pricingSourceLabel } = await import('../src/cli/runCmd.ts');
+  const { DEFAULT_MANIFEST_URL } = await import('../src/cost/pricing.ts');
+  assert.equal(pricingSourceLabel(null), 'the public price list', 'the default config stores no URL');
+  assert.equal(pricingSourceLabel(DEFAULT_MANIFEST_URL), 'the public price list');
+  assert.equal(pricingSourceLabel('https://prices.example.test/card.json'), 'your price source (https://prices.example.test/card.json)');
+});

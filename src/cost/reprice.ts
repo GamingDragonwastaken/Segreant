@@ -1,6 +1,7 @@
 /** One synchronous read model for CLI and dashboard; guesses never replace guesses. */
 import type { Store, RepriceUpdate } from '../store/db.ts';
 import { computeCost, withPricingSnapshot, type Provider } from './pricing.ts';
+import { requestEconomicEventId } from '../economics/request.ts';
 
 export interface RepriceModel {
   provider: string;
@@ -57,6 +58,11 @@ function planReprice(store: Store) {
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
     });
     if (c.estimated) { stillEstimated++; continue; }
+    // A row with an exact economic event can only be corrected by an exact
+    // amount. A custom card may omit the decimal companions, and the plan used
+    // to promise such a row, then --apply refused it and rolled back the whole
+    // batch (PR #146 review). It stays an estimate until a card can price it exactly.
+    if (c.exact === undefined && store.economic().read(requestEconomicEventId(r.requestId)) !== null) { stillEstimated++; continue; }
     updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
     const key = JSON.stringify([r.provider, r.model]);
     const agg = byModel.get(key) ?? {
