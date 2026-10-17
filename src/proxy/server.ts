@@ -28,8 +28,8 @@ import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
 import { configPath, loadConfig, type BudgetConfig, type SegreantConfig } from '../config.ts';
 import { BudgetGuard, unverifiedBasis, type GuardDecision } from '../budget/guard.ts';
-import { computeCost, unpricedPricingEvidence, notSentPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
-import { loadPriceOverrides, PriceOverridesError } from '../cost/overrides.ts';
+import { computeCost, withDeclarations, unpricedPricingEvidence, notSentPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
+import { activePriceOverrides, PriceOverridesError, type PriceOverride } from '../cost/overrides.ts';
 import {
   StreamUsageAccumulator,
   normalizeAnthropicUsage,
@@ -518,13 +518,17 @@ async function handle(
   // --- Budget pre-flight ---
   let decision: GuardDecision;
   let budgetFailure = false;
+  let declarations: Record<string, PriceOverride> = Object.create(null) as Record<string, PriceOverride>;
   try {
     // Declared prices are read before anything is sent: a hand-edited
     // overrides.json that no longer parses would otherwise throw only when the
     // answer is priced, after the provider had charged for it, leaving the
     // request out of the ledger and the cap (PR #146 review). Like a broken
     // config.json it does not latch: repairing the file resumes forwarding.
-    loadPriceOverrides();
+    // The request is later priced from exactly these declarations, so an edit
+    // that breaks the file while it is in flight cannot stop its accounting
+    // after the provider has answered (PR #146 review).
+    declarations = activePriceOverrides();
     decision = guard.evaluate({ sessionId });
   } catch (error) {
     budgetFailure = true;
@@ -801,7 +805,7 @@ async function handle(
     } catch {
       /* non-JSON (e.g. error HTML) — usage stays empty */
     }
-    const cost = computeCost(provider, resolvedModel, usage);
+    const cost = withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
     downHeaders['x-segreant-cost-usd'] = cost.costUsd.toFixed(6);
     if (decision.sessionSpendUsd !== null && config.budget.sessionUsd !== null) {
       const remaining = Math.max(0, config.budget.sessionUsd - decision.sessionSpendUsd - cost.costUsd);
@@ -812,7 +816,7 @@ async function handle(
   }
 
   // --- Cost + log (after the client has its bytes) ---
-  const cost = computeCost(provider, resolvedModel, usage);
+  const cost = withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
   safeLog(deps, {
     requestId,
     sessionId,

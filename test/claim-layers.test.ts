@@ -405,4 +405,6 @@ test('doctor names a price you set instead of calling it a list rate (PR #146 re
   const listed = { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 6, costUsd: 60 } as const;
   assert.equal(doctorPricingLine(summarizeBasis([mine])), '$25.00 at prices you set (not checked against a price list)');
   assert.equal(doctorPricingLine(summarizeBasis([listed])), "30d spend priced at each model's own list rate (an estimate, not a bill)");
+  const free = { provider: 'ollama', model: 'llama-local', costBasis: 'user_declared_price', rateMatchKind: 'user_declared_free', requests: 3, costUsd: 0 } as const;
+  assert.equal(doctorPricingLine(summarizeBasis([free])), '3 requests on models you marked free (no charge)');
 });
