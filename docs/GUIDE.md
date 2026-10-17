@@ -65,8 +65,10 @@ tree from silently running older source.
 Onboarding — where you are, and how spend gets in with no wiring at all:
 
 ```
+segreant                       Bare: this month, your plans, how much of the AI work
+                                stayed in the code, and the next step
 segreant guide                 Where you are + the single next step, read from your
-                                real state — also what bare `segreant` shows  (--json)
+                                real state — the full checklist  (--json)
 segreant scan [path]           One-command setup: find the AI tools + git repos on
                                 this machine, preview a plan (read-only). --setup
                                 imports every detected tool and correlates every repo
@@ -75,7 +77,8 @@ segreant scan [path]           One-command setup: find the AI tools + git repos 
                                 the walk.
 segreant import <tool|all>     NATIVE metering, no routing — reads the usage a tool
                                 already logs locally (works on subscriptions the proxy
-                                can never see). Tools: claude-code, opencode, codex.
+                                can never see). Tools: claude-code, opencode, codex,
+                                antigravity (or all).
                                 Idempotent; --watch keeps it live.  (--days N, --json)
 segreant discover              Correlate already-imported projects into per-project
                                 RoI without re-importing — `scan --setup`'s other half
@@ -83,6 +86,15 @@ segreant connect <tool>        Wire a tool through the proxy as a connected sour
                                 (opencode, antigravity, or any OpenAI-compatible API)
 segreant sources                Spend by connected source, at its honest depth
                                 (--all for all-time, --json)
+segreant launch -- <command>   Run one tool metered through the proxy while it runs;
+                                with a cap set, a stopped proxy refuses unless
+                                --allow-unmetered
+segreant plan                  Your plans, what you pay, and the list-price work they
+                                did (plan set <tool> <usd> records a price you pay)
+segreant quota                 The vendors' own usage meters and the pace to their
+                                reset, beside Segreant's count  (--json)
+segreant statusline --setup    Prints the one line that makes Claude Code's status
+                                line record its live usage meter
 ```
 
 Metering, governance, and value:
@@ -129,6 +141,18 @@ segreant report --kind K       Wire an outcome gate: tested|merged|shipped|incid
                                 --commit <hash> [--verdict pass|fail] [--detail "…"]
 segreant exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
                                 `npm test`); every run reports its own exit code
+segreant outcome record        Preview a self-reported chat, image or other result;
+                                --apply records it (--request ID, --session ID, or
+                                --from/--to --tool to link it)
+segreant outcome report        Cost per accepted and used self-reported result, by
+                                kind and model  (--days N, --json)
+segreant market                Public quality per dollar by kind of work, from a
+                                bundled dated snapshot — never mixed with your own
+                                figures (--repo P shows yours beside it; --refresh
+                                fetches through egress)
+segreant evidence github       Signed, offline CI evidence: `emit` runs in a
+                                protected workflow, `import` verifies a pinned key and
+                                the exact repository, branch, workflow and policy
 segreant receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
 segreant yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
@@ -142,6 +166,14 @@ Operations:
 segreant init                  Write default config + print setup steps
 segreant doctor                First-run health check — config, DB, proxy, caps, pricing
 segreant config                Show config and file paths      (--json)
+segreant features              List optional subsystems and their switches;
+                                features on|off <key> previews, --apply saves
+segreant economic              Exact economic events, roles, bases and legacy
+                                coverage; period close/finalize/reopen controls
+                                (--days N | --all, --as-of <ISO>, --json)
+segreant alloc <action>        Cost-centre allocation: centres, rules, and a
+                                previewed split (--apply records it). See
+                                "Cost-centre allocation" below
 segreant pricing --refresh     Update the rate card from the community price feed
                                 (--auto opts into a refresh check on start when stale)
 segreant pricing --coverage    Read-only per-model historical rate-card and match
@@ -176,6 +208,12 @@ segreant plugin run --manifest <file> --request <file> --exec <path> --scope k=v
 segreant restore --from <file> --out <file>
                                 Preview a snapshot, or create a new verified
                                 database with --apply (never overwrites the active ledger)
+segreant causal                Retained randomized-study evidence: status, inspect,
+                                replay verification and review-only estimates; never
+                                changes routing (causal design|transport|family
+                                --options <file> check study declarations)
+segreant capital evaluate      Review-only AI-capital decomposition from a bounded
+                                JSON snapshot (--options <file>); no chargeback
 segreant demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve starts the dashboard
                                 on it; --clear removes it). Append --demo to today,
