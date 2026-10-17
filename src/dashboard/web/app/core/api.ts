@@ -95,6 +95,10 @@ import type {
   DiscoverPayload,
   ScanSetupPayload,
   PricingPayload,
+  UnknownPricingPayload,
+  PricingDeclarePayload,
+  PricingUnsetPayload,
+  RepricePayload,
   RealizationPayload,
   GuidePayload,
   JudgePayload,
@@ -320,9 +324,16 @@ export const api = {
   importers: () => request<ImportersPayload>(routePath('importers')),
   /** GET /api/scan is the dry run: it detects and reports, and imports nothing. */
   scan: () => request<ScanPayload>(routePath('scan')),
+  pricingUnknown: () => request<UnknownPricingPayload>(routePath('pricing-unknown')),
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
+    pricingDeclare: (body: Record<string, unknown>) =>
+      request<PricingDeclarePayload>(routePath('pricing-declare'), { method: 'POST', body: JSON.stringify(body) }),
+    pricingUnset: (model: string) =>
+      request<PricingUnsetPayload>(routePath('pricing-unset'), { method: 'POST', body: JSON.stringify({ model }) }),
+    reprice: (apply: boolean) =>
+      request<RepricePayload>(routePath('reprice'), { method: 'POST', body: JSON.stringify({ apply }) }),
     /**
      * Month close: `scope`, `import`, `adopt`, `reconcile`. Without `apply: true`
      * every op is a preview and writes nothing. An import carries the file's raw

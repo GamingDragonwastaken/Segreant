@@ -98,6 +98,16 @@ export function meteredBasisLine(basis: Basis | undefined): string {
   }
 }
 
+/** Share of the dollar total priced by a guess (nearest model or generic rate), 0..1. */
+export function guessedShare(basis: Basis | undefined): number {
+  if (!basis || basis.totalUsd <= 0) return 0;
+  const guessed = basis.cohorts.filter((c) => c.id === 'fallback' || c.id === 'list_family').reduce((s, c) => s + c.costUsd, 0);
+  return guessed / basis.totalUsd;
+}
+
+/** Below this share a guess cannot change what the total says; above it, say where to fix it. */
+export const GUESSED_SHARE_NEXT_STEP = 0.05;
+
 /** Every part of the total, one clause each, for the inspector. */
 export function meteredBasisParts(basis: Basis | undefined): string {
   if (!basis || basis.cohorts.length === 0) return 'no recorded requests in this period';
@@ -130,7 +140,11 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: o === null
       ? 'could not read the ledger'
       : meteredBasisLine(o.pricing.basis),
-    nextStep: o === null ? 'Check that Segreant is running.' : undefined,
+    nextStep: o === null
+      ? 'Check that Segreant is running.'
+      : guessedShare(o.pricing.basis) >= GUESSED_SHARE_NEXT_STEP
+        ? `${Math.round(guessedShare(o.pricing.basis) * 100)}% is priced by a guess. Give those models a price under Data, then re-price.`
+        : undefined,
     inspection: {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,

@@ -202,6 +202,8 @@ export function dataView(): Node {
             actionCard('connect'),
             actionCard('sources'),
             actionCard('baseline'),
+            actionCard('pricing-unknown'),
+            actionCard('reprice'),
             actionCard('demo'))));
     });
 }

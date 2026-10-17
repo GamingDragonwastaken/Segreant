@@ -6,7 +6,11 @@
  * at most five models, so a long tail never turns setup into a questionnaire.
  */
 import { C, color, usd, num } from './ui.ts';
-import { promptForUnknownModels, unknownModels } from './pricingDeclareCmd.ts';
+import { existsSync } from 'node:fs';
+import { dbPath } from '../config.ts';
+import { unknownModels } from '../cost/declarations.ts';
+import { Store } from '../store/db.ts';
+import { promptForUnknownModels } from './pricingDeclareCmd.ts';
 
 const MAX_ASKED = 5;
 /** Below this, a guess cannot move a total enough to be worth a question. */
@@ -19,7 +23,11 @@ export async function askModelPrices(
   },
 ): Promise<number> {
   if (!io.interactive) return 0;
-  const guessed = unknownModels().filter((m) => m.costUsd >= MIN_COST_USD);
+  if (!existsSync(dbPath())) return 0;
+  const store = new Store(dbPath());
+  let all: ReturnType<typeof unknownModels>;
+  try { all = unknownModels(store); } finally { store.close(); }
+  const guessed = all.filter((m) => m.costUsd >= MIN_COST_USD);
   if (guessed.length === 0) return 0;
   const asked = guessed.slice(0, MAX_ASKED);
   const write = (line: string) => io.output.write(`${line}\n`);
