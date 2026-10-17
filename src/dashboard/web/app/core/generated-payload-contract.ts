@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "2eacece2fdfed0f3b95cf549b1bc3f2b7164d5e435c04a169a195d4380e1fe09";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "8ac1e53007aab5b4422b9ecbd16b1260409fe17721d67ac6db2057b449dc16d6";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -4316,6 +4316,16 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "declaredAt",
       "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "rate",
+      "optional": true,
+      "type": "{ input: string; output: string; cacheRead?: string; cacheWrite?: string }"
+    },
+    {
+      "name": "like",
+      "optional": true,
       "type": "string"
     }
   ],

@@ -73,7 +73,6 @@ export function createFirstSightWatcher(options: FirstSightOptions): FirstSightW
   const run = (): void => {
     if (running || pending.size === 0 || !due()) return;
     lastAttemptMs = now();
-    const asked = [...pending.values()];
     running = (async () => {
       try {
         const result = await options.refresh();
@@ -81,10 +80,15 @@ export function createFirstSightWatcher(options: FirstSightOptions): FirstSightW
           options.onFailed?.(result.error ?? 'the price list could not be read');
           return;
         }
-        const learned = asked.filter(({ provider, model }) => !rateFor(provider, model).estimated);
-        // Every model asked about has had its answer, known or not; a model the
-        // list does not know is not asked about again until the next interval.
-        for (const { provider, model } of asked) pending.delete(JSON.stringify([provider, model]));
+        // Every pending model is checked against the refreshed card, including
+        // one first seen while this lookup was running: a snapshot taken at the
+        // start left it pending for good once the card priced it exactly, since
+        // exact requests never call note() again (PR #146 review). Known or not,
+        // each has had its answer; one the list does not know is not asked about
+        // again until the next interval.
+        const answered = [...pending.values()];
+        pending.clear();
+        const learned = answered.filter(({ provider, model }) => !rateFor(provider, model).estimated);
         if (learned.length > 0) options.onLearned?.(learned);
       } catch (error) {
         options.onFailed?.(error instanceof Error ? error.message : String(error));

@@ -94,6 +94,13 @@ export function meteredBasisLine(basis: Basis | undefined): string {
       // used to print "0% priced without the model's own rate ()".
       if (weak.length === 0 && !declared) {
         if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the price list';
+        // No rate card priced any of it: every charged request is on a model the
+        // user marked free (PR #146 review). It used to read "API list price".
+        if (basis.cohorts.some((c) => c.id === 'user_free') && !basis.cohorts.some((c) => c.id === 'list_exact' || c.id === 'list_family')) {
+          return basis.cohorts.some((c) => c.id === 'unpriced')
+            ? 'no charge on models you marked free; some requests have no price'
+            : 'no charge: every request is on a model you marked free';
+        }
         if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'list prices; some requests have no price';
         return "API list price from the rate card";
       }

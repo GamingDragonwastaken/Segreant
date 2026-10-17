@@ -77,6 +77,31 @@ test('turned off, it never looks anything up', async () => {
   assert.equal(h.calls.length, 0);
 });
 
+test('a model first seen while a lookup runs is answered by that lookup (PR #146 review)', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const learned: string[][] = [];
+  let calls = 0;
+  const watcher = createFirstSightWatcher({
+    enabled: () => true,
+    lastCheckedMs: () => null,
+    refresh: async () => {
+      calls += 1;
+      await gate;
+      setPriceOverride('acme-during', { kind: 'rate', input: '0.1', output: '0.5' });
+      return { ok: true };
+    },
+    onLearned: (models) => learned.push(models.map((m) => m.model)),
+  });
+  watcher.note('openai', 'acme-before', 'fallback');
+  watcher.note('openai', 'acme-during', 'fallback');
+  release();
+  await watcher.idle();
+  assert.equal(calls, 1);
+  assert.deepEqual(learned, [['acme-during']], 'the model sighted mid-lookup is reported once the card prices it');
+  removePriceOverride('acme-during');
+});
+
 test('a failed lookup is reported and leaves the estimate standing', async () => {
   const h = harness({ ok: false });
   h.watcher.note('openai', 'acme-e', 'fallback');

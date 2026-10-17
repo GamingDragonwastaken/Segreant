@@ -336,6 +336,12 @@ test('a price you set is named as yours, never as "priced without the model\'s o
   assert.equal(listAndMine!.basis, 'estimated: 29% at prices you set');
   const [all] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, mine, guessed]) }, '30d');
   assert.equal(all!.basis, "estimated: 15% priced without the model's own rate (fallback rate); 25% at prices you set");
+
+  const free = { provider: 'ollama', model: 'llama-local', costBasis: 'user_declared_price', rateMatchKind: 'user_declared_free', requests: 3, costUsd: 0 } as const;
+  const [onlyFree] = buildClaimLayers({ ...NOTHING, overview: withRows([free]) }, '30d');
+  assert.equal(onlyFree!.basis, 'no charge: every request is on a model you marked free', 'no rate card priced it, so it is never called a list price');
+  const [freeAndList] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, free]) }, '30d');
+  assert.equal(freeAndList!.basis, "list prices: each model's own published price");
 });
 
 test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {

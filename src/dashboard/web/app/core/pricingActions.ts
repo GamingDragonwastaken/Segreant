@@ -1,6 +1,6 @@
 /** Local price declarations and audited history corrections, preview first. */
 import { api } from './api.ts';
-import type { UnknownPricingPayload, UnknownPricingModel, RepricePayload } from './generated-types.ts';
+import type { DeclaredPrice, UnknownPricingPayload, UnknownPricingModel, RepricePayload } from './generated-types.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
 import { usd, count } from './fmt.ts';
@@ -22,8 +22,11 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   const key = (model: UnknownPricingModel): string => JSON.stringify([model.provider, model.model]);
   /** A declared price is edited in place: a model already on the card, or whose guessed rows were re-priced, never returns to the list above. */
   const declaredKey = (model: string): string => JSON.stringify(['declared', model]);
-  function draft(model: { model: string }) {
-    return { model: model.model, mode: signal('skip'), like: signal(''), input: signal(''), output: signal(''), cacheRead: signal(''), cacheWrite: signal('') };
+  /** A declared price's draft starts from its stored numbers, so changing the input price keeps the cache prices (PR #146 review). */
+  function draft(model: { model: string; rate?: DeclaredPrice['rate']; like?: string }) {
+    const r = model.rate;
+    return { model: model.model, mode: signal('skip'), like: signal(model.like ?? ''), input: signal(r?.input ?? ''), output: signal(r?.output ?? ''),
+      cacheRead: signal(r?.cacheRead ?? ''), cacheWrite: signal(r?.cacheWrite ?? '') };
   }
   const load = async (): Promise<UnknownPricingPayload> => {
     if (!read) read = api.pricingUnknown().then((payload) => {

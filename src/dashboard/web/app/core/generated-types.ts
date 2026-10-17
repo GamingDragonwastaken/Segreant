@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 2eacece2fdfed0f3b95cf549b1bc3f2b7164d5e435c04a169a195d4380e1fe09 */
+/** Source SHA-256: 8ac1e53007aab5b4422b9ecbd16b1260409fe17721d67ac6db2057b449dc16d6 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1913,6 +1913,9 @@ export interface DeclaredPrice {
   /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
   summary: string;
   declaredAt: string;
+  /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
+  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string };
+  like?: string;
 }
 
 export interface UnknownPricingPayload {
