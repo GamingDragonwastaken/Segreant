@@ -2158,6 +2158,11 @@ export class Store {
     options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean },
   ): EffectiveRequestRow[] {
     const rows = this.requestsInRange(startMs, endMs).filter((row) => {
+      // A request refused before it was sent has no economic event because it
+      // cost nothing; reading it here marked it no_exact_economic_event and made
+      // attribution partial (PR #143 review). It is not spend, so it is skipped,
+      // as the exact spend projection skips it.
+      if (row.pricing?.costBasis === 'not_sent') return false;
       if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
       if (options.liveOnly === true && (row.via ?? 'proxy') !== 'proxy') return false;
       return true;

@@ -646,9 +646,13 @@ async function handle(
       reasoningTokens: 0,
       costUsd: 0,
       estimated: false,
-      // An egress refusal never left the machine; a timeout or a dropped
-      // connection may have reached the provider, so its cost stays unknown.
-      pricing: egressRefusal ? notSentPricingEvidence() : unpricedPricingEvidence(),
+      // Only a policy or DNS refusal is certainly decided before the dial. A
+      // receipt failure can come after the provider answered (the response
+      // receipt), and a timeout or dropped connection may have reached it, so
+      // those keep an unknown cost (PR #143 review).
+      pricing: egressRefusal !== null && (egressRefusal.code === 'policy_denied' || egressRefusal.code === 'dns_denied')
+        ? notSentPricingEvidence()
+        : unpricedPricingEvidence(),
       streamed: parsed.stream,
       statusCode: status,
       durationMs: Date.now() - startedAt,
