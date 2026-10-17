@@ -498,7 +498,11 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Segreant proxy (:8090)
    versioned rate card, and logs it on-device. Prompt bodies are not stored by
    this metering path.
 3. **Runaway spend is capped** — soft warnings, hard caps, and a velocity guard
-   can halt a looping agent before further proxy-routed provider usage.
+   can halt a looping agent before further proxy-routed provider usage. A cap
+   set with `segreant budget` takes effect on a running proxy without a
+   restart. The check happens before a request is sent, so requests already in
+   flight when the cap is crossed still finish: the overshoot is at most one
+   request per concurrent stream.
 
 The rate card is a local list-price estimate. Every newly calculated ledger row
 retains the exact rate-card SHA-256, source kind, and exact/family/fallback
