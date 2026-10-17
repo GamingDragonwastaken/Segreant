@@ -178,7 +178,9 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
   }
   line(color(tty, C.bold, 'Start your tools through Segreant:'));
   line(color(tty, C.gray, '  segreant launch -- claude        (or codex, aider, opencode, …)'));
-  line(color(tty, C.gray, '  Metered while this proxy runs; starts unmetered with a warning when it does not.'));
+  line(color(tty, C.gray, cfg.budget.dailyUsd !== null || cfg.budget.sessionUsd !== null
+    ? '  Metered while this proxy runs. With a cap set, launch refuses while it is stopped (--allow-unmetered overrides).'
+    : '  Metered while this proxy runs; starts unmetered with a warning when it does not.'));
   line(color(tty, C.bold, 'Or point a tool here yourself (PowerShell):'));
   line(color(tty, C.gray, `  $env:ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`));
   line(color(tty, C.gray, `  $env:OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`));

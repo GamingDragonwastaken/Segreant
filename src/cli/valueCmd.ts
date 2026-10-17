@@ -24,7 +24,9 @@ import {
   previewBudgetCapIssuance,
   readBudgetCapCertificates,
   renderBudgetCapDecision,
+  type BudgetCapDecision,
 } from '../budget/capDecision.ts';
+import type { DecisionKernelIssuance } from '../decision/epistemic.ts';
 import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { describeDriftReading, driftReading } from '../value/drift.ts';
@@ -62,6 +64,25 @@ async function answeredNothingSpent(store: Store, flags: Flags, repo: string): P
   }
   store.close();
   return true;
+}
+
+/**
+ * The budget decision in two sentences: whether the evidence shows the
+ * recommended cap doing better than the current one, and where the full record
+ * is. The record itself (renderBudgetCapDecision) stays one flag away.
+ */
+function plainCapVerdict(decision: BudgetCapDecision, canonical: DecisionKernelIssuance): string[] {
+  const label = (capUsd: number | null | undefined) => (capUsd === null || capUsd === undefined ? 'no cap' : usd(capUsd));
+  const recommended = label(decision.actions.find((a) => a.action === 'apply_recommended')?.capUsd);
+  const current = label(decision.actions.find((a) => a.action === 'keep_current')?.capUsd);
+  const certificate = canonical.certificateBundle.dominance;
+  const currentPhrase = current === 'no cap' ? 'having no cap' : `your current ${current}`;
+  const verdict = certificate.status === 'proven_dominant'
+    ? certificate.action === 'apply_recommended'
+      ? `  On this evidence the recommended ${recommended} cap does better than ${currentPhrase}.`
+      : `  On this evidence ${currentPhrase} does better than the recommended ${recommended} cap.`
+    : `  Is ${recommended} better than ${currentPhrase}? Not shown: which days' spend was kept is only partly observed, so neither is proven better.`;
+  return [verdict, '  Full decision record, with each assumption and what would settle it: segreant budget --recommend --detail'];
 }
 
 export async function cmdYield(flags: Flags): Promise<void> {
@@ -775,7 +796,13 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   for (const r of rec.rationale) console.log(color(tty, C.gray, `  · ${r}`));
   if (decision) {
     console.log('');
-    for (const line of renderBudgetCapDecision(decision, certificates, canonicalDecision!)) console.log(color(tty, C.gray, line));
+    // The full record (certificate, assurance level, every unmet input claim)
+    // is for an auditor; printed by default it buried the answer under internal
+    // claim ids and read as contradicting the recommendation above it.
+    const lines = flags.detail
+      ? renderBudgetCapDecision(decision, certificates, canonicalDecision!)
+      : plainCapVerdict(decision, canonicalDecision!);
+    for (const line of lines) console.log(color(tty, C.gray, line));
   }
   // Raw allocation and frontier trim/grow hints are withheld from this surface
   // (D-248): generic contexts can be unlike work, and comparable model guidance
@@ -807,7 +834,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     console.log('');
     console.log(color(tty, C.gray, decision && applyPermitted
       ? '  Re-run with --apply to write these to your config.'
-      : '  No cap written. Applying a recommendation requires a certified DecisionCertificate with DAL-3 assurance; the decision block above says what is missing.'));
+      : '  No cap written: --apply needs evidence that the new cap does better, and this data does not show it. --detail lists what is missing.'));
   }
   console.log('');
   store.close();

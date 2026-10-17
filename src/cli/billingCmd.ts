@@ -907,7 +907,25 @@ export async function cmdBilling(flags: Flags): Promise<void> {
         console.log(`  Imports       ${summary.importCount}`);
         console.log(`  Charge lines  ${summary.recordCount}`);
         console.log(`  Declared USD  $${formatUsdMicros(summary.providerReportedUsdMicros)}`);
-        console.log('  Reconcile     not_reconciled — imported reports and local request estimates are not yet scope-comparable.');
+        // A recorded comparison is the answer to "has this been reconciled?";
+        // the status line used to say not_reconciled whatever the ledger held.
+        const latest = store.reconciliationRuns(20);
+        if (latest.length === 0) {
+          console.log('  Reconcile     not_reconciled — no comparison recorded yet. Preview one: segreant billing reconcile');
+        } else {
+          const run = latest[0]!.result;
+          const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+          console.log(`  Reconcile     ${latest.length === 20 ? '20+' : latest.length} recorded comparison(s); latest: ${run.providerProjectRef}, ${day(run.periodStartMs)} → ${day(run.periodEndMs)} (UTC, end exclusive)`);
+          console.log(`                provider $${formatUsdMicros(run.providerReportedMicros)} · metered $${formatUsdMicros(run.localCapturedMicros)} · unexplained ${signedUsd(run.unexplainedVarianceMicros)} — scope-conditional, not a clean reconciliation`);
+          // How much of what Segreant metered in that period the comparison
+          // actually covers: one project's bill is not the month's spend.
+          const meteredMicros = Math.round(store.spendBetween(run.periodStartMs, run.periodEndMs) * 1e6);
+          if (meteredMicros > 0) {
+            const share = Math.min(100, (run.localCapturedMicros / meteredMicros) * 100);
+            console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(meteredMicros)} Segreant metered across all providers in that period (${share < 1 ? share.toFixed(1) : Math.round(share)}%)`);
+          }
+          console.log('                Details: segreant billing reconcile');
+        }
         if (summary.lastImportedAtMs !== null) console.log(`  Last import   ${new Date(summary.lastImportedAtMs).toISOString()}`);
         if (imports.length > 0) console.log(`  Latest file   ${imports[0]!.fileName}  sha256:${imports[0]!.fileSha256}`);
         console.log('');

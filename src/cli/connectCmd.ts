@@ -386,6 +386,12 @@ function connectGenericApi(cfg: SegreantConfig, flags: Flags, tty: boolean): voi
   console.log(color(tty, C.gray, '  The header wins if you send both. Either way it is your declaration, recorded'));
   console.log(color(tty, C.gray, '  as such — Segreant does not verify that the label is true.'));
   console.log('');
+  // The recipe covered the client side only; a user pointing scripts at another
+  // OpenAI-compatible provider had to find the other half in the docs.
+  console.log(color(tty, C.gray, `  Segreant forwards these requests to ${cfg.upstreams.openai}. For another`));
+  console.log(color(tty, C.gray, '  OpenAI-compatible provider (OpenRouter, Azure, a local server), set'));
+  console.log(color(tty, C.gray, '  "upstreams": { "openai": "<base URL>" } in config.json; docs/INTEGRATIONS.md has examples.'));
+  console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
   console.log(color(tty, C.green, '    segreant sources'));
   console.log(color(tty, C.gray, '    segreant project --coverage   # what the spend is attributed to, and how'));

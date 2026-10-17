@@ -226,7 +226,7 @@ function cmdHelp(): void {
                           --include-imported on|off: whether imported subscription
                           spend counts toward cap ENFORCEMENT (default off — the
                           cap governs live proxy traffic, the spend it can block)
-    budget --recommend    Suggest a value-aware budget from usage + realized value
+    budget --recommend    Suggest a value-aware budget from usage + realized value (--detail: full decision record)
                           (--repo <path> for value-based, --apply to write, --json)
     budget --control      Evaluate one bounded autonomous daily-cap control step
                           from a versioned JSON policy (--policy <file>, --repo <path>,
