@@ -130,8 +130,11 @@ test('litellm: per-token costs transform to exact per-1M rates, provider-mapped 
   assert.equal(t.ok, true);
   const f = t.file!;
   // Per-token → per-1M is exact, not float-noisy.
+  // ...and every learned rate carries its decimal companion, so a first-sight
+  // model reprices to an exact amount (PR #146 review).
   assert.deepEqual(f.providers['anthropic']!.models['claude-opus-4-8'], {
     input: 5, output: 25, cache_write_5m: 6.25, cache_read: 0.5,
+    exact: { input: '5', output: '25', cache_write_5m: '6.25', cache_read: '0.5' },
   });
   assert.equal(f.providers['openai']!.models['gpt-4o']!.input, 2.5);
   // gemini routes map to our 'google' provider, with the route prefix stripped.
@@ -158,13 +161,13 @@ test('litellm: first-party makers survive with bare model keys and unverified li
   const transformed = transformLiteLLMManifest(litellmFeed(firstPartyEntries));
   assert.equal(transformed.ok, true);
   const expected = [
-    ['deepseek', 'deepseek-chat', { input: 0.28, output: 0.42 }],
-    ['mistral', 'mistral-small-latest', { input: 0.1, output: 0.3 }],
-    ['xai', 'grok-4.20-multi-agent-beta-0309', { input: 1.25, output: 2.5 }],
-    ['dashscope', 'qwen-plus', { input: 0.4, output: 1.2 }],
-    ['zai', 'glm-5', { input: 1, output: 3.2 }],
-    ['perplexity', 'sonar', { input: 1, output: 1 }],
-    ['cohere', 'command-r-08-2024', { input: 0.15, output: 0.6 }],
+    ['deepseek', 'deepseek-chat', { input: 0.28, output: 0.42, exact: { input: '0.28', output: '0.42' } }],
+    ['mistral', 'mistral-small-latest', { input: 0.1, output: 0.3, exact: { input: '0.1', output: '0.3' } }],
+    ['xai', 'grok-4.20-multi-agent-beta-0309', { input: 1.25, output: 2.5, exact: { input: '1.25', output: '2.5' } }],
+    ['dashscope', 'qwen-plus', { input: 0.4, output: 1.2, exact: { input: '0.4', output: '1.2' } }],
+    ['zai', 'glm-5', { input: 1, output: 3.2, exact: { input: '1', output: '3.2' } }],
+    ['perplexity', 'sonar', { input: 1, output: 1, exact: { input: '1', output: '1' } }],
+    ['cohere', 'command-r-08-2024', { input: 0.15, output: 0.6, exact: { input: '0.15', output: '0.6' } }],
   ] as const;
   for (const [provider, model, rate] of expected) {
     assert.deepEqual(transformed.file!.providers[provider]?.models[model], rate, `${provider}/${model}`);
@@ -227,7 +230,7 @@ test('litellm: DeepSeek on the OpenAI route resolves exactly against the transfo
   assert.equal(applied.ok, true);
   assert.equal(applied.sourceKind, 'litellm_transformed');
   const resolved = rateFor('openai', 'deepseek-chat');
-  assert.deepEqual(resolved.rate, { input: 0.28, output: 0.42 });
+  assert.deepEqual(resolved.rate, { input: 0.28, output: 0.42, exact: { input: '0.28', output: '0.42' } });
   assert.equal(resolved.estimated, false);
   assert.equal(resolved.pricing.costBasis, 'local_list_price');
   assert.equal(resolved.pricing.rateMatchKind, 'exact_cross_provider');
@@ -249,7 +252,7 @@ test('litellm: unchanged cross-provider family matching prices an R1 distill as 
   // A distinct distilled model still contains the maker's short key. This
   // characterizes the existing heuristic; it does not endorse the guessed rate.
   const resolved = rateFor('openai', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B');
-  assert.deepEqual(resolved.rate, { input: 0.55, output: 2.19 });
+  assert.deepEqual(resolved.rate, { input: 0.55, output: 2.19, exact: { input: '0.55', output: '2.19' } });
   assert.equal(resolved.estimated, true);
   assert.equal(resolved.pricing.rateMatchKind, 'family_cross_provider');
   assert.equal(resolved.pricing.rateMatchProvider, 'deepseek');

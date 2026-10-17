@@ -22,7 +22,7 @@ import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { RequestRow, SpendBucket } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
-import type { Money } from '../economics/money.ts';
+import { formatMoneyAmount, money, type Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
 import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
@@ -324,11 +324,22 @@ export function applyRepricedCosts(
           throw new Error(`exact reprice for request ${u.requestId} requires an exact replacement amount`);
         }
         const recordedAt = new Date(appliedAtMs).toISOString();
+        // A correction keeps its source's basis: the economic ledger never
+        // moves an amount from one kind of evidence to another. An estimate
+        // repriced at a list rate is recorded as that estimate, corrected to the
+        // exact figure; the request row itself says which rate priced it. Without
+        // this, every fallback row on an exact ledger refused to reprice
+        // (PR #146 review). Re-labelling the other way would claim more
+        // certainty than the source event carries.
+        const source = exactSource.amount!;
+        const nextAmount = u.economicAmount.basis === source.basis
+          ? u.economicAmount
+          : money(formatMoneyAmount(u.economicAmount), u.economicAmount.currency, source.basis);
         const correction = priceCorrectionEvent({
           id: `economic:request:${u.requestId}:price-corrected`,
           source: exactSource,
-          previousAmount: exactSource.amount!,
-          nextAmount: u.economicAmount,
+          previousAmount: source,
+          nextAmount,
           recordedAt,
         });
         deps.economicLedger!.appendWithinTransaction(correction);

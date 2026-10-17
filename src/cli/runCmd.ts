@@ -110,7 +110,16 @@ export async function cmdStart(flags: Flags): Promise<void> {
   // in the request's path). Rows are not rewritten: the user is told, and
   // `segreant reprice` previews the correction.
   const firstSight = createFirstSightWatcher({
-    enabled: () => cfg.pricing.lookupUnknownModels,
+    // Read from the file at each sighting: `segreant pricing --auto off` in
+    // another terminal must stop the next lookup without a restart (PR #146
+    // review). A config that no longer reads is treated as off.
+    enabled: () => {
+      try {
+        return loadConfig().pricing.lookupUnknownModels;
+      } catch {
+        return false;
+      }
+    },
     refresh: () => refreshPricing(cfg.pricing.manifestUrl),
     onLearned: (models) => {
       const names = models.map((m) => m.model).join(', ');

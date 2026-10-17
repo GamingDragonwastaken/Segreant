@@ -49,8 +49,11 @@ card into provider billing, or alter signed/canonical evidence bytes.
   traffic, applies local soft/hard/velocity controls, and serves a local CLI and
   dashboard.
 - A Segreant-process egress boundary starts in `local_locked` mode: it permits
-  literal loopback HTTP(S) targets only and refuses non-loopback targets before
-  DNS. `controlled_cloud` mode permits a cloud request only when an enabled,
+  literal loopback HTTP(S) targets and one built-in request, a GET of the public
+  price list at its exact fixed URL (purpose `pricing_refresh`, no query or
+  fragment, public DNS answer required, receipted under rule id
+  `segreant-builtin-price-list`), and refuses every other non-loopback target
+  before DNS. `controlled_cloud` mode permits a cloud request only when an enabled,
   exact rule matches its purpose, data class, method, HTTPS origin, and leading
   path; it pins the selected public IP for the dial, follows no redirect, and,
   after policy evaluation, writes a redacted hash-chained `preflight_allowed`
@@ -156,9 +159,11 @@ the provider or optional egress paths above.
 ### High-assurance egress modes
 
 - **Local locked** is the default and is enforceable for Segreant's own HTTP(S)
-  transport: no non-loopback target is resolved or dialled. It permits a local
-  inference service at a literal loopback address such as `127.0.0.1` or
-  `localhost`.
+  transport: no non-loopback target is resolved or dialled except the built-in
+  public price list (one exact HTTPS URL, GET only, sending nothing about the
+  user; `segreant pricing --auto off` stops Segreant requesting it by itself).
+  It permits a local inference service at a literal loopback address such as
+  `127.0.0.1` or `localhost`.
 - **Controlled cloud** is opt-in and rule-scoped. A rule does not authorize a
   hostname pattern, arbitrary query/redirect target, plaintext remote HTTP, or
   another purpose/data class. The process receipt records a redacted target

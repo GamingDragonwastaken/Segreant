@@ -15,6 +15,8 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   const data = signal<UnknownPricingPayload | null>(null);
   const saved = signal(false);
   const selected = signal<string | null>(null);
+  /** A price the user set and chose to remove; exclusive with a model being priced. */
+  const removal = signal<string | null>(null);
   const drafts = new Map<string, ReturnType<typeof draft>>();
   let read: Promise<UnknownPricingPayload> | null = null;
   const key = (model: UnknownPricingModel): string => JSON.stringify([model.provider, model.model]);
@@ -49,6 +51,8 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
     command: () => {
       const id = selected();
       const d = id ? drafts.get(id) : undefined;
+      const removing = removal();
+      if (removing) return /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]*$/.test(removing) ? `segreant pricing unset ${removing}` : null;
       if (!d || d.mode() === 'skip') return 'segreant pricing unknown';
       // Model names and prices are validated server-side; do not interpolate untrusted shell words.
       const word = (s: string) => /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]*$/.test(s) ? s : null;
@@ -66,6 +70,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
         const change = (field: typeof d.input, event: Event) => {
           field.set((event.target as HTMLInputElement).value);
           selected.set(id);
+          removal.set(null);
         };
         const input = (label: string, suffix: string, field: typeof d.input, placeholder: string) => h('div', null,
           h('label', { class: 'drawer-h3', for: `price-${i}-${suffix}`, text: label }),
@@ -80,6 +85,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
           h('select', { id: `price-${i}-mode`, class: 'drawer-input', onchange: (event: Event) => {
             d.mode.set((event.target as HTMLSelectElement).value);
             selected.set(d.mode.peek() === 'skip' ? null : id);
+            if (d.mode.peek() !== 'skip') removal.set(null);
           } },
             h('option', { value: 'skip', selected: d.mode.peek() === 'skip', text: 'Skip' }), h('option', { value: 'like', selected: d.mode.peek() === 'like', text: 'Price like…' }),
             h('option', { value: 'rate', selected: d.mode.peek() === 'rate', text: 'Set a price' }), h('option', { value: 'free', selected: d.mode.peek() === 'free', text: 'Free (local model)' })),
@@ -89,11 +95,32 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
               input(`Input for ${model.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
               input(`Output for ${model.model} (USD per 1M tokens)`, 'output', d.output, '3.00')) : null);
       }) ?? null,
+      () => (data()?.declared.length ?? 0) > 0 ? h('section', { class: 'pricing-declared' },
+        h('h3', { class: 'drawer-h3', text: 'Your prices' }),
+        h('p', { class: 'drawer-note', text: 'To change one, remove it here; the model then comes back in the list above to price again.' }),
+        ...data()!.declared.map((p, i) => h('div', { class: 'pricing-model' },
+          h('label', { class: 'drawer-h3', for: `declared-${i}-mode`, text: `${p.model}: ${p.summary}` }),
+          h('select', { id: `declared-${i}-mode`, class: 'drawer-input', onchange: (event: Event) => {
+            const remove = (event.target as HTMLSelectElement).value === 'remove';
+            removal.set(remove ? p.model : removal.peek() === p.model ? null : removal.peek());
+            if (remove) selected.set(null);
+          } },
+            h('option', { value: 'keep', selected: removal.peek() !== p.model, text: 'Keep' }),
+            h('option', { value: 'remove', selected: removal.peek() === p.model, text: 'Remove price' }))))) : null,
       h('div', { role: 'status', 'aria-live': 'polite' }, () => saved() ? h('div', null,
         h('p', { class: 'drawer-note', text: AFTER_DECLARATION }),
         h('button', { class: 'btn-ghost', text: 'Re-price recorded requests', onclick: () => openAction(repriceAction(capability('reprice')!)) })) : null)),
     preview: async (): Promise<PreviewResult> => {
       const payload = await load();
+      const removing = removal.peek();
+      if (removing) {
+        return {
+          applicable: !payload.demo,
+          summary: `Remove your price for ${removing}. New requests go back to the rate card, or to an estimate if the card does not know the model; recorded requests are unchanged.`,
+          blockedReason: 'Sample data: start without --demo to change a price.',
+          notes: [payload.boundary],
+        };
+      }
       const body = priceBody();
       const d = choice();
       const description = !body ? '' : body.kind === 'free' ? 'Free (local model): $0 your price per request.'
@@ -109,6 +136,14 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       };
     },
     commit: async () => {
+      const removing = removal.peek();
+      if (removing) {
+        const removed = await api.write.pricingUnset(removing);
+        removal.set(null);
+        read = null;
+        try { await load(); } catch { /* the message below still holds */ }
+        return { ok: removed.ok, message: removed.removed ? `Removed your price for ${removing}.` : `${removing} had no price of yours.` };
+      }
       const body = priceBody();
       if (!body) return { ok: false, message: 'Choose a price for one model first.' };
       const result = await api.write.pricingDeclare(body);

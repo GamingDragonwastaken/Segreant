@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 6fdd02e03fd430a2b974ef8b9b0ded8b6097690a51b48e4b717190893a56a53b */
+/** Source SHA-256: 354aef3cb0fabb142fcdc5ac3e6189e71387c16dbdba5006e13ffc76b204c0cd */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1907,8 +1907,18 @@ export interface UnknownPricingModel {
   rateMatchKind: string;
 }
 
+export interface DeclaredPrice {
+  model: string;
+  kind: 'rate' | 'like' | 'free';
+  /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
+  summary: string;
+  declaredAt: string;
+}
+
 export interface UnknownPricingPayload {
   models: UnknownPricingModel[];
+  /** Prices the user set, so they can be reviewed and removed from the same drawer. */
+  declared: DeclaredPrice[];
   boundary: string;
   demo: boolean;
 }
