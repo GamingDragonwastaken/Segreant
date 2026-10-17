@@ -173,7 +173,12 @@ export function cmdAlloc(flags: Flags): void {
         // and re-running those dates gave a different total.
         const bound = (ms: number) => {
           const iso = new Date(ms).toISOString();
-          return iso.slice(11, 19) === '00:00:00' ? iso.slice(0, 10) : `${iso.slice(0, 10)} ${iso.slice(11, 16)}Z`;
+          // Every nonzero part of the time is kept: allocation includes rows by
+          // the exact millisecond, so a bound shown to the minute could not be
+          // copied back to reproduce the split (PR #142 review).
+          if (iso.slice(11, 23) === '00:00:00.000') return iso.slice(0, 10);
+          const time = iso.slice(17, 23) === '00.000' ? iso.slice(11, 16) : iso.slice(20, 23) === '000' ? iso.slice(11, 19) : iso.slice(11, 23);
+          return `${iso.slice(0, 10)} ${time}Z`;
         };
         const period = `${bound(r.result.periodStartMs)} → ${bound(r.result.periodEndMs)} (end exclusive)`;
         const share = r.result.totalMicros > 0 ? `${((r.result.allocatedMicros / r.result.totalMicros) * 100).toFixed(1)}% allocated` : 'nothing to allocate';

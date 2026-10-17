@@ -325,8 +325,11 @@ async function main(): Promise<void> {
   // Flags with no command (`segreant --demo`) are flags for the home view; the
   // help text says --demo works on any read command, and bare `segreant` is one.
   // --help/-h and --version/-v stay commands of their own.
-  const flagsOnly = argv[0] !== undefined && argv[0].startsWith('-')
-    && !['--help', '-h', '--version', '-v', '--'].includes(argv[0]);
+  // Only long options qualify: parseFlags reads `--name` alone, so a single-dash
+  // token here would be swallowed as a positional and `segreant -bogus` would
+  // render the home view and exit 0 (PR #142 review).
+  const flagsOnly = argv[0] !== undefined && argv[0].startsWith('--')
+    && !['--help', '--version', '--'].includes(argv[0]);
   const cmd = flagsOnly ? 'home' : argv[0] ?? 'home';
   const rest = flagsOnly ? argv : argv.slice(1);
   // `exec` wraps another command: everything after the bare `--` belongs to the

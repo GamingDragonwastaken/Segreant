@@ -19,6 +19,7 @@ import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type 
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+import { capConfigured } from './launchCmd.ts';
 
 /**
  * Fill an empty sample ledger before the dashboard serves it. `start --demo`
@@ -178,7 +179,7 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
   }
   line(color(tty, C.bold, 'Start your tools through Segreant:'));
   line(color(tty, C.gray, '  segreant launch -- claude        (or codex, aider, opencode, …)'));
-  line(color(tty, C.gray, cfg.budget.dailyUsd !== null || cfg.budget.sessionUsd !== null
+  line(color(tty, C.gray, capConfigured(cfg)
     ? '  Metered while this proxy runs. With a cap set, launch refuses while it is stopped (--allow-unmetered overrides).'
     : '  Metered while this proxy runs; starts unmetered with a warning when it does not.'));
   line(color(tty, C.bold, 'Or point a tool here yourself (PowerShell):'));

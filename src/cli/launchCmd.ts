@@ -26,7 +26,8 @@ export interface LaunchPlan {
   refuse: boolean;
 }
 
-function capConfigured(cfg: SegreantConfig): boolean {
+/** Whether any hard cap is set. The start banner uses the same test, so its advice matches launch. */
+export function capConfigured(cfg: SegreantConfig): boolean {
   const b = cfg.budget;
   return b.dailyUsd !== null || b.sessionUsd !== null || b.runawayMaxUsd !== null;
 }

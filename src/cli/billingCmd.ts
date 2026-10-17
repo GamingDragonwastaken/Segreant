@@ -919,8 +919,10 @@ export async function cmdBilling(flags: Flags): Promise<void> {
           console.log(`                provider $${formatUsdMicros(run.providerReportedMicros)} · metered $${formatUsdMicros(run.localCapturedMicros)} · unexplained ${signedUsd(run.unexplainedVarianceMicros)} — scope-conditional, not a clean reconciliation`);
           // How much of what Segreant metered in that period the comparison
           // actually covers: one project's bill is not the month's spend.
-          const meteredMicros = Math.round(store.spendBetween(run.periodStartMs, run.periodEndMs) * 1e6);
-          if (meteredMicros > 0) {
+          // Same day quantization as the comparison itself, so the share
+          // cannot exceed the whole (PR #142 review).
+          const meteredMicros = store.meteredMicrosLikeReconciliation(run.periodStartMs, run.periodEndMs);
+          if (meteredMicros !== null && meteredMicros > 0) {
             const share = Math.min(100, (run.localCapturedMicros / meteredMicros) * 100);
             console.log(`                covers $${formatUsdMicros(run.localCapturedMicros)} of the $${formatUsdMicros(meteredMicros)} Segreant metered across all providers in that period (${share < 1 ? share.toFixed(1) : Math.round(share)}%)`);
           }
