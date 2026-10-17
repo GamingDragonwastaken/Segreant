@@ -23,6 +23,11 @@ import { spec } from 'node:test/reporters';
 const scratchUser = mkdtempSync(join(tmpdir(), 'segreant-test-user-'));
 process.env.HOME = scratchUser;
 process.env.USERPROFILE = scratchUser;
+// An exported SEGREANT_HOME (or SEGREANT_DB / SEGREANT_DEMO) outranks the home
+// directory, so a developer's own override would route a forgetful test
+// straight into that real ledger and past the check below (PR #138 review).
+// Tests that need one set it themselves.
+for (const name of ['SEGREANT_HOME', 'SEGREANT_DB', 'SEGREANT_DEMO']) delete process.env[name];
 
 const files = (process.argv.length > 2 ? process.argv.slice(2) : readdirSync('test').filter((f) => f.endsWith('.test.ts')).map((f) => join('test', f))).sort();
 
