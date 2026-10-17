@@ -362,6 +362,8 @@ async function survivingLinesInFile(repoPath: string, head: string, hash: string
 export interface SurvivingLines {
   readonly added: number;
   readonly surviving: number;
+  /** Files this commit added lines to, from the same (cached) numstat read. */
+  readonly filesWithAdditions: number;
   /**
    * True when every file with added lines was blamed. False means the budget
    * ran out first, and `surviving` is a floor over an unknown remainder rather
@@ -392,9 +394,11 @@ export async function survivingLines(
   let added = 0;
   let surviving = 0;
   let measured = true;
+  let filesWithAdditions = 0;
   for (const f of files) {
     added += f.added;
     if (f.added === 0) continue;
+    filesWithAdditions += 1;
     if (head === null || (deadlineMs !== undefined && Date.now() >= deadlineMs)) {
       // No HEAD to blame against (an unborn branch) is unmeasured, never zero.
       measured = false;
@@ -402,7 +406,7 @@ export async function survivingLines(
     }
     surviving += await survivingLinesInFile(repoPath, head, hash, f.path, sinceSec);
   }
-  return { added, surviving, measured };
+  return { added, surviving, measured, filesWithAdditions };
 }
 
 /** Set of commit hashes that were later reverted (git's default revert message). */

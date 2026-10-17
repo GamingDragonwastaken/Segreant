@@ -30,10 +30,14 @@ export function color(on: boolean, code: string, s: string): string {
 }
 
 export function usd(n: number): string {
-  if (n === 0) return '$0.00';
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  if (n >= 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(6)}`;
+  // Sign outside the symbol, and the same precision either side of zero: a
+  // credit of 5 dollars used to fall through every branch to "$-5.000000".
+  const sign = n < 0 ? '-' : '';
+  const a = Math.abs(n);
+  if (a === 0) return '$0.00';
+  if (a >= 1) return `${sign}$${a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (a >= 0.01) return `${sign}$${a.toFixed(4)}`;
+  return `${sign}$${a.toFixed(6)}`;
 }
 
 export function num(n: number): string {
