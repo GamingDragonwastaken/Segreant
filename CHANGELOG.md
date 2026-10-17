@@ -12,7 +12,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 ## [0.2.0] - Unreleased
 
 - **Three figures that could still mislead, found in review.**
-  - **`segreant export --economic`:** requests refused before they were sent appeared as `legacy_unknown` with `no_exact_economic_event`, as if a cost were missing. They cost nothing and are no longer exported, the same rule the economic totals already follow.
+  - **`segreant export --economic`:** requests refused before they were sent appeared as `legacy_unknown` with `no_exact_economic_event`, as if a cost were missing. They cost nothing and are no longer exported, the same rule the economic totals already follow. The confirmation counts the rows actually written and says how many refusals were left out.
   - **The bill-comparison coverage in `segreant billing`:** a comparison covering 99.6% of metered spend was shown as 100%. Only the whole now reads 100%. A share just below that shows one decimal, capped at 99.9%, and a share under 0.1% reads "<0.1%".
   - **A cap refusal:** when spend passed the cap by less than a microdollar, both figures printed alike. The refusal now says "just over $5.000000".
 - **`segreant --watch` and `segreant --serve` with no command are reported.** They used to show the home view and exit 0, doing nothing. Like any other option a command does not use, they now say so and exit 2.

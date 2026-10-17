@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
@@ -240,6 +240,21 @@ test('a long-running flag with no command is reported, not swallowed by the home
       assert.equal(r.code, 2, `${flag}: ${r.stdout}${r.stderr}`);
       assert.match(r.stderr, new RegExp(`${flag} does nothing for "segreant home"`));
     }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('export --economic counts the rows it wrote and names the refusals it left out (PR #145 review)', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'segreant-export-count-'));
+  try {
+    await cli(['demo'], home, 120_000);
+    const out = join(home, 'e.csv');
+    const r = await cli(['export', '--demo', '--all', '--economic', '--out', out], home, 120_000);
+    assert.equal(r.code, 0, r.stderr);
+    const written = readFileSync(out, 'utf8').trim().split('\n').length - 1;
+    assert.ok(r.stderr.includes(`Exported ${written} requests (economic-csv)`), r.stderr);
+    assert.match(r.stderr, /refused before sending left out/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
