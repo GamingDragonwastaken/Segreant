@@ -769,7 +769,11 @@ export function loadConfig(): SegreantConfig {
   } else {
     let raw: unknown;
     try {
-      raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+      // Windows PowerShell 5.1 writes UTF-8 with a byte-order mark
+      // (`Set-Content -Encoding utf8`). The mark is not content, so it is
+      // skipped rather than reported as a parse error.
+      const text = readFileSync(path, 'utf8');
+      raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown;
     } catch (error) {
       throw new ConfigValidationError(
         `cannot parse ${path}; repair or restore ${path}.bak before starting Segreant (${error instanceof Error ? error.message : String(error)})`,
