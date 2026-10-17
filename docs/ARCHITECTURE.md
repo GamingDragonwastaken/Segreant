@@ -444,5 +444,6 @@ genuinely open:
 
 - Sees only traffic routed through it (D1).
 - Cost accuracy depends on the pricing table; unknown models are flagged `estimated` and use a conservative fallback rather than failing.
-- Budget blocking is pre-flight on cumulative state; a single in-flight request can still complete above a cap (you can't un-send a request mid-stream).
+- Budget blocking is pre-flight on recorded spend. Every request already admitted when the cap is crossed still completes, so the overshoot is bounded by how many requests are in flight times their cost: a stream cannot be un-sent. Measured 2026-10-17 against a local stub provider: with 50 concurrent requests at $0.00072 each, 42 completed past a $1.66 cap ($0.031 over) and the other 752 were refused with 429. One agent working serially overshoots by at most one request.
+- A cap saved from the CLI, the dashboard or an editor governs the running proxy within a second: the proxy re-reads the budget when `config.json` changes. While the file is invalid, every request is refused (503) without being sent; deleting the file keeps the cap in force.
 - "Cost reduction %" is a function of baseline waste, not a guarantee the tool makes. Segreant provides visibility and controls; the savings are the user's to realize.
