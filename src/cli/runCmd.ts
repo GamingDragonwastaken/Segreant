@@ -6,6 +6,7 @@
  */
 
 import { join } from 'node:path';
+import type { Server } from 'node:http';
 import { Store, type RepriceUpdate } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
@@ -29,6 +30,36 @@ import { type Flags } from './flags.ts';
 export function ensureDemoSeeded(store: Store): SeedResult | null {
   if (store.earliestRequestMs() !== null) return null;
   return seedDemo(store);
+}
+
+/**
+ * Listen, or say why not. A busy port used to surface as Node's unhandled
+ * 'error' event and a stack trace; the usual cause is a Segreant that is
+ * already running, and the fix is one flag.
+ */
+export function listenOrExplain(server: Server, port: number, what: 'proxy' | 'dashboard', flag: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onError = (error: NodeJS.ErrnoException) => {
+      server.off('listening', onListening);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`  Port ${port} (${what}) is already in use, so Segreant did not start.`);
+        console.error(`  Another Segreant may be running: open http://localhost:${port} to check.`);
+        console.error(`  Otherwise pick a free port: segreant start ${flag} ${port + 10}`);
+      } else if (error.code === 'EACCES') {
+        console.error(`  Port ${port} (${what}) needs permission this account does not have. Pick another: segreant start ${flag} ${port + 10}`);
+      } else {
+        console.error(`  The ${what} could not listen on 127.0.0.1:${port}: ${error.message}`);
+      }
+      resolve(false);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve(true);
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, '127.0.0.1');
+  });
 }
 
 export async function cmdStart(flags: Flags): Promise<void> {
@@ -92,8 +123,15 @@ export async function cmdStart(flags: Flags): Promise<void> {
   });
   const dashboard = createDashboardServer({ store, config: cfg, version: packageVersion() });
 
-  if (proxy) await new Promise<void>((resolve) => proxy.listen(cfg.port, '127.0.0.1', resolve));
-  await new Promise<void>((resolve) => dashboard.listen(cfg.dashboardPort, '127.0.0.1', resolve));
+  const listening = (!proxy || await listenOrExplain(proxy, cfg.port, 'proxy', '--port'))
+    && await listenOrExplain(dashboard, cfg.dashboardPort, 'dashboard', '--dashboard-port');
+  if (!listening) {
+    proxy?.close();
+    dashboard.close();
+    store.close();
+    process.exitCode = 1;
+    return;
+  }
 
   if (demo) printDemoBanner(cfg, tty);
   else printBanner(cfg, tty);

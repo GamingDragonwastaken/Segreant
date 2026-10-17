@@ -11,6 +11,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **Four first-run snags on Windows, found by a usability panel of agents using Segreant for the first time.**
+  - **A busy port:** `segreant start` crashed with Node's unhandled-error stack trace when a port was taken, usually by a Segreant already running. It now names the port, says how to check for a running Segreant, gives the flag for another port and exits 1.
+  - **A config file saved from Windows PowerShell:** `Set-Content -Encoding utf8` writes a byte-order mark, and Segreant refused the file as invalid JSON. The mark is now skipped.
+  - **`segreant --demo`:** this said "Unknown command" although the help says `--demo` works on any read command. Flags with no command now go to the home view.
+  - **A refusal hid the overshoot:** a day that reached $5.004 against a $5 cap was refused as "$5.00 of $5.00". The refusal now adds digits, down to the microdollar, whenever two decimals would make the spend look equal to the cap.
 - **A cap set from the terminal now stops a running proxy.**
   - **Before:** `segreant budget --daily N` printed "Budget updated", but a proxy that was already running kept forwarding until it was restarted. Only a cap saved in the dashboard took effect at once. A budget made invalid by hand while the proxy ran was not noticed either. Found by an end-to-end test against a local stub provider: two requests over a $0.05 cap went through.
   - **Now:** the proxy re-reads the budget within half a second of `config.json` changing, whoever changed it. While the file is invalid, every request is refused without being sent; deleting the file keeps the cap in force.
