@@ -1258,6 +1258,15 @@ export class Store {
   // the traffic a cap can actually BLOCK. Imported subscription spend is sunk cost
   // observed after the fact; counting it toward enforcement froze live traffic in
   // dogfooding. Legacy NULL via reads as proxy (the conservative direction).
+  /**
+   * Requests Segreant refused before they reached the provider cost nothing and
+   * are not spend, so the exact projection neither counts them nor treats them
+   * as unresolved.
+   */
+  private sentClause(alias = ''): string {
+    return ` AND COALESCE(${alias}cost_basis, '') <> 'not_sent'`;
+  }
+
   private viaClause(liveOnly: boolean): string {
     return liveOnly ? ` AND COALESCE(via,'proxy') = 'proxy'` : '';
   }
@@ -1466,12 +1475,12 @@ export class Store {
         // NOT INDEXED keeps this a rowid range over the rows appended since the
         // mark; left to itself the planner walks the whole window's index.
         `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-           FROM requests NOT INDEXED WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+           FROM requests NOT INDEXED WHERE rowid > ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + this.sentClause() + `
            ORDER BY ts_epoch_ms ASC, request_id ASC`,
       ).all(cached.requestMark.rowid, startMs, endMs)
       : prepared(this.db, 
         `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-           FROM requests WHERE rowid > ? AND session_id = ?` + this.viaClause(liveOnly) + `
+           FROM requests WHERE rowid > ? AND session_id = ?` + this.viaClause(liveOnly) + this.sentClause() + `
            ORDER BY ts_epoch_ms ASC, request_id ASC`,
       ).all(cached.requestMark.rowid, scope.sessionId)) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     this.exactSpendWork.incrementalRowsVisited += rows.length;
@@ -1507,7 +1516,7 @@ export class Store {
     this.exactSpendWork.fullProjections += 1;
     const rows = prepared(this.db,
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + this.sentClause() + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
     ).all(startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
@@ -1525,7 +1534,7 @@ export class Store {
       `SELECT r.request_id AS requestId, r.ts_epoch_ms AS tsEpochMs, r.via
          FROM requests r
         WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
-          AND ${fam.sql}` + this.viaClause(liveOnly) + `
+          AND ${fam.sql}` + this.viaClause(liveOnly) + this.sentClause('r.') + `
         ORDER BY r.ts_epoch_ms ASC, r.request_id ASC`,
     ).all(startMs, endMs, ...fam.args) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
@@ -1550,7 +1559,7 @@ export class Store {
     this.exactSpendWork.fullProjections += 1;
     const rows = prepared(this.db,
       `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
-         FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + `
+         FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + this.sentClause() + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
     ).all(sessionId) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     if (rows.length === 0) {
@@ -2149,6 +2158,11 @@ export class Store {
     options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean },
   ): EffectiveRequestRow[] {
     const rows = this.requestsInRange(startMs, endMs).filter((row) => {
+      // A request refused before it was sent has no economic event because it
+      // cost nothing; reading it here marked it no_exact_economic_event and made
+      // attribution partial (PR #143 review). It is not spend, so it is skipped,
+      // as the exact spend projection skips it.
+      if (row.pricing?.costBasis === 'not_sent') return false;
       if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
       if (options.liveOnly === true && (row.via ?? 'proxy') !== 'proxy') return false;
       return true;

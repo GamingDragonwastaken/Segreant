@@ -23,7 +23,7 @@
  */
 
 import type { Store, RequestRow, RealizationUnitRecord } from '../store/db.ts';
-import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
+import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, notSentPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import type { WorkUnit } from '../value/realization.ts';
 import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
@@ -210,7 +210,7 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
         cacheWriteTokens,
         cacheReadTokens,
       });
-  const cost = calculated ?? { costUsd: 0, estimated: false, pricing: unpricedPricingEvidence() };
+  const cost = calculated ?? { costUsd: 0, estimated: false, pricing: notSentPricingEvidence() };
 
   // The route dictates every field that would have to agree in a real row, so a
   // seeded row cannot depict a combination the product could never produce.
