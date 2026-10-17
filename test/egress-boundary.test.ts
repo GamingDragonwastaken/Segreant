@@ -34,7 +34,7 @@ test('local_locked refuses a cloud intent before it can be resolved or dialled',
     method: 'POST',
   });
   assert.equal(denied.allowed, false);
-  assert.match(denied.reason, /no non-loopback DNS lookup or dial/i);
+  assert.match(denied.reason, /no other DNS lookup or dial/i);
 
   const local = evaluateEgressPolicy(LOCKED, {
     url: 'http://127.0.0.1:11434/v1/chat/completions',

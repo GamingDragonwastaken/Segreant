@@ -2607,6 +2607,29 @@ export class Store {
     return realization.realizationProjects(this.db);
   }
 
+  /**
+   * Recorded guesses, grouped by historical match evidence, costliest first.
+   * Current resolution belongs to the caller: a new card or declaration must
+   * not reinterpret the evidence retained on these requests.
+   */
+  unresolvedModels(): Array<{
+    provider: string;
+    model: string;
+    requests: number;
+    costUsd: number;
+    rateMatchKind: RequestPricingEvidence['rateMatchKind'];
+  }> {
+    return this.db.prepare(
+      `SELECT provider, model, COUNT(*) AS requests, COALESCE(SUM(cost_usd),0) AS costUsd,
+              rate_match_kind AS rateMatchKind
+       FROM requests
+       WHERE cost_basis != 'not_sent'
+         AND (cost_basis = 'fallback_estimate' OR rate_match_kind IN ('family_provider', 'family_cross_provider'))
+       GROUP BY provider, model, rate_match_kind
+       ORDER BY costUsd DESC, provider, model, rate_match_kind`,
+    ).all() as ReturnType<Store['unresolvedModels']>;
+  }
+
   /** Every row priced with a fallback/family-match rate — the reprice candidates. */
   estimatedRequestRows(): Array<{
     requestId: string;

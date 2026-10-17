@@ -261,6 +261,10 @@ export async function cmdDemo(flags: Flags): Promise<void> {
 }
 
 export async function cmdPricing(flags: Flags): Promise<void> {
+  const action = flags._[0];
+  if (action === 'set' || action === 'unset' || action === 'unknown') {
+    return (await import('./pricingDeclareCmd.ts')).cmdPricingDeclare(action, flags);
+  }
   const cfg = loadConfig();
   const on = process.stdout.isTTY ?? false;
 
