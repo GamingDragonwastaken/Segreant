@@ -175,7 +175,9 @@ export function summarizeBasis(rows: readonly BasisRow[]): BasisSummary {
       : only('tool_reported', 'unpriced') && has('tool_reported')
         ? 'tool_reported_cost'
         : only('list_exact', 'list_family', 'unpriced', 'user_declared') && (has('list_exact') || has('list_family'))
-            && (by.get('user_declared')?.costUsd ?? 0) < 0.005
+            // Only a free (local) declaration prices at exactly zero; any paid
+            // declaration, however small, is not list price (PR #146 review).
+            && (by.get('user_declared')?.costUsd ?? 0) === 0
           ? 'list_cost'
           : 'estimated_cost';
   const exact = by.get('list_exact')?.costUsd ?? 0;

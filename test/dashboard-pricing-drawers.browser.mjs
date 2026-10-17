@@ -101,6 +101,21 @@ test('unpriced models: skip and all three declarations; re-price previews, confi
     assert.equal(store.estimatedRequestRows().length, 2);
     for (const id of ['r0', 'r1', 'r2']) assert.equal(store.requestPriceEvents(id).length, 1);
     assert.deepEqual(store.requestPriceEvents('r3'), []);
+
+    // After re-pricing, private-rate is no longer a guessed model, so it never
+    // returns to the list; its price is still changed in place (PR #146 review).
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Open Unpriced models', exact: true }).click();
+    drawer = page.getByRole('dialog', { name: 'Unpriced models' });
+    await drawer.getByText('Your prices', { exact: true }).waitFor();
+    assert.equal(await drawer.getByLabel('Price for private-rate', { exact: true }).count(), 0, 'not in the unpriced list any more');
+    await drawer.getByLabel(/^private-rate: input \$2, output \$3/).selectOption('rate');
+    await drawer.getByLabel('New input for private-rate (USD per 1M tokens)', { exact: true }).fill('4');
+    await drawer.getByLabel('New output for private-rate (USD per 1M tokens)', { exact: true }).fill('5');
+    await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
+    await drawer.getByRole('status').getByText('Saved your price for private-rate.').waitFor();
+    const changed = loadPriceOverrides().models['private-rate'];
+    assert.ok(changed?.kind === 'rate' && changed.input === '4' && changed.output === '5');
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
   } finally {

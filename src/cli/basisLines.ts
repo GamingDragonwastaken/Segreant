@@ -23,7 +23,7 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
       out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests the tool reported at no charge: ${cohortModels(c)}`);
       continue;
     }
-    if (c.id === 'user_declared' && c.costUsd < 0.005) {
+    if (c.id === 'user_declared' && c.costUsd === 0) {
       out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests on models you marked free: ${cohortModels(c)}`);
       continue;
     }
@@ -36,7 +36,7 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
     out.push(`${indent}            fallback = the model was not on the rate card when imported; a generic rate, a rough estimate`);
     out.push(`${indent}            segreant reprice  previews new prices for models the card has learned since (nothing changes without --apply)`);
   }
-  if (basis.cohorts.some((c) => c.id === 'user_declared' && c.costUsd >= 0.005)) {
+  if (basis.cohorts.some((c) => c.id === 'user_declared' && c.costUsd > 0)) {
     out.push(`${indent}            your price = set with segreant pricing set; not checked against a price list`);
   }
   if (basis.cohorts.some((c) => c.id === 'tool_reported')) {

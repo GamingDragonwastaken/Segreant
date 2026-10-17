@@ -73,6 +73,15 @@ test('a declared price wins over the card, and removing it restores the card', (
   assert.equal(removePriceOverride('claude-haiku-4-5'), false);
 });
 
+test('a paid declaration under half a cent is still not list price (PR #146 review)', () => {
+  const listed = computeCost('anthropic', 'claude-haiku-4-5', usage);
+  const summary = summarizeBasis([
+    { provider: 'anthropic', model: 'claude-haiku-4-5', costBasis: listed.pricing.costBasis, rateMatchKind: listed.pricing.rateMatchKind, costUsd: 1, requests: 1 },
+    { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', costUsd: 0.001, requests: 1 },
+  ]);
+  assert.equal(summary.headline, 'estimated_cost');
+});
+
 test('invalid declarations are refused with the reason', () => {
   assert.throws(() => setPriceOverride('m', { kind: 'rate', input: '0', output: '1' }), /input must be a positive decimal/);
   assert.throws(() => setPriceOverride('m', { kind: 'rate', input: '-1', output: '1' }), PriceOverridesError);
