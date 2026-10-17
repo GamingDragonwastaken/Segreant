@@ -398,3 +398,11 @@ test('the claim inspector no longer renders the blanket "Nothing is missing" foo
   assert.doesNotMatch(source, /Nothing is missing/);
   assert.doesNotMatch(source, /No missing evidence is named/);
 });
+
+test('doctor names a price you set instead of calling it a list rate (PR #146 review)', async () => {
+  const { doctorPricingLine } = await import('../src/cli/opsCmd.ts');
+  const mine = { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', requests: 2, costUsd: 25 } as const;
+  const listed = { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 6, costUsd: 60 } as const;
+  assert.equal(doctorPricingLine(summarizeBasis([mine])), '$25.00 at prices you set (not checked against a price list)');
+  assert.equal(doctorPricingLine(summarizeBasis([listed])), "30d spend priced at each model's own list rate (an estimate, not a bill)");
+});
