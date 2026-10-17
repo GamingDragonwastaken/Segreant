@@ -19,6 +19,13 @@ export const FIRST_SIGHT_MIN_INTERVAL_MS = 60 * 60 * 1000;
 
 const GUESSED: ReadonlySet<RateMatchKind> = new Set(['family_provider', 'family_cross_provider', 'fallback']);
 
+/** Whether the card's last check of the price list is older than the interval (or never happened). */
+export function priceCheckDue(status: { lastCheckedAt: string | null; fetchedAt: string | null }, now: number = Date.now()): boolean {
+  const when = status.lastCheckedAt ?? status.fetchedAt;
+  const ms = when === null ? NaN : Date.parse(when);
+  return !Number.isFinite(ms) || now - ms >= FIRST_SIGHT_MIN_INTERVAL_MS;
+}
+
 export interface FirstSightOptions {
   /** Read at each sighting, so turning the setting off takes effect without a restart. */
   enabled: () => boolean;
