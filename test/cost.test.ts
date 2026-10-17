@@ -160,8 +160,8 @@ test('a family match prefers the most specific card name (flash-lite is not pric
   // Both "gemini-2.5-flash" and "gemini-2.5-flash-lite" are substrings of a
   // dated lite id; the longer key must win or a lite model is priced at the
   // full flash rate. Found unguarded by a planted-bug run on 2026-10-17.
-  const { rate, pricing } = rateFor('google', 'gemini-2.5-flash-lite-preview-20991231');
-  assert.equal(pricing.rateMatchKind, 'family_provider');
+  const { rate, pricing } = rateFor('openai', 'gemini-2.5-flash-lite-preview-20991231');
+  assert.equal(pricing.rateMatchKind, 'family_cross_provider');
   assert.equal(rate.input, 0.1);
   assert.equal(rate.output, 0.4);
 });
