@@ -19,6 +19,7 @@ import { isPrecise, usd, usdFromMicros, count, pct, share, date, relative } from
 import { quantizationWords } from '../core/reconcileWords.ts';
 import { meteredBasisLine } from '../core/claimLayers.ts';
 import { errorText } from '../components/workflow.ts';
+import { emptyLedgerNotice } from '../components/firstRun.ts';
 
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -71,6 +72,8 @@ export function statementView(): Node {
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'One calendar month: metered, provider-billed, allocated and realized, each on its own evidence. They answer different questions and are never summed.'
         : 'One month at a glance: what we measured, what your provider billed, how it was split, and what it produced. Four different questions, so the four figures are never added up.' })),
+
+    emptyLedgerNotice(),
 
     h('div', { class: 'month-bar', role: 'group', 'aria-label': 'Month' },
       h('button', { class: 'btn-ghost', type: 'button', 'aria-label': 'Previous month', text: '‹', onclick: () => month.set(shiftMonth(month(), -1)) }),
