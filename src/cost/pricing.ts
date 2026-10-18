@@ -168,8 +168,15 @@ export interface NormalizedUsage {
   cacheWriteTokens: number;
   /** Tokens served from cache this request. */
   cacheReadTokens: number;
-  /** TTL of the cache write, if known. Affects the write rate. */
+  /** TTL the cache write is priced at, if known. Affects the write rate. */
   cacheWriteTtl?: '5m' | '1h';
+  /**
+   * True when the source reported a 5-minute / 1-hour breakdown, so the
+   * duration above is the one the request was priced with, which the ledger
+   * keeps. False when it did not say: priced at the standard rate, recorded as
+   * not recorded.
+   */
+  cacheWriteTtlObserved?: boolean;
   /** Reasoning tokens — reporting only, billed inside outputTokens. */
   reasoningTokens?: number;
 }
@@ -1157,6 +1164,20 @@ function zeroExactCost(): ExactCostBreakdown {
 function per(tokens: number, rate: number | undefined): number {
   if (!tokens || !rate) return 0;
   return (tokens / 1_000_000) * rate;
+}
+
+/**
+ * The duration a cache write is priced at, and whether the source reported a
+ * breakdown. No breakdown: no duration (priced at the standard 5-minute rate,
+ * recorded as not recorded). One duration only: that one. Both: the larger
+ * share, which is what the request is priced with, and the ledger records it
+ * so a later reprice prices it the same way (PR #150 review). A missing
+ * breakdown used to be stored as '1h' by the Claude Code import and '5m' by
+ * the proxy, each as if it were seen (independent review, 2026-10-18).
+ */
+export function cacheWriteDuration(ephemeral5m: number, ephemeral1h: number): { ttl?: '5m' | '1h'; observed: boolean } {
+  if (ephemeral5m <= 0 && ephemeral1h <= 0) return { observed: false };
+  return { ttl: ephemeral1h > ephemeral5m ? '1h' : '5m', observed: true };
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {

@@ -18,7 +18,10 @@ Yes, for everything Segreant would send on its own. New configuration begins in
 DNS, with two built-in routes: your own requests to the official OpenAI and
 Anthropic APIs (they were going there anyway; Segreant meters them on the way),
 and its download of the public price list, which sends nothing about you.
-`segreant pricing --auto off` stops Segreant making that download by itself. A local model at `localhost` or
+`segreant pricing --auto off` stops Segreant making that download by itself.
+Your own provider requests are not something egress settings switch off: they go
+out whenever a tool sends them through the proxy, so to stop them, stop the
+proxy or point the tool back at the provider. A local model at `localhost` or
 `127.0.0.1` remains available. To permit a cloud route, use `segreant egress
 plan` to inspect one exact rule and `segreant egress apply --apply` to persist it;
 `segreant egress verify` validates the redacted local receipt chain. This is a

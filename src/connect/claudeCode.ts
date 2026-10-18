@@ -26,7 +26,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
-import { computeCost } from '../cost/pricing.ts';
+import { cacheWriteDuration, computeCost } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import {
   type ImportSummary,
@@ -64,6 +64,7 @@ export interface TranscriptUsageEvent {
   cacheWriteTokens: number;
   cacheReadTokens: number;
   cacheWriteTtl?: '5m' | '1h';
+  cacheWriteTtlObserved?: boolean;
 }
 
 /** Default transcript root: ~/.claude/projects (override for tests / unusual installs). */
@@ -124,7 +125,10 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
     outputTokens: u.output_tokens ?? 0,
     cacheWriteTokens: cacheWrite,
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
-    cacheWriteTtl: cacheWrite > 0 ? (ttl1h >= ttl5m ? '1h' : '5m') : undefined,
+    ...(cacheWrite > 0 ? (() => {
+      const d = cacheWriteDuration(ttl5m, ttl1h);
+      return { ...(d.ttl === undefined ? {} : { cacheWriteTtl: d.ttl }), cacheWriteTtlObserved: d.observed };
+    })() : {}),
   };
 }
 
@@ -241,7 +245,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         outputTokens: ev.outputTokens,
         cacheWriteTokens: ev.cacheWriteTokens,
         cacheReadTokens: ev.cacheReadTokens,
-        ...(ev.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: ev.cacheWriteTtl }),
+        ...(ev.cacheWriteTtl === undefined || !ev.cacheWriteTtlObserved ? {} : { cacheWriteTtl: ev.cacheWriteTtl }),
         reasoningTokens: 0,
         costUsd: cost.costUsd,
         economicAmount: cost.exact?.total,
