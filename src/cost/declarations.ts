@@ -2,16 +2,7 @@
 import type { Store } from '../store/db.ts';
 import { isDemo } from '../config.ts';
 import { modelNameError, PriceOverridesError, setPriceOverride, type PriceOverride, type PriceOverrideInput } from './overrides.ts';
-import { loadPricing, rateFor, type Provider } from './pricing.ts';
-
-/** The rate-card entry for exactly this name, if any provider lists it. */
-function cardEntry(model: string): { provider: string; input: number; output: number } | null {
-  for (const [provider, p] of Object.entries(loadPricing().providers)) {
-    const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
-    if (rate) return { provider, input: rate.input, output: rate.output };
-  }
-  return null;
-}
+import { cardEntryAnywhere, loadPricing, rateFor, type Provider } from './pricing.ts';
 
 export function declarePrice(model: string, input: PriceOverrideInput, options: { force?: boolean } = {}): PriceOverride {
   if (isDemo()) throw new PriceOverridesError('Demo mode only shows sample data; run without --demo to declare a price.');
@@ -20,7 +11,7 @@ export function declarePrice(model: string, input: PriceOverrideInput, options: 
     // spend as $0. A zero rate is refused for the same reason; `free` is for a
     // model that runs locally, so a card match needs an explicit --force
     // (owner decision, 2026-10-18).
-    const entry = cardEntry(model);
+    const entry = cardEntryAnywhere(model);
     if (entry) {
       throw new PriceOverridesError(
         `${model} is a cloud model the rate card prices (${entry.provider}: $${entry.input} in / $${entry.output} out per 1M tokens). ` +

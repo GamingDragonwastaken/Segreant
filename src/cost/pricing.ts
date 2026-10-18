@@ -424,6 +424,27 @@ export function loadPricing(force = false): PricingFile {
   return cached;
 }
 
+/**
+ * The rate-card entry for exactly this model name in any card that may apply:
+ * the one this process loaded, the verified card on disk (a refresh in another
+ * process replaces it without telling this one), and the bundled card. Reads
+ * only; the process's loaded card is never replaced here (PR #153 review).
+ */
+export function cardEntryAnywhere(model: string): { provider: string; input: number; output: number } | null {
+  const cards: PricingFile[] = [loadPricing()];
+  const onDisk = loadVerifiedCache();
+  if (onDisk) cards.push(onDisk.file);
+  const bundled = readValidPricing(BUNDLED_PRICING_PATH);
+  if (bundled) cards.push(bundled);
+  for (const card of cards) {
+    for (const [provider, p] of Object.entries(card.providers)) {
+      const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
+      if (rate) return { provider, input: rate.input, output: rate.output };
+    }
+  }
+  return null;
+}
+
 export interface RefreshResult {
   ok: boolean;
   updated?: string;
