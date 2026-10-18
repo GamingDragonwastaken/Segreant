@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "83117b19db99af4006b7155d2e3008a5e657c9247ca1345fb5cb1d688f45e086";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "2d5ed21981209fcc0668b240fa7fa29163a4e6de22acdfecaa298e88ee3f0b33";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -4320,6 +4320,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "forced",
+      "optional": true,
+      "type": "true"
+    },
+    {
+      "name": "supersededByCard",
       "optional": true,
       "type": "true"
     },

@@ -200,5 +200,21 @@ test('a forced free price is labelled as forced in the declared prices (PR #153 
     const local = payload.declared.find((p) => p.model === 'acme-local-llm')!;
     assert.equal(local.forced, undefined);
     assert.equal(local.summary, 'free (local model)');
+    assert.equal(local.supersededByCard, undefined);
+  });
+});
+
+test('an unforced free price a rate card now prices is shown as not applied (PR #153 review)', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  mkdirSync(join(overridesPath(), '..'), { recursive: true });
+  // The state a refresh leaves: a free price stored before the card priced the model.
+  writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { 'claude-sonnet-4-6': { kind: 'free', declaredAt: new Date().toISOString() } } }));
+  await dashboard(async (base) => {
+    const payload = await unknown(base);
+    wire('pricing-unknown', 'GET', payload);
+    const p = payload.declared.find((d) => d.model === 'claude-sonnet-4-6')!;
+    assert.equal(p.supersededByCard, true);
+    assert.match(p.summary, /not applied: a rate card now prices this model/);
   });
 });

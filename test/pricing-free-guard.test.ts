@@ -138,35 +138,28 @@ test('force stores free for a card model, and only free takes force', () => {
   assert.match(misuse.stderr, /--force only applies to --free/);
 });
 
-test('archived cards are taken newest first by recorded fetch time, not listing order (PR #153 review)', async () => {
+test('among archived cards the highest stated rate counts, whatever their order or provenance (PR #153 review)', async () => {
   const { mkdirSync, writeFileSync } = await import('node:fs');
   const { createHash } = await import('node:crypto');
   const { cardEntryAnywhere } = await import('../src/cost/pricing.ts');
   const dir = join(home, 'pricing', 'cards');
   mkdirSync(dir, { recursive: true });
-  const write = (input: number): { sha: string; card: ReturnType<typeof loadPricing> } => {
+  const write = (input: number): string => {
     const card = structuredClone(loadPricing());
     card.providers['openai']!.models['acme-reintroduced'] = { input, output: input * 4 };
     const text = JSON.stringify(card);
     const sha = createHash('sha256').update(text, 'utf8').digest('hex');
     writeFileSync(join(dir, `${sha}.json`), text);
-    return { sha, card };
-  };
-  const date = (x: { sha: string; card: ReturnType<typeof loadPricing> }, fetchedAt: string): void => {
-    writeFileSync(join(dir, `${x.sha}.provenance.json`), JSON.stringify({
-      schemaVersion: 1, sourceUrl: null, sourceUrlSha256: null, sourceKind: 'manual', fetchedAt, upstreamDeclaredUpdated: null,
-      cardSha256: x.sha, modelCount: Object.values(x.card.providers).reduce((n, p) => n + Object.keys(p.models).length, 0), etag: null, lastModified: null,
-    }));
+    return sha;
   };
   try {
-    // The newer fetch goes to whichever card lists LAST by name, so taking
-    // cards in listing order would pick the older one and fail.
-    const [first, last] = [write(1), write(9)].sort((x, y) => (x.sha < y.sha ? -1 : 1));
-    date(first!, '2026-01-01T00:00:00.000Z');
-    date(last!, '2026-10-01T00:00:00.000Z');
+    // Whichever lists first, and with no provenance at all (a card mid-activation),
+    // the higher rate is the one charged.
+    const shas = [write(1), write(9), write(4)];
+    assert.equal(new Set(shas).size, 3);
     const entry = cardEntryAnywhere('acme-reintroduced');
     assert.equal(entry?.source, 'archive');
-    assert.equal(entry?.input, last!.card.providers['openai']!.models['acme-reintroduced']!.input, 'the most recently fetched card');
+    assert.equal(entry?.input, 9);
   } finally {
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
   }

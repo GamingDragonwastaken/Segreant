@@ -63,7 +63,7 @@ import { emptyImportSummary, type ImportSummary } from '../connect/importShared.
 import { IMPORT_REGISTRY } from '../connect/registry.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
-import { pricingStatus } from '../cost/pricing.ts';
+import { cardPricesModel, pricingStatus } from '../cost/pricing.ts';
 import { declarePrice, unknownModels } from '../cost/declarations.ts';
 import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { modelNameError, removePriceOverride, type PriceOverrideInput } from '../cost/overrides.ts';
@@ -997,12 +997,18 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
     const payload: DashboardResponseFor<'pricing-unknown'> = {
       models: unknownModels(store), demo: isDemo(),
       // Sample data shows no real declarations (activePriceOverrides is empty in demo mode).
-      declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
+      declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => {
+        // An unforced free price for a model a card now prices is stored but
+        // not applied; saying "free" there would show the opposite of what a
+        // cap counts (PR #153 review).
+        const superseded = price.kind === 'free' && price.force !== true && cardPricesModel(model);
+        return {
         model, kind: price.kind, declaredAt: price.declaredAt,
         // A forced free price makes a cap ignore a known card rate, so it never
         // reads as an ordinary local-model price (PR #153 review).
         summary: price.kind === 'free' && price.force === true
           ? 'free, forced: a cap counts this model as $0 even though a rate card prices it'
+          : superseded ? 'free, not applied: a rate card now prices this model, so its card price counts'
           : price.kind === 'free' ? 'free (local model)'
           : price.kind === 'like' ? `like ${price.like}`
           : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''}${price.cacheWrite1h ? `, 1-hour cache write $${price.cacheWrite1h}` : ''} per 1M tokens`,
@@ -1014,7 +1020,9 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
         } } : {}),
         ...(price.kind === 'like' ? { like: price.like } : {}),
         ...(price.kind === 'free' && price.force === true ? { forced: true as const } : {}),
-      })),
+        ...(superseded ? { supersededByCard: true as const } : {}),
+        };
+      }),
       boundary: 'Recorded cost (estimated). Declaring a price leaves recorded requests unchanged until you re-price them.',
     };
     json(res, 200, payload);
