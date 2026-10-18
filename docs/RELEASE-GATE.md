@@ -28,10 +28,10 @@ for this checklist against that source tree:
 | Egress disclosure | Reconcile every newly introduced outbound path with DATA-BOUNDARIES.md; distinguish Segreant-process enforcement, proxy-routed traffic coverage, browser behaviour, and any separately validated OS/network control. Verify corrupt-history refusal, redirect `Location` stripping, checkpoint fallback/full-scan behavior, streaming full-history verification/line bounds, and response-body release for status-only callers. Do not project a process-level test into a workstation-wide or provider-privacy guarantee. |
 | Launcher/publication integrity | The supported launcher must propagate child spawn errors/signals and fail closed when the publication lock cannot be acquired; build/publication tests must exercise both conditions. Direct unmanaged `dist/*` readers and `npm pack` remain outside the supported reader lock unless separately proven. |
 | Backup and recovery integrity | Exercise `backup --out` and `restore --from/--out` against the exact candidate. The snapshot must be created with SQLite `VACUUM INTO`, pass quick/foreign-key checks, emit a hash/schema manifest without ledger rows, reject corrupt or symlinked artifacts, refuse existing destinations, and prove preview is read-only. This is local recovery evidence only—not encryption, disaster-recovery availability, provider billing, or an independent attestation. |
-| Reliability/performance observations | Run `npm run benchmark` on the candidate and retain the JSON plus machine profile. Cover small/current/10× and an explicit 100× stress case where meaningful; record startup, ingest, summary, value/frontier, API latency, memory, and compiled/package size observations. Do not turn a single local run into a universal SLA; choose a regression budget only after repeated runs on the intended release runner. |
+| Reliability/performance observations | **Recorded as measurement, not an SLA.** `npm run benchmark` was run on the candidate itself: `sourceRevision e8a8f24`, isolated home, `externalNetworkAttempted: false`, `credentialRead: false`. Scales were 100/1,000/10,000 rows × 3 samples and 100,000 rows × 1 (`--stress`). Medians: ingest 22.3/125.3/1,238.7/15,049.4 ms; overview assembly 4.7/12.1/99.4/1,391.7 ms; frontier 0.8/4.0/43.1/404.4 ms; API overview p95 8.8/15.7/105.8/1,417.8 ms; RSS delta 0.9/1.2/49.5/220.1 MiB; compiled dist 4,494,132 bytes. Against `81ffa49`, ingest is 2.7% faster at 10× (1,239 vs 1,274 ms) and 0.3% faster at 100× (15,049 vs 15,095 ms). Overview and API latency are level. The 2.1× ingest gap to `12add59` noted in that record remains; it has not been profiled. |
 | Redacted diagnostics | Run `segreant diagnostics --json` and, when support handoff needs a file, `--out <new-file>`. The bundle must carry a correlation operation ID, bounded durations/error classes, runtime/config/database/migration/egress/pricing observations, and explicit no-network/no-credential/no-prompt/source/ledger-row-export boundaries without absolute user paths. Export refuses overwrite and does not mutate the active DB/config. |
 | Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run. If the candidate reached the remote inside a multi-commit push, CI ran on the tip; cite that run and record `git diff --stat <candidate> <tip>` so the delta is stated rather than assumed. A tip that differs only by this document does not need its own run — otherwise recording a result would forever require another commit |
-| Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof; verify keyboard/focus, responsive, contrast, chart alternatives, and screen-reader status semantics on the exact candidate. Source/DOM contracts must not be reported as visual/WCAG runtime evidence. |
+| Visual check | **Pass for the inspected surfaces, on `e8a8f24`'s installed package.** The dashboard was opened in the desktop app's built-in browser and rendered with Playwright (deviceScaleFactor 1) at 1366×768 and 375×812. The Playwright images are the evidence for layout. At 375 px the app pane's capture cropped to about 300 CSS px at device-pixel-ratio 2, while the page's own geometry and the Playwright render both show nothing past the edge. **Empty home (a real first run):** the chooser's samples read "e.g. $59.16 list cost (estimate)" and "e.g. $59.163468 list cost (estimate)", with `scrollWidth` equal to the 375 px viewport. After the first choice, the Statement shows `$0.00 · 0 requests`, with the other three claims "not established" or "nothing judged". **Demo home:** the **SAMPLE DATA** pill sits in the top bar at both widths (`role="status"`, top 17 px at 375 px). The Statement carries "Sample data: these figures were generated". Spend carries the DEMO notice and renders in dark and light. At 375 px the Spend and Statement pages have `scrollWidth` 375; the wide session table scrolls inside its own `.table-wrap`. CI `browser-accessibility` passed. **Open, not a defect in any figure:** a money reader on an empty install gets no pointer from the Statement to where usage comes in. That is a launch item, not a publish condition. |
 
 This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
@@ -75,7 +75,72 @@ the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
 
-### Current local candidate record — commit `81ffa49`, 0.2.0, 2026-10-09
+### Current local candidate record — commit `e8a8f24`, 0.2.0, 2026-10-18
+
+This record supersedes the `81ffa49` record below without rewriting it. 0.2.0 was
+not published from `81ffa49`. Pricing, egress, reprice and review work landed
+after it (#64–#151; `git diff --stat 81ffa49 e8a8f24` is 274 files, +26,187/−2,117),
+so the whole checklist was re-run on the new candidate.
+
+The exact candidate is `e8a8f246ad09c3188f948d6429118140bdeddd63`, the merge of
+#151 on `main`. The first candidate was `e5f75e0`, the merge of #150. It passed
+every row except two:
+
+- **Visual check.** The first-run chooser showed `$59.16 list cost (estimate)` on
+  every install, including one with no data. That figure is a wording sample, and
+  nothing marked it as one.
+- **Browser suite.** It failed 1 of 35 at random. The cause was harness contention
+  (11 Chromium launches at once on 12 cores), not the product. The 30 s timeout hit
+  a different test on each run. Run serially, the suite passed 35/35.
+
+#151 fixed both: the samples now begin "e.g.", and `test:browser` runs four files
+at a time. The whole checklist was then re-run on `e8a8f24`. The `e5f75e0` →
+`e8a8f24` delta is 4 files, +11/−3: one dashboard string, the test script, one
+browser test, and the changelog.
+
+Every row was run in a fresh detached worktree at the candidate, with an isolated
+`SEGREANT_HOME`. The tree was clean (0 lines of `git status --short`) before and
+after. Machine: Node v24.18.0, win32/x64, 12 CPUs, 32 GiB.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `e8a8f246ad09c3188f948d6429118140bdeddd63` before and after; `git status --short` empty both times. `git ls-remote origin refs/heads/main` returns the same SHA. |
+| Capability/evidence contract | **Pass.** The contract was last revised at `9c83b4b` (2026-10-18). It was reviewed against what 0.2.0 adds since `81ffa49`. **Prices.** Prices you set are labelled "your price", never a provider figure. Built-in card, family and fallback prices stay estimates. **Reprice.** It logs the price it replaced, and never prices a request whose usage was never captured. **Egress.** The built-in provider routes and the price-list route are named in DATA-BOUNDARIES.md and the FAQ. L4 and L9 of the launch bar were re-checked against these on 2026-10-18. `test/public-claims-contract.test.ts` and the four causal suites → **156 pass, 0 fail**. |
+| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 0 vulnerabilities. `team-server` `npm ci --ignore-scripts` → 0 vulnerabilities; `npm audit` → 0 for both. Root, browser-app and team-server typechecks all exit 0. `npm run build` → exit 0. `npm test` → **3130 tests, 3124 pass, 0 fail, 0 cancelled, 6 intentional platform skips**, with no crash reruns. `npm run test:browser` → **35/35**. `team-server` `npm test` → **131 pass, 0 fail**. |
+| Budget fail-closed integrity | **Pass.** Run on the candidate source: `test/budget-fail-closed.test.ts`, `test/config-budget-fail-closed.test.ts`, `test/dashboard-settings.test.ts` and `test/budget-control-lock.test.ts` → **23 pass, 0 fail**, both inside the full suite and in a separate run. A malformed egress section loads as mode `invalid`, refuses everything beyond loopback, and is kept on disk by config writes (`test/release-review-fixes.test.ts`). |
+| Packed artifact | **Pass.** `npm pack --ignore-scripts` → `segreant-0.2.0.tgz`, **349 entries, 1,449,469 bytes**, SHA-256 `f963e30572c74cf5447818ab5bea5b45255212512f0685d1811f7df752ca2b50`. Present: both launchers, `dist/cli.js`, `pricing/models.json` (card dated 2026-10-17), `baselines/lift-baselines.json`, and both dashboard HTML files. No `.codex`, private, test or `causalExperiment` path. Zero runtime dependencies and no install scripts. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh prefix (1 package); it reports `0.2.0` and prints `--help`. `segreant-statusline` with no ledger printed its line and created no file. `demo` exit 0 (552 requests, 5 blocked, 23 sessions). The launcher's Node guard runs before any Node-24-only API: its static imports use only `node:fs`, `node:path`, `node:crypto`, `node:os`, `node:url` and `node:child_process` names that exist in Node 22. |
+| Packaged dashboard/API | **Pass.** Run from the installed package with `start --demo --port 18640 --dashboard-port 18641`. HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal` and `/api/billing`; every API payload says `demo: true`. Also 200 for `/` (carries `id="app"`), `/classic` and `/app/main.js` (`text/javascript`). The process was stopped and the port closed. |
+| Model-trial truthfulness | **Pass.** The packaged `/api/value` is `demo: true` and carries one model switch, labelled `trial`, with none labelled `observational_separation`. `/classic` carries the labelled demo renderer (4 `demobar` hits). `/` is proven separately by `id="app"` and by its entry resolving as JavaScript. |
+| Causal-evidence integrity | **Pass for the local boundary; this is not a causal result.** The causal suites pass (inside the 156 above). The installed `causal status --json` reports `"studies": []` and no causal result. Nothing since `81ffa49` touches the causal substrate. |
+| Billing-boundary truthfulness | **Pass.** Installed `billing scope set --account-ref gate_ref_020 --json` → `"applied": false`, `"trust": "operator_declared_unverified"`, `"reconciliationStatus": "not_reconciled"`. The packaged `/api/billing` is labelled demo and carries `not_reconciled`. |
+| Direct-Costs connector boundary | **Pass for preview only.** The suite's preview tests show `networkAttempted: false` and `credentialRead: false`. No provider account, credential or amount was touched. |
+| Egress disclosure | **Pass for the Segreant-process boundary.** 0.2.0 adds three outbound paths: the official OpenAI and Anthropic API routes, which carry only the user's own proxied requests, and the public price-list download (first sight of an unknown model, at most once an hour; `pricing --auto off` turns it off). All three are declared in DATA-BOUNDARIES.md and gated by the egress policy. A fresh install's receipt log showed only `provider_inference` events on the two built-in routes, each answered by the provider's own 401 to a dummy key. Starting the dashboard produced no receipt. `test/egress-boundary.test.ts` passes. The scope is still Segreant-process transport, not a machine-wide firewall. |
+| Launcher/publication integrity | **Pass.** `test/build-race.test.ts`, `test/publication-lock-race.test.ts` and `test/statusline.test.ts` pass (54 tests in the launcher/backup/diagnostics group, 52 pass and 2 platform skips). The unmanaged `dist/*` and `npm pack` boundary is unchanged. |
+| Backup and recovery integrity | **Pass.** Checked with the installed CLI. `backup --out` → `ok: true` with its manifest. A `restore` preview → `applied: false`, and no file was written. `--apply` into a new path → `ok: true`. A second `--apply` onto the existing path is refused (exit 1). `test/backup-restore.test.ts` passes. |
+| Reliability/performance observations | **Recorded as measurement, not an SLA.** `npm run benchmark` ran on `e5f75e0` (isolated home, no network, no credential). The delta from there to this candidate is one browser string, the test script and a test, so no measured path changed. Scales were 100/1,000/10,000 rows × 3 samples and 100,000 rows × 1 (`--stress`). Medians: ingest 27.1/126.7/1,229.3/14,908.8 ms; overview assembly 5.1/12.5/96.7/1,404.6 ms; frontier 1.0/2.3/21.0/414.2 ms; API overview p95 13.3/24.0/110.8/1,412.2 ms; RSS delta 1.2/4.3/16.1/219.2 MiB; compiled dist 4,493,965 bytes. Against `81ffa49`, ingest is about 3.5% faster at 10× (1,229 vs 1,274 ms) and 1% faster at 100× (14,909 vs 15,095 ms). The 2.1× ingest gap to `12add59` noted in that record remains; it has not been profiled. |
+| Redacted diagnostics | **Pass.** Installed `diagnostics --json` → exit 0, with zero absolute-user-path hits. `--out <new-file>` → exit 0; a second export to the same path is refused (exit 1). `test/diagnostics.test.ts` passes. |
+| Intended CI | **Pass.** The push of `e8a8f24` to `main` ran CI [39144843866](https://github.com/GamingDragonwastaken/Segreant/actions/runs/39144843866) → **success**. `test` and `team-server-test` passed on ubuntu, macos and windows, as did `install-paths` on all three. `team-server-postgres`, `browser-accessibility`, `package-smoke` and `security` passed. `candidate-head` was skipped by design on a push. PR #151 passed 14/14 checks before the merge, and Codex's review of it reported no findings. The first candidate `e5f75e0` also succeeded on main (run 39142319355). A later commit that changes only this document does not need its own run. |
+| Visual check | **Pass for the inspected surfaces.** The installed dashboard was opened in the desktop app's built-in browser at 1366×768 and 375×812. **Empty home (a real first run):** the chooser's samples read "e.g. $59.16 list cost (estimate)" and "e.g. $59.163468 list cost (estimate)", and `scrollWidth` equals the 375 px viewport. After the first choice, the Statement shows `$0.00 · 0 requests` with the other three claims "not established" or "nothing judged". **Demo home (checked on `e5f75e0`; the delta does not touch these views):** the **SAMPLE DATA** pill sits in the top bar at both widths (`role="status"`, top 17 px at 375 px). The Statement and Spend pages carry the sample-data notice. Spend renders in both the dark and light themes. CI `browser-accessibility` passed. **Open, not a defect in any figure:** a money reader on an empty install gets no pointer from the Statement to where usage comes in. That is a launch item, not a publish condition. |
+
+**What this candidate establishes.** 0.2.0 is a clean, locally verified build.
+It adds:
+
+- real prices for models the old card lacked: your own price, the bundled card,
+  a lookup on first sight, then the nearest model;
+- a reprice that keeps its history;
+- working OpenAI and Anthropic routes on a fresh install;
+- the live log line that counts what the cap counts;
+- the review fixes from #145–#151.
+
+A real 0.1.0 install (from npm) was upgraded in place to a 0.2.0 build of
+`f896cf5` and checked: 33,319 rows and $4,479.03 unchanged, the new
+cache-duration column at `legacy_unknown`, and the proxy working after the
+upgrade. `src/store` has no schema or migration change between `f896cf5` and
+this candidate. Publishing to npm, tagging and a GitHub release
+are the owner's steps and are not recorded here.
+
+### Superseded record — commit `81ffa49`, 0.2.0, 2026-10-09
 
 This record supersedes the `12add59` record below without rewriting it. It is
 the first record since the package was renamed and published. **0.1.0 was
