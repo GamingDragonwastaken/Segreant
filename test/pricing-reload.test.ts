@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,7 +9,7 @@ import { join } from 'node:path';
 // without a restart, and never midway through a reprice plan.
 const home = mkdtempSync(join(tmpdir(), 'segreant-pricing-reload-'));
 process.env.SEGREANT_HOME = home; delete process.env.SEGREANT_DB; delete process.env.SEGREANT_DEMO;
-const { loadPricing, rateFor, withPricingSnapshot, resetPricingFreshnessForTests } = await import('../src/cost/pricing.ts');
+const { loadPricing, rateFor, withPricingSnapshot, withDeclarations, resetPricingFreshnessForTests } = await import('../src/cost/pricing.ts');
 
 test.after(() => rmSync(home, { recursive: true, force: true }));
 
@@ -91,4 +91,34 @@ test('between checks the loaded card is reused, so pricing does not read the dis
   refreshOnDisk(cardAt(7));
   // No reset: within the interval the loaded card stands.
   assert.equal(rateFor('openai', MODEL).rate.input, 2);
+});
+
+test('one rate lookup reads one card, even when a refresh lands during it', () => {
+  // The old card does not list the model and a free price is declared for it,
+  // so the free price applies. The refresh adds the model. A lookup that read
+  // the new card for the free check and the old card for the rate would price
+  // the request at neither: the generic fallback rate.
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+  // Every clock read moves past the freshness interval, and the refresh is
+  // written at the second one: after the lookup has read its card, before any
+  // later read of the card inside the same lookup.
+  let clock = Date.now();
+  let reads = 0;
+  const now = mock.method(Date, 'now', () => {
+    if (++reads === 2) refreshOnDisk(cardAt(3));
+    return (clock += 1500);
+  });
+  let kind: string;
+  try {
+    kind = withDeclarations({ [MODEL]: { kind: 'free', declaredAt: new Date(0).toISOString() } },
+      () => rateFor('openai', MODEL).pricing.rateMatchKind);
+  } finally {
+    now.mock.restore();
+  }
+  assert.ok(reads >= 1, 'the lookup checked freshness');
+  assert.equal(kind, 'user_declared_free', 'the card the lookup started with decided the price');
+  resetPricingFreshnessForTests();
+  if (reads < 2) refreshOnDisk(cardAt(3));
+  assert.equal(rateFor('openai', MODEL).pricing.rateMatchKind, 'exact_provider', 'the next lookup prices with the refresh');
 });

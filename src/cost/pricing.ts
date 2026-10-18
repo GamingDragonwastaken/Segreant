@@ -1189,7 +1189,19 @@ export function withPricingSnapshot<T>(fn: () => T): T {
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
+  // One resolution reads one card: the card is pinned for the whole lookup, so a
+  // refresh that lands midway cannot price the free check, the rate and its
+  // evidence from two different cards (PR #154 review).
   const pricing = loadPricing();
+  pinnedDepth++;
+  try {
+    return rateFromCard(pricing, provider, model);
+  } finally {
+    pinnedDepth--;
+  }
+}
+
+function rateFromCard(pricing: PricingFile, provider: Provider, model: string): ResolvedRate {
   const here = pricing.providers[provider]?.models;
 
   // 0) A price the user declared for this exact model name wins: it is the one
