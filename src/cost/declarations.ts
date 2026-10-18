@@ -4,8 +4,30 @@ import { isDemo } from '../config.ts';
 import { modelNameError, PriceOverridesError, setPriceOverride, type PriceOverride, type PriceOverrideInput } from './overrides.ts';
 import { loadPricing, rateFor, type Provider } from './pricing.ts';
 
-export function declarePrice(model: string, input: PriceOverrideInput): PriceOverride {
+/** The rate-card entry for exactly this name, if any provider lists it. */
+function cardEntry(model: string): { provider: string; input: number; output: number } | null {
+  for (const [provider, p] of Object.entries(loadPricing().providers)) {
+    const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
+    if (rate) return { provider, input: rate.input, output: rate.output };
+  }
+  return null;
+}
+
+export function declarePrice(model: string, input: PriceOverrideInput, options: { force?: boolean } = {}): PriceOverride {
   if (isDemo()) throw new PriceOverridesError('Demo mode only shows sample data; run without --demo to declare a price.');
+  if (input.kind === 'free' && options.force !== true) {
+    // A free price on a model the card prices makes a cap count real cloud
+    // spend as $0. A zero rate is refused for the same reason; `free` is for a
+    // model that runs locally, so a card match needs an explicit --force
+    // (owner decision, 2026-10-18).
+    const entry = cardEntry(model);
+    if (entry) {
+      throw new PriceOverridesError(
+        `${model} is a ${entry.provider} cloud model on the rate card ($${entry.input} in / $${entry.output} out per 1M tokens). ` +
+        `Declaring it free would make a cap count its spend as $0. If it really runs locally under this name: ` +
+        `segreant pricing set ${model} --free --force`);
+    }
+  }
   if (input.kind === 'like') {
     const error = modelNameError(input.like);
     if (error) throw new PriceOverridesError(`--like: ${error}`);

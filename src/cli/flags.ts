@@ -66,7 +66,7 @@ const KNOWN_OPTION_NAMES = [
   'account-ref', 'all', 'allow-unmetered', 'apply', 'archive', 'as-of', 'at', 'attempts', 'auto', 'category', 'centre',
   'cache-read', 'cache-write', 'cache-write-1h', 'clear', 'clear-webhook', 'close-status', 'commit', 'control', 'coverage', 'cwd', 'daily', 'dashboard-port', 'data-class',
   'days', 'debug', 'decision', 'deep', 'demo', 'detail', 'disabled', 'dry-run', 'economic', 'effective-at', 'every',
-  'exact-money', 'file', 'finalize', 'format', 'free', 'from', 'grain', 'help', 'id', 'import-id', 'include-imported', 'input', 'into',
+  'exact-money', 'file', 'finalize', 'force', 'format', 'free', 'from', 'grain', 'help', 'id', 'import-id', 'include-imported', 'input', 'into',
   'json', 'key', 'key-id', 'kind', 'labor-rate', 'like', 'limit', 'list', 'manifest', 'materiality', 'me', 'method', 'mode',
   'name', 'note', 'notify', 'notify-url', 'origin', 'out', 'output', 'owner', 'path-prefix', 'policy', 'port', 'priority',
   'project', 'project-ref', 'pubkey', 'purpose', 'rating', 'reason', 'recommend', 'reconcile', 'record-id', 'refresh',

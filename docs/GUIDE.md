@@ -184,7 +184,8 @@ segreant pricing unknown       Models still priced by a guess, with requests and
                                 recorded cost (--json)
 segreant pricing set <model>   Give a model a price: --input <usd> --output <usd>
                                 (per 1M tokens, optional --cache-read/--cache-write/--cache-write-1h),
-                                --like <card-model>, or --free for a local model.
+                                --like <card-model>, or --free for a local model
+                                (--free --force for a name the rate card prices).
                                 Shown as "your price", never as list price
 segreant pricing unset <model> Remove a price you set
 segreant pricing --coverage    Read-only per-model historical rate-card and match
