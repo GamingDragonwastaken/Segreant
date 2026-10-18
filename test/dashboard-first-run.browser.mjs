@@ -66,13 +66,14 @@ test('an empty install points Statement and Spend to where usage comes in', asyn
   });
 });
 
-test('the pointer is absent once anything is recorded, and on sample data', async () => {
+test('the pointer is absent once anything is recorded, on sample data, and after retention emptied the ledger', async () => {
   const one = (store) => store.insertRequest({
     requestId: 'r1', sessionId: null, tsEpochMs: Date.now() - 86_400_000, provider: 'openai', model: 'gpt-4o', project: 'p', taskWeight: 1,
     inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
     costUsd: 0.01, estimated: true, streamed: false, statusCode: 200, durationMs: 1, pricing: legacyPricingEvidence(),
   });
-  for (const [label, prepare] of [['recorded', one], ['sample data', (store) => seedDemo(store)]]) {
+  const pruned = (store) => { one(store); assert.equal(store.prune(Date.now()), 1); };
+  for (const [label, prepare] of [['recorded', one], ['sample data', (store) => seedDemo(store)], ['retention emptied', pruned]]) {
     await withDashboard(prepare, async (browser, base) => {
       for (const route of ['statement', 'spend']) {
         const page = await open(browser, base, route);
