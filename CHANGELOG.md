@@ -9,6 +9,10 @@ release evidence.
 
 The format follows Keep a Changelog and releases will use Semantic Versioning.
 
+## [Unreleased]
+
+- **`segreant pricing set <model> --free` is refused for a model the rate card prices.** A cap counts a free model's requests as $0, so marking a cloud model free (for example `claude-sonnet-4-6`) would have let real spend through uncounted. The refusal names the card's rate. A model that really runs locally under a card name can still be marked free with `--free --force`. The dashboard refuses it without an override.
+
 ## [0.2.0] - Unreleased
 
 - **The first-run chooser's sample figures say they are examples.** "$59.16 list cost (estimate)" showed how each wording reads, but it appeared on every install, including one with no data, as if it were the reader's spend. Both samples now begin "e.g.".
