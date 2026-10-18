@@ -34,7 +34,10 @@ Another provider (OpenRouter, a gateway, a hosted open model) needs one rule
 for its address. A refused request prints the exact command, for example:
 
 ```bash
-segreant egress apply --apply --mode controlled_cloud   --id openrouter.ai --purpose provider_inference   --data-class provider_request --method POST   --origin https://openrouter.ai --path-prefix /
+segreant egress apply --apply --mode controlled_cloud \
+  --id provider-openrouter-ai --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://openrouter.ai --path-prefix /
 ```
 
 The built-in routes hold in either mode, so adding a rule never cuts off your
