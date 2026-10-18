@@ -57,7 +57,18 @@ function storedLine(model: string, price: PriceOverride): string {
     ...(price.cacheWrite === undefined ? [] : [`cache-write $${price.cacheWrite}`]),
     ...(price.cacheWrite1h === undefined ? [] : [`cache-write-1h $${price.cacheWrite1h}`]),
   ];
-  return `Stored user-declared price for ${model}: input $${price.input}, output $${price.output}${cache.length ? `, ${cache.join(', ')}` : ''} (USD per 1M tokens).`;
+  // A cache price left out is not yours: it is the usual multiple of your
+  // input price. Say so where the price is stored (independent review,
+  // 2026-10-18), naming only the parts that were left out.
+  const derived = [
+    ...(price.cacheWrite === undefined ? ['5-minute cache writes at 1.25×'] : []),
+    ...(price.cacheWrite1h === undefined ? ['1-hour cache writes at 2×'] : []),
+    ...(price.cacheRead === undefined ? ['cache reads at 0.1×'] : []),
+  ];
+  const note = derived.length
+    ? ` Not set, so priced at the usual multiple of your input price: ${derived.join(', ')} (set --cache-write, --cache-write-1h or --cache-read to give your own).`
+    : '';
+  return `Stored user-declared price for ${model}: input $${price.input}, output $${price.output}${cache.length ? `, ${cache.join(', ')}` : ''} (USD per 1M tokens).${note}`;
 }
 
 /** No ledger is created just to inspect historical usage. */
