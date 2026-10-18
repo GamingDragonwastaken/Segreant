@@ -23,7 +23,7 @@ export function declarePrice(model: string, input: PriceOverrideInput, options: 
     const entry = cardEntry(model);
     if (entry) {
       throw new PriceOverridesError(
-        `${model} is a ${entry.provider} cloud model on the rate card ($${entry.input} in / $${entry.output} out per 1M tokens). ` +
+        `${model} is a cloud model the rate card prices (${entry.provider}: $${entry.input} in / $${entry.output} out per 1M tokens). ` +
         `Declaring it free would make a cap count its spend as $0. If it really runs locally under this name: ` +
         `segreant pricing set ${model} --free --force`);
     }

@@ -26,7 +26,7 @@ test.after(() => rmSync(home, { recursive: true, force: true }));
 
 test('free is refused for a model the rate card prices, naming the rate', () => {
   assert.throws(() => declarePrice(cardModel, { kind: 'free' }), (error: unknown) =>
-    error instanceof PriceOverridesError && error.message.includes(cardModel) && /rate card \(\$[\d.]+ in \/ \$[\d.]+ out/.test(error.message) && /--free --force/.test(error.message));
+    error instanceof PriceOverridesError && error.message.includes(cardModel) && /rate card prices \(\w+: \$[\d.]+ in \/ \$[\d.]+ out/.test(error.message) && /--free --force/.test(error.message));
   assert.equal(priceOverrideFor(cardModel), null, 'nothing stored');
 });
 
