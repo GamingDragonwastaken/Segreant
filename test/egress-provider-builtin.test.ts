@@ -70,7 +70,7 @@ test('a request to a provider that is not built in is refused with the one comma
     const body = await response.json() as { error: { message: string; subcode: string } };
     assert.equal(body.error.subcode, 'policy_denied');
     assert.match(body.error.message, /https:\/\/gateway\.example\.com is not one of the built-in provider APIs/);
-    assert.match(body.error.message, /segreant egress apply --apply --mode controlled_cloud --id provider-gateway-example-com --purpose provider_inference --data-class provider_request --method POST --origin https:\/\/gateway\.example\.com --path-prefix \//);
+    assert.match(body.error.message, /segreant egress apply --apply --mode controlled_cloud --id provider-gateway-example-com-post --purpose provider_inference --data-class provider_request --method POST --origin https:\/\/gateway\.example\.com --path-prefix \//);
   } finally {
     await new Promise<void>((resolve) => proxy.close(() => resolve()));
     store.close();
@@ -83,7 +83,7 @@ test('the printed command is one the egress command accepts, and it then allows 
   const { providerRuleCommand, providerRuleId } = await import('../src/egress/policy.ts');
   const { validateEgressRule } = await import('../src/egress/ruleValidation.ts');
   for (const host of ['gateway.example.com', 'openrouter.ai', 'My-Proxy.Internal.Example.ORG', 'a.b', `${'x'.repeat(80)}.example.com`, '1api.example.com']) {
-    const id = providerRuleId(host);
+    const id = providerRuleId(host, 'POST');
     const rule = { id, enabled: true, purpose: 'provider_inference', dataClass: 'provider_request', method: 'POST', origin: `https://${host.toLowerCase()}`, pathPrefix: '/' };
     assert.deepEqual(validateEgressRule(rule as never), [], `${host} -> ${id}`);
   }
@@ -101,9 +101,35 @@ test('the printed command is one the egress command accepts, and it then allows 
     const config = loadConfig();
     const d = evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' });
     assert.equal(d.allowed, true, 'the provider is allowed once the printed command has run');
-    assert.equal(d.ruleId, 'provider-gateway-example-com');
+    assert.equal(d.ruleId, 'provider-gateway-example-com-post');
+    // The GET command adds its own rule and keeps the POST one.
+    const get = providerRuleCommand('https://gateway.example.com/v1/models', 'GET')!;
+    const second = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', ...get.split(' ').slice(1)], { encoding: 'utf8', env: { ...process.env, SEGREANT_HOME: home } });
+    assert.equal(second.status, 0, second.stdout + second.stderr);
+    const both = loadConfig().egress;
+    assert.equal(evaluateEgressPolicy(both, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' }).allowed, true, 'POST still allowed');
+    assert.equal(evaluateEgressPolicy(both, { ...provider, method: 'GET', url: 'https://gateway.example.com/v1/models' }).allowed, true, 'GET allowed too');
   } finally {
     if (previous === undefined) delete process.env.SEGREANT_HOME; else process.env.SEGREANT_HOME = previous;
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a running proxy follows an egress change in config.json on the next request, with no restart (PR #148 review)', async () => {
+  const { liveBudget } = await import('../src/proxy/server.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'segreant-live-egress-'));
+  try {
+    const path = join(dir, 'config.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(path, '{}');
+    const config = structuredClone(DEFAULT_CONFIG);
+    const rule = { id: 'provider-gateway-example-com-post', enabled: true, purpose: 'provider_inference', dataClass: 'provider_request', method: 'POST', origin: 'https://gateway.example.com', pathPrefix: '/' };
+    const onDisk = { ...structuredClone(DEFAULT_CONFIG), egress: { mode: 'controlled_cloud', rules: [rule] } };
+    const read = liveBudget(config, { intervalMs: 0, path: () => path, load: () => onDisk as never });
+    read();
+    assert.equal(evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' }).allowed, true,
+      'the rule written by another process governs the running proxy');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

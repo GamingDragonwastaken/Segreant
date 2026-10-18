@@ -307,7 +307,7 @@ function cmdHelp(): void {
   Setup
     1) OpenAI and Anthropic work with no setup. Another provider (OpenRouter, a
        gateway) needs one rule; a refused request prints the exact command:
-         segreant egress apply --apply --mode controlled_cloud --id provider-<host>
+         segreant egress apply --apply --mode controlled_cloud --id provider-<host>-post
            --purpose provider_inference --data-class provider_request --method POST
            --origin https://<host> --path-prefix /
     2) segreant start
