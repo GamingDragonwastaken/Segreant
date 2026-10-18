@@ -11,6 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The first-run chooser's sample figures say they are examples.** "$59.16 list cost (estimate)" showed how each wording reads, but it appeared on every install, including one with no data, as if it were the reader's spend. Both samples now begin "e.g.".
 - **Found by two independent reviews of the release candidate.**
   - **`segreant reprice` keeps the record of what it replaced.** Each price change is logged with the price it replaced, but the log recorded that earlier price's basis as unknown on every reprice. It now records the earlier basis, rate card and match.
   - **A reprice no longer prices a request whose usage was never captured.** A response cut off at the resource limit is recorded with no token counts and an unknown cost. A reprice used to turn it into a confirmed $0 list price. Such requests are now left as they are; an unpriced request that does have token counts can still be priced by a price you declare.
