@@ -367,7 +367,13 @@ export function liveBudget(
       }
       if (mtimeMs !== null && (mtimeMs !== seenMtimeMs || failure !== null)) {
         try {
-          config.budget = load().budget;
+          const fresh = load();
+          config.budget = fresh.budget;
+          // The egress rules follow the file the same way: a rule added with
+          // `segreant egress apply` (the command a refusal prints) governs the
+          // next request, with no restart, and so does a tightening (PR #148
+          // review). An invalid file throws above and fails closed.
+          config.egress = fresh.egress;
           seenMtimeMs = mtimeMs;
           failure = null;
         } catch (error) {

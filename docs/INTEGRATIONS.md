@@ -38,7 +38,7 @@ For example, before routing traffic to a gateway:
 
 ```bash
 segreant egress apply --apply --mode controlled_cloud \
-  --id provider-openrouter-ai --purpose provider_inference \
+  --id provider-openrouter-ai-post --purpose provider_inference \
   --data-class provider_request --method POST \
   --origin https://openrouter.ai --path-prefix /
 ```
