@@ -55,7 +55,7 @@ test('an empty install points Statement and Spend to where usage comes in', asyn
   await withDashboard(() => {}, async (browser, base) => {
     for (const route of ['statement', 'spend']) {
       const page = await open(browser, base, route);
-      const note = page.getByRole('note').filter({ hasText: 'Nothing recorded yet.' });
+      const note = page.getByRole('note').filter({ hasText: 'Your ledger is empty.' });
       await note.waitFor();
       const link = note.getByRole('link', { name: 'Bring in your usage' });
       assert.equal(await link.getAttribute('href'), '#/data', `${route} links to Data`);
@@ -77,7 +77,7 @@ test('the pointer is absent once anything is recorded, on sample data, and after
     await withDashboard(prepare, async (browser, base) => {
       for (const route of ['statement', 'spend']) {
         const page = await open(browser, base, route);
-        assert.equal(await page.getByText('Nothing recorded yet.').count(), 0, `${route} with ${label}`);
+        assert.equal(await page.getByText('Your ledger is empty.').count(), 0, `${route} with ${label}`);
         await page.close();
       }
     });
