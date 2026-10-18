@@ -249,15 +249,26 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
   cacheReadTokens: number;
   cacheWriteTtl: '5m' | '1h' | null;
   costUsd: number;
+  usageCaptured: boolean;
 }> {
-  return db
+  const rows = db
     .prepare(
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
-                cost_usd AS costUsd
-         FROM requests WHERE estimated = 1`,
+                cost_usd AS costUsd,
+                -- An unpriced row with no token counts has no captured usage to
+                -- price (a response cut off at the resource limit): repricing it
+                -- wrote a confirmed $0 list price over an unknown cost
+                -- (independent review, 2026-10-18). It stays in the report as an
+                -- untouched estimate; only the write plan skips it (PR #150
+                -- review). An unpriced row WITH token counts stays repriceable.
+                CASE WHEN cost_basis = 'unpriced'
+                      AND input_tokens + output_tokens + cache_write_tokens + cache_read_tokens = 0
+                     THEN 0 ELSE 1 END AS usageCaptured
+         FROM requests
+         WHERE estimated = 1 AND cost_basis <> 'not_sent'`,
     )
     .all() as Array<{
     requestId: string;
@@ -269,7 +280,9 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
+    usageCaptured: number;
   }>;
+  return rows.map((r) => ({ ...r, usageCaptured: r.usageCaptured === 1 }));
 }
 
 /**
@@ -293,10 +306,14 @@ export function applyRepricedCosts(
   appliedAtMs: number,
 ): RealizationCostSync & { writtenRequestIds: string[] } {
   const prior = db.prepare(
+    // camelCase, which is what pricingEvidenceFromRecord reads with no prefix.
+    // These were aliased CostBasis/RateCardSha256/..., so every reprice event
+    // recorded legacy_unknown as the provenance it replaced (independent review,
+    // 2026-10-18).
     `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
-              cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
-              rate_card_source_kind AS RateCardSourceKind, rate_match_kind AS RateMatchKind,
-              rate_match_provider AS RateMatchProvider, rate_match_model AS RateMatchModel
+              cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+              rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+              rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
        FROM requests WHERE request_id = ?`,
   );
   const update = db.prepare(

@@ -31,6 +31,8 @@ export interface ExactNormalizedUsage {
   readonly cacheWriteTokens: number;
   readonly cacheReadTokens: number;
   readonly cacheWriteTtl?: '5m' | '1h';
+  /** Whether that duration was observed; recording only, never priced or hashed. */
+  readonly cacheWriteTtlObserved?: boolean;
   readonly reasoningTokens?: number;
 }
 
@@ -45,7 +47,7 @@ export interface ExactCostBreakdown {
 }
 
 const RATE_KEYS = new Set(['input', 'output', 'cache_write_5m', 'cache_write_1h', 'cache_read']);
-const USAGE_KEYS = new Set(['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'cacheWriteTtl', 'reasoningTokens']);
+const USAGE_KEYS = new Set(['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'cacheWriteTtl', 'cacheWriteTtlObserved', 'reasoningTokens']);
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -108,6 +110,9 @@ function canonicalUsage(value: ExactNormalizedUsage): ExactNormalizedUsage {
     throw new Error('exact normalized usage cacheWriteTtl must be 5m or 1h');
   }
   if (value.reasoningTokens !== undefined) tokenCount(value.reasoningTokens, 'exact normalized usage reasoningTokens');
+  if (value.cacheWriteTtlObserved !== undefined && typeof value.cacheWriteTtlObserved !== 'boolean') {
+    throw new Error('exact normalized usage cacheWriteTtlObserved must be a boolean');
+  }
   return Object.freeze({
     inputTokens,
     outputTokens,

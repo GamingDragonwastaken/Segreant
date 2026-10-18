@@ -106,8 +106,10 @@ web/
   `POST /api/pricing/declare` and `/api/pricing/unset` share the CLI's validation
   and leave recorded amounts unchanged. `POST /api/reprice` previews with
   `apply: false` and writes with `apply: true`, through the same cost computation
-  as the CLI. All three POST routes require the local header, a strict JSON body
-  of at most 16 KiB, and non-demo mode. The history drawer requires typing
+  as the CLI. All three POST routes require the local header and a strict JSON
+  body of at most 16 KiB. Every write requires non-demo mode; the one exception
+  is a reprice preview (`apply: false`), which writes nothing, so the sample data
+  may show one (its response carries `demo: true`). The history drawer requires typing
   `reprice`, labels old and new amounts by basis, shows what was applied, and
   refreshes the metered/value claims (`test/dashboard-pricing-drawers.browser.mjs`).
 - **The Statement is one calendar month, four claims, never summed.**

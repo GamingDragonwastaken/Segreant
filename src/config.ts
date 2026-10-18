@@ -903,6 +903,26 @@ function assertConfigMutationLock(lock: ConfigMutationLock): void {
   }
 }
 
+/**
+ * `invalid` is how a malformed egress section loads; it is never written. A
+ * write that does not touch egress (a cap, a plan price) keeps the section
+ * exactly as it is on disk, so the user's rules survive to be repaired. Writing
+ * the marker replaced the section with `{"mode":"invalid","rules":[]}`, and the
+ * rules were gone once the next write rotated the backup (independent review,
+ * 2026-10-18). A write that repairs egress sets a real mode and is written as is.
+ */
+function withPersistedEgress(config: SegreantConfig, path: string): unknown {
+  if (config.egress.mode !== 'invalid') return config;
+  let onDisk: unknown;
+  try {
+    const text = readFileSync(path, 'utf8');
+    onDisk = (JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as Record<string, unknown>)['egress'];
+  } catch (error) {
+    throw new ConfigValidationError(`the egress section of ${path} is malformed and could not be kept as it is; repair it before changing other settings (${error instanceof Error ? error.message : String(error)})`);
+  }
+  return { ...config, egress: onDisk };
+}
+
 function persistConfigUnlocked(config: SegreantConfig): void {
   ensureHome();
   validateBudgetConfig(config.budget);
@@ -910,7 +930,7 @@ function persistConfigUnlocked(config: SegreantConfig): void {
   const path = configPath();
   const tempPath = `${path}.tmp-${randomUUID()}`;
   const backupPath = `${path}.bak`;
-  const text = JSON.stringify(config, null, 2) + '\n';
+  const text = JSON.stringify(withPersistedEgress(config, path), null, 2) + '\n';
   let descriptor: number | null = null;
   try {
     // Preserve the previous known-good config before replacing it. The target
