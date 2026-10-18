@@ -1,7 +1,7 @@
 # Changelog
 
-Segreant is pre-1.0. 0.1.0 is published on npm (2026-10-08); the repository
-carries no tag and no GitHub release yet. This file records user-visible changes
+Segreant is pre-1.0. 0.1.0 (2026-10-08) and 0.2.0 (2026-10-18) are published
+on npm; 0.2.0 is tagged `v0.2.0` with a GitHub release. This file records user-visible changes
 from the point at which release discipline was formalized; Git history remains
 the authoritative record for earlier development. The verification procedure in
 `docs/RELEASE-PROCESS.md` remains the release authority — an entry here is not
@@ -13,7 +13,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 - **`segreant pricing set <model> --free` is refused for a model the rate card prices.** A cap counts a free model's requests as $0, so marking a cloud model free (for example `claude-sonnet-4-6`) would have let real spend through uncounted. The refusal names the card's rate. A model that really runs locally under a card name can still be marked free with `--free --force`. The dashboard refuses it without an override.
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-10-18
 
 - **The first-run chooser's sample figures say they are examples.** "$59.16 list cost (estimate)" showed how each wording reads, but it appeared on every install, including one with no data, as if it were the reader's spend. Both samples now begin "e.g.".
 - **Found by two independent reviews of the release candidate.**
