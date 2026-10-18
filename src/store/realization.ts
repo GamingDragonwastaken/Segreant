@@ -258,12 +258,15 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
                 CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
                 cost_usd AS costUsd
          FROM requests
-         -- An unpriced row has no captured usage to price (a response cut off at
-         -- the resource limit, an unknown provider), and a not-sent row cost
-         -- nothing. Repricing either from its zero token counts wrote a
-         -- confirmed $0 list price over an unknown cost (independent review,
-         -- 2026-10-18).
-         WHERE estimated = 1 AND cost_basis NOT IN ('unpriced', 'not_sent')`,
+         -- A not-sent row cost nothing, and an unpriced row with no token
+         -- counts has no captured usage to price (a response cut off at the
+         -- resource limit): repricing it wrote a confirmed $0 list price over an
+         -- unknown cost (independent review, 2026-10-18). An unpriced row WITH
+         -- token counts (an imported provider the card does not cover) stays
+         -- eligible, so a price declared later can price it (PR #150 review).
+         WHERE estimated = 1 AND cost_basis <> 'not_sent'
+           AND NOT (cost_basis = 'unpriced'
+                    AND input_tokens + output_tokens + cache_write_tokens + cache_read_tokens = 0)`,
     )
     .all() as Array<{
     requestId: string;

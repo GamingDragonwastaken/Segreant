@@ -171,9 +171,10 @@ export interface NormalizedUsage {
   /** TTL the cache write is priced at, if known. Affects the write rate. */
   cacheWriteTtl?: '5m' | '1h';
   /**
-   * True only when the source reported every written token at that one
-   * duration. A mixed request is priced at its larger share but is not an
-   * observation of one duration, so the ledger records it as not recorded.
+   * True when the source reported a 5-minute / 1-hour breakdown, so the
+   * duration above is the one the request was priced with, which the ledger
+   * keeps. False when it did not say: priced at the standard rate, recorded as
+   * not recorded.
    */
   cacheWriteTtlObserved?: boolean;
   /** Reasoning tokens — reporting only, billed inside outputTokens. */
@@ -1166,18 +1167,17 @@ function per(tokens: number, rate: number | undefined): number {
 }
 
 /**
- * The duration a cache write is priced at, and whether that is an observation.
- * No breakdown: neither (priced at the standard 5-minute rate, recorded as not
- * recorded). One duration only: that one, observed. Both: the larger share,
- * not observed. A missing breakdown used to be stored as '1h' by the Claude
- * Code import and '5m' by the proxy, each as if it were seen (independent
- * review, 2026-10-18).
+ * The duration a cache write is priced at, and whether the source reported a
+ * breakdown. No breakdown: no duration (priced at the standard 5-minute rate,
+ * recorded as not recorded). One duration only: that one. Both: the larger
+ * share, which is what the request is priced with, and the ledger records it
+ * so a later reprice prices it the same way (PR #150 review). A missing
+ * breakdown used to be stored as '1h' by the Claude Code import and '5m' by
+ * the proxy, each as if it were seen (independent review, 2026-10-18).
  */
 export function cacheWriteDuration(ephemeral5m: number, ephemeral1h: number): { ttl?: '5m' | '1h'; observed: boolean } {
   if (ephemeral5m <= 0 && ephemeral1h <= 0) return { observed: false };
-  if (ephemeral5m <= 0) return { ttl: '1h', observed: true };
-  if (ephemeral1h <= 0) return { ttl: '5m', observed: true };
-  return { ttl: ephemeral1h > ephemeral5m ? '1h' : '5m', observed: false };
+  return { ttl: ephemeral1h > ephemeral5m ? '1h' : '5m', observed: true };
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
