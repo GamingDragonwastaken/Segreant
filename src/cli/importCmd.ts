@@ -8,7 +8,7 @@
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig, isDemo, DemoWriteBlockedError } from '../config.ts';
-import { pricingStatus, refreshPricing } from '../cost/pricing.ts';
+import { pricingStatus, refreshPricing, DEFAULT_MANIFEST_URL } from '../cost/pricing.ts';
 import { priceCheckDue } from '../cost/firstSight.ts';
 import {
   realizeDiscoveredProjects, projectValueBreakdown, CLI_PERIOD_DAYS, CLI_GIT_BUDGET_MS, SCAN_VALUE_BUDGET_MS,
@@ -543,10 +543,14 @@ export async function cmdScan(flags: Flags): Promise<void> {
   // Imported rows keep the price they are recorded at, so the best moment to
   // learn new models is before the import, not after it. Only when someone is
   // at the terminal: a scripted import does not gain a network call it did not
-  // ask for (the running proxy still looks models up on first sight).
-  if (flags.setup && !flags.json && tty && !isDemo() && pricingCfg.lookupUnknownModels && priceCheckDue(prices)) {
+  // ask for (the running proxy still looks models up on first sight). Only the
+  // built-in public list, which is what this line and the privacy statement
+  // disclose: a custom pricing.manifestUrl is refreshed when its operator asks
+  // (segreant pricing --refresh, or autoRefresh), never by scan (PR #146 review).
+  const builtInList = pricingCfg.manifestUrl === null || pricingCfg.manifestUrl === undefined || pricingCfg.manifestUrl === DEFAULT_MANIFEST_URL;
+  if (flags.setup && !flags.json && tty && !isDemo() && pricingCfg.lookupUnknownModels && builtInList && priceCheckDue(prices)) {
     console.log(color(tty, C.gray, '  Checking the public price list so imported requests get current prices (sends nothing about you)…'));
-    const checked = await refreshPricing(pricingCfg.manifestUrl);
+    const checked = await refreshPricing(DEFAULT_MANIFEST_URL);
     console.log(checked.ok
       ? color(tty, C.gray, `  Prices current: ${num(checked.modelCount ?? 0)} models on the card.`)
       : color(tty, C.yellow, `  Price check skipped: ${checked.error ?? 'the price list could not be read'}.`));

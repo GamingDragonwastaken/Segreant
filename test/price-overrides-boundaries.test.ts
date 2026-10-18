@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -311,5 +311,19 @@ test('a reprice plan never promises a row it cannot write exactly (PR #146 revie
     assert.doesNotThrow(() => applyReprice(store), 'apply writes exactly what the preview promised');
   } finally {
     store.close();
+  }
+});
+
+test('the prices file is private to its owner, on every write (PR #146 review)', { skip: process.platform === 'win32' ? 'POSIX modes only' : false }, () => {
+  const old = process.umask(0o022);
+  try {
+    setPriceOverride('acme-private-a', { kind: 'free' });
+    assert.equal(statSync(overridesPath()).mode & 0o777, 0o600, 'first write');
+    setPriceOverride('acme-private-b', { kind: 'rate', input: '1', output: '2' });
+    assert.equal(statSync(overridesPath()).mode & 0o777, 0o600, 'replacement');
+  } finally {
+    process.umask(old);
+    removePriceOverride('acme-private-a');
+    removePriceOverride('acme-private-b');
   }
 });
