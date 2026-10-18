@@ -364,6 +364,15 @@ export function liveBudget(
         // Any other stat failure (permissions, I/O) means the persisted
         // budget cannot be verified, and that fails closed.
         if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') failure = new BudgetConfigUnavailable(error);
+        else {
+          // Deleting the file is the documented way back to defaults, so the
+          // egress policy returns to its default too: a gateway allowed by a
+          // rule in the deleted file is refused on the next request, not at
+          // the next restart (PR #148 review). The built-in provider routes
+          // hold in the default. A file written again is re-read in full.
+          config.egress = { mode: 'local_locked', rules: [] };
+          seenMtimeMs = null;
+        }
       }
       if (mtimeMs !== null && (mtimeMs !== seenMtimeMs || failure !== null)) {
         try {

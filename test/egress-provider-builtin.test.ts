@@ -129,6 +129,18 @@ test('a running proxy follows an egress change in config.json on the next reques
     read();
     assert.equal(evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' }).allowed, true,
       'the rule written by another process governs the running proxy');
+    // Deleting config.json restores the defaults, the egress rules included.
+    const budget = config.budget;
+    rmSync(path);
+    assert.equal(read(), budget, 'the cap stays in force');
+    assert.equal(evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' }).allowed, false,
+      'a gateway allowed only by the deleted file is refused on the next request');
+    assert.equal(evaluateEgressPolicy(config.egress, { ...provider, url: 'https://api.openai.com/v1/chat/completions' }).allowed, true,
+      'the built-in provider routes still hold');
+    writeFileSync(path, '{}');
+    read();
+    assert.equal(evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' }).allowed, true,
+      'a file written again is read again');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
