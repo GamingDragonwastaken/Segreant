@@ -24,25 +24,21 @@ linked onto your `PATH`, run the same thing as `npm run segreant -- <verb>`.
 
 ## Egress control
 
-Segreant starts in **local-locked** mode. Before a cloud provider can receive
-routed traffic, grant only the exact route you intend to use. For the default
-OpenAI Responses/Chat API path:
+Segreant starts in **local-locked** mode. Your requests to the official OpenAI
+and Anthropic APIs go through with no setup: that traffic was already going to
+your provider, and Segreant meters it on the way. The public price-list download
+is built in the same way. Everything else Segreant could send on its own
+(webhooks, team rollups, hosted judging) stays off until you add an exact rule.
+
+Another provider (OpenRouter, a gateway, a hosted open model) needs one rule
+for its address. A refused request prints the exact command, for example:
 
 ```bash
-segreant egress apply --apply --mode controlled_cloud \
-  --id openai-inference --purpose provider_inference \
-  --data-class provider_request --method POST \
-  --origin https://api.openai.com --path-prefix /v1/
+segreant egress apply --apply --mode controlled_cloud   --id openrouter.ai --purpose provider_inference   --data-class provider_request --method POST   --origin https://openrouter.ai --path-prefix /
 ```
 
-For Anthropic, add a second exact rule (this preserves the OpenAI rule):
-
-```bash
-segreant egress apply --apply --mode controlled_cloud \
-  --id anthropic-inference --purpose provider_inference \
-  --data-class provider_request --method POST \
-  --origin https://api.anthropic.com --path-prefix /v1/
-```
+The built-in routes hold in either mode, so adding a rule never cuts off your
+provider or your price updates.
 
 Use `segreant egress status` to inspect the active mode/rules and
 `segreant egress verify` to verify the local receipt chain. Return to

@@ -26,7 +26,7 @@ test('nothing else gets through: another file, a query, another method, purpose 
     { ...intent, method: 'POST' },
     { ...intent, purpose: 'alert_delivery' as const },
     { ...intent, dataClass: 'provider_request' as const },
-    { ...intent, purpose: 'provider_inference' as const, dataClass: 'provider_request' as const, method: 'POST', url: 'https://api.anthropic.com/v1/messages' },
+    { ...intent, purpose: 'provider_inference' as const, dataClass: 'provider_request' as const, method: 'POST', url: 'https://gateway.example.com/v1/messages' },
   ];
   for (const i of denied) {
     const d = evaluateEgressPolicy(locked, i as typeof intent);
@@ -34,8 +34,8 @@ test('nothing else gets through: another file, a query, another method, purpose 
   }
 });
 
-test('controlled_cloud still needs its own exact rule for the price list', () => {
+test('controlled_cloud keeps the built-in price list, so adding a rule for something else never stops price updates', () => {
   const d = evaluateEgressPolicy({ mode: 'controlled_cloud', rules: [] }, intent);
-  assert.equal(d.allowed, false);
-  assert.match(d.reason, /no exact enabled rule/);
+  assert.equal(d.allowed, true);
+  assert.equal(d.ruleId, MAINTENANCE_RULE_ID);
 });

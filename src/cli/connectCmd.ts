@@ -5,6 +5,7 @@
  * the per-tool flows stay module-internal.
  */
 
+import { isBuiltInProviderUpstream, providerRuleCommand } from '../egress/policy.ts';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
@@ -143,8 +144,10 @@ function wrapOpencodeFlow(cfg: SegreantConfig, flags: Flags, tty: boolean, provi
     console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through Segreant.`));
     console.log(color(tty, C.gray, `    opencode config: ${path}  (backup at ${path}.bak)`));
     console.log(color(tty, C.gray, `    Segreant upstreams.openai → ${res.originalBaseUrl}`));
-    console.log(color(tty, C.gray, `    Egress remains ${cfg.egress.mode}; this connection never grants cloud permission.`));
-    console.log(color(tty, C.gray, `    Review the provider's exact rule with: segreant egress plan ...`));
+    const allow = isBuiltInProviderUpstream(res.originalBaseUrl!) ? null : providerRuleCommand(res.originalBaseUrl!);
+    console.log(color(tty, C.gray, allow
+      ? `    ${res.originalBaseUrl} is not a built-in provider API. Allow Segreant to forward there with:\n      ${allow}`
+      : '    Requests to the official provider API go out with no extra step.'));
     console.log(color(tty, C.gray, '    JSON comments were reformatted away; your settings + keys are preserved.'));
     console.log('');
     console.log(color(tty, C.gray, '  Restart Segreant (segreant start), run opencode, then:  segreant sources'));
@@ -395,7 +398,8 @@ function connectGenericApi(cfg: SegreantConfig, flags: Flags, tty: boolean): voi
   // segment in both places doubles it (/v1/v1/chat/completions) and 404s.
   console.log(color(tty, C.gray, '  If that base URL already ends in its version (an Ollama base ending in /v1),'));
   console.log(color(tty, C.gray, `  point the client at http://localhost:${port} without /v1. A remote upstream also`));
-  console.log(color(tty, C.gray, '  needs its own egress rule; segreant egress help shows the form.'));
+  console.log(color(tty, C.gray, '  other than the official OpenAI and Anthropic APIs needs one egress rule; a refused'));
+  console.log(color(tty, C.gray, '  request prints the exact command.'));
   console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
   console.log(color(tty, C.green, '    segreant sources'));

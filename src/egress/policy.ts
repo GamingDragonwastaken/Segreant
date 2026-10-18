@@ -57,6 +57,62 @@ function maintenanceTarget(target: URL, intent: EgressRequestIntent, method: str
   return MAINTENANCE_TARGETS.some((m) => m.purpose === intent.purpose && m.dataClass === intent.dataClass && m.href === target.href);
 }
 
+/**
+ * The providers' own APIs. A request the user's tool sends to its provider is
+ * the user's traffic, already going there before Segreant existed; Segreant only
+ * meters it on the way through. Locking it by default made a fresh install
+ * refuse every request with a 403 until two egress commands were run, which
+ * protected nothing (the owner's call, 2026-10-18). What stays locked is
+ * everything that would send Segreant's own data somewhere new: webhooks, team
+ * rollups, hosted judging. The match is exact: provider purpose and data class,
+ * GET or POST, HTTPS, the official origin, under /v1/. A custom upstream (a
+ * gateway, a self-hosted model) is the user's to allow with its own rule.
+ */
+export const PROVIDER_RULE_ID_PREFIX = 'segreant-builtin-provider-';
+
+const PROVIDER_TARGETS: ReadonlyArray<{ id: string; origin: string; pathPrefix: string }> = [
+  { id: 'anthropic', origin: 'https://api.anthropic.com', pathPrefix: '/v1/' },
+  { id: 'openai', origin: 'https://api.openai.com', pathPrefix: '/v1/' },
+];
+
+function providerTarget(target: URL, intent: EgressRequestIntent, method: string): string | null {
+  if (intent.purpose !== 'provider_inference' || intent.dataClass !== 'provider_request') return null;
+  if ((method !== 'POST' && method !== 'GET') || target.protocol !== 'https:') return null;
+  const match = PROVIDER_TARGETS.find((p) => p.origin === target.origin && pathMatchesPrefix(target.pathname, p.pathPrefix));
+  return match ? PROVIDER_RULE_ID_PREFIX + match.id : null;
+}
+
+/** Whether requests to this upstream go out with no rule: it is one of the providers' official APIs. */
+export function isBuiltInProviderUpstream(url: string): boolean {
+  try {
+    const target = new URL(url);
+    return PROVIDER_TARGETS.some((p) => p.origin === target.origin);
+  } catch {
+    return false;
+  }
+}
+
+/** The one command that lets Segreant forward to an upstream that is not built in (a gateway, a hosted model). */
+export function providerRuleCommand(url: string, method = 'POST'): string | null {
+  let origin: URL;
+  try { origin = new URL(new URL(url).origin); } catch { return null; }
+  if (origin.protocol !== 'https:') return null;
+  return `segreant egress apply --apply --mode controlled_cloud --id ${origin.hostname} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
+}
+
+/** Built-in routes, the same in every mode: an operator who adds a webhook rule keeps their provider and their price list. */
+function builtInRoute(target: URL, intent: EgressRequestIntent, method: string): EgressPolicyDecision | null {
+  if (maintenanceTarget(target, intent, method)) {
+    // Same transport checks as a cloud rule: the address must resolve public.
+    return { allowed: true, target, targetClass: 'controlled_cloud', ruleId: MAINTENANCE_RULE_ID, reason: "Segreant's built-in public price list (GET only)" };
+  }
+  const provider = providerTarget(target, intent, method);
+  if (provider) {
+    return { allowed: true, target, targetClass: 'controlled_cloud', ruleId: provider, reason: "your request to the provider's official API (built in)" };
+  }
+  return null;
+}
+
 function literalLoopback(hostname: string): boolean {
   const host = hostname.replace(/(^\[|\]$)/g, '').toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '::ffff:127.0.0.1';
@@ -100,15 +156,13 @@ export function evaluateEgressPolicy(config: EgressConfig, intent: EgressRequest
   const method = normalMethod(intent.method);
   if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(method)) return { allowed: false, target, reason: 'method is not supported' };
   if (literalLoopback(target.hostname)) return { allowed: true, target, targetClass: 'loopback', reason: 'literal loopback target is permitted' };
-  if (config.mode === 'local_locked') {
-    if (maintenanceTarget(target, intent, method)) {
-      // Same transport checks as a cloud rule: the address must resolve public.
-      return { allowed: true, target, targetClass: 'controlled_cloud', ruleId: MAINTENANCE_RULE_ID, reason: "Segreant's built-in public price list (GET only)" };
-    }
-    return { allowed: false, target, reason: 'local_locked permits only literal loopback and the built-in public price list; no other DNS lookup or dial occurs' };
-  }
-  if (config.mode !== 'controlled_cloud' || !Array.isArray(config.rules)) {
+  if (config.mode !== 'local_locked' && (config.mode !== 'controlled_cloud' || !Array.isArray(config.rules))) {
     return { allowed: false, target, reason: 'unknown or malformed egress mode/config is fail-closed; only local_locked or controlled_cloud is supported' };
+  }
+  const builtIn = builtInRoute(target, intent, method);
+  if (builtIn) return builtIn;
+  if (config.mode === 'local_locked') {
+    return { allowed: false, target, reason: "local_locked permits only literal loopback, the built-in public price list and the providers' official APIs; no other DNS lookup or dial occurs" };
   }
   if (target.protocol !== 'https:') return { allowed: false, target, reason: 'controlled_cloud refuses plaintext HTTP outside literal loopback' };
   const matching = config.rules.filter((rule) => matches(rule, target, { ...intent, method }));
