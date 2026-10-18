@@ -11,7 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
-- **A fresh install says where usage comes in.** With nothing recorded, Statement and Spend showed four honest $0.00 and "not established" figures and no next step. Both pages now say the ledger is empty and link to Data, where the usage Claude Code, Codex and other tools have already logged on this machine can be brought in. The note goes away once anything is recorded, and never shows on sample data.
+- **A fresh install says where usage comes in.** With nothing recorded, Statement and Spend showed four honest $0.00 and "not established" figures and no next step. Both pages now say no usage has been measured and link to Data, where the usage Claude Code, Codex and other tools have already logged on this machine can be brought in. The note goes away once anything is recorded, and never shows on sample data.
 - **`segreant pricing set <model> --free` is refused for a model the rate card prices.** A cap counts a free model's requests as $0, so marking a cloud model free (for example `claude-sonnet-4-6`) would have let real spend through uncounted. The refusal names the card's rate. A model that really runs locally under a card name can still be marked free with `--free --force`. The dashboard refuses it without an override. The same rule holds when a request is priced: a free price set without `--force` never applies to a model a rate card prices, even one the card learned after the price was set, so the card's price counts.
 
 ## [0.2.0] - 2026-10-18

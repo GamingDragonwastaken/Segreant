@@ -12,6 +12,10 @@
  * The note says what is observed, that the ledger is empty, never that it was
  * always empty: a ledger pruned before prunes were recorded cannot say whether
  * it was used, and the wording holds either way (PR #155 review).
+ *
+ * It speaks for the measured claim only. A provider bill can be imported with
+ * no request recorded, and the billed figure beside this note is a different
+ * claim that this note must not describe (PR #155 review).
  */
 
 import { h } from '../core/dom.ts';
@@ -27,10 +31,10 @@ export function emptyLedgerNotice(): Node {
   return h('div', null, () => (empty()
     ? h('div', { class: 'banner banner-first', role: 'note' },
         h('p', null,
-          h('strong', { text: () => (isPrecise() ? 'The ledger has no requests. ' : 'Your ledger is empty. ') }),
+          h('strong', { text: () => (isPrecise() ? 'The ledger has no metered requests. ' : 'No measured usage in your ledger. ') }),
           h('span', { text: () => (isPrecise()
-            ? 'Import native tool logs, or route a tool through the proxy, to populate these claims. '
-            : 'These figures stay at $0.00 until usage comes in. Segreant reads what Claude Code, Codex and other tools have already recorded on this machine. ') }),
+            ? 'Import native tool logs, or route a tool through the proxy, to populate the metered claim. '
+            : 'What we measured stays at $0.00 until usage comes in. Segreant reads what Claude Code, Codex and other tools have already recorded on this machine. ') }),
           h('a', { class: 'banner-link', href: '#/data', text: () => (isPrecise() ? 'Open Data' : 'Bring in your usage') })))
     : null));
 }
