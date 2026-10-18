@@ -8,7 +8,7 @@
  * 10 live proxy request(s), $180.00`. `segreant prune` then deleted rows older
  * than the middle of that period, and the same report read:
  *
- *     Declared route 0 live proxy request(s), $0.00 local rate-card estimate
+ *     Declared route 0 live proxy request(s), $0.00 local estimate, not the bill
  *
  * **with the blocker list byte-for-byte identical.** Not one of the five named
  * a deletion, because all five are permanent conditions and this one is not.
