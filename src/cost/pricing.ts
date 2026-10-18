@@ -440,6 +440,10 @@ export function loadPricing(force = false): PricingFile {
     if (pinnedDepth > 0 || now - lastFreshnessCheckMs < FRESHNESS_INTERVAL_MS) return cached;
     lastFreshnessCheckMs = now;
     if (diskIdentity() === loadedIdentity) return cached;
+    // A running process adopts only a committed card: an active card with no
+    // provenance is a refresh in progress or one that failed, so the loaded
+    // card stands (PR #154 review). A legacy card is still read at startup.
+    if (existsSync(cachePath()) && readProvenance() === null) return cached;
   }
   lastFreshnessCheckMs = performance.now();
   loadedIdentity = diskIdentity();
@@ -756,7 +760,12 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     writeAtomically(cachePath(), cardText);
     writeAtomically(provenancePath(), JSON.stringify(provenance, null, 2) + '\n');
   } catch (e) {
-    if (firstActivation) { try { unlinkSync(cachePath()); } catch { /* not written */ } }
+    // Only this attempt's own uncommitted card is removed: another process may
+    // have committed its card meanwhile (PR #154 review).
+    if (firstActivation && readProvenance() === null) {
+      const active = readValidPricing(cachePath());
+      if (active && pricingCardHash(active) === cardSha256) { try { unlinkSync(cachePath()); } catch { /* already gone */ } }
+    }
     return { ok: false, error: `could not write verified pricing cache: ${String(e)}` };
   }
   cached = null;
