@@ -2659,6 +2659,7 @@ export class Store {
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
+    usageCaptured: boolean;
   }> {
     return realization.estimatedRequestRows(this.db);
   }

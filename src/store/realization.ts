@@ -249,24 +249,26 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
   cacheReadTokens: number;
   cacheWriteTtl: '5m' | '1h' | null;
   costUsd: number;
+  usageCaptured: boolean;
 }> {
-  return db
+  const rows = db
     .prepare(
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
-                cost_usd AS costUsd
+                cost_usd AS costUsd,
+                -- An unpriced row with no token counts has no captured usage to
+                -- price (a response cut off at the resource limit): repricing it
+                -- wrote a confirmed $0 list price over an unknown cost
+                -- (independent review, 2026-10-18). It stays in the report as an
+                -- untouched estimate; only the write plan skips it (PR #150
+                -- review). An unpriced row WITH token counts stays repriceable.
+                CASE WHEN cost_basis = 'unpriced'
+                      AND input_tokens + output_tokens + cache_write_tokens + cache_read_tokens = 0
+                     THEN 0 ELSE 1 END AS usageCaptured
          FROM requests
-         -- A not-sent row cost nothing, and an unpriced row with no token
-         -- counts has no captured usage to price (a response cut off at the
-         -- resource limit): repricing it wrote a confirmed $0 list price over an
-         -- unknown cost (independent review, 2026-10-18). An unpriced row WITH
-         -- token counts (an imported provider the card does not cover) stays
-         -- eligible, so a price declared later can price it (PR #150 review).
-         WHERE estimated = 1 AND cost_basis <> 'not_sent'
-           AND NOT (cost_basis = 'unpriced'
-                    AND input_tokens + output_tokens + cache_write_tokens + cache_read_tokens = 0)`,
+         WHERE estimated = 1 AND cost_basis <> 'not_sent'`,
     )
     .all() as Array<{
     requestId: string;
@@ -278,7 +280,9 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
+    usageCaptured: number;
   }>;
+  return rows.map((r) => ({ ...r, usageCaptured: r.usageCaptured === 1 }));
 }
 
 /**
