@@ -255,12 +255,18 @@ function providerBudgetUnavailableBody(provider: Provider, message: string): str
   return JSON.stringify({ error: { message, type: 'segreant_budget_unavailable', code: 'budget_enforcement_unavailable' } });
 }
 
-function providerEgressRefusalBody(provider: Provider, error: EgressError, targetUrl: string, method: string): string {
+export function providerEgressRefusalBody(provider: Provider, error: EgressError, targetUrl: string, method: string, egressMode: string): string {
   // Only the providers' official APIs are built in; a gateway or a self-hosted
-  // model is allowed by name, with the one command the refusal prints.
-  const allow = error.code === 'policy_denied' ? providerRuleCommand(targetUrl, method) : null;
+  // model is allowed by name, with the one command the refusal prints. A
+  // malformed egress section refuses everything, built-ins included, and its
+  // repair is the file, not a rule: printing a rule there called
+  // api.openai.com "not a built-in provider API" (independent review, 2026-10-18).
+  const invalid = egressMode === 'invalid';
+  const allow = error.code === 'policy_denied' && !invalid ? providerRuleCommand(targetUrl, method) : null;
   const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
     ? ' Repair or restore the local receipt history before retrying.'
+    : invalid
+      ? ' The egress section of config.json is malformed, so every cloud request is refused. Fix it by hand, or reset it with: segreant egress apply --apply --mode local_locked'
     : allow
       ? ` ${new URL(targetUrl).origin} is not one of the built-in provider APIs. To send your requests there, run: ${allow}`
       : '';
@@ -657,7 +663,7 @@ async function handle(
     if (egressRefusal) headers['x-segreant-egress-refusal'] = egressRefusal.code;
     res.writeHead(status, headers);
     res.end(egressRefusal
-      ? providerEgressRefusalBody(provider, egressRefusal, targetUrl, req.method ?? 'POST')
+      ? providerEgressRefusalBody(provider, egressRefusal, targetUrl, req.method ?? 'POST', deps.config.egress.mode)
       : providerUpstreamErrorBody(provider, detail, timedOut ? 'upstream_timeout' : 'upstream_unreachable'));
     safeLog(deps, {
       requestId,
@@ -853,8 +859,9 @@ async function handle(
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
-    // Kept so a later reprice prices the writes at the same duration (PR #146 review).
-    ...(usage.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
+    // Kept so a later reprice prices the writes at the same duration (PR #146
+    // review), and only when it was observed rather than chosen.
+    ...(usage.cacheWriteTtl === undefined || !usage.cacheWriteTtlObserved ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,
     costUsd: cost.costUsd,

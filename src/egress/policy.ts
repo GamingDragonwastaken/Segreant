@@ -40,9 +40,9 @@ export interface EgressPolicyDecision {
  * model by a guess (claude-haiku-5-5 at $3/$15 against a $0.10/$0.50 list
  * price). The match is exact: purpose, data class, GET, and the full URL with no
  * query or fragment, so no caller can reach any other address through it. The
- * DNS answer must still be public, every attempt is in the receipt chain, and
- * controlled_cloud still needs its own exact rule (an operator who enumerates
- * every route keeps that power). `segreant pricing --auto off` stops Segreant
+ * DNS answer must still be public and every attempt is in the receipt chain.
+ * Like the providers' official APIs it holds in every mode, controlled_cloud
+ * included (PR #148). `segreant pricing --auto off` stops Segreant
  * asking on its own; a manual `segreant pricing --refresh` is the user asking.
  */
 export const DEFAULT_PRICE_LIST_URL =
