@@ -418,7 +418,9 @@ function loadVerifiedCache(): { file: PricingFile; provenance: PricingProvenance
  */
 const FRESHNESS_INTERVAL_MS = 1000;
 let loadedIdentity: string | null = null;
-let lastFreshnessCheckMs = 0;
+// A monotonic clock: a wall clock set back (a manual correction, a resumed VM)
+// would otherwise hold the loaded card until wall time caught up (PR #154 review).
+let lastFreshnessCheckMs = Number.NEGATIVE_INFINITY;
 let pinnedDepth = 0;
 
 function diskIdentity(): string {
@@ -429,17 +431,17 @@ function diskIdentity(): string {
 
 /** Tests only: run the next freshness check now instead of waiting out the interval. */
 export function resetPricingFreshnessForTests(): void {
-  lastFreshnessCheckMs = 0;
+  lastFreshnessCheckMs = Number.NEGATIVE_INFINITY;
 }
 
 export function loadPricing(force = false): PricingFile {
   if (cached && !force) {
-    const now = Date.now();
+    const now = performance.now();
     if (pinnedDepth > 0 || now - lastFreshnessCheckMs < FRESHNESS_INTERVAL_MS) return cached;
     lastFreshnessCheckMs = now;
     if (diskIdentity() === loadedIdentity) return cached;
   }
-  lastFreshnessCheckMs = Date.now();
+  lastFreshnessCheckMs = performance.now();
   loadedIdentity = diskIdentity();
   // Prefer the refreshed cache when present AND structurally valid; otherwise
   // fall back to the bundled table. A corrupt cache degrades to bundled rather
@@ -716,6 +718,10 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     lastModified: options.lastModified ?? null,
   };
 
+  // A first activation has no earlier provenance to recover from: if it fails
+  // after writing the active card, that card is removed, so neither a restart
+  // nor a running process's reload prices with a card that was never committed.
+  const firstActivation = !existsSync(cachePath()) && readProvenance() === null;
   try {
     const dir = join(segreantHome(), 'pricing');
     const archiveDir = join(dir, 'cards');
@@ -750,6 +756,7 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     writeAtomically(cachePath(), cardText);
     writeAtomically(provenancePath(), JSON.stringify(provenance, null, 2) + '\n');
   } catch (e) {
+    if (firstActivation) { try { unlinkSync(cachePath()); } catch { /* not written */ } }
     return { ok: false, error: `could not write verified pricing cache: ${String(e)}` };
   }
   cached = null;

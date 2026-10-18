@@ -1,7 +1,7 @@
 import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,7 +9,7 @@ import { join } from 'node:path';
 // without a restart, and never midway through a reprice plan.
 const home = mkdtempSync(join(tmpdir(), 'segreant-pricing-reload-'));
 process.env.SEGREANT_HOME = home; delete process.env.SEGREANT_DB; delete process.env.SEGREANT_DEMO;
-const { loadPricing, rateFor, withPricingSnapshot, withDeclarations, resetPricingFreshnessForTests } = await import('../src/cost/pricing.ts');
+const { loadPricing, rateFor, withPricingSnapshot, withDeclarations, resetPricingFreshnessForTests, applyPricingManifest } = await import('../src/cost/pricing.ts');
 
 test.after(() => rmSync(home, { recursive: true, force: true }));
 
@@ -103,9 +103,9 @@ test('one rate lookup reads one card, even when a refresh lands during it', () =
   // Every clock read moves past the freshness interval, and the refresh is
   // written at the second one: after the lookup has read its card, before any
   // later read of the card inside the same lookup.
-  let clock = Date.now();
+  let clock = performance.now();
   let reads = 0;
-  const now = mock.method(Date, 'now', () => {
+  const now = mock.method(performance, 'now', () => {
     if (++reads === 2) refreshOnDisk(cardAt(3));
     return (clock += 1500);
   });
@@ -121,4 +121,35 @@ test('one rate lookup reads one card, even when a refresh lands during it', () =
   resetPricingFreshnessForTests();
   if (reads < 2) refreshOnDisk(cardAt(3));
   assert.equal(rateFor('openai', MODEL).pricing.rateMatchKind, 'exact_provider', 'the next lookup prices with the refresh');
+});
+
+test('a first refresh that fails before its provenance leaves no card to load', () => {
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+  // A directory where the provenance file goes makes its write fail after the
+  // active card was written.
+  mkdirSync(join(home, 'pricing', 'provenance.json'), { recursive: true });
+  const result = applyPricingManifest(JSON.stringify(cardAt(4)));
+  assert.equal(result.ok, false);
+  assert.equal(existsSync(join(home, 'pricing', 'models.json')), false, 'the uncommitted card was removed');
+  resetPricingFreshnessForTests();
+  assert.equal(rateFor('openai', MODEL).pricing.rateMatchKind, 'fallback', 'pricing stays on the card it had');
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+});
+
+test('a wall clock set back does not stop the card being checked', () => {
+  start(2);
+  // The wall clock jumps an hour back after the check; the monotonic interval
+  // still elapses, so the refresh is picked up.
+  const wall = Date.now() - 3_600_000;
+  const back = mock.method(Date, 'now', () => wall);
+  let clock = performance.now();
+  const mono = mock.method(performance, 'now', () => (clock += 1500));
+  try {
+    refreshOnDisk(cardAt(11));
+    assert.equal(rateFor('openai', MODEL).rate.input, 11);
+  } finally {
+    back.mock.restore();
+    mono.mock.restore();
+  }
 });
