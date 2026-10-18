@@ -58,6 +58,8 @@ export interface ActionSpec {
   command?: () => string | null;
   /** A same-origin path the operator can download instead of committing. */
   download?: string;
+  /** A precise verb when the tier's default would misdescribe the operation. */
+  commitLabel?: string;
 }
 
 const CONSEQUENCE_COPY: Record<Consequence, { badge: string; plain: string; tone: string }> = {
@@ -326,7 +328,7 @@ function panel(spec: ActionSpec): Node {
                 class: `btn-commit tone-${consequence.tone}`,
                 disabled: () => !ready(),
                 'aria-describedby': () => (blocked() ? 'drawer-blocked-reason' : null),
-                text: () => (committing() ? 'Working…' : commitLabel(cap.consequence)),
+                text: () => (committing() ? 'Working…' : spec.commitLabel ?? commitLabel(cap.consequence)),
                 onclick: (event: Event) => {
                   if (!ready() || !spec.commit) return;
                   const button = event.currentTarget as HTMLButtonElement;

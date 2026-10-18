@@ -7,16 +7,18 @@
 
 import { join } from 'node:path';
 import type { Server } from 'node:http';
-import { Store, type RepriceUpdate } from '../store/db.ts';
+import { Store } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type SegreantConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo, type SeedResult } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
+import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
-import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
+import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
+import { createFirstSightWatcher } from '../cost/firstSight.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 import { capConfigured } from './launchCmd.ts';
@@ -104,17 +106,59 @@ export async function cmdStart(flags: Flags): Promise<void> {
   // started with `segreant launch` then finds no proxy, warns that it is
   // unmetered and goes direct, as it does whenever Segreant is not running.
   const demo = isDemo();
+  // A model priced by a guess sends one lookup to the public price list (never
+  // in the request's path). Rows are not rewritten: the user is told, and
+  // `segreant reprice` previews the correction.
+  const firstSight = createFirstSightWatcher({
+    // Read from the file at each sighting: `segreant pricing --auto off` in
+    // another terminal must stop the next lookup without a restart (PR #146
+    // review). A config that no longer reads is treated as off.
+    enabled: () => {
+      try {
+        // Only against the built-in public list, which is what the banner and
+        // the privacy statement disclose: an operator who points
+        // pricing.manifestUrl at their own card refreshes it themselves
+        // (PR #146 review).
+        const pricing = loadConfig().pricing;
+        return pricing.lookupUnknownModels && pricingSourceLabel(pricing.manifestUrl) === 'the public price list';
+      } catch {
+        return false;
+      }
+    },
+    // The source the live config selects, not the one at start: enabled() has
+    // just confirmed it is the built-in list, and a source changed since then
+    // is never fetched behind the operator's back (PR #146 review).
+    refresh: async () => {
+      let url: string | null;
+      try { url = loadConfig().pricing.manifestUrl; } catch { return { ok: false, error: 'the configuration could not be read' }; }
+      if (pricingSourceLabel(url) !== 'the public price list') return { ok: false, error: 'the price source is no longer the public price list' };
+      return refreshPricing(DEFAULT_MANIFEST_URL);
+    },
+    onLearned: (models) => {
+      const names = models.map((m) => m.model).join(', ');
+      // refresh() above fetches only the built-in list, so that is the source
+      // that learned them, whatever the config said at start (PR #146 review).
+      console.log(color(tty, C.green, `  ↻ the public price list now prices ${names}: new requests use that price.`));
+      console.log(color(tty, C.gray, '    Requests already recorded keep their estimate until you run: segreant reprice (preview), then segreant reprice --apply'));
+    },
+    onFailed: (error) => {
+      console.log(color(tty, C.yellow, `  ↻ price lookup skipped: ${error}. Estimated prices stand; segreant pricing set <model> gives one yourself.`));
+    },
+  });
   const proxy = demo ? null : createProxyServer({
     store,
     config: cfg,
     onLog: (row) => {
+      if (row.pricing) firstSight.note(row.provider as Provider, row.model, row.pricing.rateMatchKind);
       if (row.statusCode === 429) {
         console.log(color(tty, C.red, `  ⛔ blocked  ${row.provider}/${row.model}  (budget)`));
         return;
       }
       const today = store.spendBetween(startOfLocalDay(), Date.now() + 1000);
       const time = new Date(row.tsEpochMs).toLocaleTimeString('en-US', { hour12: false });
-      const est = row.estimated ? color(tty, C.yellow, ' ~est') : '';
+      // A price you set is not a guess, and not a list price either (PR #146 sweep).
+      const est = row.estimated ? color(tty, C.yellow, ' ~est')
+        : row.pricing?.costBasis === 'user_declared_price' ? color(tty, C.gray, ' your price') : '';
       console.log(
         `  ${color(tty, C.gray, time)}  ${row.provider}/${row.model}  ` +
           `in ${num(row.inputTokens)} out ${num(row.outputTokens)}  ` +
@@ -191,10 +235,28 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
   } else {
     line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
   }
+  // The one request Segreant makes on its own: said where the user starts it.
+  if (cfg.pricing.lookupUnknownModels && pricingSourceLabel(cfg.pricing.manifestUrl) === 'the public price list') {
+    line(color(tty, C.gray, 'Prices     a model missing from the rate card is looked up in the public price list'));
+    line(color(tty, C.gray, '           (a plain download; sends nothing about you). Off: segreant pricing --auto off'));
+  } else if (cfg.pricing.lookupUnknownModels) {
+    line(color(tty, C.gray, `Prices     ${pricingSourceLabel(cfg.pricing.manifestUrl)} is not looked up automatically;`));
+    line(color(tty, C.gray, '           refresh it with: segreant pricing --refresh'));
+  }
   console.log('');
   line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));
   line(color(tty, C.gray, 'Segreant is stopped; unset the two variables, or use segreant launch, to go direct.'));
   console.log('');
+}
+
+/**
+ * The source a price refresh reads, in words. The built-in list is spelled two
+ * ways, no URL configured or its own URL; both are the public price list (PR #146 review).
+ */
+export function pricingSourceLabel(manifestUrl: string | null | undefined): string {
+  return manifestUrl === null || manifestUrl === undefined || manifestUrl === DEFAULT_MANIFEST_URL
+    ? 'the public price list'
+    : `your price source (${manifestUrl})`;
 }
 
 export async function cmdDemo(flags: Flags): Promise<void> {
@@ -239,6 +301,10 @@ export async function cmdDemo(flags: Flags): Promise<void> {
 }
 
 export async function cmdPricing(flags: Flags): Promise<void> {
+  const action = flags._[0];
+  if (action === 'set' || action === 'unset' || action === 'unknown') {
+    return (await import('./pricingDeclareCmd.ts')).cmdPricingDeclare(action, flags);
+  }
   const cfg = loadConfig();
   const on = process.stdout.isTTY ?? false;
 
@@ -297,14 +363,17 @@ export async function cmdPricing(flags: Flags): Promise<void> {
   // file — nothing about the user). `--auto off` turns it back off.
   if (flags['auto'] !== undefined) {
     const enable = flags['auto'] !== 'off' && flags['auto'] !== 'false';
-    const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable } }));
+    // One switch for both: the age-based refresh and the first-sight lookup.
+    const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable, lookupUnknownModels: enable } }));
     console.log('');
     if (enable) {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "segreant start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "segreant start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d,`);
+      console.log('    and a running Segreant looks up a model the card does not know the first time it sees it.');
       console.log(`  ${color(on, C.dim, `Source: ${updated.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
       console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: segreant pricing --auto off')}`);
     } else {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "segreant pricing --refresh".`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "segreant pricing --refresh",`);
+      console.log('    and a model the card does not know stays at an estimate until you refresh or run segreant pricing set.');
     }
     console.log('');
     return;
@@ -439,49 +508,20 @@ export function cmdReprice(flags: Flags): void {
   const store = new Store(dbPath());
   const tty = process.stdout.isTTY ?? false;
   try {
-    const rows = store.estimatedRequestRows();
-    const updates: RepriceUpdate[] = [];
-    const byModel = new Map<string, { n: number; before: number; after: number }>();
-    let stillEstimated = 0;
-
-    for (const r of rows) {
-      const c = computeCost(r.provider as Provider, r.model, {
-        inputTokens: r.inputTokens,
-        outputTokens: r.outputTokens,
-        cacheWriteTokens: r.cacheWriteTokens,
-        cacheReadTokens: r.cacheReadTokens,
-      });
-      if (c.estimated) {
-        stillEstimated++;
-        continue; // still a guess — keep the original guess rather than churn numbers
-      }
-      updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
-      // Tuple key, not a delimiter join (D-217/D-241): a model name may carry '/'.
-      const key = JSON.stringify([r.provider, r.model]);
-      const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
-      agg.n++;
-      agg.before += r.costUsd;
-      agg.after += c.costUsd;
-      byModel.set(key, agg);
-    }
-
-    const before = [...byModel.values()].reduce((a, v) => a + v.before, 0);
-    const after = [...byModel.values()].reduce((a, v) => a + v.after, 0);
+    const report = flags.apply ? applyReprice(store) : previewReprice(store);
+    const { updates, stillEstimated, totalBeforeUsd: before, totalAfterUsd: after } = report;
+    const rows = { length: report.estimatedRows };
+    const byModel = new Map(report.byModel.map((v) => [JSON.stringify([v.provider, v.model]), { n: v.rows, before: v.beforeUsd, after: v.afterUsd }]));
 
     if (flags.json) {
       // Write BEFORE serializing, so the payload can report what the reprice did
       // to the stored realized-value snapshots rather than describing the request
       // rows alone and leaving the snapshots' state to be discovered elsewhere.
-      const sync = flags.apply && updates.length ? store.applyRepricedCosts(updates) : null;
+      const sync = report.realizationSync;
       printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
-        stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
-        priceEvidence: updates.length ? {
-          localRateCardOnly: true,
-          cardSha256: updates[0]!.pricing.rateCardSha256,
-          sourceKind: updates[0]!.pricing.rateCardSourceKind,
-          note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
-        } : null,
+        stillEstimated, cacheDurationUnknown: report.cacheDurationUnknown, alreadyRepriced: report.alreadyRepriced, totalBeforeUsd: before, totalAfterUsd: after,
+        priceEvidence: report.priceEvidence,
         byModel: [...byModel.entries()].map(([key, v]) => {
           const [provider, model] = JSON.parse(key) as [string, string];
           return { provider, model, rows: v.n, beforeUsd: v.before, afterUsd: v.after };
@@ -499,19 +539,22 @@ export function cmdReprice(flags: Flags): void {
       return;
     }
     console.log(`  Estimated rows       ${num(rows.length)}`);
-    console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(current card has an exact rate for these models)')}`);
+    console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(the current card, or a price you set, gives these models an exact rate)')}`);
     if (stillEstimated) console.log(`  Still estimates      ${num(stillEstimated)}  ${color(tty, C.gray, 'left untouched — a new guess is not more honest than the old one')}`);
+    if (report.alreadyRepriced) console.log(`  Already re-priced    ${num(report.alreadyRepriced)}  ${color(tty, C.gray, 'another reprice wrote these first; left as it wrote them and not counted here')}`);
+    if (report.cacheDurationUnknown) console.log(`  Cache duration       ${num(report.cacheDurationUnknown)}  ${color(tty, C.gray, 'rows recorded before Segreant kept the cache-write duration; their writes are priced at the 5-minute rate')}`);
     if (updates.length) {
       console.log('');
       for (const [model, v] of [...byModel.entries()].sort((a, b) => b[1].after - a[1].after).slice(0, 10)) {
         const delta = v.after - v.before;
         const dc = delta > 0 ? C.red : C.green;
-        console.log(`  ${model.padEnd(40)} ${num(v.n).padStart(6)} rows  ${usd(v.before).padStart(10)} → ${usd(v.after).padStart(10)}  ${color(tty, dc, (delta >= 0 ? '+' : '') + usd(delta))}`);
+        const [provider, name] = JSON.parse(model) as [string, string];
+        console.log(`  ${`${provider}/${name}`.padEnd(40)} ${num(v.n).padStart(6)} rows  ${usd(v.before).padStart(10)} → ${usd(v.after).padStart(10)}  ${color(tty, dc, (delta >= 0 ? '+' : '') + usd(delta))}`);
       }
       console.log('');
       console.log(`  Total                ${usd(before)} → ${usd(after)}  ${color(tty, after - before >= 0 ? C.red : C.green, (after - before >= 0 ? '+' : '') + usd(after - before))}`);
       if (flags.apply) {
-        const sync = store.applyRepricedCosts(updates);
+        const sync = report.realizationSync!;
         console.log(color(tty, C.green, `  ✓ Applied — ${num(updates.length)} rows re-costed, estimated flag cleared.`));
         if (sync.resynced) {
           const delta = sync.costUsdAfter - sync.costUsdBefore;

@@ -179,7 +179,15 @@ segreant alloc <action>        Cost-centre allocation: centres, rules, and a
                                 previewed split (--apply records it). See
                                 "Cost-centre allocation" below
 segreant pricing --refresh     Update the rate card from the community price feed
-                                (--auto opts into a refresh check on start when stale)
+                                (--auto on|off: the start-time refresh when stale and
+                                the first-sight lookup of an unknown model, together)
+segreant pricing unknown       Models still priced by a guess, with requests and
+                                recorded cost (--json)
+segreant pricing set <model>   Give a model a price: --input <usd> --output <usd>
+                                (per 1M tokens, optional --cache-read/--cache-write/--cache-write-1h),
+                                --like <card-model>, or --free for a local model.
+                                Shown as "your price", never as list price
+segreant pricing unset <model> Remove a price you set
 segreant pricing --coverage    Read-only per-model historical rate-card and match
                                 evidence (--days N or --all; --json for automation)
 segreant reprice               Re-cost estimated rows against the current rate card
@@ -507,6 +515,16 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Segreant proxy (:8090)
    restart. The check happens before a request is sent, so requests already in
    flight when the cap is crossed still finish: the overshoot is at most one
    request per concurrent stream.
+
+A request is priced by the first of these that knows its model: a price you
+set (`segreant pricing set`), the rate card by exact name, the nearest model on
+the card, then a generic $3 / $15 per million tokens. A running Segreant that
+prices a request by either of the last two downloads the public price list once
+(at most hourly, outside the request's path, sending nothing about you), so the
+next request for that model gets its list price; an interactive
+`scan --setup` does the same before it imports, then asks for a price for the
+costliest models still guessed (Enter skips). Recorded rows keep their estimate
+until `segreant reprice --apply`.
 
 The rate card is a local list-price estimate. Every newly calculated ledger row
 retains the exact rate-card SHA-256, source kind, and exact/family/fallback

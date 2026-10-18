@@ -3,23 +3,46 @@
  * and how much list-price work the plan did. Two bases, always named: the plan
  * price is what the person entered; the work is list cost from the rate card.
  */
+import { computeCost, withoutDeclaredPrices, type Provider } from '../cost/pricing.ts';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig, mutateConfig, PLAN_SOURCES, type PlanPrice } from '../config.ts';
 import {
   detectPlans, planName, suggestedPrice, PUBLIC_PLAN_PRICES_CHECKED, type DetectedPlan, type PlanSource,
 } from '../plans/detect.ts';
-import { C, color, usd, printJson } from './ui.ts';
+import { C, color, usd, printJson, num } from './ui.ts';
 import { rangeFor, UserInputError, type Flags } from './flags.ts';
 
 const TOOL_LABEL: Record<PlanSource, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
 
 /** List cost of a tool's imported (subscription) use in a window. */
-function importedListCost(store: Store, source: PlanSource, startMs: number, endMs: number): number {
-  let total = 0;
+export function importedListCost(store: Store, source: PlanSource, startMs: number, endMs: number): number {
+  return importedListWork(store, source, startMs, endMs).listCostUsd;
+}
+
+/**
+ * The list-price work a tool's imported use did, and how many requests on a
+ * price you set were left out because the card has no exact price for their
+ * model. "List-price work" means list prices: a declared row is priced from
+ * the card here, so a declaration never inflates, shrinks or hides the plan
+ * line, and a private model the card only estimates (family or fallback) is
+ * withheld rather than shown as a published price (PR #146 review). Other
+ * rows keep the price they were recorded at.
+ */
+export function importedListWork(store: Store, source: PlanSource, startMs: number, endMs: number): { listCostUsd: number; withheldRequests: number } {
+  let listCostUsd = 0;
+  let withheldRequests = 0;
   for (const r of store.requestsInRange(startMs, endMs)) {
-    if (r.source === source && r.via === 'import') total += r.costUsd;
+    if (r.source !== source || r.via !== 'import') continue;
+    if (r.pricing?.costBasis !== 'user_declared_price') { listCostUsd += r.costUsd; continue; }
+    const card = withoutDeclaredPrices(() => computeCost(r.provider as Provider, r.model, {
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+      cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
+      ...(r.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
+    }));
+    if (card.estimated) { withheldRequests++; continue; }
+    listCostUsd += card.costUsd;
   }
-  return total;
+  return { listCostUsd, withheldRequests };
 }
 
 export interface PlanComparison {
@@ -28,6 +51,8 @@ export interface PlanComparison {
   price: PlanPrice | null;
   /** List cost of the tool's logged use over the last 30 days. */
   listCostUsd: number;
+  /** Requests on a price you set whose model the card does not price exactly: left out of listCostUsd. */
+  withheldRequests: number;
 }
 
 export function planComparisons(store: Store, startMs: number, endMs: number): PlanComparison[] {
@@ -36,8 +61,14 @@ export function planComparisons(store: Store, startMs: number, endMs: number): P
     source: detected.source,
     detected,
     price: cfg.plans[detected.source] ?? null,
-    listCostUsd: importedListCost(store, detected.source, startMs, endMs),
+    ...importedListWork(store, detected.source, startMs, endMs),
   }));
+}
+
+function withheldNote(r: PlanComparison): string {
+  return r.withheldRequests > 0
+    ? ` · ${num(r.withheldRequests)} request${r.withheldRequests === 1 ? '' : 's'} on models with no published price left out`
+    : '';
 }
 
 /**
@@ -52,10 +83,10 @@ export function printPlanLines(tty: boolean, rows: PlanComparison[]): void {
     if (r.price !== null) {
       const times = r.price.monthlyUsd > 0 ? `, ${(r.listCostUsd / r.price.monthlyUsd).toFixed(1)}× its price` : '';
       console.log(`  ${color(tty, C.bold, `Your ${usd(r.price.monthlyUsd)}/month ${name} plan`)} did ${color(tty, C.green, usd(r.listCostUsd))} of list-price work in the last 30 days${color(tty, C.gray, `${times}`)}`);
-      console.log(color(tty, C.gray, `              plan price: what you set${r.price.plan !== null && r.price.plan !== r.detected.plan ? ` (for ${r.price.plan}; the tool now reports ${r.detected.plan ?? 'no plan'})` : ''} · work: priced from the rate card`));
+      console.log(color(tty, C.gray, `              plan price: what you set${r.price.plan !== null && r.price.plan !== r.detected.plan ? ` (for ${r.price.plan}; the tool now reports ${r.detected.plan ?? 'no plan'})` : ''} · work: priced from the rate card${withheldNote(r)}`));
     } else if (r.detected.plan !== null) {
       const hint = suggestedPrice(r.detected);
-      console.log(color(tty, C.gray, `  ${name} plan: ${usd(r.listCostUsd)} of list-price work. Compare it with what you pay: segreant plan set ${r.source} <dollars per month>${hint !== null ? ` (public price ${usd(hint)})` : ''}`));
+      console.log(color(tty, C.gray, `  ${name} plan: ${usd(r.listCostUsd)} of list-price work${withheldNote(r)}. Compare it with what you pay: segreant plan set ${r.source} <dollars per month>${hint !== null ? ` (public price ${usd(hint)})` : ''}`));
     }
   }
 }

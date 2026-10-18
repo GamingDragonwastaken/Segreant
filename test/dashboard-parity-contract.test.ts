@@ -49,8 +49,30 @@ function actionBlock(id: string): string | null {
       break;
     }
   }
-  return ACTIONS.slice(start, next < 0 ? undefined : next);
+  const block = ACTIONS.slice(start, next < 0 ? undefined : next);
+  // A runner may live in a focused module. Follow its actual named import;
+  // a pointer alone still cannot establish that it can commit.
+  const reference = /^['\w-]+:\s*(\w+)\s*,/.exec(block);
+  if (reference) {
+    const symbol = reference[1]!;
+    for (const imported of ACTIONS.matchAll(/import \{([^}]+)\} from '(\.\/[^']+)';/g)) {
+      if (!imported[1]!.split(',').map((name) => name.trim()).includes(symbol)) continue;
+      const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', imported[2]!), 'utf8');
+      const declaration = source.indexOf(`export function ${symbol}(`);
+      if (declaration < 0) return null;
+      const end = source.indexOf('\nexport function ', declaration + 1);
+      return source.slice(declaration, end < 0 ? undefined : end);
+    }
+    return null;
+  }
+  return block;
 }
+
+test('the runner gate follows imported pricing builders to their actual write calls', () => {
+  assert.match(actionBlock('pricing-unknown')!, /api\.write\.pricingDeclare\(body\)/);
+  assert.match(actionBlock('reprice')!, /api\.write\.reprice\(true\)/);
+  assert.equal(actionBlock('missing-runner'), null);
+});
 
 test('every consequential capability marked full has an executable GUI runner', () => {
   const fullConsequential = capabilityRows().filter(

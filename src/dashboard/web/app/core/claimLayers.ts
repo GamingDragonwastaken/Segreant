@@ -78,25 +78,55 @@ export function meteredBasisLine(basis: Basis | undefined): string {
   switch (basis.headline) {
     case 'sample_cost': return 'sample data, priced from the price list';
     case 'tool_reported_cost': return 'amounts the tools reported, not verified';
-    case 'list_cost':
-      return basis.cohorts.some((c) => c.id === 'list_family')
+    case 'list_cost': {
+      const line = basis.cohorts.some((c) => c.id === 'list_family')
         ? "list prices (some models at the nearest model's price)"
         : "list prices: each model's own published price";
+      // A model marked free is priced by its operator's declaration, not by a
+      // published price, so a mixed total names it (PR #146 review).
+      const free = basis.cohorts.find((c) => c.id === 'user_free');
+      return free ? `${line}; no charge on models you marked free (${modelsOf(free)})` : line;
+    }
     default: {
       const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
-      // With no weak part above a cent, the "estimated" headline comes from the
+      // A declared price IS the model's own rate, the one its operator set, so
+      // it is named on its own rather than counted as "priced without" a rate
+      // (PR #146 review). It still makes the total an estimate: it is not a
+      // published list price.
+      const declared = basis.cohorts.find((c) => c.id === 'user_declared');
+      // With no weak or declared part, the "estimated" headline comes from the
       // mix itself (sample rows beside priced ones, or unpriced requests). It
       // used to print "0% priced without the model's own rate ()".
-      if (weak.length === 0) {
+      if (weak.length === 0 && !declared) {
         if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the price list';
+        // No rate card priced any of it: every charged request is on a model the
+        // user marked free (PR #146 review). It used to read "API list price".
+        if (basis.cohorts.some((c) => c.id === 'user_free') && !basis.cohorts.some((c) => c.id === 'list_exact' || c.id === 'list_family')) {
+          return basis.cohorts.some((c) => c.id === 'unpriced')
+            ? 'no charge on models you marked free; some requests have no price'
+            : 'no charge: every request is on a model you marked free';
+        }
         if (basis.cohorts.some((c) => c.id === 'unpriced')) return 'list prices; some requests have no price';
         return "API list price from the rate card";
       }
-      const share = basis.totalUsd > 0 ? Math.round((weak.reduce((s, c) => s + c.costUsd, 0) / basis.totalUsd) * 100) : 0;
-      return `estimated: ${share}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`;
+      const pct = (usd: number): number => (basis.totalUsd > 0 ? Math.round((usd / basis.totalUsd) * 100) : 0);
+      const parts: string[] = [];
+      if (weak.length > 0) parts.push(`${pct(weak.reduce((s, c) => s + c.costUsd, 0))}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`);
+      if (declared) parts.push(`${pct(declared.costUsd)}% at prices you set`);
+      return `estimated: ${parts.join('; ')}`;
     }
   }
 }
+
+/** Share of the dollar total priced by a guess (nearest model or generic rate), 0..1. */
+export function guessedShare(basis: Basis | undefined): number {
+  if (!basis || basis.totalUsd <= 0) return 0;
+  const guessed = basis.cohorts.filter((c) => c.id === 'fallback' || c.id === 'list_family').reduce((s, c) => s + c.costUsd, 0);
+  return guessed / basis.totalUsd;
+}
+
+/** Below this share a guess cannot change what the total says; above it, say where to fix it. */
+export const GUESSED_SHARE_NEXT_STEP = 0.05;
 
 /** Every part of the total, one clause each, for the inspector. */
 export function meteredBasisParts(basis: Basis | undefined): string {
@@ -104,6 +134,7 @@ export function meteredBasisParts(basis: Basis | undefined): string {
   return basis.cohorts.map((c) => {
     if (c.id === 'unpriced') return `${c.requests} request(s) not priced (${modelsOf(c)})`;
     if (c.id === 'not_sent') return `${c.requests} request(s) refused before reaching the provider (no charge)`;
+    if (c.id === 'user_free') return `${c.requests} request(s) on models you marked free (${modelsOf(c)})`;
     if (c.id === 'tool_reported' && c.costUsd < 0.005) return `${c.requests} request(s) the tool reported at no charge (${modelsOf(c)})`;
     const which = c.id === 'list_exact' || c.id === 'demo' || c.id === 'tool_reported' ? '' : ` (${modelsOf(c)})`;
     return `${money(c.costUsd)} ${c.label}${which}`;
@@ -129,7 +160,11 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: o === null
       ? 'could not read the ledger'
       : meteredBasisLine(o.pricing.basis),
-    nextStep: o === null ? 'Check that Segreant is running.' : undefined,
+    nextStep: o === null
+      ? 'Check that Segreant is running.'
+      : guessedShare(o.pricing.basis) >= GUESSED_SHARE_NEXT_STEP
+        ? `${Math.round(guessedShare(o.pricing.basis) * 100)}% is priced by a guess. Give those models a price under Data, then re-price.`
+        : undefined,
     inspection: {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,

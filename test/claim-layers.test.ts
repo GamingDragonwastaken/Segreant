@@ -323,6 +323,28 @@ test('the metered claim states how each part was priced, and never calls a match
   assert.equal(clean!.basis, "list prices: each model's own published price");
 });
 
+test('a price you set is named as yours, never as "priced without the model\'s own rate" (PR #146 review)', () => {
+  const base = anOverview(100, 10);
+  const withRows = (rows: Parameters<typeof summarizeBasis>[0]) => ({ ...base, pricing: { ...base.pricing, basis: summarizeBasis(rows) } });
+  const listed = { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 6, costUsd: 60 } as const;
+  const mine = { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', requests: 2, costUsd: 25 } as const;
+  const guessed = { provider: 'openai', model: 'gpt-6.9-new', costBasis: 'fallback_estimate', rateMatchKind: 'fallback', requests: 2, costUsd: 15 } as const;
+
+  const [onlyMine] = buildClaimLayers({ ...NOTHING, overview: withRows([{ ...mine, costUsd: 100 }]) }, '30d');
+  assert.equal(onlyMine!.basis, 'estimated: 100% at prices you set');
+  const [listAndMine] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, mine]) }, '30d');
+  assert.equal(listAndMine!.basis, 'estimated: 29% at prices you set');
+  const [all] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, mine, guessed]) }, '30d');
+  assert.equal(all!.basis, "estimated: 15% priced without the model's own rate (fallback rate); 25% at prices you set");
+
+  const free = { provider: 'ollama', model: 'llama-local', costBasis: 'user_declared_price', rateMatchKind: 'user_declared_free', requests: 3, costUsd: 0 } as const;
+  const [onlyFree] = buildClaimLayers({ ...NOTHING, overview: withRows([free]) }, '30d');
+  assert.equal(onlyFree!.basis, 'no charge: every request is on a model you marked free', 'no rate card priced it, so it is never called a list price');
+  const [freeAndList] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, free]) }, '30d');
+  assert.equal(freeAndList!.basis, "list prices: each model's own published price; no charge on models you marked free (llama-local)",
+    'a mixed total still names the models priced by your declaration (PR #146 review)');
+});
+
 test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {
   const week = buildClaimLayers({ ...NOTHING, overview: anOverview(5, 2) }, '7d');
   assert.deepEqual(week.map((l) => [l.id, l.period]), [
@@ -376,4 +398,14 @@ test('the claim inspector no longer renders the blanket "Nothing is missing" foo
   const source = readFileSync(new URL('../src/dashboard/web/app/components/claimInspector.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Nothing is missing/);
   assert.doesNotMatch(source, /No missing evidence is named/);
+});
+
+test('doctor names a price you set instead of calling it a list rate (PR #146 review)', async () => {
+  const { doctorPricingLine } = await import('../src/cli/opsCmd.ts');
+  const mine = { provider: 'openai', model: 'acme-private-7b', costBasis: 'user_declared_price', rateMatchKind: 'user_declared', requests: 2, costUsd: 25 } as const;
+  const listed = { provider: 'openai', model: 'gpt-6-sol', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 6, costUsd: 60 } as const;
+  assert.equal(doctorPricingLine(summarizeBasis([mine])), '$25.00 at prices you set (not checked against a price list)');
+  assert.equal(doctorPricingLine(summarizeBasis([listed])), "30d spend priced at each model's own list rate (an estimate, not a bill)");
+  const free = { provider: 'ollama', model: 'llama-local', costBasis: 'user_declared_price', rateMatchKind: 'user_declared_free', requests: 3, costUsd: 0 } as const;
+  assert.equal(doctorPricingLine(summarizeBasis([free])), '3 requests on models you marked free (no charge)');
 });

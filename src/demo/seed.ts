@@ -23,7 +23,7 @@
  */
 
 import type { Store, RequestRow, RealizationUnitRecord } from '../store/db.ts';
-import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, notSentPricingEvidence, type Provider } from '../cost/pricing.ts';
+import { computeCost, withoutDeclaredPrices, syntheticPricingEvidence, unpricedPricingEvidence, notSentPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import type { WorkUnit } from '../value/realization.ts';
 import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
@@ -737,6 +737,11 @@ function seedImportedTail(ctx: Ctx, now: number, days: number): void {
  * the deterministic ids collision-free).
  */
 export function seedDemo(store: Store, opts: { now?: number; days?: number } = {}): SeedResult {
+  // Sample data is priced from the card alone, whatever the user declared.
+  return withoutDeclaredPrices(() => seedDemoFromCard(store, opts));
+}
+
+function seedDemoFromCard(store: Store, opts: { now?: number; days?: number }): SeedResult {
   const now = opts.now ?? Date.now();
   const days = opts.days ?? 14;
   const ctx: Ctx = { store, rng: mulberry32(0xae915f10), n: 0, requests: 0, blocked: 0, sessions: 0, proposals: 0, signals: 0, cost: 0, openAiScopeId: null };

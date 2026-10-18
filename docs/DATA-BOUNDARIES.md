@@ -125,8 +125,16 @@ recommendations. Failed/partial pulls retain failure metadata with no usable
 provider observations.
 
 All Segreant-process HTTP(S) transport is now governed by the egress boundary.
-The default `egress.mode: "local_locked"` permits literal loopback targets only
-and refuses non-loopback targets before DNS. A cloud operation needs
+The default `egress.mode: "local_locked"` permits literal loopback targets, plus
+one built-in exception, and refuses every other non-loopback target before DNS.
+The exception is Segreant's own price list: a GET of exactly
+`https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json`
+for purpose `pricing_refresh` and data class `pricing_manifest`, with no query or
+fragment. It carries nothing about the user, its DNS answer must be public, and
+it is receipted under rule id `segreant-builtin-price-list` like any cloud route.
+Without it the rate card could never update and every new model would be priced
+by a guess. `controlled_cloud` mode does not carry the exception: an operator who
+enumerates routes grants this one with its own exact rule. A cloud operation needs
 `controlled_cloud` mode plus one enabled exact rule for its purpose, data class,
 method, HTTPS origin, and leading path. Before an allowed request is dialled,
 Segreant persists redacted local receipts for policy preflight and dial start; it
@@ -179,7 +187,7 @@ added without appearing on this page.
 | Purpose | Data class | What may cross | Reached by |
 | --- | --- | --- | --- |
 | `provider_inference` | `provider_request` | prompts, source snippets, tool payloads, and the caller's provider credential, exactly as the provider API requires | any tool pointed at the Segreant proxy |
-| `pricing_refresh` | `pricing_manifest` | nothing about you — a plain GET for a public pricing manifest | `segreant pricing --refresh`, or `pricing.autoRefresh` |
+| `pricing_refresh` | `pricing_manifest` | nothing about you — a plain GET for a public pricing manifest | `segreant pricing --refresh`, `pricing.autoRefresh`, or a running Segreant's first-sight lookup (`pricing.lookupUnknownModels`, on by default) |
 | `market_refresh` | `market_manifest` | nothing about you — plain GETs for the public leaderboard and price files listed in `docs/MARKET-SOURCES.md` | `segreant market --refresh <source|all>` |
 | `baseline_refresh` | `baseline_manifest` | nothing about you — a plain GET for the manifest at an operator-supplied URL | `segreant baseline --refresh --url ...` |
 | `alert_delivery` | `alert_metadata` | configured alert summaries; never prompts, source, or credentials | `segreant alerts --set-webhook ...` |
@@ -220,6 +228,15 @@ separate hosted subject-access request path because there is no hosted copy of
 this data to request in the first place.
 
 ## Optional outbound paths
+
+One path is on by default:
+
+- the first-sight price lookup. When a running Segreant prices a request by a
+  guess (the model is not on its rate card), it downloads the built-in public
+  price list once, at most once an hour, outside the request's path. Recorded
+  amounts are not rewritten; `segreant reprice` previews the correction and
+  `--apply` commits it. `segreant pricing --auto off` sets
+  `pricing.lookupUnknownModels` (and `pricing.autoRefresh`) to false.
 
 These paths are off unless an operator deliberately invokes or configures them:
 

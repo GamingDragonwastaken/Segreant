@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "22918f50dde0aaaf68e687fa800f2932876d013583af7f995f0038bc5863162b";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "44c07ff040b509ef725d96444091f757b767d12f7df57d569e817c2a62dec4c3";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -4270,6 +4270,210 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "number"
     }
   ],
+  "UnknownPricingModel": [
+    {
+      "name": "provider",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "rateMatchKind",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "DeclaredPrice": [
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "kind",
+      "optional": false,
+      "type": "'rate' | 'like' | 'free'"
+    },
+    {
+      "name": "summary",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "declaredAt",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "rate",
+      "optional": true,
+      "type": "{ input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string }"
+    },
+    {
+      "name": "like",
+      "optional": true,
+      "type": "string"
+    }
+  ],
+  "UnknownPricingPayload": [
+    {
+      "name": "models",
+      "optional": false,
+      "type": "UnknownPricingModel[]"
+    },
+    {
+      "name": "declared",
+      "optional": false,
+      "type": "DeclaredPrice[]"
+    },
+    {
+      "name": "boundary",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "demo",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
+  "PricingDeclarePayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "price",
+      "optional": false,
+      "type": "{ kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; like?: string }"
+    }
+  ],
+  "PricingUnsetPayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "removed",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
+  "RepriceModelPayload": [
+    {
+      "name": "provider",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "model",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "rows",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "beforeUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "afterUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "afterBasis",
+      "optional": false,
+      "type": "'list price' | 'your price'"
+    }
+  ],
+  "RepricePayload": [
+    {
+      "name": "applied",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "demo",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "estimatedRows",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "repriceable",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "stillEstimated",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "cacheDurationUnknown",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "alreadyRepriced",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "totalBeforeUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "totalAfterUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "byModel",
+      "optional": false,
+      "type": "RepriceModelPayload[]"
+    },
+    {
+      "name": "realizationSync",
+      "optional": false,
+      "type": "{ resynced: number; unresolvable: number; costUsdBefore: number; costUsdAfter: number } | null"
+    }
+  ],
   "DashboardResponseMap": [
     {
       "name": "health",
@@ -4330,6 +4534,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "pricing",
       "optional": false,
       "type": "PricingPayload"
+    },
+    {
+      "name": "reprice",
+      "optional": false,
+      "type": "RepricePayload"
     },
     {
       "name": "realization",

@@ -77,7 +77,7 @@ export function cmdHome(flags: Flags): void {
       console.log('');
       console.log('  Read their logs and measure what the work produced:');
       console.log(color(tty, C.cyan, '    segreant scan --setup'));
-      console.log(color(tty, C.gray, '    Nothing leaves this machine. The first run takes a few minutes; the month appears after about one.'));
+      console.log(color(tty, C.gray, '    Nothing about you leaves this machine. The first run takes a few minutes; the month appears after about one.'));
     } else {
       console.log('  No AI coding tool logs found here (Claude Code, Codex, Antigravity and opencode are read today).');
       console.log(color(tty, C.cyan, '    segreant scan') + color(tty, C.gray, '   looks further and lists what it can and cannot read'));

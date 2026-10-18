@@ -54,6 +54,8 @@ export interface AlertInputs {
   baselinePrunedBeforeMs?: number | null;
   blocked24h: number; // count of budget-blocked (429) requests in the last 24h
   estimatedShare: number; // 0..1 share of recent spend priced with estimated rates
+  /** 0..1 share of recent spend priced at prices the user set: resolved, but not list prices (PR #146 review). */
+  declaredShare?: number;
   /**
    * Total spend the `estimatedShare` window was computed over. The share arrives
    * already divided, so zero is ambiguous between "none of the spend was
@@ -280,6 +282,18 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
     });
   }
 
+  // Prices the user set are not estimates of a list price, and not checked
+  // against one either; said apart from "approximate" so neither is mislabelled.
+  if ((inp.declaredShare ?? 0) > 0.2) {
+    out.push({
+      id: 'declared-pricing',
+      severity: 'info',
+      title: 'Some costs use prices you set',
+      detail: 'Part of recent spend is priced at prices set with segreant pricing set; they are not checked against a price list or your bill.',
+      metric: `${Math.round((inp.declaredShare ?? 0) * 100)}% of last-7d spend at prices you set`,
+    });
+  }
+
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
 
@@ -311,6 +325,7 @@ function gatherAlertInputs(
   const blocked24h = store.healthStats(now - day, now + 1000).blocked;
   const week = store.healthStats(now - 7 * day, now + 1000);
   const estimatedShare = week.totalCostUsd > 0 ? week.estimatedCostUsd / week.totalCostUsd : 0;
+  const declaredShare = week.totalCostUsd > 0 ? week.declaredCostUsd / week.totalCostUsd : 0;
   // Carried alongside the share so coverage can tell an unestimated window from
   // an empty one; the share alone cannot (D-141).
   const pricedWindowSpendUsd = week.totalCostUsd;
@@ -336,6 +351,7 @@ function gatherAlertInputs(
     baselinePrunedBeforeMs,
     blocked24h,
     estimatedShare,
+    declaredShare,
     pricedWindowSpendUsd,
     runaway,
     realizedSpendShare: opts.realizedSpendShare ?? null,

@@ -23,7 +23,11 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
       out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests the tool reported at no charge: ${cohortModels(c)}`);
       continue;
     }
-    const models = c.id === 'fallback' || c.id === 'list_family' || c.id === 'unrecorded'
+    if (c.id === 'user_free') {
+      out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests on models you marked free: ${cohortModels(c)}`);
+      continue;
+    }
+    const models = c.id === 'fallback' || c.id === 'list_family' || c.id === 'user_declared' || c.id === 'unrecorded'
       ? `: ${cohortModels(c)}`
       : '';
     out.push(`${indent}${usd(c.costUsd).padStart(10)}  ${c.label}${models}`);
@@ -31,6 +35,9 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
   if (basis.cohorts.some((c) => c.id === 'fallback')) {
     out.push(`${indent}            fallback = the model was not on the rate card when imported; a generic rate, a rough estimate`);
     out.push(`${indent}            segreant reprice  previews new prices for models the card has learned since (nothing changes without --apply)`);
+  }
+  if (basis.cohorts.some((c) => c.id === 'user_declared')) {
+    out.push(`${indent}            your price = set with segreant pricing set; not checked against a price list`);
   }
   if (basis.cohorts.some((c) => c.id === 'tool_reported')) {
     out.push(`${indent}            tool-reported = what the tool recorded; not checked against any rate card or bill`);

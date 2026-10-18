@@ -226,13 +226,13 @@ export function capBasisSpend(
 
 export function describeSpendBasis(basis: SpendBasis): string {
   if (basis.enforcedAgainst === 'rate_card_float' && basis.exactResolvedUsd === null) {
-    return 'Basis: local rate-card estimates, with no exact economic projection available.';
+    return 'Basis: local estimates (list prices, and any prices you set), with no exact economic projection available.';
   }
   const bases = basis.sourceBases.length > 0 ? basis.sourceBases.join(', ') : 'none declared';
   if (basis.complete) return `Basis: effective economic charges (${bases}), complete for this window.`;
   const which = basis.enforcedAgainst === 'exact_effective'
     ? `effective economic charges (${bases})`
-    : 'local rate-card estimates';
+    : 'local estimates (list prices, and any prices you set)';
   return `Basis: ${which}, a lower bound — ${basis.unresolvedRequests} of ${basis.requestCount} requests in this window are unpriced.`;
 }
 

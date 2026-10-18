@@ -15,9 +15,12 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkS
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
+import { DEFAULT_PRICE_LIST_URL } from '../egress/policy.ts';
 import { dirname, join } from 'node:path';
 import { segreantHome } from '../config.ts';
 import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
+import { activePriceOverrides, priceOverrideFor, type PriceOverride } from './overrides.ts';
+import { money } from '../economics/money.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +92,7 @@ export const COST_BASES = [
   'synthetic_demo',
   'unpriced',
   'not_sent',
+  'user_declared_price',
   'legacy_unknown',
 ] as const;
 export type CostBasis = (typeof COST_BASES)[number];
@@ -96,7 +100,7 @@ export type CostBasis = (typeof COST_BASES)[number];
 /** Source of an attached rate-card hash. `none` is deliberately explicit for
  * tool-reported and unpriced rows, so a null hash is never mistaken for a lost
  * local rate card. */
-export const RATE_CARD_SOURCE_KINDS = ['manual', 'native_manifest', 'litellm_transformed', 'bundled', 'legacy_unknown', 'none'] as const;
+export const RATE_CARD_SOURCE_KINDS = ['manual', 'native_manifest', 'litellm_transformed', 'bundled', 'legacy_unknown', 'none', 'user_declaration'] as const;
 export type RateCardSourceKind = (typeof RATE_CARD_SOURCE_KINDS)[number];
 
 /** How the observed model was resolved against a local rate card, if any. */
@@ -109,6 +113,8 @@ export const RATE_MATCH_KINDS = [
   'reported',
   'unpriced',
   'not_sent',
+  'user_declared',
+  'user_declared_free',
   'legacy_unknown',
 ] as const;
 export type RateMatchKind = (typeof RATE_MATCH_KINDS)[number];
@@ -440,14 +446,24 @@ export type PricingRefreshFailureCode =
  * scraping provider pricing pages (brittle HTML that needs a parser which
  * itself rots). The GET fetches a public file and sends nothing about the user.
  */
-export const DEFAULT_MANIFEST_URL =
-  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
+export const DEFAULT_MANIFEST_URL = DEFAULT_PRICE_LIST_URL;
 
-/** LiteLLM providers we carry, mapped onto our table's provider keys. */
+/**
+ * First-party model makers, mapped onto our table's provider keys. Hosts and
+ * resellers are excluded: their rates price the host's route, which a bare
+ * model name cannot identify.
+ */
 const LITELLM_PROVIDER_MAP: Record<string, string> = {
   anthropic: 'anthropic',
   openai: 'openai',
   gemini: 'google',
+  cohere_chat: 'cohere',
+  dashscope: 'dashscope',
+  deepseek: 'deepseek',
+  mistral: 'mistral',
+  perplexity: 'perplexity',
+  xai: 'xai',
+  zai: 'zai',
 };
 
 /** Fewer matched models than this means the feed shape changed — refuse, keep the current table. */
@@ -462,6 +478,13 @@ interface LiteLLMEntry {
   cache_read_input_token_cost?: number;
 }
 
+/** A per-1M rate as a plain decimal string, never exponent notation (1e-7 is "0.0000001"). */
+function plainDecimal(n: number): string {
+  const s = String(n);
+  if (!/e/i.test(s)) return s;
+  return n.toFixed(20).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 /** Per-token → per-1M, trimmed of float noise (3e-6/token → 3 $/1M exactly). */
 function perMillion(perToken: number): number {
   return Number((perToken * 1e6).toPrecision(10));
@@ -470,7 +493,7 @@ function perMillion(perToken: number): number {
 /**
  * Convert a LiteLLM price file into our manifest schema. Pure and total: bad
  * input yields `{ ok: false }`, never a throw. Only chat-capable entries from
- * providers we meter are carried; `verified` is false because the rates are
+ * first-party makers are carried; `verified` is false because the rates are
  * community-maintained; the conservative `unknown` fallback comes from the
  * CURRENT table, so a feed can never weaken it.
  */
@@ -509,6 +532,16 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     if (typeof e.cache_read_input_token_cost === 'number' && e.cache_read_input_token_cost > 0) {
       rate.cache_read = perMillion(e.cache_read_input_token_cost);
     }
+    // The decimal companion, so a model learned from the feed reprices to an
+    // exact amount: without it `reprice --apply` refused a first-sight model
+    // that had been recorded against the bundled card's exact fallback (PR #146 review).
+    const exact: { input: string; output: string; cache_write_5m?: string; cache_read?: string } = {
+      input: plainDecimal(rate.input),
+      output: plainDecimal(rate.output),
+    };
+    if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
+    if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
+    rate.exact = exact;
     bucket.models[name] = rate;
   }
 
@@ -517,12 +550,21 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     return { ok: false, error: `feed shape not recognized (only ${total} usable models found) — keeping the current table` };
   }
 
+  // Cross-provider lookups use insertion order: keep the big three ahead of
+  // other makers on name collisions, regardless of the upstream key order.
+  const primaryProviders = ['anthropic', 'openai', 'google'];
+  const providerOrder = [
+    ...primaryProviders,
+    ...Object.keys(providers).filter((provider) => !primaryProviders.includes(provider)).sort(),
+  ];
   const file: PricingFile = {
     schema_version: 1,
     updated: new Date().toISOString().slice(0, 10),
     currency: 'USD',
     unit: 'per_million_tokens',
-    providers,
+    providers: Object.fromEntries(providerOrder
+      .filter((provider) => providers[provider] !== undefined)
+      .map((provider) => [provider, providers[provider]!])),
     fallbacks: loadPricing().fallbacks,
   };
   return { ok: true, file };
@@ -868,20 +910,33 @@ function activeRateCardSourceKind(): Exclude<RateCardSourceKind, 'none'> {
 
 function resolved(
   rate: ModelRate,
-  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback'>,
+  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback' | 'user_declared' | 'user_declared_free'>,
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
+  declarationSha256: string | null = null,
 ): ResolvedRate {
   // rateFor always loads the active card first, so the card identity and source
   // describe this exact local computation rather than a later refresh.
   const card = loadPricing();
+  const declared = rateMatchKind === 'user_declared' || rateMatchKind === 'user_declared_free';
+  // A rate or free declaration is priced by the declaration alone: stamping it
+  // with the active card's hash made a card refresh look like a price change
+  // for requests whose price had not moved (PR #146 review). Only `like`
+  // depends on the card, and it names the card model it follows.
+  const fromCard = !declared || rateMatchProvider !== null;
   return {
     rate,
-    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider',
+    // A declared price is resolved, not guessed: it is the price the user said
+    // this model costs. It keeps its own basis so it is never shown as list price.
+    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider' && !declared,
     pricing: {
-      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : 'local_list_price',
-      rateCardSha256: pricingCardHash(card),
-      rateCardSourceKind: activeRateCardSourceKind(),
+      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : declared ? 'user_declared_price' : 'local_list_price',
+      // A rate or free declaration carries a revision of the declaration itself,
+      // labelled as the user's, never the card's: a changed price is then a new
+      // revision that value comparisons see, and a card refresh is not
+      // (PR #146 review).
+      rateCardSha256: fromCard ? pricingCardHash(card) : declarationSha256,
+      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
       rateMatchKind,
       rateMatchProvider,
       rateMatchModel,
@@ -947,9 +1002,118 @@ export function syntheticPricingEvidence(cost: CostBreakdown): RequestPricingEvi
   return { ...cost.pricing, costBasis: 'synthetic_demo' };
 }
 
+/** The rate-card rate a `like` declaration points at: exact matches only, never another guess. */
+function exactCardRate(pricing: PricingFile, model: string): { provider: string; rate: ModelRate } | null {
+  for (const p of Object.keys(pricing.providers)) {
+    const r = pricing.providers[p]?.models[model];
+    if (r) return { provider: p, rate: r };
+  }
+  return null;
+}
+
+/** USD per 1M tokens as a decimal string, back to the card's number form. */
+function declaredRate(o: Extract<PriceOverride, { kind: 'rate' }>): ModelRate {
+  const exact: ExactModelRate = {
+    input: o.input,
+    output: o.output,
+    ...(o.cacheRead === undefined ? {} : { cache_read: o.cacheRead }),
+    // cacheWrite prices both TTLs unless cacheWrite1h names the 1-hour price
+    // (the engine and the usage record already tell the two apart).
+    ...(o.cacheWrite === undefined ? {} : { cache_write_5m: o.cacheWrite, cache_write_1h: o.cacheWrite }),
+    ...(o.cacheWrite1h === undefined ? {} : { cache_write_1h: o.cacheWrite1h }),
+  };
+  return {
+    input: Number(o.input),
+    output: Number(o.output),
+    ...(o.cacheRead === undefined ? {} : { cache_read: Number(o.cacheRead) }),
+    ...(o.cacheWrite === undefined ? {} : { cache_write_5m: Number(o.cacheWrite), cache_write_1h: Number(o.cacheWrite) }),
+    ...(o.cacheWrite1h === undefined ? {} : { cache_write_1h: Number(o.cacheWrite1h) }),
+    exact,
+  };
+}
+
+/** A stable revision of what was declared (the prices, not when): the same price declared again is the same revision. */
+function declarationRevision(o: PriceOverride): string {
+  const { declaredAt: _when, ...price } = o;
+  const canonical = JSON.stringify(Object.keys(price).sort().map((k) => [k, (price as Record<string, unknown>)[k]]));
+  return createHash('sha256').update('segreant-declaration:v1\n' + canonical).digest('hex');
+}
+
+/** The rate with decimal companions for any it lacks, written from its own numbers. */
+function withExactCompanion(rate: ModelRate): ModelRate {
+  if (rate.exact !== undefined) return rate;
+  const exact: { input: string; output: string; cache_write_5m?: string; cache_write_1h?: string; cache_read?: string } = {
+    input: plainDecimal(rate.input),
+    output: plainDecimal(rate.output),
+  };
+  if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
+  if (rate.cache_write_1h !== undefined) exact.cache_write_1h = plainDecimal(rate.cache_write_1h);
+  if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
+  return { ...rate, exact };
+}
+
+/** A free (local) model: every rate is zero, cache rates included. */
+/** Where rateFor reads declarations; null reads the file (re-read when it changes). */
+let declarationSource: ((model: string) => PriceOverride | null) | null = null;
+
+function withDeclarationSource<T>(source: (model: string) => PriceOverride | null, fn: () => T): T {
+  const previous = declarationSource;
+  declarationSource = source;
+  try {
+    return fn();
+  } finally {
+    declarationSource = previous;
+  }
+}
+
+/**
+ * Run `fn` pricing from the card alone. The demo is fixed sample data: a real
+ * declaration (say, gpt-4o marked free) must not change its spend, evidence or
+ * comparisons (PR #146 review).
+ */
+export function withoutDeclaredPrices<T>(fn: () => T): T {
+  return withDeclarationSource(() => null, fn);
+}
+
+/**
+ * Run `fn` against one read of the declarations. A plan priced row by row
+ * re-read the file at each row, so a `pricing set` from another process midway
+ * gave earlier and later rows of the same model different prices in one
+ * correction (PR #146 review). The card needs no snapshot: it is cached for
+ * the life of the process and changes only by a refresh in this process,
+ * which cannot run inside a synchronous plan.
+ */
+/** Run `fn` against declarations read earlier (a proxied request keeps the ones it was checked against). */
+export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: () => T): T {
+  return withDeclarationSource((model) => models[model] ?? null, fn);
+}
+
+export function withPricingSnapshot<T>(fn: () => T): T {
+  if (declarationSource !== null) return fn();
+  const models = activePriceOverrides();
+  return withDeclarationSource((model) => models[model] ?? null, fn);
+}
+
+const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
+
 export function rateFor(provider: Provider, model: string): ResolvedRate {
   const pricing = loadPricing();
   const here = pricing.providers[provider]?.models;
+
+  // 0) A price the user declared for this exact model name wins: it is the one
+  //    place a private, fine-tuned or local model can get a real price. A `like`
+  //    that no longer resolves exactly on the card is ignored, so the request
+  //    falls to the ordinary ladder rather than to a guess built on a guess.
+  const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
+  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
+  if (declared?.kind === 'like') {
+    const target = exactCardRate(pricing, declared.like);
+    // A card entry without decimal companions (a hand-written manifest may omit
+    // them) would leave a reprice with no exact replacement and roll it back
+    // (PR #146 review); the companion is the card's own stated numbers.
+    if (target) return resolved(withExactCompanion(target.rate), 'user_declared', target.provider, declared.like);
+  }
 
   // 1) Exact id in the named provider — the price we're surest about.
   const exact = here?.[model];
@@ -985,6 +1149,11 @@ export function exactRateFromModelRate(rate: ModelRate): ExactModelRate | null {
   return rate.exact === undefined ? null : validateExactModelRate(rate.exact);
 }
 
+function zeroExactCost(): ExactCostBreakdown {
+  const zero = money('0', 'USD', 'estimated');
+  return Object.freeze({ total: zero, components: Object.freeze({ input: zero, output: zero, cacheWrite: zero, cacheRead: zero }) });
+}
+
 function per(tokens: number, rate: number | undefined): number {
   if (!tokens || !rate) return 0;
   return (tokens / 1_000_000) * rate;
@@ -1013,9 +1182,12 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
   const costUsd =
     components.input + components.output + components.cacheWrite + components.cacheRead;
 
-  const exactRate = exactRateFromModelRate(rate);
-  const exact = exactRate === null
-    ? undefined
-    : computeExactCost(exactRate, usage, estimated ? 'estimated' : 'list');
+  const declared = pricing.rateMatchKind === 'user_declared' || pricing.rateMatchKind === 'user_declared_free';
+  const exactRate = rate === FREE_RATE ? null : exactRateFromModelRate(rate);
+  const exact = rate === FREE_RATE
+    ? zeroExactCost()
+    : exactRate === null
+      ? undefined
+      : computeExactCost(exactRate, usage, estimated || declared ? 'estimated' : 'list');
   return { costUsd, estimated, pricing, rate, components, ...(exact === undefined ? {} : { exact }) };
 }

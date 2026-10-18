@@ -82,6 +82,13 @@ test('alerts: runaway is critical; estimated pricing is info', () => {
   assert.ok(!ids(base({ estimatedShare: 0.1 })).includes('estimated-pricing'), 'below threshold stays quiet');
 });
 
+test('alerts: prices you set are named apart from approximate costs (PR #146 review)', () => {
+  const mine = detectAlerts(base({ estimatedShare: 0, declaredShare: 0.6 }));
+  assert.ok(mine.some((a) => a.id === 'declared-pricing' && a.severity === 'info' && a.metric === '60% of last-7d spend at prices you set'));
+  assert.ok(!mine.some((a) => a.id === 'estimated-pricing'), 'a price you set is not an estimate');
+  assert.ok(!ids(base({ declaredShare: 0.1 })).includes('declared-pricing'), 'below threshold stays quiet');
+});
+
 test('alerts: sorted by severity (critical → warn → info)', () => {
   const all = detectAlerts(base({
     todaySpendUsd: 25,
