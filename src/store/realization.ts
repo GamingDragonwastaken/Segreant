@@ -255,7 +255,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
-                cache_write_ttl AS cacheWriteTtl,
+                CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
                 cost_usd AS costUsd
          FROM requests WHERE estimated = 1`,
     )

@@ -3,6 +3,7 @@
  * and how much list-price work the plan did. Two bases, always named: the plan
  * price is what the person entered; the work is list cost from the rate card.
  */
+import { computeCost, withoutDeclaredPrices, type Provider } from '../cost/pricing.ts';
 import { Store } from '../store/db.ts';
 import { dbPath, loadConfig, mutateConfig, PLAN_SOURCES, type PlanPrice } from '../config.ts';
 import {
@@ -14,10 +15,21 @@ import { rangeFor, UserInputError, type Flags } from './flags.ts';
 const TOOL_LABEL: Record<PlanSource, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
 
 /** List cost of a tool's imported (subscription) use in a window. */
-function importedListCost(store: Store, source: PlanSource, startMs: number, endMs: number): number {
+export function importedListCost(store: Store, source: PlanSource, startMs: number, endMs: number): number {
   let total = 0;
   for (const r of store.requestsInRange(startMs, endMs)) {
-    if (r.source === source && r.via === 'import') total += r.costUsd;
+    if (r.source !== source || r.via !== 'import') continue;
+    // "List-price work" means list prices: a request priced at a price the
+    // user set (a free local model, a negotiated rate) is priced from the card
+    // here, so a declaration never inflates, shrinks or hides the plan line
+    // (PR #146 review). Other rows keep the list price they were recorded at.
+    total += r.pricing?.costBasis === 'user_declared_price'
+      ? withoutDeclaredPrices(() => computeCost(r.provider as Provider, r.model, {
+        inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+        cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
+        ...(r.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
+      })).costUsd
+      : r.costUsd;
   }
   return total;
 }

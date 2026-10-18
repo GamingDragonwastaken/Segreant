@@ -63,12 +63,14 @@ function planReprice(store: Store) {
       ...(r.cacheWriteTtl === null ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
     });
     if (c.estimated) { stillEstimated++; continue; }
-    if (r.cacheWriteTokens > 0 && r.cacheWriteTtl === null) cacheDurationUnknown++;
     // A row with an exact economic event can only be corrected by an exact
     // amount. A custom card may omit the decimal companions, and the plan used
     // to promise such a row, then --apply refused it and rolled back the whole
     // batch (PR #146 review). It stays an estimate until a card can price it exactly.
     if (c.exact === undefined && store.economic().read(requestEconomicEventId(r.requestId)) !== null) { stillEstimated++; continue; }
+    // Counted only for rows the plan will rewrite, so the preview never says a
+    // row's writes are priced at the 5-minute rate when it is left untouched.
+    if (r.cacheWriteTokens > 0 && r.cacheWriteTtl === null) cacheDurationUnknown++;
     updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
     const key = JSON.stringify([r.provider, r.model]);
     const agg = byModel.get(key) ?? {
