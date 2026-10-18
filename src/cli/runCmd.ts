@@ -144,7 +144,9 @@ export async function cmdStart(flags: Flags): Promise<void> {
       }
       const today = store.spendBetween(startOfLocalDay(), Date.now() + 1000);
       const time = new Date(row.tsEpochMs).toLocaleTimeString('en-US', { hour12: false });
-      const est = row.estimated ? color(tty, C.yellow, ' ~est') : '';
+      // A price you set is not a guess, and not a list price either (PR #146 sweep).
+      const est = row.estimated ? color(tty, C.yellow, ' ~est')
+        : row.pricing?.costBasis === 'user_declared_price' ? color(tty, C.gray, ' your price') : '';
       console.log(
         `  ${color(tty, C.gray, time)}  ${row.provider}/${row.model}  ` +
           `in ${num(row.inputTokens)} out ${num(row.outputTokens)}  ` +
