@@ -145,11 +145,17 @@ function go(route: Route): void {
   current.set(route);
 }
 
-/** Focus the current page's h1 once the view has rendered; give up quietly after a second. */
-function focusPageHeading(tries = 20): void {
+/**
+ * Focus the current page's h1 once the view has rendered; give up quietly after
+ * a second. If the user moves focus while waiting (the skip link, a click), their
+ * move wins: a slow render used to land after it and take focus back (CI on PR #146).
+ */
+function focusPageHeading(tries = 20, startedFrom: Element | null = document.activeElement): void {
+  const now = document.activeElement;
+  if (now !== null && now !== document.body && now !== startedFrom) return;
   const heading = document.querySelector<HTMLElement>('main h1');
   if (!heading) {
-    if (tries > 0) setTimeout(() => focusPageHeading(tries - 1), 50);
+    if (tries > 0) setTimeout(() => focusPageHeading(tries - 1, startedFrom), 50);
     return;
   }
   if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
