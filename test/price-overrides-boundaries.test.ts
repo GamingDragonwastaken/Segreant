@@ -187,6 +187,33 @@ test('sample data never reads, shows or writes your real prices (PR #146 review)
   removePriceOverride('acme-negotiated');
 });
 
+test('value comparisons see each price you set as its own revision (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const store = new Store(join(home, 'revisions.db'));
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+  const record = (id: string, at: number) => {
+    const c = computeCost('openai', 'acme-eras', usage);
+    store.insertRequest({ requestId: id, sessionId: null, tsEpochMs: at, provider: 'openai', model: 'acme-eras', project: 'p', taskWeight: 1,
+      ...usage, costUsd: c.costUsd, estimated: c.estimated, streamed: false, statusCode: 200, durationMs: 1, pricing: c.pricing });
+  };
+  try {
+    setPriceOverride('acme-eras', { kind: 'rate', input: '1', output: '2' });
+    record('era-1', 1_000);
+    setPriceOverride('acme-eras', { kind: 'rate', input: '4', output: '2' });
+    record('era-2', 2_000);
+    setPriceOverride('acme-eras', { kind: 'like', like: 'claude-haiku-4-5' });
+    record('era-3', 3_000);
+    setPriceOverride('acme-eras', { kind: 'like', like: 'claude-sonnet-4-6' });
+    record('era-4', 4_000);
+    const basis = store.modelPricingBasis(0, 10_000, 'acme-eras');
+    assert.deepEqual(basis.costBases, ['user_declared_price']);
+    assert.equal(basis.rateCardShas.length, 4, 'two typed prices and two like targets on one card are four revisions');
+  } finally {
+    store.close();
+    removePriceOverride('acme-eras');
+  }
+});
+
 // Last: it replaces the active card for this process.
 test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
   const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');

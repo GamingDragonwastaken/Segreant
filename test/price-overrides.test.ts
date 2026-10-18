@@ -30,8 +30,8 @@ test('a declared rate prices the model exactly, under its own basis', () => {
   assert.equal(c.estimated, false, 'a declared price is resolved, not a guess');
   assert.equal(c.pricing.costBasis, 'user_declared_price');
   assert.equal(c.pricing.rateMatchKind, 'user_declared');
-  assert.equal(c.pricing.rateCardSha256, null, 'a typed price is not from any card (PR #146 review)');
-  assert.equal(c.pricing.rateCardSourceKind, 'none');
+  assert.equal(c.pricing.rateCardSourceKind, 'user_declaration', 'a typed price is the user\'s, not from any card (PR #146 review)');
+  assert.match(c.pricing.rateCardSha256 ?? '', /^[0-9a-f]{64}$/, 'it carries its own revision');
   assert.equal(c.costUsd, 1.0);
   assert.equal(formatMoneyAmount(c.exact!.total), '1');
   assert.equal(c.exact!.total.basis, 'estimated', 'never recorded as a list price');
@@ -110,6 +110,30 @@ test('a second writer is refused while another holds the lock, never silently ov
   assert.equal(loadPriceOverrides().models['acme-other'], undefined);
   setPriceOverride('acme-other', { kind: 'free' });
   assert.ok(loadPriceOverrides().models['acme-other'], 'once the lock is free the write goes through');
+});
+
+test('a changed price is a new revision; the same price declared again is not (PR #146 review)', () => {
+  setPriceOverride('acme-rev', { kind: 'rate', input: '1', output: '2' });
+  const first = computeCost('openai', 'acme-rev', usage).pricing.rateCardSha256;
+  setPriceOverride('acme-rev', { kind: 'rate', input: '1', output: '2' });
+  assert.equal(computeCost('openai', 'acme-rev', usage).pricing.rateCardSha256, first, 'declaring the same price again keeps its revision');
+  setPriceOverride('acme-rev', { kind: 'rate', input: '3', output: '2' });
+  const changed = computeCost('openai', 'acme-rev', usage).pricing.rateCardSha256;
+  assert.notEqual(changed, first, 'a new price is a new revision');
+  setPriceOverride('acme-rev', { kind: 'free' });
+  assert.notEqual(computeCost('openai', 'acme-rev', usage).pricing.rateCardSha256, changed, 'paid to free is a new revision');
+  removePriceOverride('acme-rev');
+});
+
+test('a separate 1-hour cache-write price prices 1-hour writes, and only them (PR #146 review)', () => {
+  setPriceOverride('acme-ttl', { kind: 'rate', input: '1', output: '2', cacheWrite: '1.25', cacheWrite1h: '2' });
+  const writes = { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000, cacheReadTokens: 0 };
+  assert.equal(computeCost('openai', 'acme-ttl', { ...writes, cacheWriteTtl: '5m' }).costUsd, 1.25);
+  assert.equal(computeCost('openai', 'acme-ttl', { ...writes, cacheWriteTtl: '1h' }).costUsd, 2);
+  setPriceOverride('acme-ttl', { kind: 'rate', input: '1', output: '2', cacheWrite: '1.25' });
+  assert.equal(computeCost('openai', 'acme-ttl', { ...writes, cacheWriteTtl: '1h' }).costUsd, 1.25, 'without a 1-hour price, the one cache-write price covers both, as before');
+  assert.throws(() => setPriceOverride('acme-ttl', { kind: 'rate', input: '1', output: '2', cacheWrite1h: 'abc' }), /cacheWrite1h must be a positive decimal/);
+  removePriceOverride('acme-ttl');
 });
 
 test('invalid declarations are refused with the reason', () => {
