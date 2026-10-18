@@ -437,26 +437,38 @@ export function loadPricing(force = false): PricingFile {
  * is seen for the whole activation. Over-reading only refuses more, and that
  * refusal has --force (PR #153 review).
  */
-export function cardEntryAnywhere(model: string): { provider: string; input: number; output: number } | null {
-  const cards: PricingFile[] = [loadPricing()];
+export interface CardEntry {
+  provider: string;
+  input: number;
+  output: number;
+  rate: ModelRate;
+  card: PricingFile;
+  /** Which card matched: the loaded one, the verified card on disk, the active card unverified, the bundled card, or an archived card. */
+  source: 'loaded' | 'disk' | 'active' | 'bundled' | 'archive';
+}
+
+export function cardEntryAnywhere(model: string): CardEntry | null {
+  // Newest first, so the rate charged is the most current one any card states;
+  // archived cards, which may be old, come last.
+  const cards: Array<[PricingFile, CardEntry['source']]> = [[loadPricing(), 'loaded']];
   const onDisk = loadVerifiedCache();
-  if (onDisk) cards.push(onDisk.file);
+  if (onDisk) cards.push([onDisk.file, 'disk']);
   const active = readValidPricing(cachePath());
-  if (active) cards.push(active);
+  if (active) cards.push([active, 'active']);
+  const bundled = readValidPricing(BUNDLED_PRICING_PATH);
+  if (bundled) cards.push([bundled, 'bundled']);
   try {
     const archiveDir = join(segreantHome(), 'pricing', 'cards');
     for (const name of existsSync(archiveDir) ? readdirSync(archiveDir) : []) {
       if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
       const archived = readValidPricing(join(archiveDir, name));
-      if (archived) cards.push(archived);
+      if (archived) cards.push([archived, 'archive']);
     }
   } catch { /* an unreadable archive adds nothing; the other cards still count */ }
-  const bundled = readValidPricing(BUNDLED_PRICING_PATH);
-  if (bundled) cards.push(bundled);
-  for (const card of cards) {
+  for (const [card, source] of cards) {
     for (const [provider, p] of Object.entries(card.providers)) {
       const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
-      if (rate) return { provider, input: rate.input, output: rate.output };
+      if (rate) return { provider, input: rate.input, output: rate.output, rate, card, source };
     }
   }
   return null;
@@ -977,6 +989,8 @@ function resolved(
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
   declarationSha256: string | null = null,
+  /** The card this rate came from, when it is not the loaded one (PR #153 review). */
+  fromOtherCard: { sha256: string; sourceKind: RateCardSourceKind } | null = null,
 ): ResolvedRate {
   // rateFor always loads the active card first, so the card identity and source
   // describe this exact local computation rather than a later refresh.
@@ -998,8 +1012,8 @@ function resolved(
       // labelled as the user's, never the card's: a changed price is then a new
       // revision that value comparisons see, and a card refresh is not
       // (PR #146 review).
-      rateCardSha256: fromCard ? pricingCardHash(card) : declarationSha256,
-      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
+      rateCardSha256: fromOtherCard ? fromOtherCard.sha256 : fromCard ? pricingCardHash(card) : declarationSha256,
+      rateCardSourceKind: fromOtherCard ? fromOtherCard.sourceKind : fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
       rateMatchKind,
       rateMatchProvider,
       rateMatchModel,
@@ -1160,8 +1174,8 @@ export function withPricingSnapshot<T>(fn: () => T): T {
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
-  const pricing = loadPricing();
-  const here = pricing.providers[provider]?.models;
+  let pricing = loadPricing();
+  let here = pricing.providers[provider]?.models;
 
   // 0) A price the user declared for this exact model name wins: it is the one
   //    place a private, fine-tuned or local model can get a real price. A `like`
@@ -1173,6 +1187,26 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   // happened in: the card's price counts instead (PR #153 review).
   if (declared?.kind === 'free' && (declared.force === true || !cardPricesModel(model))) {
     return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  }
+  if (declared?.kind === 'free') {
+    // Set aside: the request is charged at the card rate, not the generic
+    // fallback (PR #153 review). A refresh in another process leaves this
+    // process's card stale; reload the verified card when it is the one that
+    // prices the model, as a restart would.
+    let entry = cardEntryAnywhere(model);
+    if (entry?.source === 'disk') {
+      pricing = loadPricing(true);
+      here = pricing.providers[provider]?.models;
+      entry = cardEntryAnywhere(model);
+    }
+    // Still not on the loaded card (a refresh mid-activation, or only an
+    // archived card has it): charge the matching card's rate, labelled with
+    // that card's own identity. Its source is unknown unless it was recorded.
+    if (entry && entry.source !== 'loaded') {
+      const sha256 = pricingCardHash(entry.card);
+      const sourceKind: RateCardSourceKind = entry.source === 'bundled' ? 'bundled' : readCardProvenance(sha256)?.sourceKind ?? 'legacy_unknown';
+      return resolved(entry.rate, entry.provider === provider ? 'exact_provider' : 'exact_cross_provider', entry.provider, model, null, { sha256, sourceKind });
+    }
   }
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
   if (declared?.kind === 'like') {
