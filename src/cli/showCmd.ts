@@ -290,10 +290,18 @@ export function cmdExport(flags: Flags): void {
     ? (asJson ? `${stringifyJson(cliJsonResponse(JSON.parse(economicRequestsToJson(economicRows!))))}\n` : economicRequestsToCsv(economicRows!))
     : (asJson ? `${stringifyJson(cliJsonResponse(rows))}\n` : requestsToCsv(rows));
 
+  // The economic export leaves out requests refused before they were sent
+  // (they cost nothing), so its count is its own rows, and the gap is named
+  // rather than left for the reader to discover (PR #145 review).
+  const exportedCount = economicRows ? economicRows.length : rows.length;
+  const notSent = economicRows ? rows.length - economicRows.length : 0;
+  if (notSent > 0) {
+    console.error(color(process.stdout.isTTY ?? false, C.gray, `  ${num(notSent)} request${notSent === 1 ? '' : 's'} refused before sending left out: no cost, no economic record.`));
+  }
   if (typeof flags.out === 'string') {
     writeFileSync(flags.out, out);
     const tty = process.stdout.isTTY ?? false;
-    console.error(color(tty, C.green, `  Exported ${num(rows.length)} requests (${economic ? 'economic-' : ''}${asJson ? 'json' : 'csv'}) → ${flags.out}`));
+    console.error(color(tty, C.green, `  Exported ${num(exportedCount)} requests (${economic ? 'economic-' : ''}${asJson ? 'json' : 'csv'}) → ${flags.out}`));
   } else {
     process.stdout.write(out);
   }

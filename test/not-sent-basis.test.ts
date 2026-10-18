@@ -63,6 +63,9 @@ test('a cap refusal is recorded as not sent, and later refusals do not call it u
     // attribution partial (PR #143 review).
     const economic = store.economicRequestRowsInRange(0, Date.now() + 1000);
     assert.equal(economic.length, 1, 'only the request that was sent is spend');
+    const exported = store.economicRequestsInRange(0, Date.now() + 1000);
+    assert.equal(exported.length, 1, 'export --economic does not list a refusal as legacy_unknown (PR #143 review)');
+    assert.notEqual(exported[0]!.unresolvedReason, 'no_exact_economic_event');
   } finally {
     proxy.closeAllConnections?.();
     await new Promise<void>((r) => proxy.close(() => r()));
