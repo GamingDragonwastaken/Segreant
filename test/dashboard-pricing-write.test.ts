@@ -187,3 +187,18 @@ for (const path of ['/api/pricing/declare', '/api/pricing/unset', '/api/reprice'
     });
   });
 }
+
+test('a forced free price is labelled as forced in the declared prices (PR #153 review)', async () => {
+  setPriceOverride('claude-sonnet-4-6', { kind: 'free', force: true });
+  setPriceOverride('acme-local-llm', { kind: 'free' });
+  await dashboard(async (base) => {
+    const payload = await unknown(base);
+    wire('pricing-unknown', 'GET', payload);
+    const forced = payload.declared.find((p) => p.model === 'claude-sonnet-4-6')!;
+    assert.equal(forced.forced, true);
+    assert.match(forced.summary, /forced: a cap counts this model as \$0 even though a rate card prices it/);
+    const local = payload.declared.find((p) => p.model === 'acme-local-llm')!;
+    assert.equal(local.forced, undefined);
+    assert.equal(local.summary, 'free (local model)');
+  });
+});

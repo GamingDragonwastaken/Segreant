@@ -1911,6 +1911,8 @@ export interface DeclaredPrice {
   /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
   summary: string;
   declaredAt: string;
+  /** A free price stored with --force: a cap counts the model as $0 even though a rate card prices it (PR #153 review). */
+  forced?: true;
   /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
   rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;

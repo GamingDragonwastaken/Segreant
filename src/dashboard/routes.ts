@@ -999,7 +999,11 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
       // Sample data shows no real declarations (activePriceOverrides is empty in demo mode).
       declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
         model, kind: price.kind, declaredAt: price.declaredAt,
-        summary: price.kind === 'free' ? 'free (local model)'
+        // A forced free price makes a cap ignore a known card rate, so it never
+        // reads as an ordinary local-model price (PR #153 review).
+        summary: price.kind === 'free' && price.force === true
+          ? 'free, forced: a cap counts this model as $0 even though a rate card prices it'
+          : price.kind === 'free' ? 'free (local model)'
           : price.kind === 'like' ? `like ${price.like}`
           : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''}${price.cacheWrite1h ? `, 1-hour cache write $${price.cacheWrite1h}` : ''} per 1M tokens`,
         ...(price.kind === 'rate' ? { rate: {
@@ -1009,6 +1013,7 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
           ...(price.cacheWrite1h === undefined ? {} : { cacheWrite1h: price.cacheWrite1h }),
         } } : {}),
         ...(price.kind === 'like' ? { like: price.like } : {}),
+        ...(price.kind === 'free' && price.force === true ? { forced: true as const } : {}),
       })),
       boundary: 'Recorded cost (estimated). Declaring a price leaves recorded requests unchanged until you re-price them.',
     };

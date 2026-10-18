@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 2a97a9ba8ac2b9a19eebcf48c7b5aa90f76271509d93f460ec339ad773fc43a6 */
+/** Source SHA-256: 83117b19db99af4006b7155d2e3008a5e657c9247ca1345fb5cb1d688f45e086 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1913,6 +1913,8 @@ export interface DeclaredPrice {
   /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
   summary: string;
   declaredAt: string;
+  /** A free price stored with --force: a cap counts the model as $0 even though a rate card prices it (PR #153 review). */
+  forced?: true;
   /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
   rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;

@@ -458,12 +458,21 @@ export function cardEntryAnywhere(model: string): CardEntry | null {
   const bundled = readValidPricing(BUNDLED_PRICING_PATH);
   if (bundled) cards.push([bundled, 'bundled']);
   try {
+    // Hash names carry no order and directory listing order is unspecified, so
+    // archives are taken newest first by the fetch time their provenance
+    // records; a card being activated was archived last and comes first. An
+    // archive with no valid provenance comes after every dated one (PR #153 review).
     const archiveDir = join(segreantHome(), 'pricing', 'cards');
+    const archives: Array<{ card: PricingFile; fetchedMs: number }> = [];
     for (const name of existsSync(archiveDir) ? readdirSync(archiveDir) : []) {
       if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
       const archived = readValidPricing(join(archiveDir, name));
-      if (archived) cards.push([archived, 'archive']);
+      if (!archived) continue;
+      const fetchedAt = readCardProvenance(name.slice(0, 64))?.fetchedAt;
+      archives.push({ card: archived, fetchedMs: fetchedAt === undefined ? Number.NEGATIVE_INFINITY : Date.parse(fetchedAt) });
     }
+    archives.sort((a, b) => b.fetchedMs - a.fetchedMs);
+    for (const a of archives) cards.push([a.card, 'archive']);
   } catch { /* an unreadable archive adds nothing; the other cards still count */ }
   for (const [card, source] of cards) {
     for (const [provider, p] of Object.entries(card.providers)) {
