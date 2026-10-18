@@ -64,8 +64,12 @@ import { IMPORT_REGISTRY } from '../connect/registry.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
+import { declarePrice, unknownModels } from '../cost/declarations.ts';
+import { previewReprice, applyReprice } from '../cost/reprice.ts';
+import { modelNameError, removePriceOverride, type PriceOverrideInput } from '../cost/overrides.ts';
 import { summarizeBasis } from '../cost/basis.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { activePriceOverrides } from '../cost/overrides.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
@@ -220,7 +224,8 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
     // in the browser, which answered `complete` for a window with no spend in it.
     claimSupport: meteredClaimSupport({
       totalCostUsd: pricingWindow.totalCostUsd,
-      estimatedCostUsd: pricingWindow.estimatedCostUsd,
+      // Prices you set are not list prices, so they never count as list support.
+      estimatedCostUsd: pricingWindow.estimatedCostUsd + pricingWindow.declaredCostUsd,
       retention,
     }),
     retention,
@@ -646,7 +651,7 @@ function buildStatement(store: Store, raw: string | null, top: number | null): S
         requests: summary.requests,
         claimSupport: meteredClaimSupport({
           totalCostUsd: pricingWindow.totalCostUsd,
-          estimatedCostUsd: pricingWindow.estimatedCostUsd,
+          estimatedCostUsd: pricingWindow.estimatedCostUsd + pricingWindow.declaredCostUsd,
           retention,
         }),
         basis,
@@ -985,6 +990,93 @@ export function handlePricing({ res, url, store, config }: RouteContext): void {
   } catch (err) {
     return json(res, 500, { error: String(err) });
   }
+}
+
+export function handlePricingUnknown({ res, store }: RouteContext): void {
+  try {
+    const payload: DashboardResponseFor<'pricing-unknown'> = {
+      models: unknownModels(store), demo: isDemo(),
+      // Sample data shows no real declarations (activePriceOverrides is empty in demo mode).
+      declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => ({
+        model, kind: price.kind, declaredAt: price.declaredAt,
+        summary: price.kind === 'free' ? 'free (local model)'
+          : price.kind === 'like' ? `like ${price.like}`
+          : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''} per 1M tokens`,
+        ...(price.kind === 'rate' ? { rate: {
+          input: price.input, output: price.output,
+          ...(price.cacheRead === undefined ? {} : { cacheRead: price.cacheRead }),
+          ...(price.cacheWrite === undefined ? {} : { cacheWrite: price.cacheWrite }),
+        } } : {}),
+        ...(price.kind === 'like' ? { like: price.like } : {}),
+      })),
+      boundary: 'Recorded cost (estimated). Declaring a price leaves recorded requests unchanged until you re-price them.',
+    };
+    json(res, 200, payload);
+  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : String(error) }); }
+}
+
+/** Small local pricing operations share a strict 16 KiB JSON boundary. */
+async function pricingBody(req: http.IncomingMessage, allowed: readonly string[]): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of req) {
+    bytes += (chunk as Buffer).byteLength;
+    if (bytes > 16_384) {
+      req.resume();
+      throw new PricingBodyTooLarge();
+    }
+    chunks.push(chunk as Buffer);
+  }
+  let body: unknown;
+  try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw new Error('request must contain valid JSON'); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('request must be an object');
+  if (Object.keys(body).some((key) => !allowed.includes(key))) throw new Error('request has an unknown field');
+  return body as Record<string, unknown>;
+}
+
+class PricingBodyTooLarge extends Error {}
+
+function pricingWrite(context: RouteContext, allowed: readonly string[], action: (body: Record<string, unknown>) => unknown): void {
+  void (async () => {
+    try {
+      const body = await pricingBody(context.req, allowed);
+      if (isDemo()) return json(context.res, 409, { error: new DemoWriteBlockedError('the pricing change').message });
+      json(context.res, 200, action(body));
+    } catch (error) {
+      json(context.res, error instanceof PricingBodyTooLarge ? 413 : 400, {
+        error: error instanceof PricingBodyTooLarge ? 'pricing request exceeds bounded dashboard limit' : error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+}
+
+export function handlePricingDeclare(context: RouteContext): void {
+  pricingWrite(context, ['model', 'kind', 'input', 'output', 'cacheRead', 'cacheWrite', 'like'], (body) => {
+    const { model, ...input } = body;
+    const error = modelNameError(model);
+    if (error) throw new Error(error);
+    // setPriceOverride validates kind-specific fields and decimal strings; no coercion.
+    const price = declarePrice(model as string, input as PriceOverrideInput);
+    return { ok: true, model: model as string, price } satisfies DashboardResponseFor<'pricing-declare'>;
+  });
+}
+
+export function handlePricingUnset(context: RouteContext): void {
+  pricingWrite(context, ['model'], (body) => {
+    const error = modelNameError(body.model);
+    if (error) throw new Error(error);
+    const model = body.model as string;
+    return { ok: true, model, removed: removePriceOverride(model) } satisfies DashboardResponseFor<'pricing-unset'>;
+  });
+}
+
+export function handleReprice(context: RouteContext): void {
+  pricingWrite(context, ['apply'], (body) => {
+    if (typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
+    const { updates: _updates, priceEvidence: _legacyCliEvidence, ...report } = body.apply ? applyReprice(context.store) : previewReprice(context.store);
+    return { ...report, demo: false } satisfies DashboardResponseFor<'reprice'>;
+  });
 }
 
 export function handleExportCsv({ res, url, store }: RouteContext): void {
@@ -1970,6 +2062,10 @@ export const ROUTES: readonly Route[] = [
   apiRoute('billing-write', handleBillingWrite),
   apiRoute('economic', handleEconomic),
   apiRoute('pricing', handlePricing),
+  apiRoute('pricing-unknown', handlePricingUnknown),
+  apiRoute('pricing-declare', handlePricingDeclare),
+  apiRoute('pricing-unset', handlePricingUnset),
+  apiRoute('reprice', handleReprice),
   apiRoute('export-csv', handleExportCsv),
   apiRoute('realization', handleRealization),
   apiRoute('guide', handleGuide),

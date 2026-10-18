@@ -101,6 +101,15 @@ web/
   what the page just saved. `holdFocus` keeps keyboard focus on the rebuilt
   control, or moves it to the next step's first control
   (`test/dashboard-workflow-focus.browser.mjs`).
+- **Prices are declared separately from history corrections.** Unpriced models
+  (`pricing-unknown`) lists current guesses through `GET /api/pricing/unknown`.
+  `POST /api/pricing/declare` and `/api/pricing/unset` share the CLI's validation
+  and leave recorded amounts unchanged. `POST /api/reprice` previews with
+  `apply: false` and writes with `apply: true`, through the same cost computation
+  as the CLI. All three POST routes require the local header, a strict JSON body
+  of at most 16 KiB, and non-demo mode. The history drawer requires typing
+  `reprice`, labels old and new amounts by basis, shows what was applied, and
+  refreshes the metered/value claims (`test/dashboard-pricing-drawers.browser.mjs`).
 - **The Statement is one calendar month, four claims, never summed.**
   `GET /api/statement?month=YYYY-MM` and `GET /api/statement.csv` come from one
   `buildStatement`. Months are local midnight, half-open. A billed or allocated

@@ -1,0 +1,220 @@
+// Where a declared price must NOT reach: the provider is never called while the
+// declarations file is broken, and the sample data never takes a real declaration.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { once } from 'node:events';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const home = mkdtempSync(join(tmpdir(), 'segreant-override-boundaries-'));
+process.env.SEGREANT_HOME = home;
+
+const { createProxyServer } = await import('../src/proxy/server.ts');
+const { DEFAULT_CONFIG } = await import('../src/config.ts');
+const { Store } = await import('../src/store/db.ts');
+const { setPriceOverride, removePriceOverride, overridesPath } = await import('../src/cost/overrides.ts');
+const { seedDemo } = await import('../src/demo/seed.ts');
+
+async function listen(server: http.Server): Promise<string> {
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+const close = (server: http.Server): Promise<void> => new Promise((resolve) => server.close(() => resolve()));
+
+test('a broken declarations file stops forwarding before the provider is called, and repairing it resumes (PR #146 review)', async () => {
+  let upstreamRequests = 0;
+  const upstream = http.createServer((_req, res) => {
+    upstreamRequests += 1;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'gpt-4o', usage: { prompt_tokens: 1, completion_tokens: 1 } }));
+  });
+  const upstreamBase = await listen(upstream);
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.upstreams.openai = upstreamBase;
+  const store = new Store(join(home, 'proxy.db'));
+  const proxy = createProxyServer({ store, config });
+  const proxyBase = await listen(proxy);
+  const send = () => fetch(`${proxyBase}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  try {
+    mkdirSync(join(home, 'pricing'), { recursive: true });
+    writeFileSync(overridesPath(), '{ "version": 1, "models": { "acme": { "kind": "rate" } } }');
+    const refused = await send();
+    assert.equal(refused.status, 503);
+    assert.equal(((await refused.json()) as { error?: { code?: string } }).error?.code, 'budget_enforcement_unavailable');
+    assert.equal(upstreamRequests, 0, 'nothing is sent while a declared price cannot be read');
+
+    rmSync(overridesPath());
+    const sent = await send();
+    assert.equal(sent.status, 200, 'repairing the file resumes forwarding without a restart');
+    await sent.text();
+    assert.equal(upstreamRequests, 1);
+  } finally {
+    await close(proxy);
+    await close(upstream);
+    store.close();
+  }
+});
+
+test('a request is priced from the declarations it was checked against, even if the file breaks while it is in flight (PR #146 review)', async () => {
+  setPriceOverride('acme-inflight', { kind: 'rate', input: '2', output: '8' });
+  const upstream = http.createServer((_req, res) => {
+    // Someone breaks the file while the provider is answering.
+    writeFileSync(overridesPath(), '{ "version": 1, "models": { "x": { "kind": "rate" } } }');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'acme-inflight', usage: { prompt_tokens: 1000, completion_tokens: 0 } }));
+  });
+  const upstreamBase = await listen(upstream);
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.upstreams.openai = upstreamBase;
+  const store = new Store(join(home, 'inflight.db'));
+  const proxy = createProxyServer({ store, config });
+  const proxyBase = await listen(proxy);
+  try {
+    const response = await fetch(`${proxyBase}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'acme-inflight', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+    assert.equal(response.status, 200, 'the answer the provider charged for reaches the client');
+    await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const recorded = store.pricingEvidenceByModel(0, Date.now() + 60_000);
+    assert.equal(recorded.length, 1, 'the charged request is in the ledger');
+    assert.equal(recorded[0]!.requests, 1);
+    assert.equal(recorded[0]!.costBasis, 'user_declared_price');
+    assert.ok(Math.abs(recorded[0]!.costUsd - 0.002) < 1e-9, 'priced at the declaration it was checked against');
+  } finally {
+    await close(proxy);
+    await close(upstream);
+    store.close();
+    rmSync(overridesPath(), { force: true });
+  }
+});
+
+test('the sample data is priced from the card, whatever the user declared (PR #146 review)', () => {
+  const now = Date.parse('2026-10-15T12:00:00Z');
+  const seed = (name: string) => {
+    const store = new Store(join(home, name));
+    try { return seedDemo(store, { now }); } finally { store.close(); }
+  };
+  const plain = seed('demo-plain.db');
+  setPriceOverride('gpt-4o', { kind: 'free' });
+  setPriceOverride('claude-sonnet-4-6', { kind: 'rate', input: '99', output: '99' });
+  try {
+    const declared = seed('demo-declared.db');
+    assert.equal(declared.totalCostUsd, plain.totalCostUsd);
+    assert.equal(declared.requests, plain.requests);
+  } finally {
+    removePriceOverride('gpt-4o');
+    removePriceOverride('claude-sonnet-4-6');
+  }
+});
+
+test.after(() => rmSync(home, { recursive: true, force: true }));
+
+test('a period priced by your own prices is not claimed as complete list-price support (PR #146 review)', async () => {
+  const { buildOverview } = await import('../src/dashboard/routes.ts');
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  setPriceOverride('acme-support-7b', { kind: 'rate', input: '2', output: '8' });
+  const store = new Store(join(home, 'support.db'));
+  try {
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+    const c = computeCost('openai', 'acme-support-7b', usage);
+    assert.equal(c.estimated, false, 'a declared price is resolved, so a reprice can write it');
+    store.insertRequest({
+      requestId: 'declared-1', sessionId: null, tsEpochMs: Date.now() - 60_000, provider: 'openai', model: 'acme-support-7b',
+      project: 'p', taskWeight: 1, ...usage, costUsd: c.costUsd, estimated: c.estimated, streamed: false, statusCode: 200, durationMs: 1,
+      pricing: c.pricing,
+    });
+    const support = buildOverview(store, structuredClone(DEFAULT_CONFIG), '30d').claimSupport;
+    assert.equal(support.profile.monetaryBasis, 'mixed');
+    assert.equal(support.profile.coverage, 'partial');
+  } finally {
+    store.close();
+    removePriceOverride('acme-support-7b');
+  }
+});
+
+test('one reprice plan prices every row from the same declarations, even if the file changes midway (PR #146 review)', async () => {
+  const { withPricingSnapshot, computeCost } = await import('../src/cost/pricing.ts');
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  setPriceOverride('acme-snap', { kind: 'rate', input: '2', output: '8' });
+  try {
+    const [first, second] = withPricingSnapshot(() => {
+      const a = computeCost('openai', 'acme-snap', usage).costUsd;
+      setPriceOverride('acme-snap', { kind: 'rate', input: '5', output: '8' }); // another process, midway
+      return [a, computeCost('openai', 'acme-snap', usage).costUsd];
+    });
+    assert.equal(first, 2);
+    assert.equal(second, 2, 'the plan keeps the declarations it started with');
+    assert.equal(computeCost('openai', 'acme-snap', usage).costUsd, 5, 'the next plan reads the new price');
+  } finally {
+    removePriceOverride('acme-snap');
+  }
+});
+
+test('sample data never reads, shows or writes your real prices (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { activePriceOverrides } = await import('../src/cost/overrides.ts');
+  const { handlePricingUnknown } = await import('../src/dashboard/routes.ts');
+  setPriceOverride('acme-negotiated', { kind: 'rate', input: '0.5', output: '1' });
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  const store = new Store(join(home, 'demo-route.db'));
+  process.env.SEGREANT_DEMO = '1';
+  try {
+    assert.deepEqual(Object.keys(activePriceOverrides()), []);
+    assert.notEqual(computeCost('openai', 'acme-negotiated', usage).pricing.rateMatchKind, 'user_declared');
+    let body = '';
+    const res = { writeHead() { return this; }, setHeader() {}, end(chunk?: string) { body = chunk ?? ''; } };
+    handlePricingUnknown({ res, store } as never);
+    const payload = JSON.parse(body) as { declared: unknown[]; demo: boolean };
+    assert.equal(payload.demo, true);
+    assert.deepEqual(payload.declared, [], 'no real model name or rate reaches the sample screen');
+    assert.throws(() => setPriceOverride('acme-demo-write', { kind: 'free' }), /Demo mode only shows sample data/);
+  } finally {
+    delete process.env.SEGREANT_DEMO;
+    store.close();
+  }
+  assert.equal(computeCost('openai', 'acme-negotiated', usage).pricing.rateMatchKind, 'user_declared', 'outside the demo the price applies again');
+  removePriceOverride('acme-negotiated');
+});
+
+// Last: it replaces the active card for this process.
+test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
+  const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');
+  const { previewReprice, applyReprice } = await import('../src/cost/reprice.ts');
+  const store = new Store(join(home, 'reprice-exact.db'));
+  try {
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+    const guess = computeCost('openai', 'acme-custom-1', usage);
+    assert.equal(guess.pricing.rateMatchKind, 'fallback');
+    assert.ok(guess.exact, 'a proxied guess carries an exact economic amount');
+    store.insertRequest({
+      requestId: 'exact-guess', sessionId: null, tsEpochMs: Date.now() - 60_000, provider: 'openai', model: 'acme-custom-1',
+      project: 'p', taskWeight: 1, ...usage, costUsd: guess.costUsd, estimated: true, streamed: false, statusCode: 200, durationMs: 1,
+      pricing: guess.pricing, economicAmount: guess.exact!.total,
+    });
+    // A custom card that knows the model but states no decimal companions.
+    const applied = applyPricingManifest(JSON.stringify({
+      schema_version: 1, updated: '2026-10-01', currency: 'USD', unit: 'per_million_tokens',
+      providers: { openai: { verified: false, models: { 'acme-custom-1': { input: 0.3, output: 1.2 } } } },
+      fallbacks: { unknown: { input: 3, output: 15 } },
+    }));
+    assert.equal(applied.ok, true, applied.error ?? 'manifest refused');
+    assert.equal(computeCost('openai', 'acme-custom-1', usage).exact, undefined);
+    const plan = previewReprice(store);
+    assert.equal(plan.repriceable, 0);
+    assert.equal(plan.stillEstimated, 1);
+    assert.doesNotThrow(() => applyReprice(store), 'apply writes exactly what the preview promised');
+  } finally {
+    store.close();
+  }
+});

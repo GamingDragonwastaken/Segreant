@@ -274,6 +274,15 @@ export interface PricingConfig {
    * cloud egress rule; a denied refresh leaves the active local table intact.
    */
   autoRefresh: boolean;
+  /**
+   * When true, a running Segreant checks the public price list the first time it
+   * prices a request by a guess (a model missing from the rate card), at most
+   * once an hour. ON by default: a plain GET of a public file that sends nothing
+   * about you, the same request `pricing --refresh` makes. A separate key from
+   * autoRefresh because configs written before it existed carry
+   * `autoRefresh: false` whether or not anyone chose it.
+   */
+  lookupUnknownModels: boolean;
 }
 
 export interface PerUserConfig {
@@ -570,6 +579,7 @@ export const DEFAULT_CONFIG: SegreantConfig = {
     manifestUrl: null,
     maxAgeDays: 30,
     autoRefresh: false,
+    lookupUnknownModels: true,
   },
   perUser: {
     enabled: false,
@@ -795,6 +805,9 @@ export function loadConfig(): SegreantConfig {
     port: sanitizePort(cfg.port, DEFAULT_CONFIG.port),
     dashboardPort: sanitizePort(cfg.dashboardPort, DEFAULT_CONFIG.dashboardPort),
   };
+  if (typeof cfg.pricing.lookupUnknownModels !== 'boolean') {
+    throw new ConfigValidationError('pricing.lookupUnknownModels must be true or false');
+  }
   validateBudgetConfig(cfg.budget);
   validateFeaturesConfig(cfg.features);
   validatePlansConfig(cfg.plans);

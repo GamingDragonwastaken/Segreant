@@ -9,9 +9,9 @@ import { join } from 'node:path';
 // must not change what they see. Each test file runs in its own process, so this is airtight.
 process.env.SEGREANT_HOME = mkdtempSync(join(tmpdir(), 'segreant-home-'));
 
-import { computeCost, rateFor } from '../src/cost/pricing.ts';
-import { formatMoneyAmount } from '../src/economics/money.ts';
-import { normalizeAnthropicUsage, normalizeOpenAIUsage } from '../src/proxy/usage.ts';
+const { computeCost, rateFor } = await import('../src/cost/pricing.ts');
+const { formatMoneyAmount } = await import('../src/economics/money.ts');
+const { normalizeAnthropicUsage, normalizeOpenAIUsage } = await import('../src/proxy/usage.ts');
 
 test('Anthropic rate is exact for a known model', () => {
   const { rate, estimated, pricing } = rateFor('anthropic', 'claude-opus-4-8');

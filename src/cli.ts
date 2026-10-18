@@ -253,6 +253,14 @@ function cmdHelp(): void {
                           when stale; --auto off to disable)
                           Evidence: pricing --coverage [--days N|--all] (--json;
                           read-only historical card/match cohorts)
+                          Declare: pricing set <model> --input <usd> --output <usd>
+                            [--cache-read <usd>] [--cache-write <usd>] (USD per 1M tokens)
+                          Or: pricing set <model> --like <known-model>
+                          Or: pricing set <model> --free (user-declared local price)
+                          Remove: pricing unset <model>
+                          Still need a price: pricing unknown [--json]
+                          Declarations leave recorded cost unchanged; segreant reprice
+                          previews changes, --apply writes them.
     reprice               Re-cost rows that were priced with a fallback estimate,
                           using the current rate card — only rows the card now
                           resolves EXACTLY are rewritten; remaining estimates are
