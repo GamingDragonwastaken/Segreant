@@ -92,11 +92,18 @@ test('a free price that was not forced never zeroes a model a card prices, whate
     const card = structuredClone(loadPricing());
     card.providers['openai']!.models['acme-later-cloud'] = { input: 5, output: 20 };
     mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
-    writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
-    // Pricing uses the card this process prices with: until it loads the new
-    // card the free price stands, so one reprice plan never mixes the two.
-    assert.equal(rateFor('openai', 'acme-later-cloud').pricing.rateMatchKind, 'user_declared_free');
-    loadPricing(true);
+    // Pricing uses the card this process prices with. A card written while a
+    // reprice plan is pinned does not change that plan: the free price stands
+    // for the whole plan. At the next freshness check the new card is loaded
+    // and its price counts.
+    const { withPricingSnapshot, resetPricingFreshnessForTests } = await import('../src/cost/pricing.ts');
+    const inPlan = withPricingSnapshot(() => {
+      writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
+      resetPricingFreshnessForTests();
+      return rateFor('openai', 'acme-later-cloud').pricing.rateMatchKind;
+    });
+    assert.equal(inPlan, 'user_declared_free');
+    resetPricingFreshnessForTests();
     const later = rateFor('openai', 'acme-later-cloud');
     assert.equal(later.pricing.rateMatchKind, 'exact_provider', 'once loaded, the card price counts');
     assert.equal(later.rate.input, 5);
