@@ -52,12 +52,18 @@ function planReprice(store: Store) {
   const updates: RepriceUpdate[] = [];
   const byModel = new Map<string, RepriceModel>();
   let stillEstimated = 0;
+  // Rows with cache writes whose duration was never recorded (before Segreant
+  // kept it): priced at the 5-minute rate, as they were first priced, and
+  // counted so the preview says so (PR #146 review).
+  let cacheDurationUnknown = 0;
   for (const r of rows) {
     const c = computeCost(r.provider as Provider, r.model, {
       inputTokens: r.inputTokens, outputTokens: r.outputTokens,
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
+      ...(r.cacheWriteTtl === null ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
     });
     if (c.estimated) { stillEstimated++; continue; }
+    if (r.cacheWriteTokens > 0 && r.cacheWriteTtl === null) cacheDurationUnknown++;
     // A row with an exact economic event can only be corrected by an exact
     // amount. A custom card may omit the decimal companions, and the plan used
     // to promise such a row, then --apply refused it and rolled back the whole
@@ -75,7 +81,7 @@ function planReprice(store: Store) {
     byModel.set(key, agg);
   }
   return {
-    applied: false, estimatedRows: rows.length, repriceable: updates.length, stillEstimated,
+    applied: false, estimatedRows: rows.length, repriceable: updates.length, stillEstimated, cacheDurationUnknown,
     totalBeforeUsd: [...byModel.values()].reduce((a, v) => a + v.beforeUsd, 0),
     totalAfterUsd: [...byModel.values()].reduce((a, v) => a + v.afterUsd, 0),
     priceEvidence: repriceEvidence(updates),

@@ -241,6 +241,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         outputTokens: ev.outputTokens,
         cacheWriteTokens: ev.cacheWriteTokens,
         cacheReadTokens: ev.cacheReadTokens,
+        ...(ev.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: ev.cacheWriteTtl }),
         reasoningTokens: 0,
         costUsd: cost.costUsd,
         economicAmount: cost.exact?.total,

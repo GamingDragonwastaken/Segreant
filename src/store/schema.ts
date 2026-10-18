@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS requests (
   scope_capture_status TEXT NOT NULL DEFAULT 'legacy_unknown',
   provider_scope_declaration_id TEXT,
   attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown',
-  capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown'
+  capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown',
+  cache_write_ttl   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -1187,6 +1188,13 @@ function migrate(db: DatabaseSync): void {
   const cols = db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'user')) {
     db.prepare('ALTER TABLE requests ADD COLUMN user TEXT').run();
+  }
+  if (!cols.some((c) => c.name === 'cache_write_ttl')) {
+    // The cache-write duration ('5m' or '1h') a request was priced with. No
+    // backfill: an older row does not record it, so it stays NULL (unknown),
+    // and a reprice says how many rows it priced at the 5-minute rate for that
+    // reason (PR #146 review).
+    db.prepare('ALTER TABLE requests ADD COLUMN cache_write_ttl TEXT').run();
   }
   if (!cols.some((c) => c.name === 'source')) {
     db.prepare('ALTER TABLE requests ADD COLUMN source TEXT').run();

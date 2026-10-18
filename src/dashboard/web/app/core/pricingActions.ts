@@ -283,7 +283,8 @@ export function repriceAction(cap: Capability): ActionSpec {
         rows: changedRows(result),
         notes: ['Only recorded estimates change. Each previous amount is kept in the request’s price history.',
           'Apply uses the card, declarations and requests current at that moment. It shows the amounts it actually wrote.',
-          'Value snapshot costs are updated on their recorded basis. Older snapshots whose basis cannot be recovered are marked stale. Outcomes stay the same.'],
+          'Value snapshot costs are updated on their recorded basis. Older snapshots whose basis cannot be recovered are marked stale. Outcomes stay the same.',
+          ...(result.cacheDurationUnknown > 0 ? [`${count(result.cacheDurationUnknown)} of these requests were recorded before Segreant kept the cache-write duration, so their cache writes are priced at the 5-minute rate.`] : [])],
       };
     },
     commit: async () => {
