@@ -440,11 +440,15 @@ export function loadPricing(force = false): PricingFile {
     if (pinnedDepth > 0 || now - lastFreshnessCheckMs < FRESHNESS_INTERVAL_MS) return cached;
     lastFreshnessCheckMs = now;
     if (diskIdentity() === loadedIdentity) return cached;
-    // A running process adopts only a committed card: an active card with no
-    // provenance is a refresh in progress or one that failed, so the loaded
-    // card stands (PR #154 review). A legacy card is still read at startup.
-    if (existsSync(cachePath()) && readProvenance() === null) return cached;
   }
+  // A running process, forced or not, switches only to a committed card: an
+  // active card with no provenance that appears after startup is a refresh in
+  // progress or one that failed, and the loaded card stands. A process that
+  // started on a legacy card (no provenance) keeps following that file's edits.
+  // A legacy card that first appears after startup is read at the next start
+  // (PR #154 review).
+  const runningOnLegacy = cachedSource === 'cache' && cachedProvenance === null;
+  if (cached && !runningOnLegacy && existsSync(cachePath()) && readProvenance() === null) return cached;
   lastFreshnessCheckMs = performance.now();
   loadedIdentity = diskIdentity();
   // Prefer the refreshed cache when present AND structurally valid; otherwise
