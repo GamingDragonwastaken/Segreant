@@ -167,3 +167,28 @@ test('a first refresh still in progress in another process is not adopted', () =
   assert.equal(rateFor('openai', MODEL).rate.input, 9);
   rmSync(join(home, 'pricing'), { recursive: true, force: true });
 });
+
+test('a forced reload does not adopt an uncommitted card either', () => {
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+  refreshOnDisk(cardAt(9), { stopBeforeProvenance: true });
+  loadPricing(true);
+  assert.equal(rateFor('openai', MODEL).pricing.rateMatchKind, 'fallback');
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+});
+
+test('a process started on a legacy card follows edits to it', async () => {
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  mkdirSync(join(home, 'pricing'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(cardAt(2)));
+  // A fresh module instance is a fresh process: it starts on the legacy card.
+  const freshInstance: string = '../src/cost/pricing.ts?started-on-legacy';
+  const fresh = await import(freshInstance) as typeof import('../src/cost/pricing.ts');
+  assert.equal(fresh.rateFor('openai', MODEL).rate.input, 2);
+  writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(cardAt(60)));
+  fresh.resetPricingFreshnessForTests();
+  assert.equal(fresh.rateFor('openai', MODEL).rate.input, 60);
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+});
