@@ -244,6 +244,8 @@ test('a reprice prices cache writes at the duration they were recorded with (PR 
 test('an older ledger gains the cache-write duration column on open, with no guessed values (PR #146 review)', async () => {
   const path = join(home, 'pre-ttl.db');
   const old = new Store(path);
+  old.insertRequest({ requestId: 'before-column', sessionId: null, tsEpochMs: 1_000, provider: 'openai', model: 'm', project: 'p', taskWeight: 1,
+    inputTokens: 1, outputTokens: 1, cacheWriteTokens: 5, cacheReadTokens: 0, reasoningTokens: 0, costUsd: 0.1, estimated: true, streamed: false, statusCode: 200, durationMs: 1 });
   old.close();
   const { DatabaseSync } = await import('node:sqlite');
   const raw = new DatabaseSync(path);
@@ -252,9 +254,31 @@ test('an older ledger gains the cache-write duration column on open, with no gue
   const reopened = new Store(path);
   reopened.close();
   const check = new DatabaseSync(path);
-  const cols = check.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
+  const cols = check.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string; notnull: number; dflt_value: string | null }>;
+  const recorded = check.prepare("SELECT cache_write_ttl AS ttl FROM requests WHERE request_id = 'before-column'").get() as { ttl: string };
   check.close();
-  assert.ok(cols.some((c) => c.name === 'cache_write_ttl'));
+  const column = cols.find((c) => c.name === 'cache_write_ttl');
+  assert.ok(column && column.notnull === 1 && column.dflt_value === "'legacy_unknown'", 'a NOT NULL column with the legacy sentinel, per the store contract');
+  assert.equal(recorded.ttl, 'legacy_unknown', 'an older row says it predates the column; nothing is guessed');
+});
+
+test('a plan comparison counts list prices, never a price you set (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { importedListCost } = await import('../src/cli/planCmd.ts');
+  const store = new Store(join(home, 'plan-compare.db'));
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+  try {
+    const listed = computeCost('anthropic', 'claude-sonnet-4-6', usage).costUsd;
+    setPriceOverride('claude-sonnet-4-6', { kind: 'free' });
+    const c = computeCost('anthropic', 'claude-sonnet-4-6', usage);
+    assert.equal(c.costUsd, 0);
+    store.insertRequestIfNew({ requestId: 'plan-1', sessionId: null, tsEpochMs: 5_000, provider: 'anthropic', model: 'claude-sonnet-4-6', project: 'p', taskWeight: 1,
+      ...usage, costUsd: c.costUsd, estimated: c.estimated, streamed: true, statusCode: 200, durationMs: null, pricing: c.pricing, source: 'claude-code', via: 'import' });
+    assert.equal(importedListCost(store, 'claude-code', 0, 10_000), listed, 'the plan line still shows the list-price work done');
+  } finally {
+    store.close();
+    removePriceOverride('claude-sonnet-4-6');
+  }
 });
 
 // Last: it replaces the active card for this process.
@@ -263,7 +287,7 @@ test('a reprice plan never promises a row it cannot write exactly (PR #146 revie
   const { previewReprice, applyReprice } = await import('../src/cost/reprice.ts');
   const store = new Store(join(home, 'reprice-exact.db'));
   try {
-    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 1_000, cacheReadTokens: 0, reasoningTokens: 0 };
     const guess = computeCost('openai', 'acme-custom-1', usage);
     assert.equal(guess.pricing.rateMatchKind, 'fallback');
     assert.ok(guess.exact, 'a proxied guess carries an exact economic amount');
@@ -283,6 +307,7 @@ test('a reprice plan never promises a row it cannot write exactly (PR #146 revie
     const plan = previewReprice(store);
     assert.equal(plan.repriceable, 0);
     assert.equal(plan.stillEstimated, 1);
+    assert.equal(plan.cacheDurationUnknown, 0, 'a row the plan leaves untouched is not said to be priced at the 5-minute rate');
     assert.doesNotThrow(() => applyReprice(store), 'apply writes exactly what the preview promised');
   } finally {
     store.close();

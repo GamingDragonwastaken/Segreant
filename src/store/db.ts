@@ -316,7 +316,7 @@ const REQUEST_ROW_SELECT = `SELECT request_id AS requestId, session_id AS sessio
                 scope_capture_status AS scopeCaptureStatus,
                 provider_scope_declaration_id AS providerScopeDeclarationId,
                 attribution_basis AS attributionBasis,
-                capture_coverage AS captureCoverage
+                capture_coverage AS captureCoverage, cache_write_ttl AS cacheWriteTtlRecorded
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project`;
 
 /**
@@ -509,6 +509,7 @@ export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
 const SCOPE_CAPTURE_STATUSES = ['legacy_unknown', 'unscoped', 'declared_unverified', 'not_observed'] as const satisfies readonly ScopeCaptureStatus[];
 const CAPTURE_COVERAGES = ['complete', 'truncated', 'unknown', 'legacy_unknown'] as const;
+const CACHE_WRITE_TTLS = ['5m', '1h', 'not_recorded', 'legacy_unknown'] as const;
 
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
@@ -518,10 +519,15 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     rateMatchKind,
     rateMatchProvider,
     rateMatchModel,
+    cacheWriteTtlRecorded,
     ...row
   } = record;
+  // 'not_recorded' and 'legacy_unknown' read as absent; any other string is
+  // damage (D-251) and refuses rather than passing through.
+  const ttl = vocabularyValue(cacheWriteTtlRecorded, CACHE_WRITE_TTLS, 'cacheWriteTtl', 'legacy_unknown');
   return {
     ...(row as unknown as RequestRow),
+    ...(ttl === '5m' || ttl === '1h' ? { cacheWriteTtl: ttl } : {}),
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
@@ -957,7 +963,7 @@ export class Store {
         scope.declarationId,
         row.attributionBasis ?? 'legacy_unknown',
         row.captureCoverage ?? 'complete',
-        row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : null,
+        row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (row.economicAmount !== undefined) {
