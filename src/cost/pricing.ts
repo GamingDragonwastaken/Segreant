@@ -425,13 +425,12 @@ export function loadPricing(force = false): PricingFile {
 }
 
 /**
- * The current card's entry for exactly this model name. "Current" is, newest
- * first: the active card on disk when it differs from the verified one (a
- * refresh caught between writing the card and its provenance), the verified
- * card on disk (a refresh in another process this one has not loaded), then
- * the card this process loaded. Archived cards and the bundled card are
- * history: a model a later card removed is not priced by them (PR #153 review).
- * Reads only.
+ * The current card's entry for exactly this model name. The current card is
+ * the one Segreant's verified loader would load now: the verified card on
+ * disk when it differs from the card this process loaded (a refresh in another
+ * process), else the loaded card. An unverified or failed activation is not
+ * current; the loader already recovers the previous card for it. Archived
+ * cards and the bundled card are history (PR #153 review). Reads only.
  */
 export interface CardEntry {
   provider: string;
@@ -439,8 +438,8 @@ export interface CardEntry {
   output: number;
   rate: ModelRate;
   card: PricingFile;
-  /** Which card matched: the active card mid-activation, the verified card on disk, or the loaded one. */
-  source: 'active' | 'disk' | 'loaded';
+  /** Which card matched: the verified card on disk (not yet loaded here), or the loaded one. */
+  source: 'disk' | 'loaded';
 }
 
 function entryIn(card: PricingFile, model: string, source: CardEntry['source']): CardEntry | null {
@@ -454,9 +453,7 @@ function entryIn(card: PricingFile, model: string, source: CardEntry['source']):
 export function cardEntryAnywhere(model: string): CardEntry | null {
   const loaded = loadPricing();
   const verified = loadVerifiedCache();
-  const active = readValidPricing(cachePath());
   // Exactly one card is current; it decides even when it does not list the model.
-  if (active && (!verified || pricingCardHash(active) !== pricingCardHash(verified.file))) return entryIn(active, model, 'active');
   if (verified && pricingCardHash(verified.file) !== pricingCardHash(loaded)) return entryIn(verified.file, model, 'disk');
   return entryIn(loaded, model, 'loaded');
 }
@@ -986,8 +983,6 @@ function resolved(
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
   declarationSha256: string | null = null,
-  /** The card this rate came from, when it is not the loaded one (PR #153 review). */
-  fromOtherCard: { sha256: string; sourceKind: RateCardSourceKind } | null = null,
 ): ResolvedRate {
   // rateFor always loads the active card first, so the card identity and source
   // describe this exact local computation rather than a later refresh.
@@ -1009,8 +1004,8 @@ function resolved(
       // labelled as the user's, never the card's: a changed price is then a new
       // revision that value comparisons see, and a card refresh is not
       // (PR #146 review).
-      rateCardSha256: fromOtherCard ? fromOtherCard.sha256 : fromCard ? pricingCardHash(card) : declarationSha256,
-      rateCardSourceKind: fromOtherCard ? fromOtherCard.sourceKind : fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
+      rateCardSha256: fromCard ? pricingCardHash(card) : declarationSha256,
+      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
       rateMatchKind,
       rateMatchProvider,
       rateMatchModel,
@@ -1191,19 +1186,10 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
     // process's card stale, whether it added the model or changed its rate;
     // reload the verified card when it prices the model and differs from the
     // loaded one, as a restart would. Memoized until the card files change.
-    let { entry } = cardLookup(model);
+    // After the reload the ordinary ladder below prices it, named provider first.
     if (cardLookup(model).verifiedIsNewer) {
       pricing = loadPricing(true);
       here = pricing.providers[provider]?.models;
-      ({ entry } = cardLookup(model));
-    }
-    // Mid-activation, the current card is the active one, which this process
-    // cannot load as verified: charge its rate under its own identity, with
-    // its source unknown unless recorded (PR #153 review).
-    if (entry && entry.source === 'active') {
-      const sha256 = pricingCardHash(entry.card);
-      const sourceKind: RateCardSourceKind = readCardProvenance(sha256)?.sourceKind ?? 'legacy_unknown';
-      return resolved(entry.rate, entry.provider === provider ? 'exact_provider' : 'exact_cross_provider', entry.provider, model, null, { sha256, sourceKind });
     }
   }
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
