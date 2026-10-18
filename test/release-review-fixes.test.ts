@@ -56,6 +56,8 @@ test('a reprice never turns a request whose usage was not captured into a confir
     store.insertRequest({ ...base, requestId: 'cut-off', provider: 'anthropic', model: 'claude-sonnet-4-6', ...zero, costUsd: 0, estimated: true, pricing: unpricedPricingEvidence() });
     const plan = previewReprice(store);
     assert.equal(plan.repriceable, 0);
+    assert.equal(plan.estimatedRows, 1, 'still reported as an estimate (PR #150 review)');
+    assert.equal(plan.stillEstimated, 1);
     applyReprice(store);
     assert.equal(store.requestPriceEvents('cut-off').length, 0, 'the unknown cost stays unknown');
   } finally { store.close(); }

@@ -57,6 +57,8 @@ function planReprice(store: Store) {
   // counted so the preview says so (PR #146 review).
   let cacheDurationUnknown = 0;
   for (const r of rows) {
+    // No captured usage: nothing to price it from, so it stays an estimate.
+    if (!r.usageCaptured) { stillEstimated++; continue; }
     const c = computeCost(r.provider as Provider, r.model, {
       inputTokens: r.inputTokens, outputTokens: r.outputTokens,
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
