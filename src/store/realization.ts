@@ -291,7 +291,7 @@ export function applyRepricedCosts(
   deps: RealizationDeps,
   updates: RepriceUpdate[],
   appliedAtMs: number,
-): RealizationCostSync {
+): RealizationCostSync & { writtenRequestIds: string[] } {
   const prior = db.prepare(
     `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
               cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
@@ -316,6 +316,9 @@ export function applyRepricedCosts(
        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   );
   const touched: Array<{ tsEpochMs: number; project: string }> = [];
+  // Which requests this transaction actually rewrote, so a caller reports
+  // those and not its plan (PR #146 review).
+  const writtenRequestIds: string[] = [];
   runScript(db, 'BEGIN');
   try {
     for (const u of updates) {
@@ -367,10 +370,11 @@ export function applyRepricedCosts(
         u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
       );
       touched.push({ tsEpochMs: Number(old.tsEpochMs), project: String(old.project) });
+      writtenRequestIds.push(u.requestId);
     }
     const sync = syncRealizationCosts(db, deps, touched);
     runScript(db, 'COMMIT');
-    return sync;
+    return { ...sync, writtenRequestIds };
   } catch (e) {
     runScript(db, 'ROLLBACK');
     throw e;

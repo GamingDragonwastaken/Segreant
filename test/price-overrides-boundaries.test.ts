@@ -281,6 +281,61 @@ test('a plan comparison counts list prices, never a price you set (PR #146 revie
   }
 });
 
+test('a plan comparison leaves out a declared model the card has no exact price for (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { importedListWork } = await import('../src/cli/planCmd.ts');
+  const store = new Store(join(home, 'plan-withhold.db'));
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+  try {
+    const listed = computeCost('anthropic', 'claude-sonnet-4-6', usage);
+    store.insertRequestIfNew({ requestId: 'plan-listed', sessionId: null, tsEpochMs: 5_000, provider: 'anthropic', model: 'claude-sonnet-4-6', project: 'p', taskWeight: 1,
+      ...usage, costUsd: listed.costUsd, estimated: listed.estimated, streamed: true, statusCode: 200, durationMs: null, pricing: listed.pricing, source: 'claude-code', via: 'import' });
+    setPriceOverride('acme-private-plan', { kind: 'rate', input: '2', output: '8' });
+    const mine = computeCost('anthropic', 'acme-private-plan', usage);
+    assert.equal(mine.pricing.costBasis, 'user_declared_price');
+    store.insertRequestIfNew({ requestId: 'plan-private', sessionId: null, tsEpochMs: 5_000, provider: 'anthropic', model: 'acme-private-plan', project: 'p', taskWeight: 1,
+      ...usage, costUsd: mine.costUsd, estimated: mine.estimated, streamed: true, statusCode: 200, durationMs: null, pricing: mine.pricing, source: 'claude-code', via: 'import' });
+    const work = importedListWork(store, 'claude-code', 0, 10_000);
+    assert.equal(work.listCostUsd, listed.costUsd, 'only the request with a published price counts as list-price work');
+    assert.equal(work.withheldRequests, 1, 'and the one left out is counted, not priced at a guess');
+  } finally {
+    store.close();
+    removePriceOverride('acme-private-plan');
+  }
+});
+
+test('a reprice reports only the rows it wrote when another reprice wrote some first (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { applyReprice } = await import('../src/cost/reprice.ts');
+  const path = join(home, 'reprice-race.db');
+  const store = new Store(path);
+  const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
+  try {
+    for (const id of ['race-1', 'race-2']) {
+      const guess = computeCost('openai', 'acme-race', usage);
+      store.insertRequest({ requestId: id, sessionId: null, tsEpochMs: 1_000, provider: 'openai', model: 'acme-race', project: 'p', taskWeight: 1,
+        ...usage, costUsd: guess.costUsd, estimated: true, streamed: false, statusCode: 200, durationMs: 1, pricing: guess.pricing });
+    }
+    setPriceOverride('acme-race', { kind: 'rate', input: '2', output: '8' });
+    // The other process commits between this one's plan and its write.
+    const write = store.applyRepricedCosts.bind(store);
+    store.applyRepricedCosts = (updates, at) => {
+      const other = new Store(path);
+      try { other.applyRepricedCosts(updates.filter((u) => u.requestId === 'race-1'), at); } finally { other.close(); }
+      return write(updates, at);
+    };
+    const result = applyReprice(store);
+    assert.equal(result.applied, true);
+    assert.equal(result.repriceable, 1, 'only the row this reprice wrote');
+    assert.equal(result.alreadyRepriced, 1, 'the other is named as already re-priced');
+    assert.equal(result.totalAfterUsd, 2);
+    assert.deepEqual(result.byModel.map((m) => m.rows), [1]);
+  } finally {
+    store.close();
+    removePriceOverride('acme-race');
+  }
+});
+
 // Last: it replaces the active card for this process.
 test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
   const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');
