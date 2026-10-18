@@ -382,3 +382,42 @@ test('the prices file is private to its owner, on every write (PR #146 review)',
     removePriceOverride('acme-private-b');
   }
 });
+
+test('an edit that keeps the file size and timestamp is still read (PR #146 review)', async () => {
+  const { loadPriceOverrides } = await import('../src/cost/overrides.ts');
+  const { readFileSync, utimesSync } = await import('node:fs');
+  try {
+    setPriceOverride('acme-same-size', { kind: 'rate', input: '1', output: '2' });
+    const path = overridesPath();
+    const fixed = new Date('2026-01-01T00:00:00Z'); // whole seconds survive every filesystem's precision
+    utimesSync(path, fixed, fixed);
+    assert.equal((loadPriceOverrides().models['acme-same-size'] as { input: string }).input, '1');
+    const mtimeMs = statSync(path).mtimeMs;
+    const before = readFileSync(path, 'utf8');
+    const after = before.replace('"input": "1"', '"input": "9"');
+    assert.equal(after.length, before.length, 'same size');
+    writeFileSync(path, after);
+    utimesSync(path, fixed, fixed);
+    assert.equal(statSync(path).mtimeMs, mtimeMs, 'same timestamp');
+    assert.equal((loadPriceOverrides().models['acme-same-size'] as { input: string }).input, '9', 'the new price, not the cached one');
+  } finally {
+    removePriceOverride('acme-same-size');
+  }
+});
+
+test('a prices file the process cannot reach refuses rather than reading as empty (PR #146 review)', {
+  skip: process.platform === 'win32' ? 'POSIX permissions only' : process.getuid?.() === 0 ? 'root reads through permissions' : false,
+}, async () => {
+  const { loadPriceOverrides, PriceOverridesError } = await import('../src/cost/overrides.ts');
+  const { chmodSync } = await import('node:fs');
+  const { dirname } = await import('node:path');
+  setPriceOverride('acme-unreachable', { kind: 'rate', input: '1', output: '2' });
+  const dir = dirname(overridesPath());
+  chmodSync(dir, 0o000);
+  try {
+    assert.throws(() => loadPriceOverrides(), (e: unknown) => e instanceof PriceOverridesError && /could not be read/.test((e as Error).message));
+  } finally {
+    chmodSync(dir, 0o700);
+    removePriceOverride('acme-unreachable');
+  }
+});
