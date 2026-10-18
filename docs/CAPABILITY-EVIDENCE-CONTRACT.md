@@ -49,11 +49,15 @@ card into provider billing, or alter signed/canonical evidence bytes.
   traffic, applies local soft/hard/velocity controls, and serves a local CLI and
   dashboard.
 - A Segreant-process egress boundary starts in `local_locked` mode: it permits
-  literal loopback HTTP(S) targets and one built-in request, a GET of the public
-  price list at its exact fixed URL (purpose `pricing_refresh`, no query or
-  fragment, public DNS answer required, receipted under rule id
-  `segreant-builtin-price-list`), and refuses every other non-loopback target
-  before DNS. `controlled_cloud` mode permits a cloud request only when an enabled,
+  literal loopback HTTP(S) targets and two built-in routes, the same in every
+  mode: a GET of the public price list at its exact fixed URL (purpose
+  `pricing_refresh`, no query or fragment, rule id `segreant-builtin-price-list`),
+  and the user's own proxied requests to the official provider APIs
+  (`https://api.anthropic.com` and `https://api.openai.com`, purpose
+  `provider_inference`, GET or POST under `/v1/`, rule ids
+  `segreant-builtin-provider-*`). Both need a public DNS answer and are receipted.
+  Every other non-loopback target is refused before DNS in `local_locked`; in
+  `controlled_cloud` mode a further cloud request is permitted only when an enabled,
   exact rule matches its purpose, data class, method, HTTPS origin, and leading
   path; it pins the selected public IP for the dial, follows no redirect, and,
   after policy evaluation, writes a redacted hash-chained `preflight_allowed`
@@ -188,7 +192,8 @@ the provider or optional egress paths above.
 - Say no Segreant-hosted telemetry by default; do not generalize that default into
   an egress guarantee or claim that proxy traffic remains on the device.
 - Say `local_locked Segreant-process transport refused non-loopback HTTP(S)
-  egress` only when that mode is active and receipts verify; say
+  egress other than its built-in routes` only when that mode is active and
+  receipts verify; say
   `controlled_cloud rule and receipt` for a permitted cloud request. Do not
   generalize either to the operating system, other applications, direct
   clients, or provider retention.

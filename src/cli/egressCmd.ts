@@ -34,11 +34,12 @@ function ruleFromFlags(flags: Flags): EgressRule | null {
 function printUsage(tty: boolean): void {
   console.log('');
   console.log(color(tty, C.bold, '  Segreant egress — process-scoped high-assurance transport'));
-  console.log(color(tty, C.gray, '  Default is local_locked: literal loopback only. No remote probe is made by this command.'));
+  console.log(color(tty, C.gray, "  Built in, in every mode: loopback, Segreant's public price list, and your requests to the"));
+  console.log(color(tty, C.gray, '  official OpenAI and Anthropic APIs. Anything else needs a rule. No remote probe is made here.'));
   console.log('');
   console.log(color(tty, C.gray, '  segreant egress status'));
-  console.log(color(tty, C.gray, '  segreant egress plan --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
-  console.log(color(tty, C.gray, '  segreant egress apply --apply --mode controlled_cloud --id openai-main --purpose provider_inference --data-class provider_request --method POST --origin https://api.openai.com --path-prefix /v1/'));
+  console.log(color(tty, C.gray, '  segreant egress plan --mode controlled_cloud --id openrouter --purpose provider_inference --data-class provider_request --method POST --origin https://openrouter.ai --path-prefix /api/'));
+  console.log(color(tty, C.gray, '  segreant egress apply --apply --mode controlled_cloud --id openrouter --purpose provider_inference --data-class provider_request --method POST --origin https://openrouter.ai --path-prefix /api/'));
   console.log(color(tty, C.gray, '  segreant egress apply --apply --mode local_locked'));
   console.log(color(tty, C.gray, '  segreant egress receipts | segreant egress verify'));
   console.log('');

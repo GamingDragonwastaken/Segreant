@@ -126,15 +126,24 @@ provider observations.
 
 All Segreant-process HTTP(S) transport is now governed by the egress boundary.
 The default `egress.mode: "local_locked"` permits literal loopback targets, plus
-one built-in exception, and refuses every other non-loopback target before DNS.
-The exception is Segreant's own price list: a GET of exactly
+two built-in routes, and refuses every other non-loopback target before DNS.
+
+The first is your own traffic to your provider. A request your tool sends to
+`https://api.anthropic.com` or `https://api.openai.com` (GET or POST under
+`/v1/`, purpose `provider_inference`) is forwarded with no setup, receipted under
+a `segreant-builtin-provider-*` rule id. It was going to that provider before
+Segreant existed; Segreant only meters it on the way. Any other upstream (a
+gateway, OpenRouter, a hosted open model) needs one exact rule, and a refused
+request prints the command.
+
+The second is Segreant's own price list: a GET of exactly
 `https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json`
 for purpose `pricing_refresh` and data class `pricing_manifest`, with no query or
 fragment. It carries nothing about the user, its DNS answer must be public, and
 it is receipted under rule id `segreant-builtin-price-list` like any cloud route.
 Without it the rate card could never update and every new model would be priced
-by a guess. `controlled_cloud` mode does not carry the exception: an operator who
-enumerates routes grants this one with its own exact rule. A cloud operation needs
+by a guess. Both routes hold in `controlled_cloud` mode too, so adding a rule for a webhook
+never cuts off your provider or your price updates. Any other cloud operation needs
 `controlled_cloud` mode plus one enabled exact rule for its purpose, data class,
 method, HTTPS origin, and leading path. Before an allowed request is dialled,
 Segreant persists redacted local receipts for policy preflight and dial start; it
