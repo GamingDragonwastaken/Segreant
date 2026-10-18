@@ -34,7 +34,8 @@ export interface EgressPolicyDecision {
 
 /**
  * Segreant's own self-maintenance downloads: fixed public files, fetched with a
- * plain GET that carries nothing about the user. They are the one exception to
+ * plain GET that carries nothing about the user. With the providers' official
+ * APIs (below), they are the built-in exceptions to
  * local_locked, because a rate card that can never update prices every new
  * model by a guess (claude-haiku-5-5 at $3/$15 against a $0.10/$0.50 list
  * price). The match is exact: purpose, data class, GET, and the full URL with no
@@ -98,14 +99,18 @@ export function isBuiltInProviderUpstream(url: string): boolean {
  * a-z, 0-9, _ or -). The hostname alone was printed before, and its dots made
  * the printed command fail with "Rule refused" (PR #148 review).
  */
-export function providerRuleId(hostname: string, method = 'POST'): string {
+export function providerRuleId(origin: string, method = 'POST'): string {
   // Rules are replaced by id, so the id must be unique per origin and method:
   // the method keeps a GET and a POST rule for one host apart, and a short hash
-  // of the full hostname keeps apart hosts whose slugs collide
-  // (api.foo-bar.com / api.foo.bar.com) or share a truncated prefix (PR #148 review).
-  const host = hostname.toLowerCase();
+  // of the full canonical origin (scheme, host and port) keeps apart hosts whose
+  // slugs collide (api.foo-bar.com / api.foo.bar.com), share a truncated
+  // prefix, or differ only by port (PR #148 review). The slug is the hostname,
+  // for a readable id.
+  let canonical: URL;
+  try { canonical = new URL(origin.includes('://') ? origin : `https://${origin}`); } catch { canonical = new URL('https://invalid.invalid'); }
+  const host = canonical.hostname.toLowerCase();
   const verb = method.toLowerCase().replace(/[^a-z]/g, '');
-  const tag = createHash('sha256').update(host).digest('hex').slice(0, 8);
+  const tag = createHash('sha256').update(canonical.origin).digest('hex').slice(0, 8);
   const slug = host.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const head = `provider-${slug}`.slice(0, 64 - tag.length - verb.length - 2).replace(/-+$/, '');
   return `${head}-${tag}-${verb}`;
@@ -116,7 +121,7 @@ export function providerRuleCommand(url: string, method = 'POST'): string | null
   let origin: URL;
   try { origin = new URL(new URL(url).origin); } catch { return null; }
   if (origin.protocol !== 'https:') return null;
-  return `segreant egress apply --apply --mode controlled_cloud --id ${providerRuleId(origin.hostname, method)} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
+  return `segreant egress apply --apply --mode controlled_cloud --id ${providerRuleId(origin.origin, method)} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
 }
 
 /** Built-in routes, the same in every mode: an operator who adds a webhook rule keeps their provider and their price list. */
@@ -160,7 +165,8 @@ function matches(rule: EgressRule, target: URL, intent: EgressRequestIntent): bo
 }
 
 /**
- * Decides before DNS. Local locked mode permits only literal loopback, so it
+ * Decides before DNS. Local locked mode permits literal loopback and the exact
+ * built-in routes (price list, official provider APIs) only, so it
  * never resolves a potential cloud host before rejecting it.
  */
 export function evaluateEgressPolicy(config: EgressConfig, intent: EgressRequestIntent): EgressPolicyDecision {
