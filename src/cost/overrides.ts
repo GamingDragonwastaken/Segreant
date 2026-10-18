@@ -14,7 +14,7 @@
  * edit that breaks it is refused with the reason, never half-read: a price that
  * silently disappeared would change what a cap counts.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { acquireConfigMutationLock, DemoReadOnlyError, isDemo, segreantHome } from '../config.ts';
 
@@ -113,20 +113,34 @@ export function validatePriceOverrides(raw: unknown): string | null {
   return null;
 }
 
-let cache: { path: string; mtimeMs: number; size: number; file: PriceOverridesFile } | null = null;
+let cache: { path: string; text: string; file: PriceOverridesFile } | null = null;
 
-/** The declared prices, re-read when the file changes. Throws PriceOverridesError when the file is broken. */
+/**
+ * The declared prices, re-read when the file's content changes. Throws
+ * PriceOverridesError when the file is broken or cannot be read.
+ *
+ * Only a missing file means "no declarations". A path the process cannot
+ * reach (a directory that lost search permission, an I/O error) used to read
+ * as absent, so a negotiated price silently dropped out of accounting and the
+ * cap (PR #146 review). The cache is keyed on the text itself, not on mtime and
+ * size: an edit that keeps both, such as a restored backup, is still seen.
+ */
 export function loadPriceOverrides(): PriceOverridesFile {
   const path = overridesPath();
-  if (!existsSync(path)) {
-    cache = null;
-    return { version: 1, models: {} };
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      cache = null;
+      return { version: 1, models: {} };
+    }
+    throw new PriceOverridesError(`${path} could not be read (${(error as NodeJS.ErrnoException)?.code ?? String(error)}); check its permissions, or remove it`);
   }
-  const st = statSync(path);
-  if (cache && cache.path === path && cache.mtimeMs === st.mtimeMs && cache.size === st.size) return cache.file;
+  if (cache && cache.path === path && cache.text === text) return cache.file;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8').replace(/^﻿/, ''));
+    parsed = JSON.parse(text.replace(/^﻿/, ''));
   } catch {
     throw new PriceOverridesError(`${path} is not valid JSON; fix it or remove it (segreant pricing unset <model> rewrites it)`);
   }
@@ -137,7 +151,7 @@ export function loadPriceOverrides(): PriceOverridesFile {
   const models: Record<string, PriceOverride> = Object.create(null);
   for (const [model, entry] of Object.entries(file.models)) models[model] = entry;
   const safe: PriceOverridesFile = { version: 1, models };
-  cache = { path, mtimeMs: st.mtimeMs, size: st.size, file: safe };
+  cache = { path, text, file: safe };
   return safe;
 }
 
