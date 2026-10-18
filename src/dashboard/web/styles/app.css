@@ -694,6 +694,8 @@ body.claim-open { overflow: hidden; }
   padding: var(--s3) var(--s4); margin-bottom: var(--s5); background: var(--panel-2);
 }
 .banner-demo { border-color: var(--violet); }
+.banner-first { border-color: var(--accent); }
+.banner-link { color: var(--accent-text); font-weight: 600; text-underline-offset: 3px; white-space: nowrap; }
 .banner-stale { border-color: var(--coral); align-items: center; justify-content: space-between; }
 .banner.banner-stale strong { color: var(--coral); }
 .banner-retry { flex: none; padding: var(--s2) var(--s4); border-radius: var(--r-sm); font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
