@@ -214,6 +214,49 @@ test('value comparisons see each price you set as its own revision (PR #146 revi
   }
 });
 
+test('a reprice prices cache writes at the duration they were recorded with (PR #146 review)', async () => {
+  const { computeCost } = await import('../src/cost/pricing.ts');
+  const { previewReprice } = await import('../src/cost/reprice.ts');
+  const store = new Store(join(home, 'ttl-reprice.db'));
+  const writes = { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000, cacheReadTokens: 0, reasoningTokens: 0 };
+  const record = (id: string, ttl?: '5m' | '1h') => {
+    const c = computeCost('openai', 'acme-ttl-reprice', { ...writes, ...(ttl ? { cacheWriteTtl: ttl } : {}) });
+    store.insertRequest({ requestId: id, sessionId: null, tsEpochMs: 1_000, provider: 'openai', model: 'acme-ttl-reprice', project: 'p', taskWeight: 1,
+      ...writes, ...(ttl ? { cacheWriteTtl: ttl } : {}), costUsd: c.costUsd, estimated: c.estimated, streamed: false, statusCode: 200, durationMs: 1, pricing: c.pricing });
+  };
+  try {
+    record('one-hour', '1h');
+    record('five-minute', '5m');
+    record('not-recorded');
+    setPriceOverride('acme-ttl-reprice', { kind: 'rate', input: '1', output: '2', cacheWrite: '1.25', cacheWrite1h: '2' });
+    const plan = previewReprice(store);
+    const after = Object.fromEntries(plan.updates.map((u) => [u.requestId, u.costUsd]));
+    assert.equal(after['one-hour'], 2, 'a 1-hour write is priced at the 1-hour price');
+    assert.equal(after['five-minute'], 1.25);
+    assert.equal(after['not-recorded'], 1.25, 'an unrecorded duration is priced as it was first priced, at the 5-minute rate');
+    assert.equal(plan.cacheDurationUnknown, 1, 'and the preview says how many rows that was');
+  } finally {
+    store.close();
+    removePriceOverride('acme-ttl-reprice');
+  }
+});
+
+test('an older ledger gains the cache-write duration column on open, with no guessed values (PR #146 review)', async () => {
+  const path = join(home, 'pre-ttl.db');
+  const old = new Store(path);
+  old.close();
+  const { DatabaseSync } = await import('node:sqlite');
+  const raw = new DatabaseSync(path);
+  raw.exec('ALTER TABLE requests DROP COLUMN cache_write_ttl');
+  raw.close();
+  const reopened = new Store(path);
+  reopened.close();
+  const check = new DatabaseSync(path);
+  const cols = check.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
+  check.close();
+  assert.ok(cols.some((c) => c.name === 'cache_write_ttl'));
+});
+
 // Last: it replaces the active card for this process.
 test('a reprice plan never promises a row it cannot write exactly (PR #146 review)', async () => {
   const { computeCost, applyPricingManifest } = await import('../src/cost/pricing.ts');

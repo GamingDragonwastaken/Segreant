@@ -247,6 +247,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
   outputTokens: number;
   cacheWriteTokens: number;
   cacheReadTokens: number;
+  cacheWriteTtl: '5m' | '1h' | null;
   costUsd: number;
 }> {
   return db
@@ -254,6 +255,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
+                cache_write_ttl AS cacheWriteTtl,
                 cost_usd AS costUsd
          FROM requests WHERE estimated = 1`,
     )
@@ -265,6 +267,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
     outputTokens: number;
     cacheWriteTokens: number;
     cacheReadTokens: number;
+    cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
   }>;
 }
