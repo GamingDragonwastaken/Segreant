@@ -1001,11 +1001,12 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
         model, kind: price.kind, declaredAt: price.declaredAt,
         summary: price.kind === 'free' ? 'free (local model)'
           : price.kind === 'like' ? `like ${price.like}`
-          : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''} per 1M tokens`,
+          : `input $${price.input}, output $${price.output}${price.cacheRead ? `, cache read $${price.cacheRead}` : ''}${price.cacheWrite ? `, cache write $${price.cacheWrite}` : ''}${price.cacheWrite1h ? `, 1-hour cache write $${price.cacheWrite1h}` : ''} per 1M tokens`,
         ...(price.kind === 'rate' ? { rate: {
           input: price.input, output: price.output,
           ...(price.cacheRead === undefined ? {} : { cacheRead: price.cacheRead }),
           ...(price.cacheWrite === undefined ? {} : { cacheWrite: price.cacheWrite }),
+          ...(price.cacheWrite1h === undefined ? {} : { cacheWrite1h: price.cacheWrite1h }),
         } } : {}),
         ...(price.kind === 'like' ? { like: price.like } : {}),
       })),
@@ -1052,7 +1053,7 @@ function pricingWrite(context: RouteContext, allowed: readonly string[], action:
 }
 
 export function handlePricingDeclare(context: RouteContext): void {
-  pricingWrite(context, ['model', 'kind', 'input', 'output', 'cacheRead', 'cacheWrite', 'like'], (body) => {
+  pricingWrite(context, ['model', 'kind', 'input', 'output', 'cacheRead', 'cacheWrite', 'cacheWrite1h', 'like'], (body) => {
     const { model, ...input } = body;
     const error = modelNameError(model);
     if (error) throw new Error(error);

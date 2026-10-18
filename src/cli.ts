@@ -255,7 +255,8 @@ function cmdHelp(): void {
                           Evidence: pricing --coverage [--days N|--all] (--json;
                           read-only historical card/match cohorts)
                           Declare: pricing set <model> --input <usd> --output <usd>
-                            [--cache-read <usd>] [--cache-write <usd>] (USD per 1M tokens)
+                            [--cache-read <usd>] [--cache-write <usd>]
+                            [--cache-write-1h <usd>] (USD per 1M tokens)
                           Or: pricing set <model> --like <known-model>
                           Or: pricing set <model> --free (user-declared local price)
                           Remove: pricing unset <model>

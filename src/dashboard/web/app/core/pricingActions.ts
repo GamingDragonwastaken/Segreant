@@ -26,7 +26,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   function draft(model: { model: string; rate?: DeclaredPrice['rate']; like?: string }) {
     const r = model.rate;
     return { model: model.model, mode: signal('skip'), like: signal(model.like ?? ''), input: signal(r?.input ?? ''), output: signal(r?.output ?? ''),
-      cacheRead: signal(r?.cacheRead ?? ''), cacheWrite: signal(r?.cacheWrite ?? '') };
+      cacheRead: signal(r?.cacheRead ?? ''), cacheWrite: signal(r?.cacheWrite ?? ''), cacheWrite1h: signal(r?.cacheWrite1h ?? '') };
   }
   /**
    * Any other model by name: one already on the card (a negotiated rate, a
@@ -61,10 +61,12 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
         // (reads at 0.1x input, writes at 1.25x). A filled one must be valid.
         const read = d.cacheRead.peek().trim();
         const write = d.cacheWrite.peek().trim();
+        const write1h = d.cacheWrite1h.peek().trim();
         if (!decimal(d.input.peek()) || !decimal(d.output.peek())) return null;
-        if ((read !== '' && !decimal(read)) || (write !== '' && !decimal(write))) return null;
+        if ([read, write, write1h].some((v) => v !== '' && !decimal(v))) return null;
         return { model: d.model, kind: 'rate', input: d.input.peek(), output: d.output.peek(),
-          ...(read === '' ? {} : { cacheRead: read }), ...(write === '' ? {} : { cacheWrite: write }) };
+          ...(read === '' ? {} : { cacheRead: read }), ...(write === '' ? {} : { cacheWrite: write }),
+          ...(write1h === '' ? {} : { cacheWrite1h: write1h }) };
       }
       default: return null;
     }
@@ -88,9 +90,10 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       if (d.mode() === 'like') return word(like) ? `segreant pricing set ${model} --like ${like}` : null;
       const read = d.cacheRead().trim();
       const write = d.cacheWrite().trim();
-      if ((read !== '' && !decimal(read)) || (write !== '' && !decimal(write))) return null;
+      const write1h = d.cacheWrite1h().trim();
+      if ([read, write, write1h].some((v) => v !== '' && !decimal(v))) return null;
       return decimal(d.input()) && decimal(d.output())
-        ? `segreant pricing set ${model} --input ${d.input()} --output ${d.output()}${read ? ` --cache-read ${read}` : ''}${write ? ` --cache-write ${write}` : ''}`
+        ? `segreant pricing set ${model} --input ${d.input()} --output ${d.output()}${read ? ` --cache-read ${read}` : ''}${write ? ` --cache-write ${write}` : ''}${write1h ? ` --cache-write-1h ${write1h}` : ''}`
         : null;
     },
     fields: () => h('div', null,
@@ -126,7 +129,8 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
               input(`Input for ${model.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
               input(`Output for ${model.model} (USD per 1M tokens)`, 'output', d.output, '3.00'),
               input(`Cache read for ${model.model}, optional (USD per 1M tokens)`, 'read', d.cacheRead, '0.10 x input if blank'),
-              input(`Cache write for ${model.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank')) : null);
+              input(`Cache write for ${model.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank'),
+              input(`1-hour cache write for ${model.model}, optional (USD per 1M tokens)`, 'write1h', d.cacheWrite1h, 'cache write, or 2 x input, if blank')) : null);
       }) ?? null,
       () => (data()?.declared.length ?? 0) > 0 ? h('section', { class: 'pricing-declared' },
         h('h3', { class: 'drawer-h3', text: 'Your prices' }),
@@ -165,7 +169,8 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
                 field(`New input for ${p.model} (USD per 1M tokens)`, 'input', d.input, '1.00'),
                 field(`New output for ${p.model} (USD per 1M tokens)`, 'output', d.output, '3.00'),
                 field(`New cache read for ${p.model}, optional (USD per 1M tokens)`, 'read', d.cacheRead, '0.10 x input if blank'),
-                field(`New cache write for ${p.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank')) : null);
+                field(`New cache write for ${p.model}, optional (USD per 1M tokens)`, 'write', d.cacheWrite, '1.25 x input if blank'),
+                field(`New 1-hour cache write for ${p.model}, optional (USD per 1M tokens)`, 'write1h', d.cacheWrite1h, 'cache write, or 2 x input, if blank')) : null);
         })) : null,
       h('section', { class: 'pricing-other' },
         h('h3', { class: 'drawer-h3', text: 'Another model' }),
@@ -197,7 +202,8 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
               field('Input for another model (USD per 1M tokens)', 'input', other.input, '1.00'),
               field('Output for another model (USD per 1M tokens)', 'output', other.output, '3.00'),
               field('Cache read for another model, optional (USD per 1M tokens)', 'read', other.cacheRead, '0.10 x input if blank'),
-              field('Cache write for another model, optional (USD per 1M tokens)', 'write', other.cacheWrite, '1.25 x input if blank')) : null;
+              field('Cache write for another model, optional (USD per 1M tokens)', 'write', other.cacheWrite, '1.25 x input if blank'),
+              field('1-hour cache write for another model, optional (USD per 1M tokens)', 'write1h', other.cacheWrite1h, 'cache write, or 2 x input, if blank')) : null;
         }),
       h('div', { role: 'status', 'aria-live': 'polite' }, () => saved() ? h('div', null,
         h('p', { class: 'drawer-note', text: AFTER_DECLARATION }),
@@ -217,7 +223,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       const d = choice();
       const description = !body ? '' : body.kind === 'free' ? 'Free (local model): $0 your price per request.'
         : body.kind === 'like' ? `Your price follows ${body.like}, an exact model on the current card.`
-        : `Your price: input $${body.input}, output $${body.output}${body.cacheRead ? `, cache read $${body.cacheRead}` : ''}${body.cacheWrite ? `, cache write $${body.cacheWrite}` : ''} USD per 1M tokens.`;
+        : `Your price: input $${body.input}, output $${body.output}${body.cacheRead ? `, cache read $${body.cacheRead}` : ''}${body.cacheWrite ? `, cache write $${body.cacheWrite}` : ''}${body.cacheWrite1h ? `, 1-hour cache write $${body.cacheWrite1h}` : ''} USD per 1M tokens.`;
       return {
         applicable: !payload.demo && body !== null,
         summary: body ? `Save your price for ${d!.model}. ${description}`
