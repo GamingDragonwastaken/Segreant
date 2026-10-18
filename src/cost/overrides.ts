@@ -14,7 +14,7 @@
  * edit that breaks it is refused with the reason, never half-read: a price that
  * silently disappeared would change what a cap counts.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { acquireConfigMutationLock, DemoReadOnlyError, isDemo, segreantHome } from '../config.ts';
 
@@ -160,7 +160,11 @@ function writeOverrides(file: PriceOverridesFile): void {
   const tmp = `${path}.${process.pid}.tmp`;
   const sorted: Record<string, PriceOverride> = {};
   for (const model of Object.keys(file.models).sort()) sorted[model] = file.models[model]!;
-  writeFileSync(tmp, `${JSON.stringify({ version: 1, models: sorted }, null, 2)}\n`, 'utf8');
+  // Private like the config and backups: model names and negotiated rates are
+  // not for other local users (PR #146 review). chmod covers a leftover temp
+  // file, which writeFileSync's mode would not narrow.
+  writeFileSync(tmp, `${JSON.stringify({ version: 1, models: sorted }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(tmp, 0o600);
   renameSync(tmp, path);
   cache = null;
 }
