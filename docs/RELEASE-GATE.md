@@ -686,7 +686,7 @@ Use the following precise language:
 
 Do not call it a general AI-financial-services product, financial advice,
 compliance certification, a Vanta replacement, “zero egress,” a verified
-production deployment, or a published npm package for 0.2.0 (0.1.0 is on npm; 0.2.0 is not).
+production deployment, or a published npm package for any version after 0.2.0 (0.1.0 and 0.2.0 are on npm; 0.2.0 was published from the gated `e8a8f24` tarball).
 
 ## Required before public npm/GitHub release
 

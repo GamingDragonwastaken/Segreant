@@ -258,7 +258,8 @@ function cmdHelp(): void {
                             [--cache-read <usd>] [--cache-write <usd>]
                             [--cache-write-1h <usd>] (USD per 1M tokens)
                           Or: pricing set <model> --like <known-model>
-                          Or: pricing set <model> --free (user-declared local price)
+                          Or: pricing set <model> --free (user-declared local price;
+                              a model on the rate card also needs --force)
                           Remove: pricing unset <model>
                           Still need a price: pricing unknown [--json]
                           Declarations leave recorded cost unchanged; segreant reprice

@@ -248,7 +248,10 @@ Each request is priced by the first of these that knows its model:
 1. **A price you set.** `segreant pricing set <model>` with `--input` and
    `--output` (USD per million tokens), `--like <model>` to price it as a model
    on the card, or `--free` for a local model. Shown as "your price", never as
-   list price.
+   list price. `--free` is refused for a model the rate card prices, because a
+   cap would then count that cloud spend as $0; add `--force` only if the name
+   really runs locally. Without `--force`, a free price stops applying as soon
+   as a rate card prices that name.
 2. **The rate card**, by exact model name. The bundled card is refreshed from
    the public price list before each release.
 3. **The public price list, looked up on first sight.** When a running Segreant
