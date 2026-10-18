@@ -520,7 +520,7 @@ export function cmdReprice(flags: Flags): void {
       const sync = report.realizationSync;
       printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
-        stillEstimated, cacheDurationUnknown: report.cacheDurationUnknown, totalBeforeUsd: before, totalAfterUsd: after,
+        stillEstimated, cacheDurationUnknown: report.cacheDurationUnknown, alreadyRepriced: report.alreadyRepriced, totalBeforeUsd: before, totalAfterUsd: after,
         priceEvidence: report.priceEvidence,
         byModel: [...byModel.entries()].map(([key, v]) => {
           const [provider, model] = JSON.parse(key) as [string, string];
@@ -541,6 +541,7 @@ export function cmdReprice(flags: Flags): void {
     console.log(`  Estimated rows       ${num(rows.length)}`);
     console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(the current card, or a price you set, gives these models an exact rate)')}`);
     if (stillEstimated) console.log(`  Still estimates      ${num(stillEstimated)}  ${color(tty, C.gray, 'left untouched — a new guess is not more honest than the old one')}`);
+    if (report.alreadyRepriced) console.log(`  Already re-priced    ${num(report.alreadyRepriced)}  ${color(tty, C.gray, 'another reprice wrote these first; left as it wrote them and not counted here')}`);
     if (report.cacheDurationUnknown) console.log(`  Cache duration       ${num(report.cacheDurationUnknown)}  ${color(tty, C.gray, 'rows recorded before Segreant kept the cache-write duration; their writes are priced at the 5-minute rate')}`);
     if (updates.length) {
       console.log('');

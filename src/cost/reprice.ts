@@ -50,7 +50,7 @@ export function previewReprice(store: Store) {
 function planReprice(store: Store) {
   const rows = store.estimatedRequestRows();
   const updates: RepriceUpdate[] = [];
-  const byModel = new Map<string, RepriceModel>();
+  const meta = new Map<string, PlannedRow>();
   let stillEstimated = 0;
   // Rows with cache writes whose duration was never recorded (before Segreant
   // kept it): priced at the 5-minute rate, as they were first priced, and
@@ -72,18 +72,35 @@ function planReprice(store: Store) {
     // row's writes are priced at the 5-minute rate when it is left untouched.
     if (r.cacheWriteTokens > 0 && r.cacheWriteTtl === null) cacheDurationUnknown++;
     updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
+    meta.set(r.requestId, {
+      provider: r.provider, model: r.model, beforeUsd: r.costUsd,
+      cacheDurationUnknown: r.cacheWriteTokens > 0 && r.cacheWriteTtl === null,
+    });
+  }
+  return { ...summarize(updates, meta, 0), estimatedRows: rows.length, stillEstimated, cacheDurationUnknown, meta };
+}
+
+interface PlannedRow { provider: string; model: string; beforeUsd: number; cacheDurationUnknown: boolean }
+
+/** Totals, models and evidence for exactly these updates: the plan, or the rows a write touched. */
+function summarize(updates: RepriceUpdate[], meta: ReadonlyMap<string, PlannedRow>, alreadyRepriced: number) {
+  const byModel = new Map<string, RepriceModel>();
+  for (const u of updates) {
+    const r = meta.get(u.requestId)!;
     const key = JSON.stringify([r.provider, r.model]);
     const agg = byModel.get(key) ?? {
       provider: r.provider, model: r.model, rows: 0, beforeUsd: 0, afterUsd: 0,
-      afterBasis: c.pricing.rateMatchKind === 'user_declared' || c.pricing.rateMatchKind === 'user_declared_free' ? 'your price' : 'list price',
+      afterBasis: u.pricing.rateMatchKind === 'user_declared' || u.pricing.rateMatchKind === 'user_declared_free' ? 'your price' : 'list price',
     };
     agg.rows++;
-    agg.beforeUsd += r.costUsd;
-    agg.afterUsd += c.costUsd;
+    agg.beforeUsd += r.beforeUsd;
+    agg.afterUsd += u.costUsd;
     byModel.set(key, agg);
   }
   return {
-    applied: false, estimatedRows: rows.length, repriceable: updates.length, stillEstimated, cacheDurationUnknown,
+    applied: false, repriceable: updates.length,
+    /** Planned rows another reprice had already rewritten by the time this one wrote: left alone, not counted. */
+    alreadyRepriced,
     totalBeforeUsd: [...byModel.values()].reduce((a, v) => a + v.beforeUsd, 0),
     totalAfterUsd: [...byModel.values()].reduce((a, v) => a + v.afterUsd, 0),
     priceEvidence: repriceEvidence(updates),
@@ -94,9 +111,24 @@ function planReprice(store: Store) {
   };
 }
 
-/** Compute once, write exactly that plan through the Store's audited transaction. */
-export function applyReprice(store: Store): ReturnType<typeof planReprice> {
+/**
+ * Compute once, write that plan through the Store's audited transaction, and
+ * report only the rows the transaction wrote. Another process may reprice the
+ * same rows between the plan and the write; the store skips a row that is no
+ * longer an estimate, and the result used to claim it anyway (PR #146 review).
+ */
+export function applyReprice(store: Store) {
   const preview = previewReprice(store);
-  const realizationSync = preview.updates.length ? store.applyRepricedCosts(preview.updates) : null;
-  return { ...preview, applied: true, realizationSync };
+  if (preview.updates.length === 0) return { ...preview, applied: true };
+  const { writtenRequestIds, ...realizationSync } = store.applyRepricedCosts(preview.updates);
+  const written = new Set(writtenRequestIds);
+  const done = preview.updates.filter((u) => written.has(u.requestId));
+  const cacheDurationUnknown = done.filter((u) => preview.meta.get(u.requestId)!.cacheDurationUnknown).length;
+  return {
+    ...preview,
+    ...summarize(done, preview.meta, preview.updates.length - done.length),
+    cacheDurationUnknown,
+    applied: true,
+    realizationSync,
+  };
 }

@@ -2665,7 +2665,7 @@ export class Store {
    * re-attributed inside the same transaction, on each unit's own recorded
    * basis — see realization.ts for why that basis is never re-derived.
    */
-  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync {
+  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync & { writtenRequestIds: string[] } {
     return realization.applyRepricedCosts(this.db, this.realizationDeps(), updates, appliedAtMs);
   }
 
