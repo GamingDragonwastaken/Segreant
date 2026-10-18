@@ -15,6 +15,7 @@ import { period, setPeriod } from '../core/period.ts';
 import { usd, count, isPrecise, register, share } from '../core/fmt.ts';
 import { capability } from '../core/registry.ts';
 import { openAction } from '../components/drawer.ts';
+import { emptyLedgerNotice } from '../components/firstRun.ts';
 import { actionSpec, hasRunner } from '../core/actions.ts';
 import { workbench } from './workbench.ts';
 
@@ -73,6 +74,8 @@ export function spendView(): Node {
       h('p', { class: 'view-plain', text: () => isPrecise()
         ? 'Request volume and cost computed locally from a rate card. Not a provider-billed amount.'
         : 'What we watched AI cost you. This is our own measurement — Billed is where we check it against the real invoice.' })),
+
+    emptyLedgerNotice(),
 
     () => {
       const err = error();
