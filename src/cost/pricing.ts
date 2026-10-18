@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -429,11 +429,28 @@ export function loadPricing(force = false): PricingFile {
  * the one this process loaded, the verified card on disk (a refresh in another
  * process replaces it without telling this one), and the bundled card. Reads
  * only; the process's loaded card is never replaced here (PR #153 review).
+ *
+ * A refresh activates in order: archived card, archived provenance, active
+ * card, active provenance. Between the last two the verified read falls back
+ * to the previous card, so this also reads the active card unverified and
+ * every archived card. The archive is written first, so a card being activated
+ * is seen for the whole activation. Over-reading only refuses more, and that
+ * refusal has --force (PR #153 review).
  */
 export function cardEntryAnywhere(model: string): { provider: string; input: number; output: number } | null {
   const cards: PricingFile[] = [loadPricing()];
   const onDisk = loadVerifiedCache();
   if (onDisk) cards.push(onDisk.file);
+  const active = readValidPricing(cachePath());
+  if (active) cards.push(active);
+  try {
+    const archiveDir = join(segreantHome(), 'pricing', 'cards');
+    for (const name of existsSync(archiveDir) ? readdirSync(archiveDir) : []) {
+      if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
+      const archived = readValidPricing(join(archiveDir, name));
+      if (archived) cards.push(archived);
+    }
+  } catch { /* an unreadable archive adds nothing; the other cards still count */ }
   const bundled = readValidPricing(BUNDLED_PRICING_PATH);
   if (bundled) cards.push(bundled);
   for (const card of cards) {

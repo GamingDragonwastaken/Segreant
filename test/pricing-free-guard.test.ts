@@ -54,6 +54,27 @@ test('a card refreshed on disk by another process counts, without replacing the 
   }
 });
 
+test('a refresh caught mid-activation still counts (PR #153 review)', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const card = structuredClone(loadPricing());
+  card.providers['openai']!.models['acme-mid-refresh'] = { input: 4, output: 16 };
+  const text = JSON.stringify(card);
+  const sha = createHash('sha256').update(text, 'utf8').digest('hex');
+  mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
+  try {
+    // Step 1 of activation: only the archived card exists.
+    writeFileSync(join(home, 'pricing', 'cards', `${sha}.json`), text);
+    assert.throws(() => declarePrice('acme-mid-refresh', { kind: 'free' }), /cloud model the rate card prices/);
+    // Step 3: the active card is written, its provenance not yet (no provenance file at all here).
+    rmSync(join(home, 'pricing', 'cards'), { recursive: true, force: true });
+    writeFileSync(join(home, 'pricing', 'models.json'), text);
+    assert.throws(() => declarePrice('acme-mid-refresh', { kind: 'free' }), /cloud model the rate card prices/);
+  } finally {
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
+
 test('free stays allowed for a model the card does not know', () => {
   assert.equal(declarePrice('acme-local-llm', { kind: 'free' }).kind, 'free');
 });
