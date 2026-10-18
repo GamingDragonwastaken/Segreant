@@ -11,6 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **A running Segreant picks up a price-list refresh without a restart.** When `segreant pricing --refresh` (or another Segreant) updated the price list, a proxy or dashboard that was already running kept pricing with the old list until it was restarted. It now notices the new list within a second. A refresh still in progress, or one that failed, changes nothing, and a reprice never switches lists partway through.
 - **`segreant pricing set <model> --free` is refused for a model the rate card prices.** A cap counts a free model's requests as $0, so marking a cloud model free (for example `claude-sonnet-4-6`) would have let real spend through uncounted. The refusal names the card's rate. A model that really runs locally under a card name can still be marked free with `--free --force`. The dashboard refuses it without an override. The same rule holds when a request is priced: a free price set without `--force` never applies to a model a rate card prices, even one the card learned after the price was set, so the card's price counts.
 
 ## [0.2.0] - 2026-10-18

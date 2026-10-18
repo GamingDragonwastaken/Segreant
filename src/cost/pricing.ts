@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -403,8 +403,44 @@ function loadVerifiedCache(): { file: PricingFile; provenance: PricingProvenance
   return null;
 }
 
+/**
+ * A refresh in another process (`segreant pricing --refresh`, or another
+ * Segreant running alongside) replaces the card on disk without telling this
+ * one, so a long-running proxy or dashboard kept pricing with the old card
+ * until restart. At most once a second, loadPricing compares the card on disk
+ * with the one it loaded and reloads when it changed.
+ *
+ * The comparison is by the card hash its provenance records (written last by
+ * a refresh, so a refresh in progress or one that failed changes nothing),
+ * plus the active file's size and timestamp for a card that has no provenance
+ * record. Inside withPricingSnapshot the card is pinned, so one reprice plan
+ * never mixes two cards.
+ */
+const FRESHNESS_INTERVAL_MS = 1000;
+let loadedIdentity: string | null = null;
+let lastFreshnessCheckMs = 0;
+let pinnedDepth = 0;
+
+function diskIdentity(): string {
+  let file: [number, number] | null = null;
+  try { const st = statSync(cachePath()); file = [st.size, st.mtimeMs]; } catch { /* no active card on disk */ }
+  return JSON.stringify([segreantHome(), readProvenance()?.cardSha256 ?? null, file]);
+}
+
+/** Tests only: run the next freshness check now instead of waiting out the interval. */
+export function resetPricingFreshnessForTests(): void {
+  lastFreshnessCheckMs = 0;
+}
+
 export function loadPricing(force = false): PricingFile {
-  if (cached && !force) return cached;
+  if (cached && !force) {
+    const now = Date.now();
+    if (pinnedDepth > 0 || now - lastFreshnessCheckMs < FRESHNESS_INTERVAL_MS) return cached;
+    lastFreshnessCheckMs = now;
+    if (diskIdentity() === loadedIdentity) return cached;
+  }
+  lastFreshnessCheckMs = Date.now();
+  loadedIdentity = diskIdentity();
   // Prefer the refreshed cache when present AND structurally valid; otherwise
   // fall back to the bundled table. A corrupt cache degrades to bundled rather
   // than breaking pricing — and `pricingStatus()` always reports which won, so
@@ -1128,9 +1164,8 @@ export function withoutDeclaredPrices<T>(fn: () => T): T {
  * Run `fn` against one read of the declarations. A plan priced row by row
  * re-read the file at each row, so a `pricing set` from another process midway
  * gave earlier and later rows of the same model different prices in one
- * correction (PR #146 review). The card needs no snapshot: it is cached for
- * the life of the process and changes only by a refresh in this process,
- * which cannot run inside a synchronous plan.
+ * correction (PR #146 review). The card is pinned for the same span, since a
+ * refresh in another process is now picked up by a running one (loadPricing).
  */
 /** Run `fn` against declarations read earlier (a proxied request keeps the ones it was checked against). */
 export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: () => T): T {
@@ -1138,9 +1173,17 @@ export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: (
 }
 
 export function withPricingSnapshot<T>(fn: () => T): T {
-  if (declarationSource !== null) return fn();
-  const models = activePriceOverrides();
-  return withDeclarationSource((model) => models[model] ?? null, fn);
+  // The card is pinned for the whole plan as well: a refresh in another
+  // process is picked up after it, never midway (see loadPricing).
+  loadPricing();
+  pinnedDepth++;
+  try {
+    if (declarationSource !== null) return fn();
+    const models = activePriceOverrides();
+    return withDeclarationSource((model) => models[model] ?? null, fn);
+  } finally {
+    pinnedDepth--;
+  }
 }
 
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
