@@ -77,8 +77,6 @@ const overviewIn = signal<Overview | null | undefined>(undefined);
 const billingIn = signal<BillingPayload | null | undefined>(undefined);
 const allocationIn = signal<AllocationPayload | null | undefined>(undefined);
 const valueIn = signal<ValuePayload | null | undefined>(undefined);
-/** Re-pricing changes metered costs without changing the selected period. */
-const pricingRevision = signal(0);
 const chainInputs = computed(() => ({
   overview: overviewIn() ?? null,
   billing: billingIn() ?? null,
@@ -147,15 +145,17 @@ function go(route: Route): void {
 
 /**
  * Focus the current page's h1 once the view has rendered; give up quietly after
- * a second. If the user moves focus while waiting (the skip link, a click), their
- * move wins: a slow render used to land after it and take focus back (CI on PR #146).
+ * a second, or as soon as the user has put focus somewhere themselves. The
+ * retries used to land late and pull focus out of wherever the user had just
+ * moved it: the skip link's target, a field, a button (caught by the browser
+ * suite's skip-link diagnostics on CI, 2026-10-17).
  */
-function focusPageHeading(tries = 20, startedFrom: Element | null = document.activeElement): void {
+function focusPageHeading(tries = 20, from: Element | null = document.activeElement): void {
   const now = document.activeElement;
-  if (now !== null && now !== document.body && now !== startedFrom) return;
+  if (now !== from && now !== null && now !== document.body) return;
   const heading = document.querySelector<HTMLElement>('main h1');
   if (!heading) {
-    if (tries > 0) setTimeout(() => focusPageHeading(tries - 1, startedFrom), 50);
+    if (tries > 0) setTimeout(() => focusPageHeading(tries - 1, from), 50);
     return;
   }
   if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
@@ -318,7 +318,6 @@ function boot(): void {
   };
   effect(() => {
     const r = period();
-    pricingRevision();
     const controller = new AbortController();
     overviewIn.set(undefined);
     void api.overview(r, controller.signal).then(
@@ -337,10 +336,6 @@ function boot(): void {
     }
     if (claim === 'billing') {
       void api.billing().then((b) => { billingIn.set(b); lastReadAt.set(Date.now()); }, () => undefined);
-    }
-    if (claim === 'pricing') {
-      pricingRevision.update((revision) => revision + 1);
-      void api.value().then((v) => { valueIn.set(v); lastReadAt.set(Date.now()); }, () => undefined);
     }
   });
 
@@ -411,7 +406,7 @@ function boot(): void {
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
-        h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider, the public price list, and the other routes you set up.' }),
+        h('span', { text: 'Runs on this machine. Outbound traffic goes only to the configured provider and the other routes you set up.' }),
         h('span', { class: 'shellfoot-links' },
           h('a', { href: '#/privacy', text: 'Privacy' }),
           h('a', { href: '/classic', text: 'Classic dashboard' }))));

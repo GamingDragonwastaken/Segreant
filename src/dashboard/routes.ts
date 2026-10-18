@@ -1075,7 +1075,7 @@ export function handlePricingUnset(context: RouteContext): void {
 export function handleReprice(context: RouteContext): void {
   pricingWrite(context, ['apply'], (body) => {
     if (typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
-    const { updates: _updates, priceEvidence: _legacyCliEvidence, ...report } = body.apply ? applyReprice(context.store) : previewReprice(context.store);
+    const { updates: _updates, meta: _meta, priceEvidence: _legacyCliEvidence, ...report } = body.apply ? applyReprice(context.store) : previewReprice(context.store);
     return { ...report, demo: false } satisfies DashboardResponseFor<'reprice'>;
   });
 }

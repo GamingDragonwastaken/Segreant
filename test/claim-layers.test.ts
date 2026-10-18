@@ -341,7 +341,8 @@ test('a price you set is named as yours, never as "priced without the model\'s o
   const [onlyFree] = buildClaimLayers({ ...NOTHING, overview: withRows([free]) }, '30d');
   assert.equal(onlyFree!.basis, 'no charge: every request is on a model you marked free', 'no rate card priced it, so it is never called a list price');
   const [freeAndList] = buildClaimLayers({ ...NOTHING, overview: withRows([listed, free]) }, '30d');
-  assert.equal(freeAndList!.basis, "list prices: each model's own published price");
+  assert.equal(freeAndList!.basis, "list prices: each model's own published price; no charge on models you marked free (llama-local)",
+    'a mixed total still names the models priced by your declaration (PR #146 review)');
 });
 
 test('every claim names the window it covers, and only Metered follows the chosen period (H006)', () => {

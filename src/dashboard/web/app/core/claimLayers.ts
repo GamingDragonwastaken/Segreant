@@ -78,10 +78,15 @@ export function meteredBasisLine(basis: Basis | undefined): string {
   switch (basis.headline) {
     case 'sample_cost': return 'sample data, priced from the price list';
     case 'tool_reported_cost': return 'amounts the tools reported, not verified';
-    case 'list_cost':
-      return basis.cohorts.some((c) => c.id === 'list_family')
+    case 'list_cost': {
+      const line = basis.cohorts.some((c) => c.id === 'list_family')
         ? "list prices (some models at the nearest model's price)"
         : "list prices: each model's own published price";
+      // A model marked free is priced by its operator's declaration, not by a
+      // published price, so a mixed total names it (PR #146 review).
+      const free = basis.cohorts.find((c) => c.id === 'user_free');
+      return free ? `${line}; no charge on models you marked free (${modelsOf(free)})` : line;
+    }
     default: {
       const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
       // A declared price IS the model's own rate, the one its operator set, so
