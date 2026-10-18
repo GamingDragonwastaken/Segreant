@@ -37,6 +37,18 @@ test('a reprice event keeps the provenance it replaced', () => {
   } finally { store.close(); }
 });
 
+test('an unpriced request with token counts can still be priced by a price declared later (PR #150 review)', async () => {
+  const { setPriceOverride, removePriceOverride } = await import('../src/cost/overrides.ts');
+  const store = new Store(join(home, 'unpriced-tokens.db'));
+  try {
+    store.insertRequest({ ...base, requestId: 'imported', provider: 'openai', model: 'acme-uncovered', ...usage, costUsd: 0, estimated: true, pricing: unpricedPricingEvidence() });
+    setPriceOverride('acme-uncovered', { kind: 'rate', input: '2', output: '8' });
+    const plan = previewReprice(store);
+    assert.equal(plan.repriceable, 1);
+    assert.equal(plan.totalAfterUsd, 2);
+  } finally { store.close(); removePriceOverride('acme-uncovered'); }
+});
+
 test('a reprice never turns a request whose usage was not captured into a confirmed $0', () => {
   const store = new Store(join(home, 'unpriced.db'));
   try {
@@ -53,7 +65,7 @@ test('the cache-write duration is recorded only when it was observed', () => {
   assert.deepEqual(cacheWriteDuration(0, 0), { observed: false });
   assert.deepEqual(cacheWriteDuration(0, 10), { ttl: '1h', observed: true });
   assert.deepEqual(cacheWriteDuration(10, 0), { ttl: '5m', observed: true });
-  assert.deepEqual(cacheWriteDuration(3, 10), { ttl: '1h', observed: false });
+  assert.deepEqual(cacheWriteDuration(3, 10), { ttl: '1h', observed: true }, 'mixed: recorded at the duration it was priced with (PR #150 review)');
   const bare = normalizeAnthropicUsage({ input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 1_000_000 });
   assert.equal(bare.cacheWriteTtl, undefined, 'no breakdown: priced at the standard 5-minute rate');
   const priced = computeCost('anthropic', 'claude-sonnet-4-6', bare);
@@ -127,4 +139,8 @@ test('storing a rate without cache prices says how its cache is priced', async (
   const full = run('acme-cache-full', '--input', '1', '--output', '2', '--cache-write', '1.5', '--cache-write-1h', '2.5', '--cache-read', '0.2');
   assert.equal(full.status, 0, full.stderr);
   assert.doesNotMatch(full.stdout, /usual multiple/, 'nothing derived, nothing said');
+  const writeOnly = run('acme-cache-write-only', '--input', '1', '--output', '2', '--cache-write', '1.5');
+  assert.equal(writeOnly.status, 0, writeOnly.stderr);
+  assert.doesNotMatch(writeOnly.stdout, /1-hour cache writes at 2×/, '--cache-write also prices 1-hour writes (PR #150 review)');
+  assert.match(writeOnly.stdout, /cache reads at 0\.1×/);
 });
