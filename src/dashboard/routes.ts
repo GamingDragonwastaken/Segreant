@@ -1038,11 +1038,18 @@ async function pricingBody(req: http.IncomingMessage, allowed: readonly string[]
 
 class PricingBodyTooLarge extends Error {}
 
-function pricingWrite(context: RouteContext, allowed: readonly string[], action: (body: Record<string, unknown>) => unknown): void {
+function pricingWrite(
+  context: RouteContext,
+  allowed: readonly string[],
+  action: (body: Record<string, unknown>) => unknown,
+  readOnly: (body: Record<string, unknown>) => boolean = () => false,
+): void {
   void (async () => {
     try {
       const body = await pricingBody(context.req, allowed);
-      if (isDemo()) return json(context.res, 409, { error: new DemoWriteBlockedError('the pricing change').message });
+      // A preview writes nothing, so the sample data can show one (independent
+      // review, 2026-10-18); only a write is refused there.
+      if (isDemo() && !readOnly(body)) return json(context.res, 409, { error: new DemoWriteBlockedError('the pricing change').message });
       json(context.res, 200, action(body));
     } catch (error) {
       json(context.res, error instanceof PricingBodyTooLarge ? 413 : 400, {
@@ -1076,8 +1083,8 @@ export function handleReprice(context: RouteContext): void {
   pricingWrite(context, ['apply'], (body) => {
     if (typeof body.apply !== 'boolean') throw new Error('apply must be true or false');
     const { updates: _updates, meta: _meta, priceEvidence: _legacyCliEvidence, ...report } = body.apply ? applyReprice(context.store) : previewReprice(context.store);
-    return { ...report, demo: false } satisfies DashboardResponseFor<'reprice'>;
-  });
+    return { ...report, demo: isDemo() } satisfies DashboardResponseFor<'reprice'>;
+  }, (body) => body.apply === false);
 }
 
 export function handleExportCsv({ res, url, store }: RouteContext): void {

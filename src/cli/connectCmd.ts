@@ -144,10 +144,8 @@ function wrapOpencodeFlow(cfg: SegreantConfig, flags: Flags, tty: boolean, provi
     console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through Segreant.`));
     console.log(color(tty, C.gray, `    opencode config: ${path}  (backup at ${path}.bak)`));
     console.log(color(tty, C.gray, `    Segreant upstreams.openai → ${res.originalBaseUrl}`));
-    const allow = isBuiltInProviderUpstream(res.originalBaseUrl!) ? null : providerRuleCommand(res.originalBaseUrl!);
-    console.log(color(tty, C.gray, allow
-      ? `    ${res.originalBaseUrl} is not a built-in provider API. Allow Segreant to forward there with:\n      ${allow}`
-      : '    Requests to the official provider API go out with no extra step.'));
+    const advice = upstreamAdvice(res.originalBaseUrl!);
+    console.log(color(tty, advice.ok ? C.gray : C.yellow, `    ${advice.text}`));
     console.log(color(tty, C.gray, '    JSON comments were reformatted away; your settings + keys are preserved.'));
     console.log('');
     console.log(color(tty, C.gray, '  Restart Segreant (segreant start), run opencode, then:  segreant sources'));
@@ -412,6 +410,26 @@ function connectGenericApi(cfg: SegreantConfig, flags: Flags, tty: boolean): voi
  * No tool (or --list) shows the menu; opencode writes/prints its provider block;
  * `api` prints the generic env + header recipe (with an optional custom source name).
  */
+/**
+ * What forwarding to an upstream needs. Four cases: the official provider APIs
+ * are built in; plain HTTP on this machine is always allowed; any other HTTPS
+ * address needs the one rule printed; plain HTTP elsewhere cannot be allowed at
+ * all. The last case used to be told it was the official API (independent
+ * review, 2026-10-18).
+ */
+export function upstreamAdvice(url: string): { ok: boolean; text: string } {
+  if (isBuiltInProviderUpstream(url)) return { ok: true, text: 'Requests to the official provider API go out with no extra step.' };
+  let target: URL;
+  try { target = new URL(url); } catch { return { ok: false, text: `${url} is not a valid address.` }; }
+  if (target.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(target.hostname)) {
+    return { ok: true, text: 'A model on this machine is reached directly; no rule is needed.' };
+  }
+  const allow = providerRuleCommand(url);
+  return allow
+    ? { ok: false, text: `${url} is not a built-in provider API. Allow Segreant to forward there with:\n      ${allow}` }
+    : { ok: false, text: `${url} cannot be allowed as it is: Segreant forwards only to HTTPS, or to plain HTTP on this machine (localhost, 127.0.0.1). Use the gateway's https:// address.` };
+}
+
 export function cmdConnect(flags: Flags): void {
   const tty = process.stdout.isTTY ?? false;
   const cfg = loadConfig();

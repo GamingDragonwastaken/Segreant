@@ -28,7 +28,7 @@
  * `usage` at `event.response.usage`, not `event.usage`). See consumeOpenAI.
  */
 
-import type { NormalizedUsage, Provider } from '../cost/pricing.ts';
+import { cacheWriteDuration, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
 interface AnthropicUsage {
@@ -64,14 +64,14 @@ export function normalizeAnthropicUsage(u: AnthropicUsage): NormalizedUsage {
   const ephem1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
   const ephem5m = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
   const cacheWrite = u.cache_creation_input_tokens ?? ephem5m + ephem1h;
-  // Prefer the longer-TTL flag when the breakdown says most writes were 1h.
-  const ttl: '5m' | '1h' = ephem1h > ephem5m ? '1h' : '5m';
+  const duration = cacheWriteDuration(ephem5m, ephem1h);
   return {
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
     cacheWriteTokens: cacheWrite,
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
-    cacheWriteTtl: ttl,
+    ...(duration.ttl === undefined ? {} : { cacheWriteTtl: duration.ttl }),
+    cacheWriteTtlObserved: duration.observed,
   };
 }
 
@@ -211,7 +211,9 @@ export class StreamUsageAccumulator {
         this.partial.inputTokens = n.inputTokens;
         this.partial.cacheWriteTokens = n.cacheWriteTokens;
         this.partial.cacheReadTokens = n.cacheReadTokens;
-        this.partial.cacheWriteTtl = n.cacheWriteTtl;
+        if (n.cacheWriteTtl === undefined) delete this.partial.cacheWriteTtl;
+        else this.partial.cacheWriteTtl = n.cacheWriteTtl;
+        this.partial.cacheWriteTtlObserved = n.cacheWriteTtlObserved;
         this.maxOutput = Math.max(this.maxOutput, n.outputTokens);
       }
     } else if (obj.usage) {

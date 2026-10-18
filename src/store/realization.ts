@@ -257,7 +257,13 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
                 cost_usd AS costUsd
-         FROM requests WHERE estimated = 1`,
+         FROM requests
+         -- An unpriced row has no captured usage to price (a response cut off at
+         -- the resource limit, an unknown provider), and a not-sent row cost
+         -- nothing. Repricing either from its zero token counts wrote a
+         -- confirmed $0 list price over an unknown cost (independent review,
+         -- 2026-10-18).
+         WHERE estimated = 1 AND cost_basis NOT IN ('unpriced', 'not_sent')`,
     )
     .all() as Array<{
     requestId: string;
@@ -293,10 +299,14 @@ export function applyRepricedCosts(
   appliedAtMs: number,
 ): RealizationCostSync & { writtenRequestIds: string[] } {
   const prior = db.prepare(
+    // camelCase, which is what pricingEvidenceFromRecord reads with no prefix.
+    // These were aliased CostBasis/RateCardSha256/..., so every reprice event
+    // recorded legacy_unknown as the provenance it replaced (independent review,
+    // 2026-10-18).
     `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
-              cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
-              rate_card_source_kind AS RateCardSourceKind, rate_match_kind AS RateMatchKind,
-              rate_match_provider AS RateMatchProvider, rate_match_model AS RateMatchModel
+              cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+              rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+              rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
        FROM requests WHERE request_id = ?`,
   );
   const update = db.prepare(
