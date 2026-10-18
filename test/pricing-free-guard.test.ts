@@ -76,11 +76,8 @@ test('a refresh caught mid-activation still counts (PR #153 review)', async () =
   const sha = createHash('sha256').update(text, 'utf8').digest('hex');
   mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
   try {
-    // Step 1 of activation: only the archived card exists.
-    writeFileSync(join(home, 'pricing', 'cards', `${sha}.json`), text);
-    assert.throws(() => declarePrice('acme-mid-refresh', { kind: 'free' }), /cloud model the rate card prices/);
-    // Step 3: the active card is written, its provenance not yet (no provenance file at all here).
-    rmSync(join(home, 'pricing', 'cards'), { recursive: true, force: true });
+    // The active card written before its provenance (none at all here) is the current card.
+    void sha;
     writeFileSync(join(home, 'pricing', 'models.json'), text);
     assert.throws(() => declarePrice('acme-mid-refresh', { kind: 'free' }), /cloud model the rate card prices/);
   } finally {
@@ -138,29 +135,47 @@ test('force stores free for a card model, and only free takes force', () => {
   assert.match(misuse.stderr, /--force only applies to --free/);
 });
 
-test('among archived cards the highest stated rate counts, whatever their order or provenance (PR #153 review)', async () => {
+test('an archived card is history: it neither refuses nor overrides a free price the current card allows (PR #153 review)', async () => {
   const { mkdirSync, writeFileSync } = await import('node:fs');
   const { createHash } = await import('node:crypto');
-  const { cardEntryAnywhere } = await import('../src/cost/pricing.ts');
-  const dir = join(home, 'pricing', 'cards');
-  mkdirSync(dir, { recursive: true });
-  const write = (input: number): string => {
-    const card = structuredClone(loadPricing());
-    card.providers['openai']!.models['acme-reintroduced'] = { input, output: input * 4 };
-    const text = JSON.stringify(card);
-    const sha = createHash('sha256').update(text, 'utf8').digest('hex');
-    writeFileSync(join(dir, `${sha}.json`), text);
-    return sha;
-  };
+  const { cardEntryAnywhere, rateFor } = await import('../src/cost/pricing.ts');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  // An old card priced a model a later card removed.
+  const old = structuredClone(loadPricing());
+  old.providers['openai']!.models['acme-retired'] = { input: 7, output: 28 };
+  const text = JSON.stringify(old);
+  const sha = createHash('sha256').update(text, 'utf8').digest('hex');
+  mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'cards', `${sha}.json`), text);
+  mkdirSync(dirname(overridesPath()), { recursive: true });
   try {
-    // Whichever lists first, and with no provenance at all (a card mid-activation),
-    // the higher rate is the one charged.
-    const shas = [write(1), write(9), write(4)];
-    assert.equal(new Set(shas).size, 3);
-    const entry = cardEntryAnywhere('acme-reintroduced');
-    assert.equal(entry?.source, 'archive');
-    assert.equal(entry?.input, 9);
+    assert.equal(cardEntryAnywhere('acme-retired'), null);
+    assert.equal(declarePrice('acme-retired', { kind: 'free' }).kind, 'free');
+    assert.equal(rateFor('openai', 'acme-retired').pricing.rateMatchKind, 'user_declared_free');
   } finally {
+    rmSync(overridesPath(), { force: true });
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
+
+test('mid-activation, the activating card beats a stale loaded rate (PR #153 review)', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { rateFor } = await import('../src/cost/pricing.ts');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  const loadedRate = loadPricing().providers['anthropic']!.models[cardModel]!;
+  const card = structuredClone(loadPricing());
+  card.providers['anthropic']!.models[cardModel] = { ...loadedRate, input: loadedRate.input * 7, output: loadedRate.output * 7 };
+  mkdirSync(join(home, 'pricing'), { recursive: true });
+  // The new card is written; its provenance is not yet.
+  writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
+  mkdirSync(dirname(overridesPath()), { recursive: true });
+  writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { [cardModel]: { kind: 'free', declaredAt: new Date().toISOString() } } }));
+  try {
+    const charged = rateFor('anthropic', cardModel);
+    assert.equal(charged.rate.input, loadedRate.input * 7);
+    assert.equal(charged.pricing.rateCardSourceKind, 'legacy_unknown');
+  } finally {
+    rmSync(overridesPath(), { force: true });
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
   }
 });
