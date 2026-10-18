@@ -726,10 +726,13 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     lastModified: options.lastModified ?? null,
   };
 
-  // A first activation has no earlier provenance to recover from: if it fails
-  // after writing the active card, that card is removed, so neither a restart
-  // nor a running process's reload prices with a card that was never committed.
-  const firstActivation = !existsSync(cachePath()) && readProvenance() === null;
+  // A failed activation leaves the active card as it found it: the card it
+  // replaced is put back, or removed if there was none. Without that, a first
+  // activation or one over a legacy card (neither has provenance to recover
+  // from) would leave a card that was never committed for the next load.
+  let priorActiveText: string | null = null;
+  try { priorActiveText = readFileSync(cachePath(), 'utf8'); } catch { /* no active card */ }
+  const priorProvenanceSha = readProvenance()?.cardSha256 ?? null;
   try {
     const dir = join(segreantHome(), 'pricing');
     const archiveDir = join(dir, 'cards');
@@ -764,11 +767,15 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     writeAtomically(cachePath(), cardText);
     writeAtomically(provenancePath(), JSON.stringify(provenance, null, 2) + '\n');
   } catch (e) {
-    // Only this attempt's own uncommitted card is removed: another process may
-    // have committed its card meanwhile (PR #154 review).
-    if (firstActivation && readProvenance() === null) {
-      const active = readValidPricing(cachePath());
-      if (active && pricingCardHash(active) === cardSha256) { try { unlinkSync(cachePath()); } catch { /* already gone */ } }
+    // Only this attempt's own uncommitted card is rolled back, and only while
+    // no other provenance has been committed: another process may have
+    // committed its card meanwhile (PR #154 review).
+    const active = readValidPricing(cachePath());
+    if ((readProvenance()?.cardSha256 ?? null) === priorProvenanceSha && active && pricingCardHash(active) === cardSha256) {
+      try {
+        if (priorActiveText === null) unlinkSync(cachePath());
+        else writeAtomically(cachePath(), priorActiveText);
+      } catch { /* the next load reports what it finds */ }
     }
     return { ok: false, error: `could not write verified pricing cache: ${String(e)}` };
   }

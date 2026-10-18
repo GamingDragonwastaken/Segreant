@@ -192,3 +192,18 @@ test('a process started on a legacy card follows edits to it', async () => {
   rmSync(join(home, 'pricing'), { recursive: true, force: true });
   loadPricing(true);
 });
+
+test('a failed refresh over a legacy card leaves the legacy card in place', async () => {
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  mkdirSync(join(home, 'pricing'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(cardAt(2)));
+  const freshInstance: string = '../src/cost/pricing.ts?legacy-failed-refresh';
+  const fresh = await import(freshInstance) as typeof import('../src/cost/pricing.ts');
+  assert.equal(fresh.rateFor('openai', MODEL).rate.input, 2);
+  // The refresh replaces the active card, then fails writing its provenance.
+  mkdirSync(join(home, 'pricing', 'provenance.json'));
+  assert.equal(fresh.applyPricingManifest(JSON.stringify(cardAt(70))).ok, false);
+  fresh.resetPricingFreshnessForTests();
+  assert.equal(fresh.rateFor('openai', MODEL).rate.input, 2, 'the failed refresh changed no price');
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+});
