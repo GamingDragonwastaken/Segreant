@@ -44,6 +44,11 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
     await firstRun.waitFor({ state: 'visible' });
     const plain = firstRun.getByRole('button', { name: /look after the money/ });
     const precise = firstRun.getByRole('button', { name: /build with AI tools/ });
+    // The wording samples are the same on every install, data or not, so each
+    // must read as an example rather than as the reader's spend.
+    for (const sample of await firstRun.locator('.choice-eg').allInnerTexts()) {
+      assert.match(sample, /^e\.g\. \$/, `the chooser's "${sample}" must be marked as an example`);
+    }
     await plain.focus();
     assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('look after the money')), true, 'first-run focus must land on the first choice');
     await page.keyboard.press('Escape');
