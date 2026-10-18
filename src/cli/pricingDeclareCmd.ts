@@ -12,7 +12,7 @@ import { printJson, usd } from './ui.ts';
 
 const NEXT_STEP = 'segreant reprice previews re-pricing recorded requests; nothing changes without --apply.';
 const SET_WAYS = 'Set a price: segreant pricing set <model> --input <usd> --output <usd> (USD per 1M tokens), --like <known-model>, or --free.';
-const PRICE_OPTIONS = ['input', 'output', 'cache-read', 'cache-write', 'like', 'free'];
+const PRICE_OPTIONS = ['input', 'output', 'cache-read', 'cache-write', 'cache-write-1h', 'like', 'free'];
 
 function priceInput(flags: Flags): PriceOverrideInput {
   // Read every form before choosing one, including cache-only mixtures.
@@ -20,9 +20,10 @@ function priceInput(flags: Flags): PriceOverrideInput {
   const output = flags.output;
   const cacheRead = flags['cache-read'];
   const cacheWrite = flags['cache-write'];
+  const cacheWrite1h = flags['cache-write-1h'];
   const like = flags.like;
   const free = flags.free;
-  const rate = [input, output, cacheRead, cacheWrite].some((v) => v !== undefined);
+  const rate = [input, output, cacheRead, cacheWrite, cacheWrite1h].some((v) => v !== undefined);
   if (Number(rate) + Number(like !== undefined) + Number(free !== undefined) !== 1) {
     throw new PriceOverridesError('Choose exactly one price form: --input with --output, --like, or --free; do not mix them.');
   }
@@ -39,10 +40,12 @@ function priceInput(flags: Flags): PriceOverrideInput {
   }
   if (cacheRead !== undefined && typeof cacheRead !== 'string') throw new PriceOverridesError('--cache-read needs a decimal USD price per 1M tokens.');
   if (cacheWrite !== undefined && typeof cacheWrite !== 'string') throw new PriceOverridesError('--cache-write needs a decimal USD price per 1M tokens.');
+  if (cacheWrite1h !== undefined && typeof cacheWrite1h !== 'string') throw new PriceOverridesError('--cache-write-1h needs a decimal USD price per 1M tokens.');
   return {
     kind: 'rate', input, output,
     ...(cacheRead === undefined ? {} : { cacheRead }),
     ...(cacheWrite === undefined ? {} : { cacheWrite }),
+    ...(cacheWrite1h === undefined ? {} : { cacheWrite1h }),
   };
 }
 
@@ -52,6 +55,7 @@ function storedLine(model: string, price: PriceOverride): string {
   const cache = [
     ...(price.cacheRead === undefined ? [] : [`cache-read $${price.cacheRead}`]),
     ...(price.cacheWrite === undefined ? [] : [`cache-write $${price.cacheWrite}`]),
+    ...(price.cacheWrite1h === undefined ? [] : [`cache-write-1h $${price.cacheWrite1h}`]),
   ];
   return `Stored user-declared price for ${model}: input $${price.input}, output $${price.output}${cache.length ? `, ${cache.join(', ')}` : ''} (USD per 1M tokens).`;
 }

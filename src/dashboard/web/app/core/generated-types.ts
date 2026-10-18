@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 8ac1e53007aab5b4422b9ecbd16b1260409fe17721d67ac6db2057b449dc16d6 */
+/** Source SHA-256: 67e38ea8d4d3d3c3e984c3bb4b56c5820308f194f57a396d034a076e163d05e5 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1914,7 +1914,7 @@ export interface DeclaredPrice {
   summary: string;
   declaredAt: string;
   /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
-  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string };
+  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;
 }
 
@@ -1929,7 +1929,7 @@ export interface UnknownPricingPayload {
 export interface PricingDeclarePayload {
   ok: boolean;
   model: string;
-  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; like?: string };
+  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; like?: string };
 }
 
 export interface PricingUnsetPayload {

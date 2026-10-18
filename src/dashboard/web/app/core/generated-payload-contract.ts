@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "8ac1e53007aab5b4422b9ecbd16b1260409fe17721d67ac6db2057b449dc16d6";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "67e38ea8d4d3d3c3e984c3bb4b56c5820308f194f57a396d034a076e163d05e5";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -4321,7 +4321,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "rate",
       "optional": true,
-      "type": "{ input: string; output: string; cacheRead?: string; cacheWrite?: string }"
+      "type": "{ input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string }"
     },
     {
       "name": "like",
@@ -4365,7 +4365,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "price",
       "optional": false,
-      "type": "{ kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; like?: string }"
+      "type": "{ kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; like?: string }"
     }
   ],
   "PricingUnsetPayload": [

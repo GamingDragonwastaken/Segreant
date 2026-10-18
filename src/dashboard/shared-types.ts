@@ -1912,7 +1912,7 @@ export interface DeclaredPrice {
   summary: string;
   declaredAt: string;
   /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
-  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string };
+  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;
 }
 
@@ -1927,7 +1927,7 @@ export interface UnknownPricingPayload {
 export interface PricingDeclarePayload {
   ok: boolean;
   model: string;
-  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; like?: string };
+  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; like?: string };
 }
 
 export interface PricingUnsetPayload {
