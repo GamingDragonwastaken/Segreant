@@ -8,6 +8,14 @@
 // says so. A file where any test failed is never rerun, and a file that crashes
 // again fails the suite: a real import-time error is deterministic and cannot
 // hide behind the retry.
+//
+// The same fault also reaches a test through a CLI child process it spawns: the
+// child dies with Windows' access violation (exit 3221225477) or a WebAssembly
+// compile error in Node's own type stripper, and the test then fails on the
+// exit code or the output. Those failures carry the crash's signature in their
+// message; a file whose ONLY failures carry it is treated as crashed and rerun
+// alone too. A real failure in the same file, or the same failure again on the
+// rerun, still fails the suite.
 import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -29,11 +37,19 @@ process.env.USERPROFILE = scratchUser;
 // Tests that need one set it themselves.
 for (const name of ['SEGREANT_HOME', 'SEGREANT_DB', 'SEGREANT_DEMO']) delete process.env[name];
 
+const RUNTIME_CRASH = /\b3221225477\b|0xC0000005|STATUS_ACCESS_VIOLATION|WebAssembly\.Module\(\): Compiling function|memory access out of bounds|ERR_INTERNAL_ASSERTION/;
+
+function errorText(error, depth = 0) {
+  if (!error || depth > 3) return '';
+  return `${error.message ?? ''}\n${error.stack ?? ''}\n${typeof error.actual === 'string' || typeof error.actual === 'number' ? error.actual : ''}\n${errorText(error.cause, depth + 1)}`;
+}
+
 const files = (process.argv.length > 2 ? process.argv.slice(2) : readdirSync('test').filter((f) => f.endsWith('.test.ts')).map((f) => join('test', f))).sort();
 
 async function runFiles(list) {
   const failedTests = new Set(); // files with at least one failing test (nesting > 0)
   const failedFiles = new Set(); // files whose top-level run failed
+  const childCrashes = new Set(); // files with a test that failed only by a child's runtime crash
   const counts = { tests: 0, pass: 0, fail: 0, skipped: 0 };
   // Same parallelism as `node --test` (availableParallelism - 1); run() defaults to serial.
   const stream = run({ files: list, concurrency: true });
@@ -41,6 +57,7 @@ async function runFiles(list) {
     if (!e.file) return;
     // The file-level event is named by the file's own path; tests are named by their titles.
     if (e.nesting === 0 && resolve(e.name) === resolve(e.file)) failedFiles.add(e.file);
+    else if (RUNTIME_CRASH.test(errorText(e.details?.error))) childCrashes.add(e.file);
     else failedTests.add(e.file);
   });
   stream.on('test:summary', (e) => {
@@ -55,14 +72,14 @@ async function runFiles(list) {
   });
   // A top-level failure whose file also had a failing test is a test failure,
   // not a crash. Match on the file path the event reported.
-  const crashed = [...failedFiles].filter((f) => !failedTests.has(f));
+  const crashed = [...new Set([...failedFiles, ...childCrashes])].filter((f) => !failedTests.has(f));
   return { counts, crashed, realFailures: failedTests.size };
 }
 
 const first = await runFiles(files);
 let exitCode = first.counts.fail > 0 ? 1 : 0;
 if (first.realFailures === 0 && first.crashed.length > 0) {
-  console.log(`\n  ${first.crashed.length} test file(s) crashed with no failing test inside them; rerunning each once, alone:`);
+  console.log(`\n  ${first.crashed.length} test file(s) crashed with no failing test inside them (or failed only on a child process's runtime crash); rerunning each once, alone:`);
   for (const f of first.crashed) console.log(`    ${f}`);
   const second = await runFiles(first.crashed);
   exitCode = second.counts.fail > 0 ? 1 : 0;
