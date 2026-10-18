@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -425,17 +425,13 @@ export function loadPricing(force = false): PricingFile {
 }
 
 /**
- * The rate-card entry for exactly this model name in any card that may apply:
- * the one this process loaded, the verified card on disk (a refresh in another
- * process replaces it without telling this one), and the bundled card. Reads
- * only; the process's loaded card is never replaced here (PR #153 review).
- *
- * A refresh activates in order: archived card, archived provenance, active
- * card, active provenance. Between the last two the verified read falls back
- * to the previous card, so this also reads the active card unverified and
- * every archived card. The archive is written first, so a card being activated
- * is seen for the whole activation. Over-reading only refuses more, and that
- * refusal has --force (PR #153 review).
+ * The current card's entry for exactly this model name. "Current" is, newest
+ * first: the active card on disk when it differs from the verified one (a
+ * refresh caught between writing the card and its provenance), the verified
+ * card on disk (a refresh in another process this one has not loaded), then
+ * the card this process loaded. Archived cards and the bundled card are
+ * history: a model a later card removed is not priced by them (PR #153 review).
+ * Reads only.
  */
 export interface CardEntry {
   provider: string;
@@ -443,75 +439,47 @@ export interface CardEntry {
   output: number;
   rate: ModelRate;
   card: PricingFile;
-  /** Which card matched: the loaded one, the verified card on disk, the active card unverified, the bundled card, or an archived card. */
-  source: 'loaded' | 'disk' | 'active' | 'bundled' | 'archive';
+  /** Which card matched: the active card mid-activation, the verified card on disk, or the loaded one. */
+  source: 'active' | 'disk' | 'loaded';
 }
 
-export function cardEntryAnywhere(model: string): CardEntry | null {
-  // Newest first, so the rate charged is the most current one any card states;
-  // archived cards, which may be old, come last.
-  const cards: Array<[PricingFile, CardEntry['source']]> = [[loadPricing(), 'loaded']];
-  const onDisk = loadVerifiedCache();
-  if (onDisk) cards.push([onDisk.file, 'disk']);
-  const active = readValidPricing(cachePath());
-  if (active) cards.push([active, 'active']);
-  const bundled = readValidPricing(BUNDLED_PRICING_PATH);
-  if (bundled) cards.push([bundled, 'bundled']);
-  try {
-    // Archives carry no reliable order through an activation: names are
-    // hashes, listing order is unspecified, and a card being activated is
-    // written before its provenance. So among archived cards the highest
-    // stated rate for this model counts. A cap may then briefly count a
-    // superseded higher rate, but never undercount; budgets fail closed
-    // (PR #153 review). Newer cards above (loaded, verified, active, bundled)
-    // still come first.
-    const archiveDir = join(segreantHome(), 'pricing', 'cards');
-    const archives: Array<{ card: PricingFile; weight: number }> = [];
-    for (const name of existsSync(archiveDir) ? readdirSync(archiveDir) : []) {
-      if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
-      const archived = readValidPricing(join(archiveDir, name));
-      if (!archived) continue;
-      let weight = Number.NEGATIVE_INFINITY;
-      for (const p of Object.values(archived.providers)) {
-        const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
-        if (rate) weight = Math.max(weight, rate.input + rate.output);
-      }
-      archives.push({ card: archived, weight });
-    }
-    archives.sort((x, y) => y.weight - x.weight);
-    for (const a of archives) cards.push([a.card, 'archive']);
-  } catch { /* an unreadable archive adds nothing; the other cards still count */ }
-  for (const [card, source] of cards) {
-    for (const [provider, p] of Object.entries(card.providers)) {
-      const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
-      if (rate) return { provider, input: rate.input, output: rate.output, rate, card, source };
-    }
+function entryIn(card: PricingFile, model: string, source: CardEntry['source']): CardEntry | null {
+  for (const [provider, p] of Object.entries(card.providers)) {
+    const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
+    if (rate) return { provider, input: rate.input, output: rate.output, rate, card, source };
   }
   return null;
 }
 
+export function cardEntryAnywhere(model: string): CardEntry | null {
+  const loaded = loadPricing();
+  const verified = loadVerifiedCache();
+  const active = readValidPricing(cachePath());
+  // Exactly one card is current; it decides even when it does not list the model.
+  if (active && (!verified || pricingCardHash(active) !== pricingCardHash(verified.file))) return entryIn(active, model, 'active');
+  if (verified && pricingCardHash(verified.file) !== pricingCardHash(loaded)) return entryIn(verified.file, model, 'disk');
+  return entryIn(loaded, model, 'loaded');
+}
+
 /**
- * Whether any card prices this model, for applying a free price that was not
- * forced. Rechecked whenever the on-disk card or the archive changes, so a
- * refresh in another process counts at once without re-reading cards on every
- * request (PR #153 review).
+ * Whether the current card prices this model, for applying a free price that
+ * was not forced. Recomputed when the card or its provenance changes on disk,
+ * or this process loads another card, so a refresh counts at once without
+ * re-reading cards on every request (PR #153 review).
  */
 interface CardLookup {
   entry: CardEntry | null;
-  /** The verified card on disk prices this model and is not the card this process loaded: a refresh it has not picked up. */
+  /** The verified card on disk is current and differs from the loaded one: a refresh this process has not picked up. */
   verifiedIsNewer: boolean;
 }
 const cardLookupMemo = new Map<string, { key: string; lookup: CardLookup }>();
 function cardLookup(model: string): CardLookup {
   const stamp = (path: string): string => { try { return String(statSync(path).mtimeMs); } catch { return '-'; } };
-  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(provenancePath()), stamp(join(segreantHome(), 'pricing', 'cards')), cached === null ? null : pricingCardHash(cached)]);
+  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(provenancePath()), cached === null ? null : pricingCardHash(cached)]);
   const hit = cardLookupMemo.get(model);
   if (hit && hit.key === key) return hit.lookup;
-  const verified = loadVerifiedCache();
-  const loaded = loadPricing();
-  const verifiedIsNewer = verified !== null && pricingCardHash(verified.file) !== pricingCardHash(loaded)
-    && Object.values(verified.file.providers).some((p) => Object.hasOwn(p.models, model));
-  const lookup = { entry: cardEntryAnywhere(model), verifiedIsNewer };
+  const entry = cardEntryAnywhere(model);
+  const lookup = { entry, verifiedIsNewer: entry?.source === 'disk' };
   if (cardLookupMemo.size > 1000) cardLookupMemo.clear();
   cardLookupMemo.set(model, { key, lookup });
   return lookup;
@@ -1229,12 +1197,12 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
       here = pricing.providers[provider]?.models;
       ({ entry } = cardLookup(model));
     }
-    // Still not on the loaded card (a refresh mid-activation, or only an
-    // archived card has it): charge the matching card's rate, labelled with
-    // that card's own identity. Its source is unknown unless it was recorded.
-    if (entry && entry.source !== 'loaded') {
+    // Mid-activation, the current card is the active one, which this process
+    // cannot load as verified: charge its rate under its own identity, with
+    // its source unknown unless recorded (PR #153 review).
+    if (entry && entry.source === 'active') {
       const sha256 = pricingCardHash(entry.card);
-      const sourceKind: RateCardSourceKind = entry.source === 'bundled' ? 'bundled' : readCardProvenance(sha256)?.sourceKind ?? 'legacy_unknown';
+      const sourceKind: RateCardSourceKind = readCardProvenance(sha256)?.sourceKind ?? 'legacy_unknown';
       return resolved(entry.rate, entry.provider === provider ? 'exact_provider' : 'exact_cross_provider', entry.provider, model, null, { sha256, sourceKind });
     }
   }
