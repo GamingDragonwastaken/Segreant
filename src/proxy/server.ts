@@ -838,6 +838,8 @@ async function handle(
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
+    // Kept so a later reprice prices the writes at the same duration (PR #146 review).
+    ...(usage.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,
     costUsd: cost.costUsd,

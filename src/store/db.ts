@@ -243,6 +243,8 @@ export interface RequestRow {
    * same transaction; absent rows remain legacy numeric compatibility records.
    */
   economicAmount?: Money;
+  /** The cache-write duration this row was priced with, when the source said; absent is unknown. */
+  cacheWriteTtl?: '5m' | '1h';
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -920,8 +922,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
       const info = prepared(this.db, sql).run(
         row.requestId,
         row.sessionId,
@@ -955,6 +957,7 @@ export class Store {
         scope.declarationId,
         row.attributionBasis ?? 'legacy_unknown',
         row.captureCoverage ?? 'complete',
+        row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : null,
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (row.economicAmount !== undefined) {
@@ -2644,6 +2647,7 @@ export class Store {
     outputTokens: number;
     cacheWriteTokens: number;
     cacheReadTokens: number;
+    cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
   }> {
     return realization.estimatedRequestRows(this.db);

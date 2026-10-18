@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 67e38ea8d4d3d3c3e984c3bb4b56c5820308f194f57a396d034a076e163d05e5 */
+/** Source SHA-256: 4705039c83a96a688efa21311bb732a2c7143f2c6797f2a87892078be64ce0d1 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1953,6 +1953,8 @@ export interface RepricePayload {
   estimatedRows: number;
   repriceable: number;
   stillEstimated: number;
+  /** Rows with cache writes recorded before the cache-write duration was kept; priced at the 5-minute rate. */
+  cacheDurationUnknown: number;
   totalBeforeUsd: number;
   totalAfterUsd: number;
   byModel: RepriceModelPayload[];

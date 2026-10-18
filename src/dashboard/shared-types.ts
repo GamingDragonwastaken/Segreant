@@ -1951,6 +1951,8 @@ export interface RepricePayload {
   estimatedRows: number;
   repriceable: number;
   stillEstimated: number;
+  /** Rows with cache writes recorded before the cache-write duration was kept; priced at the 5-minute rate. */
+  cacheDurationUnknown: number;
   totalBeforeUsd: number;
   totalAfterUsd: number;
   byModel: RepriceModelPayload[];
