@@ -239,12 +239,16 @@ export function describeSpendBasis(basis: SpendBasis): string {
 /**
  * Spend beside the cap it crossed. Two decimals hid the overshoot: $5.004
  * against a $5 cap read "$5.00 of $5.00". When the two would round alike but
- * differ, add digits (to the microdollar) until they do not.
+ * differ, add digits (to the microdollar) until they do not. A difference
+ * below the microdollar is said in words, so two different amounts never
+ * print as the same figure (PR #142 review).
  */
 export function spendBesideCap(spendUsd: number, capUsd: number): string {
   let digits = 2;
   while (digits < 6 && spendUsd !== capUsd && spendUsd.toFixed(digits) === capUsd.toFixed(digits)) digits += 1;
-  return '$' + spendUsd.toFixed(digits);
+  const shown = '$' + spendUsd.toFixed(digits);
+  if (spendUsd === capUsd || spendUsd.toFixed(digits) !== capUsd.toFixed(digits)) return shown;
+  return `${spendUsd > capUsd ? 'just over' : 'just under'} ${shown}`;
 }
 
 export function startOfLocalDay(now: number = Date.now()): number {

@@ -49,12 +49,23 @@ test('runtime dashboard accessibility: real Chromium DOM, keyboard focus, networ
     await page.keyboard.press('Escape');
     assert.equal(await firstRun.isVisible(), true, 'Escape must not dismiss the required first-run choice');
     assert.equal(await page.evaluate(() => document.activeElement?.textContent?.includes('look after the money')), true, 'Escape must return focus to the first choice');
+    // Hold the API back so the page's heading renders late, then press the skip
+    // link before it does. The post-choice heading focus used to keep retrying
+    // and pull focus out of main once the heading appeared; CI caught it as an
+    // intermittent failure with focus on h1.view-title (PR #142, 2026-10-17).
+    // This makes that race happen every run.
+    await page.route('**/api/**', async (route) => { await new Promise((r) => setTimeout(r, 700)); await route.continue(); });
     await precise.click();
     await page.locator('#main').waitFor({ state: 'visible' });
-    // The choice routes to a page that then loads its data and re-renders.
-    // Testing the skip link before that settles raced the render: CI on PR
-    // #134 saw focus land on nothing (6 of 6 local runs passed).
+    await page.getByRole('link', { name: 'Skip to content' }).focus();
+    await page.keyboard.press('Enter');
+    // Polling keeps the network busy while responses are held, so wait for the
+    // late heading itself, then past the old one-second retry window.
+    await page.locator('main h1').first().waitFor({ state: 'attached', timeout: 15000 });
+    await page.waitForTimeout(1200);
+    await page.unroute('**/api/**');
     await page.waitForLoadState('networkidle');
+    assert.equal(await page.evaluate(() => document.activeElement?.id ?? 'none'), 'main', 'a late page render must not take focus from where the user put it');
 
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await skip.focus();
