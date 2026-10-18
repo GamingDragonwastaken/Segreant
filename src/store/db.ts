@@ -1869,20 +1869,22 @@ export class Store {
     if (fam) args.push(...fam.args);
     const rows = this.db
       .prepare(
-        `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256
+        `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256, rate_match_model AS rateMatchModel
          FROM requests
          WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` +
           (provider !== undefined ? ` AND provider = ?` : ``) +
           (fam ? ` AND ${fam.sql}` : ``),
       )
-      .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null }>;
+      .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null; rateMatchModel: string | null }>;
     const bases = new Set<string>();
     const cards = new Set<string>();
     for (const r of rows) {
       bases.add(r.costBasis);
       // A null card is not a distinct revision — plenty of bases (tool-reported,
       // unpriced) legitimately have none. Only real revisions count as a span.
-      if (r.rateCardSha256) cards.add(r.rateCardSha256);
+      // A declared `like` follows the card under the model it names, so a new
+      // target on the same card is a new price revision (PR #146 review).
+      if (r.rateCardSha256) cards.add(r.costBasis === 'user_declared_price' && r.rateMatchModel ? `${r.rateCardSha256}:${r.rateMatchModel}` : r.rateCardSha256);
     }
     return { costBases: [...bases].sort(), rateCardShas: [...cards].sort() };
   }

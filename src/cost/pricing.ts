@@ -100,7 +100,7 @@ export type CostBasis = (typeof COST_BASES)[number];
 /** Source of an attached rate-card hash. `none` is deliberately explicit for
  * tool-reported and unpriced rows, so a null hash is never mistaken for a lost
  * local rate card. */
-export const RATE_CARD_SOURCE_KINDS = ['manual', 'native_manifest', 'litellm_transformed', 'bundled', 'legacy_unknown', 'none'] as const;
+export const RATE_CARD_SOURCE_KINDS = ['manual', 'native_manifest', 'litellm_transformed', 'bundled', 'legacy_unknown', 'none', 'user_declaration'] as const;
 export type RateCardSourceKind = (typeof RATE_CARD_SOURCE_KINDS)[number];
 
 /** How the observed model was resolved against a local rate card, if any. */
@@ -913,6 +913,7 @@ function resolved(
   rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback' | 'user_declared' | 'user_declared_free'>,
   rateMatchProvider: string | null,
   rateMatchModel: string | null,
+  declarationSha256: string | null = null,
 ): ResolvedRate {
   // rateFor always loads the active card first, so the card identity and source
   // describe this exact local computation rather than a later refresh.
@@ -930,8 +931,12 @@ function resolved(
     estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider' && !declared,
     pricing: {
       costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : declared ? 'user_declared_price' : 'local_list_price',
-      rateCardSha256: fromCard ? pricingCardHash(card) : null,
-      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : 'none',
+      // A rate or free declaration carries a revision of the declaration itself,
+      // labelled as the user's, never the card's: a changed price is then a new
+      // revision that value comparisons see, and a card refresh is not
+      // (PR #146 review).
+      rateCardSha256: fromCard ? pricingCardHash(card) : declarationSha256,
+      rateCardSourceKind: fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
       rateMatchKind,
       rateMatchProvider,
       rateMatchModel,
@@ -1012,15 +1017,26 @@ function declaredRate(o: Extract<PriceOverride, { kind: 'rate' }>): ModelRate {
     input: o.input,
     output: o.output,
     ...(o.cacheRead === undefined ? {} : { cache_read: o.cacheRead }),
+    // cacheWrite prices both TTLs unless cacheWrite1h names the 1-hour price
+    // (the engine and the usage record already tell the two apart).
     ...(o.cacheWrite === undefined ? {} : { cache_write_5m: o.cacheWrite, cache_write_1h: o.cacheWrite }),
+    ...(o.cacheWrite1h === undefined ? {} : { cache_write_1h: o.cacheWrite1h }),
   };
   return {
     input: Number(o.input),
     output: Number(o.output),
     ...(o.cacheRead === undefined ? {} : { cache_read: Number(o.cacheRead) }),
     ...(o.cacheWrite === undefined ? {} : { cache_write_5m: Number(o.cacheWrite), cache_write_1h: Number(o.cacheWrite) }),
+    ...(o.cacheWrite1h === undefined ? {} : { cache_write_1h: Number(o.cacheWrite1h) }),
     exact,
   };
+}
+
+/** A stable revision of what was declared (the prices, not when): the same price declared again is the same revision. */
+function declarationRevision(o: PriceOverride): string {
+  const { declaredAt: _when, ...price } = o;
+  const canonical = JSON.stringify(Object.keys(price).sort().map((k) => [k, (price as Record<string, unknown>)[k]]));
+  return createHash('sha256').update('segreant-declaration:v1\n' + canonical).digest('hex');
 }
 
 /** The rate with decimal companions for any it lacks, written from its own numbers. */
@@ -1089,8 +1105,8 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
   const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
-  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model);
-  if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model);
+  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);
     // A card entry without decimal companions (a hand-written manifest may omit

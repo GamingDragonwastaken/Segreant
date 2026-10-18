@@ -115,7 +115,12 @@ export async function cmdStart(flags: Flags): Promise<void> {
     // review). A config that no longer reads is treated as off.
     enabled: () => {
       try {
-        return loadConfig().pricing.lookupUnknownModels;
+        // Only against the built-in public list, which is what the banner and
+        // the privacy statement disclose: an operator who points
+        // pricing.manifestUrl at their own card refreshes it themselves
+        // (PR #146 review).
+        const pricing = loadConfig().pricing;
+        return pricing.lookupUnknownModels && pricingSourceLabel(pricing.manifestUrl) === 'the public price list';
       } catch {
         return false;
       }
@@ -224,9 +229,12 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
     line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
   }
   // The one request Segreant makes on its own: said where the user starts it.
-  if (cfg.pricing.lookupUnknownModels) {
+  if (cfg.pricing.lookupUnknownModels && pricingSourceLabel(cfg.pricing.manifestUrl) === 'the public price list') {
     line(color(tty, C.gray, 'Prices     a model missing from the rate card is looked up in the public price list'));
     line(color(tty, C.gray, '           (a plain download; sends nothing about you). Off: segreant pricing --auto off'));
+  } else if (cfg.pricing.lookupUnknownModels) {
+    line(color(tty, C.gray, `Prices     ${pricingSourceLabel(cfg.pricing.manifestUrl)} is not looked up automatically;`));
+    line(color(tty, C.gray, '           refresh it with: segreant pricing --refresh'));
   }
   console.log('');
   line(color(tty, C.gray, 'Press Ctrl+C to stop. A tool pointed at this address by hand cannot connect while'));

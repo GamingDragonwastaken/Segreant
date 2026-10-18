@@ -143,6 +143,19 @@ test('the lookup is on by default, and a config without the key gets the default
   assert.equal(loadConfig().pricing.lookupUnknownModels, true);
 });
 
+test('automatic lookups run only against the built-in list; a custom price source is refreshed by hand (PR #146 review)', async () => {
+  const { mutateConfig, loadConfig } = await import('../src/config.ts');
+  const { pricingSourceLabel } = await import('../src/cli/runCmd.ts');
+  mutateConfig((c) => ({ ...c, pricing: { ...c.pricing, manifestUrl: 'https://prices.example.test/card.json' } }));
+  try {
+    const pricing = loadConfig().pricing;
+    assert.equal(pricing.lookupUnknownModels, true);
+    assert.notEqual(pricingSourceLabel(pricing.manifestUrl), 'the public price list', 'the watcher stays off for a custom source');
+  } finally {
+    mutateConfig((c) => ({ ...c, pricing: { ...c.pricing, manifestUrl: null } }));
+  }
+});
+
 test('the learned notice names the built-in list however it is configured (PR #146 review)', async () => {
   const { pricingSourceLabel } = await import('../src/cli/runCmd.ts');
   const { DEFAULT_MANIFEST_URL } = await import('../src/cost/pricing.ts');

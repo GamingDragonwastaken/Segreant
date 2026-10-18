@@ -19,12 +19,12 @@ import { dirname, join } from 'node:path';
 import { acquireConfigMutationLock, DemoReadOnlyError, isDemo, segreantHome } from '../config.ts';
 
 export type PriceOverride =
-  | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; declaredAt: string }
+  | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; declaredAt: string }
   | { kind: 'like'; like: string; declaredAt: string }
   | { kind: 'free'; declaredAt: string };
 
 export type PriceOverrideInput =
-  | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string }
+  | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string }
   | { kind: 'like'; like: string }
   | { kind: 'free' };
 
@@ -74,13 +74,14 @@ function overrideError(model: string, raw: unknown, requireDeclaredAt: boolean):
   const allowed = new Set(['kind', 'declaredAt']);
   switch (o['kind']) {
     case 'rate':
-      for (const k of ['input', 'output', 'cacheRead', 'cacheWrite']) allowed.add(k);
+      for (const k of ['input', 'output', 'cacheRead', 'cacheWrite', 'cacheWrite1h']) allowed.add(k);
       // Input and output must be positive: a zero there is what `free` is for,
       // and a typo'd zero would silently stop a cap from counting this model.
       if (!validDecimal(o['input'], true)) return `${model}: input must be a positive decimal (USD per 1M tokens)`;
       if (!validDecimal(o['output'], true)) return `${model}: output must be a positive decimal (USD per 1M tokens)`;
       if (o['cacheRead'] !== undefined && !validDecimal(o['cacheRead'], true)) return `${model}: cacheRead must be a positive decimal`;
       if (o['cacheWrite'] !== undefined && !validDecimal(o['cacheWrite'], true)) return `${model}: cacheWrite must be a positive decimal`;
+      if (o['cacheWrite1h'] !== undefined && !validDecimal(o['cacheWrite1h'], true)) return `${model}: cacheWrite1h must be a positive decimal`;
       break;
     case 'like':
       allowed.add('like');
