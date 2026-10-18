@@ -712,6 +712,10 @@ async function handle(
   const isStream = parsed.stream || contentType.includes('text/event-stream');
 
   let usage: NormalizedUsage = emptyUsage();
+  // A non-streamed response is priced once, before its headers go out, and the
+  // ledger records that same cost: pricing it again could read a price card
+  // refreshed in between (PR #154 review).
+  let pricedForHeaders: ReturnType<typeof computeCost> | null = null;
   let resolvedModel = parsed.model;
   let captureCoverage: RequestRow['captureCoverage'] = 'complete';
 
@@ -833,6 +837,7 @@ async function handle(
       /* non-JSON (e.g. error HTML) — usage stays empty */
     }
     const cost = withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
+    pricedForHeaders = cost;
     downHeaders['x-segreant-cost-usd'] = cost.costUsd.toFixed(6);
     if (decision.sessionSpendUsd !== null && config.budget.sessionUsd !== null) {
       const remaining = Math.max(0, config.budget.sessionUsd - decision.sessionSpendUsd - cost.costUsd);
@@ -843,7 +848,7 @@ async function handle(
   }
 
   // --- Cost + log (after the client has its bytes) ---
-  const cost = withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
+  const cost = pricedForHeaders ?? withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
   safeLog(deps, {
     requestId,
     sessionId,
