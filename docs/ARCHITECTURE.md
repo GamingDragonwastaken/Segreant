@@ -263,9 +263,12 @@ selected eligible address is pinned into the one socket request; the OS resolver
 is not asked to choose a different address afterward.
 Only a genuinely absent receipt path may establish a genesis predecessor, and a
 present invalid path is never silently reset. Loaded JSON egress configuration
-also accepts only the two declared modes and exact rule field types; ambiguous
-mode/enabled values return to local-locked behavior rather than authorizing a
-cloud rule. Loaded rules use the same exact semantic validator as CLI-authored
+also accepts only the two declared modes and exact rule field types. A present
+but malformed egress section (ambiguous mode or enabled values, an invalid rule,
+unexpected fields) loads as `invalid`, which refuses every non-loopback target,
+the built-in provider and price-list routes included, until it is repaired; only
+an absent section means local-locked. Falling back to local-locked would now let
+built-in provider traffic through a typo. Loaded rules use the same exact semantic validator as CLI-authored
 rules: canonical HTTPS origin, non-empty safe path prefix, valid identifiers,
 and no unexpected fields. A bounded stale-lock refusal is
 operator-repairable only after confirming no Segreant writer is active; the lock

@@ -252,9 +252,9 @@ These paths are off unless an operator deliberately invokes or configures them:
 - `segreant pricing --refresh`, or `pricing.autoRefresh` with a configured manifest,
   downloads a public pricing manifest from the selected HTTPS URL. The request is
   a plain GET with no usage, prompt, or customer data; the accepted normalized
-  card and redacted source provenance remain local under the Segreant home. It
-  additionally needs an exact `pricing_refresh` egress rule in controlled-cloud
-  mode.
+  card and redacted source provenance remain local under the Segreant home. The
+  built-in public price list needs no rule in either mode; any other manifest
+  URL needs an exact `pricing_refresh` egress rule in controlled-cloud mode.
 - `segreant baseline --refresh --url ...` downloads a baseline manifest from the
   URL supplied by the operator and needs an exact `baseline_refresh` rule.
 - `segreant alerts --set-webhook ...` sends configured alert summaries to the
