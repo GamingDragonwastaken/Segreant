@@ -224,8 +224,9 @@ it from PowerShell or cmd, where `/v1/` arrives unchanged.
 `segreant pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of
 contributors within days of every model release; the GET sends nothing about
-you). It needs a reviewed `pricing_refresh` egress rule in controlled-cloud
-mode. For self-maintenance, `segreant pricing --auto` refreshes on start
+you). The public price list is a built-in route in either egress mode, so it
+needs no rule; a custom `pricing.manifestUrl` needs an exact `pricing_refresh`
+rule in controlled-cloud mode. For self-maintenance, `segreant pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 

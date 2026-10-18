@@ -169,3 +169,13 @@ test('a malformed egress section refuses even the built-in provider routes until
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('a method no rule can name gets no repair command, only methods the validator accepts do (PR #148 review)', async () => {
+  const { providerRuleCommand } = await import('../src/egress/policy.ts');
+  for (const m of ['OPTIONS', 'TRACE', 'CONNECT', 'options']) {
+    assert.equal(providerRuleCommand('https://gateway.example.com/v1/x', m), null, m);
+  }
+  for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'post']) {
+    assert.match(providerRuleCommand('https://gateway.example.com/v1/x', m) ?? '', new RegExp(`--method ${m.toUpperCase()} `), m);
+  }
+});

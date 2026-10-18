@@ -140,10 +140,12 @@ export OPENAI_BASE_URL="http://localhost:8090/v1"
 
 A tool pointed at the proxy this way cannot connect while Segreant is stopped.
 
-Segreant starts **locked**: it forwards nothing to a cloud provider until you
-grant that exact route with `segreant egress apply`; the two commands for OpenAI
-and Anthropic are in [GETTING-STARTED.md](docs/GETTING-STARTED.md). Then set a
-cap:
+Requests to OpenAI's and Anthropic's official APIs go through as soon as Segreant
+starts: that traffic was already going to your provider, and Segreant meters it
+on the way. Everything Segreant would send on its own (webhooks, team rollups,
+hosted judging) stays off until you allow it, and another provider or gateway
+needs one rule, which a refused request prints
+([GETTING-STARTED.md](docs/GETTING-STARTED.md)). Then set a cap:
 
 ```bash
 segreant budget --daily 25 --soft 18 --runaway 2   # hard cap, warning, loop guard

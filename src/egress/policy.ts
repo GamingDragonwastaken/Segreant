@@ -116,11 +116,16 @@ export function providerRuleId(origin: string, method = 'POST'): string {
   return `${head}-${tag}-${verb}`;
 }
 
+const RULE_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
+
 /** The one command that lets Segreant forward to an upstream that is not built in (a gateway, a hosted model). */
 export function providerRuleCommand(url: string, method = 'POST'): string | null {
   let origin: URL;
   try { origin = new URL(new URL(url).origin); } catch { return null; }
   if (origin.protocol !== 'https:') return null;
+  // Only methods a rule can name: printing `--method OPTIONS` would hand the
+  // user a command the rule validator refuses (PR #148 review).
+  if (!RULE_METHODS.has(method.toUpperCase())) return null;
   return `segreant egress apply --apply --mode controlled_cloud --id ${providerRuleId(origin.origin, method)} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
 }
 
