@@ -71,10 +71,27 @@ async function answeredNothingSpent(store: Store, flags: Flags, repo: string): P
  * recommended cap doing better than the current one, and where the full record
  * is. The record itself (renderBudgetCapDecision) stays one flag away.
  */
-function plainCapVerdict(decision: BudgetCapDecision, canonical: DecisionKernelIssuance): string[] {
+function plainCapVerdict(
+  decision: BudgetCapDecision,
+  canonical: DecisionKernelIssuance,
+  soft: { current: number | null; recommended: number },
+): string[] {
   const label = (capUsd: number | null | undefined) => (capUsd === null || capUsd === undefined ? 'no cap' : usd(capUsd));
-  const recommended = label(decision.actions.find((a) => a.action === 'apply_recommended')?.capUsd);
-  const current = label(decision.actions.find((a) => a.action === 'keep_current')?.capUsd);
+  const recommendedCap = decision.actions.find((a) => a.action === 'apply_recommended')?.capUsd;
+  const currentCap = decision.actions.find((a) => a.action === 'keep_current')?.capUsd;
+  const recommended = label(recommendedCap);
+  const current = label(currentCap);
+  // Equal caps are one setting, not two options: there is nothing to compare,
+  // and blaming partly observed days for "no winner" would be a false reason
+  // (PR #142 review).
+  // The soft warning is part of the recommendation too: an equal daily cap
+  // with a different soft warning is a change, and is said as one (PR #145 review).
+  if (recommendedCap !== null && recommendedCap !== undefined && recommendedCap === currentCap) {
+    const first = soft.current === soft.recommended
+      ? `  Your current ${current} cap and ${usd(soft.recommended)} soft warning already match the recommendation; nothing to change.`
+      : `  Your current ${current} daily cap already matches the recommendation. Only the soft warning differs: recommended ${usd(soft.recommended)}, yours is ${soft.current === null ? 'off' : usd(soft.current)}.`;
+    return [first, '  Full decision record: segreant budget --recommend --detail'];
+  }
   const certificate = canonical.certificateBundle.dominance;
   const currentPhrase = current === 'no cap' ? 'having no cap' : `your current ${current}`;
   const verdict = certificate.status === 'proven_dominant'
@@ -89,7 +106,10 @@ function plainCapVerdict(decision: BudgetCapDecision, canonical: DecisionKernelI
 export function budgetClosingLine(
   applyPermitted: boolean,
   dominance: { status: string; action?: string | null } | null,
+  sameCap: { softRecommended: number; softMatches: boolean } | null = null,
 ): string {
+  if (sameCap?.softMatches) return '  No change needed: your config already has this cap and soft warning.';
+  if (sameCap) return `  Daily cap unchanged. To set only the soft warning: segreant budget --soft ${sameCap.softRecommended.toFixed(2)}`;
   if (applyPermitted) return '  Re-run with --apply to write these to your config.';
   if (dominance?.status === 'proven_dominant' && dominance.action === 'apply_recommended') {
     return '  No cap written: the evidence favours the new cap, but its inputs are not verified enough to change spend. --detail lists what is missing.';
@@ -826,7 +846,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     // claim ids and read as contradicting the recommendation above it.
     const lines = flags.detail
       ? renderBudgetCapDecision(decision, certificates, canonicalDecision!)
-      : plainCapVerdict(decision, canonicalDecision!);
+      : plainCapVerdict(decision, canonicalDecision!, { current: cfg.budget.dailySoftUsd, recommended: softCap });
     for (const line of lines) console.log(color(tty, C.gray, line));
   }
   // Raw allocation and frontier trim/grow hints are withheld from this surface
@@ -861,7 +881,8 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     // it picks the current cap, or it picks the new cap but its inputs are not
     // verified enough to change spend (PR #142 review).
     const dominance = canonicalDecision?.certificateBundle.dominance;
-    console.log(color(tty, C.gray, budgetClosingLine(decision !== null && applyPermitted, dominance ?? null)));
+    console.log(color(tty, C.gray, budgetClosingLine(decision !== null && applyPermitted, dominance ?? null,
+      cfg.budget.dailyUsd === dailyCap ? { softRecommended: softCap, softMatches: cfg.budget.dailySoftUsd === softCap } : null)));
   }
   console.log('');
   store.close();
