@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -424,22 +424,15 @@ export function loadPricing(force = false): PricingFile {
   return cached;
 }
 
-/**
- * The current card's entry for exactly this model name. The current card is
- * the one Segreant's verified loader would load now: the verified card on
- * disk when it differs from the card this process loaded (a refresh in another
- * process), else the loaded card. An unverified or failed activation is not
- * current; the loader already recovers the previous card for it. Archived
- * cards and the bundled card are history (PR #153 review). Reads only.
- */
+/** One card's entry for exactly this model name. */
 export interface CardEntry {
   provider: string;
   input: number;
   output: number;
   rate: ModelRate;
   card: PricingFile;
-  /** Which card matched: the verified card on disk (not yet loaded here), or the loaded one. */
-  source: 'disk' | 'loaded';
+  /** Which card matched: the card this process prices with, or the verified card on disk. */
+  source: 'loaded' | 'disk';
 }
 
 function entryIn(card: PricingFile, model: string, source: CardEntry['source']): CardEntry | null {
@@ -450,40 +443,27 @@ function entryIn(card: PricingFile, model: string, source: CardEntry['source']):
   return null;
 }
 
+/**
+ * For refusing `--free` when a price is declared: the card this process prices
+ * with, or the verified card on disk (a refresh another process made). A
+ * one-off user action, so it errs towards refusing; --force overrides it.
+ */
 export function cardEntryAnywhere(model: string): CardEntry | null {
-  const loaded = loadPricing();
+  const loaded = entryIn(loadPricing(), model, 'loaded');
+  if (loaded) return loaded;
   const verified = loadVerifiedCache();
-  // Exactly one card is current; it decides even when it does not list the model.
-  if (verified && pricingCardHash(verified.file) !== pricingCardHash(loaded)) return entryIn(verified.file, model, 'disk');
-  return entryIn(loaded, model, 'loaded');
+  return verified ? entryIn(verified.file, model, 'disk') : null;
 }
 
 /**
- * Whether the current card prices this model, for applying a free price that
- * was not forced. Recomputed when the card or its provenance changes on disk,
- * or this process loads another card, so a refresh counts at once without
- * re-reading cards on every request (PR #153 review).
+ * For pricing a request: whether the card this process prices with lists this
+ * model, so a free price that was not forced does not apply to it. The same
+ * card every other price in this process uses, so a reprice plan cannot change
+ * its mind midway; noticing a refresh another process made is the card
+ * loader's job, for every model alike (PR #153 review).
  */
-interface CardLookup {
-  entry: CardEntry | null;
-  /** The verified card on disk is current and differs from the loaded one: a refresh this process has not picked up. */
-  verifiedIsNewer: boolean;
-}
-const cardLookupMemo = new Map<string, { key: string; lookup: CardLookup }>();
-function cardLookup(model: string): CardLookup {
-  const stamp = (path: string): string => { try { return String(statSync(path).mtimeMs); } catch { return '-'; } };
-  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(provenancePath()), cached === null ? null : pricingCardHash(cached)]);
-  const hit = cardLookupMemo.get(model);
-  if (hit && hit.key === key) return hit.lookup;
-  const entry = cardEntryAnywhere(model);
-  const lookup = { entry, verifiedIsNewer: entry?.source === 'disk' };
-  if (cardLookupMemo.size > 1000) cardLookupMemo.clear();
-  cardLookupMemo.set(model, { key, lookup });
-  return lookup;
-}
-/** Whether a rate card prices this model, so a free price not forced for it does not apply. */
 export function cardPricesModel(model: string): boolean {
-  return cardLookup(model).entry !== null;
+  return entryIn(loadPricing(), model, 'loaded') !== null;
 }
 
 export interface RefreshResult {
@@ -1166,8 +1146,8 @@ export function withPricingSnapshot<T>(fn: () => T): T {
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
-  let pricing = loadPricing();
-  let here = pricing.providers[provider]?.models;
+  const pricing = loadPricing();
+  const here = pricing.providers[provider]?.models;
 
   // 0) A price the user declared for this exact model name wins: it is the one
   //    place a private, fine-tuned or local model can get a real price. A `like`
@@ -1175,22 +1155,10 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    falls to the ordinary ladder rather than to a guess built on a guess.
   const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
   // A free price counts a model as $0. Unless it was forced, it never applies
-  // to a model a card prices, whatever order the declaration and a refresh
-  // happened in: the card's price counts instead (PR #153 review).
+  // to a model the card this process prices with lists: that card's price
+  // counts instead, whenever the free price was declared (PR #153 review).
   if (declared?.kind === 'free' && (declared.force === true || !cardPricesModel(model))) {
     return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
-  }
-  if (declared?.kind === 'free') {
-    // Set aside: the request is charged at the card rate, not the generic
-    // fallback (PR #153 review). A refresh in another process leaves this
-    // process's card stale, whether it added the model or changed its rate;
-    // reload the verified card when it prices the model and differs from the
-    // loaded one, as a restart would. Memoized until the card files change.
-    // After the reload the ordinary ladder below prices it, named provider first.
-    if (cardLookup(model).verifiedIsNewer) {
-      pricing = loadPricing(true);
-      here = pricing.providers[provider]?.models;
-    }
   }
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
   if (declared?.kind === 'like') {
