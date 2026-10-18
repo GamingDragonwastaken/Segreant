@@ -158,7 +158,7 @@ test('an archived card is history: it neither refuses nor overrides a free price
   }
 });
 
-test('mid-activation, the activating card beats a stale loaded rate (PR #153 review)', async () => {
+test('a new card on disk beats a stale loaded rate (PR #153 review)', async () => {
   const { mkdirSync, writeFileSync } = await import('node:fs');
   const { rateFor } = await import('../src/cost/pricing.ts');
   const { overridesPath } = await import('../src/cost/overrides.ts');
@@ -166,7 +166,7 @@ test('mid-activation, the activating card beats a stale loaded rate (PR #153 rev
   const card = structuredClone(loadPricing());
   card.providers['anthropic']!.models[cardModel] = { ...loadedRate, input: loadedRate.input * 7, output: loadedRate.output * 7 };
   mkdirSync(join(home, 'pricing'), { recursive: true });
-  // The new card is written; its provenance is not yet.
+  // A new card on disk with no provenance record is what the loader loads.
   writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
   mkdirSync(dirname(overridesPath()), { recursive: true });
   writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { [cardModel]: { kind: 'free', declaredAt: new Date().toISOString() } } }));
@@ -204,6 +204,42 @@ test('a refresh that changes the rate of a model the loaded card already has is 
     assert.equal(charged.pricing.rateMatchKind, 'exact_provider');
     assert.equal(charged.rate.input, loadedRate.input * 10, 'the refreshed rate, not the stale loaded one');
     assert.equal(charged.pricing.rateCardSourceKind, 'manual');
+  } finally {
+    rmSync(overridesPath(), { force: true });
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
+
+test('a failed activation is not current: the previous verified card still decides (PR #153 review)', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const { cardEntryAnywhere, rateFor } = await import('../src/cost/pricing.ts');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+  const count = (c: ReturnType<typeof loadPricing>) => Object.values(c.providers).reduce((n, p) => n + Object.keys(p.models).length, 0);
+  const now = new Date().toISOString();
+  // The previous card, committed: archive, archive provenance, active provenance.
+  const previous = structuredClone(loadPricing());
+  previous.providers['openai']!.models['acme-failed-refresh'] = { input: 6, output: 24 };
+  const prevText = JSON.stringify(previous);
+  const prevSha = sha(prevText);
+  mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'cards', `${prevSha}.json`), prevText);
+  const prov = { schemaVersion: 1, sourceUrl: null, sourceUrlSha256: null, sourceKind: 'manual', fetchedAt: now,
+    upstreamDeclaredUpdated: null, cardSha256: prevSha, modelCount: count(previous), etag: null, lastModified: null };
+  writeFileSync(join(home, 'pricing', 'cards', `${prevSha}.provenance.json`), JSON.stringify(prov));
+  writeFileSync(join(home, 'pricing', 'provenance.json'), JSON.stringify({ ...prov, lastCheckedAt: now }));
+  // A failed refresh: the new active card (dropping the model) was written, its provenance never was.
+  const failed = structuredClone(previous);
+  delete failed.providers['openai']!.models['acme-failed-refresh'];
+  writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(failed));
+  mkdirSync(dirname(overridesPath()), { recursive: true });
+  writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { 'acme-failed-refresh': { kind: 'free', declaredAt: now } } }));
+  try {
+    assert.equal(cardEntryAnywhere('acme-failed-refresh')?.input, 6, 'the recovered previous card is current');
+    const charged = rateFor('openai', 'acme-failed-refresh');
+    assert.equal(charged.pricing.rateMatchKind, 'exact_provider', 'not $0 from the failed card');
+    assert.equal(charged.rate.input, 6);
   } finally {
     rmSync(overridesPath(), { force: true });
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
