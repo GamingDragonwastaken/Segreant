@@ -1618,7 +1618,7 @@ export interface SettingsSnapshot {
   budget: BudgetConfig;
   enforcement: BudgetEnforcement;
   egress: {
-    mode: 'local_locked' | 'controlled_cloud';
+    mode: 'local_locked' | 'controlled_cloud' | 'invalid';
     rules: Array<{
       id: string;
       enabled: boolean;

@@ -43,7 +43,8 @@ machine-wide isolation guarantee.
 2. **A network attacker between the proxy and the configured upstream**,
    attempting to redirect traffic to a different destination or read a
    credential in transit. Mitigated by DNS-pinned egress, refusing
-   non-loopback targets in `local_locked` mode, and stripping `Location` from
+   non-loopback targets other than the exact built-in provider and price-list
+   origins in `local_locked` mode, and stripping `Location` from
    upstream redirects before returning the response.
 3. **A malformed or adversarial configuration/settings payload**, attempting to
    disable budget enforcement or the egress policy by making persistence fail

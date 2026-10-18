@@ -395,8 +395,14 @@ export interface EgressRule {
 }
 
 export interface EgressConfig {
-  /** Local mode refuses every non-loopback Segreant HTTP(S) target before DNS. */
-  mode: 'local_locked' | 'controlled_cloud';
+  /**
+   * Local mode refuses every non-loopback target except the built-in routes.
+   * `invalid` is what a malformed persisted egress section loads as: it refuses
+   * every non-loopback target, built-ins included, until the file is repaired.
+   * Loading it as `local_locked` would now let provider traffic through a typo
+   * (PR #148 review).
+   */
+  mode: 'local_locked' | 'controlled_cloud' | 'invalid';
   rules: EgressRule[];
 }
 
@@ -754,16 +760,19 @@ function sanitizePort(value: unknown, fallback: number): number {
  * an array of exact rule shapes, and boolean enabled flags.
  */
 function sanitizeEgressConfig(value: unknown): EgressConfig {
-  if (!isRecord(value)) return { mode: 'local_locked', rules: [] };
+  // Absent is the default; present but malformed fails closed.
+  if (value === undefined) return { mode: 'local_locked', rules: [] };
+  const invalid: EgressConfig = { mode: 'invalid', rules: [] };
+  if (!isRecord(value)) return invalid;
   if (value.mode !== 'local_locked' && value.mode !== 'controlled_cloud') {
-    return { mode: 'local_locked', rules: [] };
+    return invalid;
   }
   const keys = Object.keys(value).sort();
   if (keys.length !== 2 || keys[0] !== 'mode' || keys[1] !== 'rules') {
-    return { mode: 'local_locked', rules: [] };
+    return invalid;
   }
   if (!Array.isArray(value.rules) || !value.rules.every((rule) => validateEgressRule(rule).length === 0)) {
-    return { mode: 'local_locked', rules: [] };
+    return invalid;
   }
   return {
     mode: value.mode as EgressConfig['mode'],

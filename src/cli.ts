@@ -99,8 +99,9 @@ function cmdHelp(): void {
                           rules without mutation, then persist only with:
                           egress apply --apply --mode controlled_cloud
                           (--id, --purpose, --data-class, --method, --origin,
-                          --path-prefix). Default local_locked permits literal
-                          loopback only; this is not a machine-wide firewall.
+                          --path-prefix). Built in: loopback, the public price
+                          list and the official OpenAI/Anthropic APIs. This is
+                          not a machine-wide firewall.
     causal                Retained randomized-study evidence: status, inspect,
                           replay verification, and review-only OPE from the
                           Store-owned action log. V1 is inspect-only; all causal
@@ -304,13 +305,11 @@ function cmdHelp(): void {
     --version             Print the Segreant version
 
   Setup
-    1) If routing a cloud provider, review its exact rule first:
-       segreant egress plan --mode controlled_cloud --id openai-inference
-         --purpose provider_inference --data-class provider_request --method POST
-         --origin https://api.openai.com --path-prefix /v1/
-       Persist the reviewed plan only with the same command as:
-         segreant egress apply --apply ...
-       (Skip this for a local loopback-only model.)
+    1) OpenAI and Anthropic work with no setup. Another provider (OpenRouter, a
+       gateway) needs one rule; a refused request prints the exact command:
+         segreant egress apply --apply --mode controlled_cloud --id <as printed>
+           --purpose provider_inference --data-class provider_request --method POST
+           --origin https://<host> --path-prefix /
     2) segreant start
     3) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"

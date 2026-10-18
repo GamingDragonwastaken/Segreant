@@ -1037,7 +1037,9 @@ const BUILDERS: Record<string, Builder> = {
         { label: 'Metadata only', value: settings['metadataOnly'] ? 'yes' : 'no', note: 'prompt and response bodies are never stored when on' },
         {
           label: 'Egress mode',
-          value: settings.egress.mode === 'local_locked' ? 'local locked' : 'controlled cloud',
+          value: settings.egress.mode === 'local_locked' ? 'local locked'
+            : settings.egress.mode === 'controlled_cloud' ? 'controlled cloud'
+            : 'invalid: every cloud request is refused until the egress section of config.json is repaired',
           note: settings.egress.receipts.ok
             ? settings.egress.rules.length + ' exact rule(s); ' + settings.egress.receipts.receiptCount + ' receipt(s); chain valid'
             : 'receipt history INVALID; outbound requests refuse before dial until it is repaired. Restore the history; if the lock is stale, confirm no Segreant writer is active, then remove only that lock and rerun verify: ' + (settings.egress.receipts.errors[0] ?? 'history could not be verified'),

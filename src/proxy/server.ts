@@ -39,6 +39,7 @@ import {
 import { extractProposalsWithCoverage, type ProposedFile } from '../value/proposals.ts';
 import { StreamProposalAccumulator } from './stream-proposals.ts';
 import { EgressError, egressFetchWithConfig } from '../egress/transport.ts';
+import { providerRuleCommand } from '../egress/policy.ts';
 import { readBoundedResponseText, RESOURCE_LIMITS, ResourceLimitError, type CaptureCoverage } from '../util/resource-limits.ts';
 
 const HOP_BY_HOP = new Set([
@@ -254,10 +255,15 @@ function providerBudgetUnavailableBody(provider: Provider, message: string): str
   return JSON.stringify({ error: { message, type: 'segreant_budget_unavailable', code: 'budget_enforcement_unavailable' } });
 }
 
-function providerEgressRefusalBody(provider: Provider, error: EgressError): string {
+function providerEgressRefusalBody(provider: Provider, error: EgressError, targetUrl: string, method: string): string {
+  // Only the providers' official APIs are built in; a gateway or a self-hosted
+  // model is allowed by name, with the one command the refusal prints.
+  const allow = error.code === 'policy_denied' ? providerRuleCommand(targetUrl, method) : null;
   const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
     ? ' Repair or restore the local receipt history before retrying.'
-    : '';
+    : allow
+      ? ` ${new URL(targetUrl).origin} is not one of the built-in provider APIs. To send your requests there, run: ${allow}`
+      : '';
   const message = `Segreant refused this outbound request at its egress boundary: ${error.message}.${repair}`;
   if (provider === 'anthropic') {
     return JSON.stringify({ type: 'error', error: { type: 'segreant_egress_refusal', code: 'egress_refused', subcode: error.code, message } });
@@ -358,10 +364,25 @@ export function liveBudget(
         // Any other stat failure (permissions, I/O) means the persisted
         // budget cannot be verified, and that fails closed.
         if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') failure = new BudgetConfigUnavailable(error);
+        else {
+          // Deleting the file is the documented way back to defaults, so the
+          // egress policy returns to its default too: a gateway allowed by a
+          // rule in the deleted file is refused on the next request, not at
+          // the next restart (PR #148 review). The built-in provider routes
+          // hold in the default. A file written again is re-read in full.
+          config.egress = { mode: 'local_locked', rules: [] };
+          seenMtimeMs = null;
+        }
       }
       if (mtimeMs !== null && (mtimeMs !== seenMtimeMs || failure !== null)) {
         try {
-          config.budget = load().budget;
+          const fresh = load();
+          config.budget = fresh.budget;
+          // The egress rules follow the file the same way: a rule added with
+          // `segreant egress apply` (the command a refusal prints) governs the
+          // next request, with no restart, and so does a tightening (PR #148
+          // review). An invalid file throws above and fails closed.
+          config.egress = fresh.egress;
           seenMtimeMs = mtimeMs;
           failure = null;
         } catch (error) {
@@ -636,7 +657,7 @@ async function handle(
     if (egressRefusal) headers['x-segreant-egress-refusal'] = egressRefusal.code;
     res.writeHead(status, headers);
     res.end(egressRefusal
-      ? providerEgressRefusalBody(provider, egressRefusal)
+      ? providerEgressRefusalBody(provider, egressRefusal, targetUrl, req.method ?? 'POST')
       : providerUpstreamErrorBody(provider, detail, timedOut ? 'upstream_timeout' : 'upstream_unreachable'));
     safeLog(deps, {
       requestId,
