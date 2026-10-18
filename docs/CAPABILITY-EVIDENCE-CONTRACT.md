@@ -163,11 +163,16 @@ the provider or optional egress paths above.
 ### High-assurance egress modes
 
 - **Local locked** is the default and is enforceable for Segreant's own HTTP(S)
-  transport: no non-loopback target is resolved or dialled except the built-in
-  public price list (one exact HTTPS URL, GET only, sending nothing about the
-  user; `segreant pricing --auto off` stops Segreant requesting it by itself).
-  It permits a local inference service at a literal loopback address such as
-  `127.0.0.1` or `localhost`.
+  transport: no non-loopback target is resolved or dialled except two built-in
+  routes, which hold in every mode. One is the user's own proxied requests to
+  the official provider APIs (`https://api.anthropic.com`,
+  `https://api.openai.com`; GET or POST under `/v1/`, purpose
+  `provider_inference`). The other is the public price list (one exact HTTPS
+  URL, GET only, sending nothing about the user; `segreant pricing --auto off`
+  stops Segreant requesting it by itself). It permits a local inference service
+  at a literal loopback address such as `127.0.0.1` or `localhost`. A malformed
+  persisted egress section loads as `invalid` and refuses every non-loopback
+  target, the built-in routes included, until it is repaired.
 - **Controlled cloud** is opt-in and rule-scoped. A rule does not authorize a
   hostname pattern, arbitrary query/redirect target, plaintext remote HTTP, or
   another purpose/data class. The process receipt records a redacted target

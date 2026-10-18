@@ -83,7 +83,7 @@ test('the printed command is one the egress command accepts, and it then allows 
   const { providerRuleCommand, providerRuleId } = await import('../src/egress/policy.ts');
   const { validateEgressRule } = await import('../src/egress/ruleValidation.ts');
   for (const host of ['gateway.example.com', 'openrouter.ai', 'My-Proxy.Internal.Example.ORG', 'a.b', `${'x'.repeat(80)}.example.com`, '1api.example.com']) {
-    const id = providerRuleId(host, 'POST');
+    const id = providerRuleId(`https://${host}`, 'POST');
     const rule = { id, enabled: true, purpose: 'provider_inference', dataClass: 'provider_request', method: 'POST', origin: `https://${host.toLowerCase()}`, pathPrefix: '/' };
     assert.deepEqual(validateEgressRule(rule as never), [], `${host} -> ${id}`);
   }
@@ -101,7 +101,7 @@ test('the printed command is one the egress command accepts, and it then allows 
     const config = loadConfig();
     const d = evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' });
     assert.equal(d.allowed, true, 'the provider is allowed once the printed command has run');
-    assert.equal(d.ruleId, providerRuleId('gateway.example.com', 'POST'));
+    assert.equal(d.ruleId, providerRuleId('https://gateway.example.com', 'POST'));
     // The GET command adds its own rule and keeps the POST one.
     const get = providerRuleCommand('https://gateway.example.com/v1/models', 'GET')!;
     const second = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', ...get.split(' ').slice(1)], { encoding: 'utf8', env: { ...process.env, SEGREANT_HOME: home } });
@@ -138,9 +138,11 @@ test('generated rule ids never collide across hosts, and stay valid however long
   const { providerRuleId } = await import('../src/egress/policy.ts');
   const { validateEgressRule } = await import('../src/egress/ruleValidation.ts');
   const hosts = ['api.foo-bar.com', 'api.foo.bar.com', `${'x'.repeat(70)}.one.example.com`, `${'x'.repeat(70)}.two.example.com`];
-  const ids = hosts.map((h) => providerRuleId(h, 'POST'));
-  assert.equal(new Set(ids).size, hosts.length, ids.join(' '));
-  for (const [i, id] of ids.entries()) {
+  const ids = [...hosts.map((h) => providerRuleId(`https://${h}`, 'POST')),
+    providerRuleId('https://gateway.example.com:8443', 'POST'), providerRuleId('https://gateway.example.com:9443', 'POST')];
+  assert.equal(new Set(ids).size, hosts.length + 2, `distinct across hosts and ports: ${ids.join(' ')}`);
+  for (const id of ids) assert.match(id, /^[a-z][a-z0-9_-]{2,63}$/, id);
+  for (const [i, id] of ids.slice(0, hosts.length).entries()) {
     assert.deepEqual(validateEgressRule({ id, enabled: true, purpose: 'provider_inference', dataClass: 'provider_request', method: 'POST', origin: `https://${hosts[i]}`, pathPrefix: '/' } as never), [], id);
   }
 });

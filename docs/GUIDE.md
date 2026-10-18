@@ -35,7 +35,7 @@ for its address. A refused request prints the exact command, for example:
 
 ```bash
 segreant egress apply --apply --mode controlled_cloud \
-  --id provider-openrouter-ai-ca864c2b-post --purpose provider_inference \
+  --id provider-openrouter-ai-8b97b9a4-post --purpose provider_inference \
   --data-class provider_request --method POST \
   --origin https://openrouter.ai --path-prefix /
 ```
