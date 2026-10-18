@@ -424,6 +424,48 @@ export function loadPricing(force = false): PricingFile {
   return cached;
 }
 
+/** One card's entry for exactly this model name. */
+export interface CardEntry {
+  provider: string;
+  input: number;
+  output: number;
+  rate: ModelRate;
+  card: PricingFile;
+  /** Which card matched: the card this process prices with, or the verified card on disk. */
+  source: 'loaded' | 'disk';
+}
+
+function entryIn(card: PricingFile, model: string, source: CardEntry['source']): CardEntry | null {
+  for (const [provider, p] of Object.entries(card.providers)) {
+    const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
+    if (rate) return { provider, input: rate.input, output: rate.output, rate, card, source };
+  }
+  return null;
+}
+
+/**
+ * For refusing `--free` when a price is declared: the card this process prices
+ * with, or the verified card on disk (a refresh another process made). A
+ * one-off user action, so it errs towards refusing; --force overrides it.
+ */
+export function cardEntryAnywhere(model: string): CardEntry | null {
+  const loaded = entryIn(loadPricing(), model, 'loaded');
+  if (loaded) return loaded;
+  const verified = loadVerifiedCache();
+  return verified ? entryIn(verified.file, model, 'disk') : null;
+}
+
+/**
+ * For pricing a request: whether the card this process prices with lists this
+ * model, so a free price that was not forced does not apply to it. The same
+ * card every other price in this process uses, so a reprice plan cannot change
+ * its mind midway; noticing a refresh another process made is the card
+ * loader's job, for every model alike (PR #153 review).
+ */
+export function cardPricesModel(model: string): boolean {
+  return entryIn(loadPricing(), model, 'loaded') !== null;
+}
+
 export interface RefreshResult {
   ok: boolean;
   updated?: string;
@@ -1112,7 +1154,12 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
   const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
-  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  // A free price counts a model as $0. Unless it was forced, it never applies
+  // to a model the card this process prices with lists: that card's price
+  // counts instead, whenever the free price was declared (PR #153 review).
+  if (declared?.kind === 'free' && (declared.force === true || !cardPricesModel(model))) {
+    return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  }
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);

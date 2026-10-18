@@ -8,7 +8,10 @@
  * Three forms:
  * - `rate`: decimal USD per 1M tokens, the same units as the rate card;
  * - `like`: price this model at another model's rate on the current card;
- * - `free`: a local model; every request costs zero.
+ * - `free`: a local model; every request costs zero. A free price is applied
+ *   to a model a rate card prices only when it was declared with --force
+ *   (`force: true`); otherwise the card's price counts (owner decision and
+ *   PR #153 review, 2026-10-18).
  *
  * The file is written only by `setPriceOverride` (validated, atomic). A hand
  * edit that breaks it is refused with the reason, never half-read: a price that
@@ -21,12 +24,12 @@ import { acquireConfigMutationLock, DemoReadOnlyError, isDemo, segreantHome } fr
 export type PriceOverride =
   | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; declaredAt: string }
   | { kind: 'like'; like: string; declaredAt: string }
-  | { kind: 'free'; declaredAt: string };
+  | { kind: 'free'; force?: true; declaredAt: string };
 
 export type PriceOverrideInput =
   | { kind: 'rate'; input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string }
   | { kind: 'like'; like: string }
-  | { kind: 'free' };
+  | { kind: 'free'; force?: true };
 
 export interface PriceOverridesFile {
   version: 1;
@@ -89,6 +92,8 @@ function overrideError(model: string, raw: unknown, requireDeclaredAt: boolean):
       if (o['like'] === model) return `${model}: cannot be priced like itself`;
       break;
     case 'free':
+      allowed.add('force');
+      if (o['force'] !== undefined && o['force'] !== true) return `${model}: force must be true when present`;
       break;
     default:
       return `${model}: kind must be rate, like or free`;

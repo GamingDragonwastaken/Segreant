@@ -12,7 +12,7 @@ import { printJson, usd } from './ui.ts';
 
 const NEXT_STEP = 'segreant reprice previews re-pricing recorded requests; nothing changes without --apply.';
 const SET_WAYS = 'Set a price: segreant pricing set <model> --input <usd> --output <usd> (USD per 1M tokens), --like <known-model>, or --free.';
-const PRICE_OPTIONS = ['input', 'output', 'cache-read', 'cache-write', 'cache-write-1h', 'like', 'free'];
+const PRICE_OPTIONS = ['input', 'output', 'cache-read', 'cache-write', 'cache-write-1h', 'like', 'free', 'force'];
 
 function priceInput(flags: Flags): PriceOverrideInput {
   // Read every form before choosing one, including cache-only mixtures.
@@ -50,7 +50,11 @@ function priceInput(flags: Flags): PriceOverrideInput {
 }
 
 function storedLine(model: string, price: PriceOverride): string {
-  if (price.kind === 'free') return `Stored user-declared price for ${model}: free ($0 per request).`;
+  if (price.kind === 'free') {
+    return price.force === true
+      ? `Stored user-declared price for ${model}: free ($0 per request), forced: a cap counts it as $0 even though a rate card prices this name.`
+      : `Stored user-declared price for ${model}: free ($0 per request).`;
+  }
   if (price.kind === 'like') return `Stored user-declared price for ${model}: like ${price.like} (exact rate-card model).`;
   const cache = [
     ...(price.cacheRead === undefined ? [] : [`cache-read $${price.cacheRead}`]),
@@ -114,12 +118,15 @@ export function cmdPricingDeclare(action: 'set' | 'unset' | 'unknown', flags: Fl
       return;
     }
     const input = priceInput(flags);
+    const force = flags.force;
+    if (force !== undefined && force !== true) throw new PriceOverridesError('--force is a switch; give it no value.');
+    if (force === true && input.kind !== 'free') throw new PriceOverridesError('--force only applies to --free.');
     const recorded = readLedger({ requests: 0, costUsd: 0 }, (store) => {
       return store.byModel(Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
         .filter((r) => r.label === model)
         .reduce((total, r) => ({ requests: total.requests + r.requests, costUsd: total.costUsd + r.costUsd }), { requests: 0, costUsd: 0 });
     });
-    const price = declare(model, input);
+    const price = declare(model, input, { force: force === true });
     console.log(`  ${storedLine(model, price)}`);
     console.log(`  ${recorded.requests} recorded requests use ${model}; recorded cost (estimated): ${usd(recorded.costUsd)}.`);
     console.log(`  ${NEXT_STEP}`);

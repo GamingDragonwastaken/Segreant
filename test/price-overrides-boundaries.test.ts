@@ -269,7 +269,8 @@ test('a plan comparison counts list prices, never a price you set (PR #146 revie
   const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
   try {
     const listed = computeCost('anthropic', 'claude-sonnet-4-6', usage).costUsd;
-    setPriceOverride('claude-sonnet-4-6', { kind: 'free' });
+    // A free price on a card model applies only when forced (PR #153).
+    setPriceOverride('claude-sonnet-4-6', { kind: 'free', force: true });
     const c = computeCost('anthropic', 'claude-sonnet-4-6', usage);
     assert.equal(c.costUsd, 0);
     store.insertRequestIfNew({ requestId: 'plan-1', sessionId: null, tsEpochMs: 5_000, provider: 'anthropic', model: 'claude-sonnet-4-6', project: 'p', taskWeight: 1,

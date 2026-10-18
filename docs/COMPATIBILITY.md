@@ -2,9 +2,9 @@
 
 What an integrator or contributor can build against without expecting it to
 move under them, and how a change to it is supposed to happen. Pre-1.0
-(`package.json` is `0.1.0`; there is no tagged release yet — see
-`CHANGELOG.md`), so this is a stated intent for how stability will be handled,
-not a SemVer promise this project has been through a cycle of yet.
+(`package.json` is `0.2.0`, tagged `v0.2.0`; see `CHANGELOG.md`), so this is a
+stated intent for how stability will be handled, not a SemVer promise this
+project has been through a full cycle of yet.
 
 ## Stable
 

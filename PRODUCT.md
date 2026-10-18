@@ -135,8 +135,9 @@ Seal" set) are in the repository.
   capabilities, intended direction, and claims the evidence does not establish.
 - `docs/RELIABILITY-PERFORMANCE.md` — reproducible local performance and
   reliability observations with their measurement limits.
-- **Published:** `segreant` 0.1.0 on npm (2026-10-08). Version 0.2.0 is
-  unreleased and not on npm.
+- **Published:** `segreant` 0.1.0 on npm (2026-10-08) and 0.2.0 (2026-10-18,
+  tagged `v0.2.0`, built from the gated commit `e8a8f24`; see
+  `docs/RELEASE-GATE.md`).
 - **Absent, and never to be fabricated:** no completed reconciliation against a
   real provider bill; no production team deployment; no customers,
   testimonials, benchmarks, or pricing.
