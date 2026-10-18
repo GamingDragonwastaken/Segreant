@@ -116,3 +116,15 @@ test('the sample data can show a reprice preview; only applying is refused', asy
     process.env.SEGREANT_DEMO = '';
   }
 });
+
+test('storing a rate without cache prices says how its cache is priced', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const scratch = mkdtempSync(join(home, 'declare-'));
+  const run = (...args: string[]) => spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'pricing', 'set', ...args], { encoding: 'utf8', env: { ...process.env, SEGREANT_HOME: scratch } });
+  const bare = run('acme-cache-note', '--input', '1', '--output', '2');
+  assert.equal(bare.status, 0, bare.stderr);
+  assert.match(bare.stdout, /5-minute cache writes at 1\.25×, 1-hour cache writes at 2×, cache reads at 0\.1×/);
+  const full = run('acme-cache-full', '--input', '1', '--output', '2', '--cache-write', '1.5', '--cache-write-1h', '2.5', '--cache-read', '0.2');
+  assert.equal(full.status, 0, full.stderr);
+  assert.doesNotMatch(full.stdout, /usual multiple/, 'nothing derived, nothing said');
+});
