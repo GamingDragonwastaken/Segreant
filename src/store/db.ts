@@ -243,6 +243,8 @@ export interface RequestRow {
    * same transaction; absent rows remain legacy numeric compatibility records.
    */
   economicAmount?: Money;
+  /** The cache-write duration this row was priced with, when the source said; absent is unknown. */
+  cacheWriteTtl?: '5m' | '1h';
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -314,7 +316,7 @@ const REQUEST_ROW_SELECT = `SELECT request_id AS requestId, session_id AS sessio
                 scope_capture_status AS scopeCaptureStatus,
                 provider_scope_declaration_id AS providerScopeDeclarationId,
                 attribution_basis AS attributionBasis,
-                capture_coverage AS captureCoverage
+                capture_coverage AS captureCoverage, cache_write_ttl AS cacheWriteTtlRecorded
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project`;
 
 /**
@@ -507,6 +509,7 @@ export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
 const SCOPE_CAPTURE_STATUSES = ['legacy_unknown', 'unscoped', 'declared_unverified', 'not_observed'] as const satisfies readonly ScopeCaptureStatus[];
 const CAPTURE_COVERAGES = ['complete', 'truncated', 'unknown', 'legacy_unknown'] as const;
+const CACHE_WRITE_TTLS = ['5m', '1h', 'not_recorded', 'legacy_unknown'] as const;
 
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
@@ -516,10 +519,15 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     rateMatchKind,
     rateMatchProvider,
     rateMatchModel,
+    cacheWriteTtlRecorded,
     ...row
   } = record;
+  // 'not_recorded' and 'legacy_unknown' read as absent; any other string is
+  // damage (D-251) and refuses rather than passing through.
+  const ttl = vocabularyValue(cacheWriteTtlRecorded, CACHE_WRITE_TTLS, 'cacheWriteTtl', 'legacy_unknown');
   return {
     ...(row as unknown as RequestRow),
+    ...(ttl === '5m' || ttl === '1h' ? { cacheWriteTtl: ttl } : {}),
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
@@ -920,8 +928,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
       const info = prepared(this.db, sql).run(
         row.requestId,
         row.sessionId,
@@ -955,6 +963,7 @@ export class Store {
         scope.declarationId,
         row.attributionBasis ?? 'legacy_unknown',
         row.captureCoverage ?? 'complete',
+        row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (row.economicAmount !== undefined) {
@@ -1581,16 +1590,19 @@ export class Store {
   }
 
   /** Health counts for governance alerts: blocked (429) requests and estimated-priced spend. */
-  healthStats(startMs: number, endMs: number): { blocked: number; estimatedCostUsd: number; totalCostUsd: number } {
+  healthStats(startMs: number, endMs: number): { blocked: number; estimatedCostUsd: number; declaredCostUsd: number; totalCostUsd: number } {
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END),0) AS blocked,
                 COALESCE(SUM(CASE WHEN estimated = 1 THEN cost_usd ELSE 0 END),0) AS estCost,
+                COALESCE(SUM(CASE WHEN estimated = 0 AND cost_basis = 'user_declared_price' THEN cost_usd ELSE 0 END),0) AS declaredCost,
                 COALESCE(SUM(cost_usd),0) AS total
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
       )
-      .get(startMs, endMs) as { blocked: number; estCost: number; total: number };
-    return { blocked: row.blocked, estimatedCostUsd: row.estCost, totalCostUsd: row.total };
+      .get(startMs, endMs) as { blocked: number; estCost: number; declaredCost: number; total: number };
+    // A declared price is resolved (so `estimated` is 0 and a reprice can write
+    // it) but it is not a list price; claim support counts it apart (PR #146 review).
+    return { blocked: row.blocked, estimatedCostUsd: row.estCost, declaredCostUsd: row.declaredCost, totalCostUsd: row.total };
   }
 
   /**
@@ -1866,20 +1878,22 @@ export class Store {
     if (fam) args.push(...fam.args);
     const rows = this.db
       .prepare(
-        `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256
+        `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256, rate_match_model AS rateMatchModel
          FROM requests
          WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` +
           (provider !== undefined ? ` AND provider = ?` : ``) +
           (fam ? ` AND ${fam.sql}` : ``),
       )
-      .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null }>;
+      .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null; rateMatchModel: string | null }>;
     const bases = new Set<string>();
     const cards = new Set<string>();
     for (const r of rows) {
       bases.add(r.costBasis);
       // A null card is not a distinct revision — plenty of bases (tool-reported,
       // unpriced) legitimately have none. Only real revisions count as a span.
-      if (r.rateCardSha256) cards.add(r.rateCardSha256);
+      // A declared `like` follows the card under the model it names, so a new
+      // target on the same card is a new price revision (PR #146 review).
+      if (r.rateCardSha256) cards.add(r.costBasis === 'user_declared_price' && r.rateMatchModel ? `${r.rateCardSha256}:${r.rateMatchModel}` : r.rateCardSha256);
     }
     return { costBases: [...bases].sort(), rateCardShas: [...cards].sort() };
   }
@@ -2611,6 +2625,29 @@ export class Store {
     return realization.realizationProjects(this.db);
   }
 
+  /**
+   * Recorded guesses, grouped by historical match evidence, costliest first.
+   * Current resolution belongs to the caller: a new card or declaration must
+   * not reinterpret the evidence retained on these requests.
+   */
+  unresolvedModels(): Array<{
+    provider: string;
+    model: string;
+    requests: number;
+    costUsd: number;
+    rateMatchKind: RequestPricingEvidence['rateMatchKind'];
+  }> {
+    return this.db.prepare(
+      `SELECT provider, model, COUNT(*) AS requests, COALESCE(SUM(cost_usd),0) AS costUsd,
+              rate_match_kind AS rateMatchKind
+       FROM requests
+       WHERE cost_basis != 'not_sent'
+         AND (cost_basis = 'fallback_estimate' OR rate_match_kind IN ('family_provider', 'family_cross_provider'))
+       GROUP BY provider, model, rate_match_kind
+       ORDER BY costUsd DESC, provider, model, rate_match_kind`,
+    ).all() as ReturnType<Store['unresolvedModels']>;
+  }
+
   /** Every row priced with a fallback/family-match rate — the reprice candidates. */
   estimatedRequestRows(): Array<{
     requestId: string;
@@ -2620,6 +2657,7 @@ export class Store {
     outputTokens: number;
     cacheWriteTokens: number;
     cacheReadTokens: number;
+    cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
   }> {
     return realization.estimatedRequestRows(this.db);
@@ -2631,7 +2669,7 @@ export class Store {
    * re-attributed inside the same transaction, on each unit's own recorded
    * basis — see realization.ts for why that basis is never re-derived.
    */
-  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync {
+  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync & { writtenRequestIds: string[] } {
     return realization.applyRepricedCosts(this.db, this.realizationDeps(), updates, appliedAtMs);
   }
 

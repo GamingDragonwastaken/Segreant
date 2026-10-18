@@ -243,8 +243,14 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'core/claimLayers.ts', token: 'pricing.estimatedSpendShare', note: 'the claim layers show the estimated-spend share the rate cards imply; the cards themselves are CLI only' },
   },
   {
+    id: 'pricing-unknown', label: 'Unpriced models', plain: 'Find models that still use guessed prices. Set your price, price like an exact model on the card, mark a local model free, or skip.',
+    territory: 'system', consequence: 'local', coverage: 'full', command: 'segreant pricing unknown',
+    guiEvidence: { file: 'core/pricingActions.ts', token: 'pricingUnknownAction', note: 'lists current guesses and declares one model at a time, then refreshes and offers re-pricing' },
+  },
+  {
     id: 'reprice', label: 'Reprice history', plain: 'Recalculate past costs against a corrected rate card.',
-    territory: 'system', consequence: 'destructive', coverage: 'planned', command: 'segreant reprice --apply',
+    territory: 'system', consequence: 'destructive', coverage: 'full', command: 'segreant reprice --apply',
+    guiEvidence: { file: 'core/pricingActions.ts', token: 'repriceAction', note: 'previews before and after by model, requires typed confirmation, and shows the applied result' },
     warning: 'Rewrites the recorded cost of past requests. Value snapshots are re-attributed on their own basis, and outcomes are never moved — but the money figures you have already reported will change.',
   },
   { id: 'doctor', label: 'Doctor', plain: 'Check that everything is wired up correctly.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'segreant doctor' },
@@ -345,7 +351,7 @@ const API_BINDINGS: Readonly<Record<string, readonly string[]>> = Object.freeze(
   roi: ['/api/value'], market: ['/api/market'], outcome: ['/api/outcome/record', '/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
   sources: ['/api/overview'], discover: ['/api/importers'], connect: ['/api/importers'], import: ['/api/import'], scan: ['/api/scan'], baseline: ['/api/value'], demo: ['/api/overview'],
   economic: ['/api/economic'],
-  features: ['/api/settings', '/api/settings/update'], egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
+  features: ['/api/settings', '/api/settings/update'], egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], 'pricing-unknown': ['/api/pricing/unknown', '/api/pricing/declare', '/api/pricing/unset'], reprice: ['/api/reprice'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
 });
 
 const DOC_BINDINGS: Readonly<Record<Territory, readonly string[]>> = Object.freeze({

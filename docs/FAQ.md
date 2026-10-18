@@ -14,7 +14,9 @@ current outbound and retention contract.
 
 **Can I make Segreant itself refuse all cloud traffic?**
 Yes. New configuration begins in `local_locked` mode, where Segreant refuses
-non-loopback HTTP(S) targets before DNS. A local model at `localhost` or
+non-loopback HTTP(S) targets before DNS, with one exception: its own download of
+the public price list, which sends nothing about you. `segreant pricing --auto
+off` stops Segreant making that download by itself. A local model at `localhost` or
 `127.0.0.1` remains available. To permit a cloud route, use `segreant egress
 plan` to inspect one exact rule and `segreant egress apply --apply` to persist it;
 `segreant egress verify` validates the redacted local receipt chain. This is a
@@ -235,16 +237,31 @@ Every Segreant rate remains a local list-price estimate, not a provider invoice,
 contractual discount, credit, tax, or reconciliation result.
 
 **How does pricing stay correct as new models launch?**
-Three layers, in order: the refreshed community feed above (170+ models across
-Anthropic, OpenAI, Google); substring family-matching when an exact name is
-missing (a new `-preview` variant prices as its family); and a flat mid-tier
-fallback ($3 in, $15 out per million tokens) that marks every such request
-`~est` — surfaced in `doctor` as "% of spend on estimated rates", so pricing
-drift is measured, never silent. The fallback is not an upper bound: about a
-third of the models on the card cost more, up to $30 / $180. A premium model
-the card does not know yet reads lower than it costs, and so does its weight
-against a budget cap. Refresh the card (`segreant pricing --refresh`) when you
-start using a new model.
+Each request is priced by the first of these that knows its model:
+
+1. **A price you set.** `segreant pricing set <model>` with `--input` and
+   `--output` (USD per million tokens), `--like <model>` to price it as a model
+   on the card, or `--free` for a local model. Shown as "your price", never as
+   list price.
+2. **The rate card**, by exact model name. The bundled card is refreshed from
+   the public price list before each release.
+3. **The public price list, looked up on first sight.** When a running Segreant
+   meets a model the card does not know, it downloads the public price list
+   (at most once an hour, outside the request's path, sending nothing about
+   you). New requests then get the list price. Requests already recorded keep
+   their estimate until `segreant reprice` (a preview) and
+   `segreant reprice --apply`.
+4. **The nearest model on the card** (a new `-preview` variant prices as its
+   family), marked as such.
+5. **A generic rate** ($3 in, $15 out per million tokens), marked `~est`.
+
+The generic rate is a guess in both directions: claude-haiku-5-5 costs $0.10 /
+$0.50, so it read 30 times too high, and about a third of the models on the
+card cost more than $3 / $15, so a premium model reads too low, including
+against a budget cap. That is why the lookup comes before it.
+`segreant pricing unknown` lists every model still priced by a guess, with its
+requests and recorded cost, and `segreant pricing --auto off` turns the lookup
+off.
 
 **Nothing shows under value / RoI.**
 Attach a git repo (`--repo .`) and let the maturity window elapse, or report outcomes

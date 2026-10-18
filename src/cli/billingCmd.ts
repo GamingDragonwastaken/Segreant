@@ -88,7 +88,7 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   console.log(`  Snapshot      ${coverage.observation.observationRunId}`);
   console.log(`  Period        ${new Date(coverage.observation.periodStartMs).toISOString().slice(0, 10)} → ${new Date(coverage.observation.periodEndMs).toISOString().slice(0, 10)} (UTC, exclusive end)`);
   console.log(`  Provider rows ${coverage.observation.providerLineCount} (${coverage.observation.currencies.join(', ') || 'none'}); values intentionally not summed here`);
-  console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local rate-card estimate (${captured.estimatedRequestCount} estimated)`);
+  console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local estimate, not the bill (${captured.estimatedRequestCount} priced by a guess; the rest at list prices or prices you set)`);
   // Directly under the number it falsifies, and not in `Blockers`, which lists
   // the conditions that hold always (D-185). A zero here is what an operator
   // uses to decide whether minting an Admin credential is worth it.

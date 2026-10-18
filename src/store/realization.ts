@@ -22,7 +22,7 @@ import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { RequestRow, SpendBucket } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
-import type { Money } from '../economics/money.ts';
+import { formatMoneyAmount, money, type Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
 import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
@@ -247,6 +247,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
   outputTokens: number;
   cacheWriteTokens: number;
   cacheReadTokens: number;
+  cacheWriteTtl: '5m' | '1h' | null;
   costUsd: number;
 }> {
   return db
@@ -254,6 +255,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
+                CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
                 cost_usd AS costUsd
          FROM requests WHERE estimated = 1`,
     )
@@ -265,6 +267,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
     outputTokens: number;
     cacheWriteTokens: number;
     cacheReadTokens: number;
+    cacheWriteTtl: '5m' | '1h' | null;
     costUsd: number;
   }>;
 }
@@ -288,7 +291,7 @@ export function applyRepricedCosts(
   deps: RealizationDeps,
   updates: RepriceUpdate[],
   appliedAtMs: number,
-): RealizationCostSync {
+): RealizationCostSync & { writtenRequestIds: string[] } {
   const prior = db.prepare(
     `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
               cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
@@ -313,6 +316,9 @@ export function applyRepricedCosts(
        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   );
   const touched: Array<{ tsEpochMs: number; project: string }> = [];
+  // Which requests this transaction actually rewrote, so a caller reports
+  // those and not its plan (PR #146 review).
+  const writtenRequestIds: string[] = [];
   runScript(db, 'BEGIN');
   try {
     for (const u of updates) {
@@ -324,11 +330,22 @@ export function applyRepricedCosts(
           throw new Error(`exact reprice for request ${u.requestId} requires an exact replacement amount`);
         }
         const recordedAt = new Date(appliedAtMs).toISOString();
+        // A correction keeps its source's basis: the economic ledger never
+        // moves an amount from one kind of evidence to another. An estimate
+        // repriced at a list rate is recorded as that estimate, corrected to the
+        // exact figure; the request row itself says which rate priced it. Without
+        // this, every fallback row on an exact ledger refused to reprice
+        // (PR #146 review). Re-labelling the other way would claim more
+        // certainty than the source event carries.
+        const source = exactSource.amount!;
+        const nextAmount = u.economicAmount.basis === source.basis
+          ? u.economicAmount
+          : money(formatMoneyAmount(u.economicAmount), u.economicAmount.currency, source.basis);
         const correction = priceCorrectionEvent({
           id: `economic:request:${u.requestId}:price-corrected`,
           source: exactSource,
-          previousAmount: exactSource.amount!,
-          nextAmount: u.economicAmount,
+          previousAmount: source,
+          nextAmount,
           recordedAt,
         });
         deps.economicLedger!.appendWithinTransaction(correction);
@@ -353,10 +370,11 @@ export function applyRepricedCosts(
         u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
       );
       touched.push({ tsEpochMs: Number(old.tsEpochMs), project: String(old.project) });
+      writtenRequestIds.push(u.requestId);
     }
     const sync = syncRealizationCosts(db, deps, touched);
     runScript(db, 'COMMIT');
-    return sync;
+    return { ...sync, writtenRequestIds };
   } catch (e) {
     runScript(db, 'ROLLBACK');
     throw e;

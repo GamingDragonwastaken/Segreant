@@ -211,7 +211,7 @@ export interface BasisSummaryPayload {
   headline: 'list_cost' | 'estimated_cost' | 'sample_cost' | 'tool_reported_cost' | 'no_cost';
   headlineLabel: string;
   cohorts: Array<{
-    id: 'list_exact' | 'list_family' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'not_sent' | 'unrecorded';
+    id: 'list_exact' | 'list_family' | 'user_declared' | 'user_free' | 'fallback' | 'tool_reported' | 'demo' | 'unpriced' | 'not_sent' | 'unrecorded';
     costUsd: number;
     requests: number;
     label: string;
@@ -1897,6 +1897,70 @@ export interface ClearProposalsPayload {
   removed: number;
 }
 
+export interface UnknownPricingModel {
+  provider: string;
+  model: string;
+  requests: number;
+  costUsd: number;
+  rateMatchKind: string;
+}
+
+export interface DeclaredPrice {
+  model: string;
+  kind: 'rate' | 'like' | 'free';
+  /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
+  summary: string;
+  declaredAt: string;
+  /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
+  rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
+  like?: string;
+}
+
+export interface UnknownPricingPayload {
+  models: UnknownPricingModel[];
+  /** Prices the user set, so they can be reviewed and removed from the same drawer. */
+  declared: DeclaredPrice[];
+  boundary: string;
+  demo: boolean;
+}
+
+export interface PricingDeclarePayload {
+  ok: boolean;
+  model: string;
+  price: { kind: 'rate' | 'like' | 'free'; declaredAt: string; input?: string; output?: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string; like?: string };
+}
+
+export interface PricingUnsetPayload {
+  ok: boolean;
+  model: string;
+  removed: boolean;
+}
+
+export interface RepriceModelPayload {
+  provider: string;
+  model: string;
+  rows: number;
+  beforeUsd: number;
+  afterUsd: number;
+  afterBasis: 'list price' | 'your price';
+}
+
+export interface RepricePayload {
+  applied: boolean;
+  demo: boolean;
+  estimatedRows: number;
+  repriceable: number;
+  stillEstimated: number;
+  /** Rows with cache writes recorded before the cache-write duration was kept; priced at the 5-minute rate. */
+  cacheDurationUnknown: number;
+  /** On apply: planned rows another reprice had already rewritten before this one wrote. Not counted in repriceable or the totals. */
+  alreadyRepriced: number;
+  totalBeforeUsd: number;
+  totalAfterUsd: number;
+  byModel: RepriceModelPayload[];
+  realizationSync: { resynced: number; unresolvable: number; costUsdBefore: number; costUsdAfter: number } | null;
+}
+
 export type Range = 'today' | '7d' | '30d' | 'all';
 
 /** Compile-time response map shared by server adapters and the browser client. */
@@ -1913,6 +1977,10 @@ export interface DashboardResponseMap {
   allocation: AllocationPayload;
   economic: EconomicPayload;
   pricing: PricingPayload;
+  'pricing-unknown': UnknownPricingPayload;
+  'pricing-declare': PricingDeclarePayload;
+  'pricing-unset': PricingUnsetPayload;
+  reprice: RepricePayload;
   realization: RealizationPayload;
   guide: GuidePayload;
   judge: JudgePayload;

@@ -548,6 +548,9 @@ tr:last-child td { border-bottom: 0; }
   border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--s2) var(--s3);
 }
 
+.pricing-model { padding-block: var(--s3); border-bottom: 1px solid var(--line-soft); }
+.pricing-model .drawer-h3 { overflow-wrap: anywhere; }
+
 .drawer-foot { margin-top: auto; padding-top: var(--s4); border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: var(--s3); }
 .drawer-actions { display: flex; gap: var(--s2); justify-content: flex-end; }
 /* Why Apply is unavailable: read before the buttons, at body size, not as fine print. */

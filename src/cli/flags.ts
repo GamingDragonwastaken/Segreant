@@ -64,11 +64,11 @@ export function parseFlags(argv: string[]): Flags {
  */
 const KNOWN_OPTION_NAMES = [
   'account-ref', 'all', 'allow-unmetered', 'apply', 'archive', 'as-of', 'at', 'attempts', 'auto', 'category', 'centre',
-  'clear', 'clear-webhook', 'close-status', 'commit', 'control', 'coverage', 'cwd', 'daily', 'dashboard-port', 'data-class',
+  'cache-read', 'cache-write', 'clear', 'clear-webhook', 'close-status', 'commit', 'control', 'coverage', 'cwd', 'daily', 'dashboard-port', 'data-class',
   'days', 'debug', 'decision', 'deep', 'demo', 'detail', 'disabled', 'dry-run', 'economic', 'effective-at', 'every',
-  'exact-money', 'file', 'finalize', 'format', 'from', 'grain', 'help', 'id', 'import-id', 'include-imported', 'into',
-  'json', 'key', 'key-id', 'kind', 'labor-rate', 'limit', 'list', 'manifest', 'materiality', 'me', 'method', 'mode',
-  'name', 'note', 'notify', 'notify-url', 'origin', 'out', 'owner', 'path-prefix', 'policy', 'port', 'priority',
+  'exact-money', 'file', 'finalize', 'format', 'free', 'from', 'grain', 'help', 'id', 'import-id', 'include-imported', 'input', 'into',
+  'json', 'key', 'key-id', 'kind', 'labor-rate', 'like', 'limit', 'list', 'manifest', 'materiality', 'me', 'method', 'mode',
+  'name', 'note', 'notify', 'notify-url', 'origin', 'out', 'output', 'owner', 'path-prefix', 'policy', 'port', 'priority',
   'project', 'project-ref', 'pubkey', 'purpose', 'rating', 'reason', 'recommend', 'reconcile', 'record-id', 'refresh',
   'reopen', 'repo', 'request', 'rescan', 'risk', 'root', 'runaway', 'scope', 'sensitivity', 'serve', 'session',
   'set-webhook', 'setup', 'sign', 'soft', 'start', 'target-currency', 'to', 'tool', 'trust', 'ts', 'tsf', 'unit',
