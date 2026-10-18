@@ -49,6 +49,19 @@ test('a card refreshed on disk by another process counts, without replacing the 
     assert.throws(() => declarePrice('acme-cloud-added', { kind: 'free' }), /cloud model the rate card prices \(openai: \$2 in/);
     assert.equal(loadPricing(), before, 'the loaded card is not replaced by the check');
     assert.equal(readFileSync(join(home, 'pricing', 'models.json'), 'utf8'), text);
+    // Pricing a request: an unforced free price stored in the race is set
+    // aside, the stale loaded card is reloaded from the verified one, and the
+    // request is charged at its rate under its own source (PR #153 review).
+    const { rateFor } = await import('../src/cost/pricing.ts');
+    const { overridesPath } = await import('../src/cost/overrides.ts');
+    mkdirSync(dirname(overridesPath()), { recursive: true });
+    writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { 'acme-cloud-added': { kind: 'free', declaredAt: now } } }));
+    try {
+      const charged = rateFor('openai', 'acme-cloud-added');
+      assert.equal(charged.pricing.rateMatchKind, 'exact_provider');
+      assert.equal(charged.rate.input, 2);
+      assert.equal(charged.pricing.rateCardSourceKind, 'manual');
+    } finally { rmSync(overridesPath(), { force: true }); }
   } finally {
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
   }
@@ -98,6 +111,11 @@ test('a free price that was not forced never zeroes a model a card prices, whate
     writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
     const later = rateFor('openai', 'acme-later-cloud');
     assert.notEqual(later.pricing.rateMatchKind, 'user_declared_free', 'a refreshed card on disk ends the free price');
+    // ...and the request is charged at that card's rate, not the generic fallback (PR #153 review).
+    assert.equal(later.pricing.rateMatchKind, 'exact_provider');
+    assert.equal(later.rate.input, 5);
+    assert.equal(later.rate.output, 20);
+    assert.equal(later.pricing.rateCardSourceKind, 'legacy_unknown', 'an unverified card is labelled as unknown, never guessed');
   } finally {
     rmSync(overridesPath(), { force: true });
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
