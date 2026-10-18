@@ -266,7 +266,7 @@ test('runtime config rejects ambiguous egress mode and rule coercions fail close
     try {
       writeFileSync(join(state.home, 'config.json'), JSON.stringify(raw), 'utf8');
       const loaded = loadConfig();
-      assert.equal(loaded.egress.mode, 'local_locked', JSON.stringify(raw));
+      assert.equal(loaded.egress.mode, 'invalid', JSON.stringify(raw) + ': a malformed section fails closed, built-ins included');
       assert.deepEqual(loaded.egress.rules, [], JSON.stringify(raw));
       const decision = evaluateEgressPolicy(loaded.egress, {
         url: 'https://ipv6.example.test/v1/test',
@@ -299,7 +299,7 @@ test('runtime config rejects semantically unsafe or unexpected egress rule field
         egress: { mode: 'controlled_cloud', rules: [rule] },
       }), 'utf8');
       const loaded = loadConfig();
-      assert.equal(loaded.egress.mode, 'local_locked', JSON.stringify(rule));
+      assert.equal(loaded.egress.mode, 'invalid', JSON.stringify(rule));
       assert.deepEqual(loaded.egress.rules, [], JSON.stringify(rule));
     } finally {
       state.restore();
@@ -314,7 +314,7 @@ test('runtime config rejects unexpected top-level egress fields', () => {
       egress: { mode: 'controlled_cloud', rules: CLOUD.rules, extra: 'ambiguous' },
     }), 'utf8');
     const loaded = loadConfig();
-    assert.equal(loaded.egress.mode, 'local_locked');
+    assert.equal(loaded.egress.mode, 'invalid');
     assert.deepEqual(loaded.egress.rules, []);
   } finally {
     state.restore();

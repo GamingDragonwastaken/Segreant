@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "4705039c83a96a688efa21311bb732a2c7143f2c6797f2a87892078be64ce0d1";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "d31f4f5aebc4d3cac3738ec72e46bed9848e753df7e23017f16f3d9b3206d00f";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {

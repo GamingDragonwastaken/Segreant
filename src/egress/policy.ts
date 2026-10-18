@@ -2,6 +2,7 @@
  * Pure, exact policy for Segreant-process HTTP(S) egress. Socket creation lives
  * only in transport.ts, so a feature cannot silently make its own network path.
  */
+import { createHash } from 'node:crypto';
 import type { EgressConfig, EgressDataClass, EgressPurpose, EgressRule } from '../config.ts';
 import {
   EGRESS_DATA_CLASSES,
@@ -98,12 +99,16 @@ export function isBuiltInProviderUpstream(url: string): boolean {
  * the printed command fail with "Rule refused" (PR #148 review).
  */
 export function providerRuleId(hostname: string, method = 'POST'): string {
-  // The method is part of the id: rules are replaced by id, so a GET rule and
-  // a POST rule for one host must not overwrite each other (PR #148 review).
+  // Rules are replaced by id, so the id must be unique per origin and method:
+  // the method keeps a GET and a POST rule for one host apart, and a short hash
+  // of the full hostname keeps apart hosts whose slugs collide
+  // (api.foo-bar.com / api.foo.bar.com) or share a truncated prefix (PR #148 review).
+  const host = hostname.toLowerCase();
   const verb = method.toLowerCase().replace(/[^a-z]/g, '');
-  const slug = hostname.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  const head = `provider-${slug}`.slice(0, 63 - verb.length).replace(/-+$/, '');
-  return `${head}-${verb}`;
+  const tag = createHash('sha256').update(host).digest('hex').slice(0, 8);
+  const slug = host.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const head = `provider-${slug}`.slice(0, 64 - tag.length - verb.length - 2).replace(/-+$/, '');
+  return `${head}-${tag}-${verb}`;
 }
 
 /** The one command that lets Segreant forward to an upstream that is not built in (a gateway, a hosted model). */
@@ -170,6 +175,8 @@ export function evaluateEgressPolicy(config: EgressConfig, intent: EgressRequest
   const method = normalMethod(intent.method);
   if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(method)) return { allowed: false, target, reason: 'method is not supported' };
   if (literalLoopback(target.hostname)) return { allowed: true, target, targetClass: 'loopback', reason: 'literal loopback target is permitted' };
+  // A malformed persisted section (mode `invalid`) or any unknown shape refuses
+  // before the built-in routes: a typo never lets provider traffic through.
   if (config.mode !== 'local_locked' && (config.mode !== 'controlled_cloud' || !Array.isArray(config.rules))) {
     return { allowed: false, target, reason: 'unknown or malformed egress mode/config is fail-closed; only local_locked or controlled_cloud is supported' };
   }

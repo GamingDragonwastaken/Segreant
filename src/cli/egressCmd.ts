@@ -116,6 +116,10 @@ export function cmdEgress(flags: Flags): void {
       console.log('');
       console.log(color(tty, C.bold, '  Segreant egress status'));
       console.log('  Mode: ' + payload.mode);
+      if (payload.mode === 'invalid') {
+        console.log('  The egress section of config.json is malformed, so every cloud request is refused,');
+        console.log('  your provider included. Repair: segreant egress apply --apply --mode local_locked');
+      }
       const rules = payload.rules as EgressRule[];
       console.log('  Rules: ' + (rules.length ? rules.map((rule) => rule.id + ' (' + (rule.enabled ? 'enabled' : 'disabled') + ')').join(', ') : 'none'));
       const receipts = payload.receipts as ReturnType<typeof verifyEgressReceipts> & { path: string };
