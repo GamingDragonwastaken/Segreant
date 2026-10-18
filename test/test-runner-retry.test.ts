@@ -26,7 +26,7 @@ function runner(fixture: string) {
 test('a file that crashes once is rerun alone and the retry is reported', () => {
   const r = runner('crash-once.ts');
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /crashed with no failing test inside them; rerunning/);
+  assert.match(r.out, /crashed with no failing test inside them.*rerunning/);
   assert.match(r.out, /Rerun passed/);
 });
 
@@ -34,6 +34,19 @@ test('a file that crashes every time still fails the suite', () => {
   const r = runner('always-crash.ts');
   assert.notEqual(r.status, 0, r.out);
   assert.match(r.out, /Rerun failed as well/);
+});
+
+test('a test that failed only because its child process crashed is rerun alone (2026-10-18)', () => {
+  const r = runner('child-crash-once.ts');
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /rerunning each once, alone/);
+  assert.match(r.out, /Rerun passed/);
+});
+
+test('a child crash beside a real failure is not retried', () => {
+  const r = runner('real-and-child-crash.ts');
+  assert.notEqual(r.status, 0, r.out);
+  assert.doesNotMatch(r.out, /rerunning/);
 });
 
 test('a real failing test is never retried', () => {

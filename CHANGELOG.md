@@ -11,6 +11,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [0.2.0] - Unreleased
 
+- **The proxy's live log shows the spend your cap counts.** Each request line ended "today $51.29" even with a $25 daily cap and requests still going through, because that total included spend imported from tool logs, which the cap does not count unless you turn it on. With a cap set the line now reads "today $3.00 of the $25.00 cap (+$48.00 imported, not counted)".
 - **Models missing from the rate card get real prices.** Segreant priced any model its card did not know at a generic $3 in / $15 out per million tokens. For claude-haiku-5-5 (list price $0.10 / $0.50) that read 30 times too high; for a premium model it read too low, including against a budget cap. Each request is now priced by the first of these that knows its model:
   - **A price you set.** `segreant pricing set <model>` takes a rate, `--like` another model, or `--free` for a local model. It is shown as "your price", never as list price.
   - **The rate card.** The bundled card now carries the 63 models the public price list had and it lacked, including claude-haiku-5-5 and the gpt-5.x-codex models.

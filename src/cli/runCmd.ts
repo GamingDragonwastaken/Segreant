@@ -10,10 +10,10 @@ import type { Server } from 'node:http';
 import { Store } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
-import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type SegreantConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, segreantHome, type BudgetConfig, type SegreantConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo, type SeedResult } from '../demo/seed.ts';
-import { startOfLocalDay } from '../budget/guard.ts';
+import { capBasisSpend, startOfLocalDay } from '../budget/guard.ts';
 import { previewReprice, applyReprice } from '../cost/reprice.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
@@ -154,7 +154,6 @@ export async function cmdStart(flags: Flags): Promise<void> {
         console.log(color(tty, C.red, `  ⛔ blocked  ${row.provider}/${row.model}  (budget)`));
         return;
       }
-      const today = store.spendBetween(startOfLocalDay(), Date.now() + 1000);
       const time = new Date(row.tsEpochMs).toLocaleTimeString('en-US', { hour12: false });
       // A price you set is not a guess, and not a list price either (PR #146 sweep).
       const est = row.estimated ? color(tty, C.yellow, ' ~est')
@@ -162,7 +161,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
       console.log(
         `  ${color(tty, C.gray, time)}  ${row.provider}/${row.model}  ` +
           `in ${num(row.inputTokens)} out ${num(row.outputTokens)}  ` +
-          `${color(tty, C.green, usd(row.costUsd))}${est}  ${color(tty, C.gray, `today ${usd(today)}`)}`,
+          `${color(tty, C.green, usd(row.costUsd))}${est}  ${color(tty, C.gray, liveTodayLine(store, cfg.budget))}`,
       );
     },
   });
@@ -253,6 +252,27 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
  * The source a price refresh reads, in words. The built-in list is spelled two
  * ways, no URL configured or its own URL; both are the public price list (PR #146 review).
  */
+/**
+ * The running total on each live log line. With a daily cap it is the spend the
+ * cap counts, beside the cap: the all-sources total read "today $51.29" next to
+ * a $25 cap while requests went through, because imported spend does not count
+ * toward the cap by default (launch pass, 2026-10-18). Any other spend today is
+ * named separately, never added in.
+ */
+export function liveTodayLine(
+  store: Pick<Store, 'spendBetween'> & Partial<Pick<Store, 'exactSpendBetween'>>,
+  budget: Pick<BudgetConfig, 'dailyUsd' | 'capIncludesImported'>,
+  nowMs = Date.now(),
+): string {
+  const start = startOfLocalDay(nowMs);
+  const all = store.spendBetween(start, nowMs + 1000);
+  if (budget.dailyUsd === null) return `today ${usd(all)}`;
+  const counted = capBasisSpend(store, budget, start, nowMs + 1000);
+  const other = all - counted.usd;
+  return `today ${usd(counted.usd)} of the ${usd(budget.dailyUsd)} cap`
+    + (other >= 0.005 ? ` (+${usd(other)} imported, not counted)` : '');
+}
+
 export function pricingSourceLabel(manifestUrl: string | null | undefined): string {
   return manifestUrl === null || manifestUrl === undefined || manifestUrl === DEFAULT_MANIFEST_URL
     ? 'the public price list'
