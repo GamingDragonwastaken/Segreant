@@ -92,12 +92,22 @@ export function isBuiltInProviderUpstream(url: string): boolean {
   }
 }
 
+/**
+ * A rule id the egress command accepts (a lowercase letter, then 2-63 of
+ * a-z, 0-9, _ or -). The hostname alone was printed before, and its dots made
+ * the printed command fail with "Rule refused" (PR #148 review).
+ */
+export function providerRuleId(hostname: string): string {
+  const slug = hostname.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `provider-${slug}`.slice(0, 64).replace(/-+$/, '');
+}
+
 /** The one command that lets Segreant forward to an upstream that is not built in (a gateway, a hosted model). */
 export function providerRuleCommand(url: string, method = 'POST'): string | null {
   let origin: URL;
   try { origin = new URL(new URL(url).origin); } catch { return null; }
   if (origin.protocol !== 'https:') return null;
-  return `segreant egress apply --apply --mode controlled_cloud --id ${origin.hostname} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
+  return `segreant egress apply --apply --mode controlled_cloud --id ${providerRuleId(origin.hostname)} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
 }
 
 /** Built-in routes, the same in every mode: an operator who adds a webhook rule keeps their provider and their price list. */

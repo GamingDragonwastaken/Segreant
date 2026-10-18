@@ -70,7 +70,7 @@ test('a request to a provider that is not built in is refused with the one comma
     const body = await response.json() as { error: { message: string; subcode: string } };
     assert.equal(body.error.subcode, 'policy_denied');
     assert.match(body.error.message, /https:\/\/gateway\.example\.com is not one of the built-in provider APIs/);
-    assert.match(body.error.message, /segreant egress apply --apply --mode controlled_cloud --id gateway\.example\.com --purpose provider_inference --data-class provider_request --method POST --origin https:\/\/gateway\.example\.com --path-prefix \//);
+    assert.match(body.error.message, /segreant egress apply --apply --mode controlled_cloud --id provider-gateway-example-com --purpose provider_inference --data-class provider_request --method POST --origin https:\/\/gateway\.example\.com --path-prefix \//);
   } finally {
     await new Promise<void>((resolve) => proxy.close(() => resolve()));
     store.close();
@@ -79,3 +79,31 @@ test('a request to a provider that is not built in is refused with the one comma
   }
 });
 
+test('the printed command is one the egress command accepts, and it then allows the provider (PR #148 review)', async () => {
+  const { providerRuleCommand, providerRuleId } = await import('../src/egress/policy.ts');
+  const { validateEgressRule } = await import('../src/egress/ruleValidation.ts');
+  for (const host of ['gateway.example.com', 'openrouter.ai', 'My-Proxy.Internal.Example.ORG', 'a.b', `${'x'.repeat(80)}.example.com`, '1api.example.com']) {
+    const id = providerRuleId(host);
+    const rule = { id, enabled: true, purpose: 'provider_inference', dataClass: 'provider_request', method: 'POST', origin: `https://${host.toLowerCase()}`, pathPrefix: '/' };
+    assert.deepEqual(validateEgressRule(rule as never), [], `${host} -> ${id}`);
+  }
+  // Run the printed command for real, in a scratch home.
+  const home = mkdtempSync(join(tmpdir(), 'segreant-provider-rule-'));
+  const previous = process.env.SEGREANT_HOME;
+  process.env.SEGREANT_HOME = home;
+  try {
+    const command = providerRuleCommand('https://gateway.example.com/v1/chat/completions')!;
+    const argv = command.split(' ').slice(1);
+    const { spawnSync } = await import('node:child_process');
+    const run = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', ...argv], { encoding: 'utf8', env: { ...process.env, SEGREANT_HOME: home } });
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    const { loadConfig } = await import('../src/config.ts');
+    const config = loadConfig();
+    const d = evaluateEgressPolicy(config.egress, { ...provider, url: 'https://gateway.example.com/v1/chat/completions' });
+    assert.equal(d.allowed, true, 'the provider is allowed once the printed command has run');
+    assert.equal(d.ruleId, 'provider-gateway-example-com');
+  } finally {
+    if (previous === undefined) delete process.env.SEGREANT_HOME; else process.env.SEGREANT_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
