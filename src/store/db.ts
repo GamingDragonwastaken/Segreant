@@ -2118,7 +2118,11 @@ export class Store {
     endMs: number,
     options: EconomicRequestExportOptions = {},
   ): EconomicRequestExportRow[] {
-    return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger, options);
+    // A request refused before it was sent cost nothing and has no economic
+    // event; exporting it would print it as legacy_unknown with
+    // no_exact_economic_event. Same rule as the economic read model (PR #143 review).
+    const rows = this.requestsInRange(startMs, endMs).filter((row) => row.pricing?.costBasis !== 'not_sent');
+    return buildEconomicRequestExportRows(rows, this.economicLedger, options);
   }
 
   /**
@@ -2665,7 +2669,7 @@ export class Store {
    * re-attributed inside the same transaction, on each unit's own recorded
    * basis — see realization.ts for why that basis is never re-derived.
    */
-  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync {
+  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync & { writtenRequestIds: string[] } {
     return realization.applyRepricedCosts(this.db, this.realizationDeps(), updates, appliedAtMs);
   }
 

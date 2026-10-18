@@ -292,7 +292,7 @@ export function repriceAction(cap: Capability): ActionSpec {
       applied.set(result);
       window.dispatchEvent(new CustomEvent('segreant:ledger-changed', { detail: { claim: 'pricing' } }));
       const sync = result.realizationSync;
-      return { ok: true, message: `Re-priced ${count(result.repriceable)} requests: ${usd(result.totalBeforeUsd)} recorded (estimated) → ${usd(result.totalAfterUsd)} ${afterWords(result)}.${sync?.unresolvable ? ` ${count(sync.unresolvable)} older value snapshots keep their previous cost and are marked stale.` : ''}` };
+      return { ok: true, message: `Re-priced ${count(result.repriceable)} requests: ${usd(result.totalBeforeUsd)} recorded (estimated) → ${usd(result.totalAfterUsd)} ${afterWords(result)}.${sync?.unresolvable ? ` ${count(sync.unresolvable)} older value snapshots keep their previous cost and are marked stale.` : ''}${result.alreadyRepriced > 0 ? ` ${count(result.alreadyRepriced)} were already re-priced by another reprice and are not counted here.` : ''}` };
     },
   };
 }

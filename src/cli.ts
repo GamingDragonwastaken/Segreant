@@ -344,7 +344,8 @@ async function main(): Promise<void> {
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
   const wraps = cmd === 'exec' || cmd === 'launch';
-  const tracked = trackFlags(parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : rest));
+  const parsed = parseFlags(wraps && sep !== -1 ? argv.slice(1, sep) : rest);
+  const tracked = trackFlags(parsed);
   const flags = tracked.flags;
   const wrapped = wraps && sep !== -1 ? argv.slice(sep + 1) : [];
 
@@ -573,7 +574,11 @@ async function main(): Promise<void> {
   // Long-running commands keep reading options after this point, so only
   // commands that have finished are checked.
   // A command that already failed has said why; its exit code stays.
-  const longRunning = cmd === 'start' || wraps || flags.watch === true || flags.serve === true;
+  // --watch and --serve count only when the command itself read them: read
+  // here through the tracking proxy they would mark themselves used, and
+  // `segreant --watch` would render the home view and exit 0 (PR #142 review).
+  const consumed = (key: string) => parsed[key] === true && !tracked.unread().includes(key);
+  const longRunning = cmd === 'start' || wraps || consumed('watch') || consumed('serve');
   const failed = typeof process.exitCode === 'number' && process.exitCode !== 0;
   if (!longRunning && !failed) {
     const unread = tracked.unread().filter((k) => k !== 'debug');
