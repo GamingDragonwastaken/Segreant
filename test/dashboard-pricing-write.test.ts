@@ -177,7 +177,9 @@ for (const path of ['/api/pricing/declare', '/api/pricing/unset', '/api/reprice'
       const pricesBefore = structuredClone(loadPriceOverrides().models);
       store.insertRequest(row('demo-refusal', 'x'));
       process.env.SEGREANT_DEMO = '1';
-      assert.equal((await post(base, path, valid)).status, 409);
+      // A reprice preview writes nothing, so the sample data may show one; every
+      // write is refused (independent review, 2026-10-18).
+      assert.equal((await post(base, path, valid)).status, path === '/api/reprice' ? 200 : 409);
       if (path === '/api/reprice') assert.equal((await post(base, path, { apply: true })).status, 409);
       assert.deepEqual({ ...loadPriceOverrides().models }, { ...pricesBefore });
       assert.equal(store.estimatedRequestRows().length, 1);

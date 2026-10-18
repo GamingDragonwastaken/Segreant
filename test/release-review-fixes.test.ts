@@ -18,7 +18,7 @@ const { DEFAULT_CONFIG, mutateConfig, configPath } = await import('../src/config
 const { providerEgressRefusalBody } = await import('../src/proxy/server.ts');
 const { EgressError } = await import('../src/egress/transport.ts');
 const { suggestOption } = await import('../src/cli/flags.ts');
-const { upstreamAdvice } = await import('../src/cli/connectCmd.ts');
+const { upstreamForwarding } = await import('../src/cli/connectCmd.ts');
 const { createDashboardServer } = await import('../src/dashboard/server.ts');
 
 const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0 };
@@ -84,10 +84,10 @@ test('an invalid egress section refuses with the real repair, not a rule for a b
 });
 
 test('connect explains each kind of upstream truthfully', () => {
-  assert.equal(upstreamAdvice('https://api.openai.com/v1').ok, true);
-  assert.match(upstreamAdvice('http://localhost:11434/v1').text, /this machine/);
-  assert.match(upstreamAdvice('https://openrouter.ai/api/v1').text, /egress apply/);
-  const lan = upstreamAdvice('http://192.168.1.50:8000/v1');
+  assert.equal(upstreamForwarding('https://api.openai.com/v1').ok, true);
+  assert.match(upstreamForwarding('http://localhost:11434/v1').text, /this machine/);
+  assert.match(upstreamForwarding('https://openrouter.ai/api/v1').text, /egress apply/);
+  const lan = upstreamForwarding('http://192.168.1.50:8000/v1');
   assert.equal(lan.ok, false);
   assert.match(lan.text, /cannot be allowed as it is/);
   assert.doesNotMatch(lan.text, /official provider API/);
