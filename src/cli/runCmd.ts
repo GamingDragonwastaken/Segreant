@@ -125,7 +125,15 @@ export async function cmdStart(flags: Flags): Promise<void> {
         return false;
       }
     },
-    refresh: () => refreshPricing(cfg.pricing.manifestUrl),
+    // The source the live config selects, not the one at start: enabled() has
+    // just confirmed it is the built-in list, and a source changed since then
+    // is never fetched behind the operator's back (PR #146 review).
+    refresh: async () => {
+      let url: string | null;
+      try { url = loadConfig().pricing.manifestUrl; } catch { return { ok: false, error: 'the configuration could not be read' }; }
+      if (pricingSourceLabel(url) !== 'the public price list') return { ok: false, error: 'the price source is no longer the public price list' };
+      return refreshPricing(DEFAULT_MANIFEST_URL);
+    },
     onLearned: (models) => {
       const names = models.map((m) => m.model).join(', ');
       // Named from the source the refresh read: an operator may point
@@ -513,7 +521,7 @@ export function cmdReprice(flags: Flags): void {
       const sync = report.realizationSync;
       printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
-        stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
+        stillEstimated, cacheDurationUnknown: report.cacheDurationUnknown, totalBeforeUsd: before, totalAfterUsd: after,
         priceEvidence: report.priceEvidence,
         byModel: [...byModel.entries()].map(([key, v]) => {
           const [provider, model] = JSON.parse(key) as [string, string];
@@ -534,6 +542,7 @@ export function cmdReprice(flags: Flags): void {
     console.log(`  Estimated rows       ${num(rows.length)}`);
     console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(the current card, or a price you set, gives these models an exact rate)')}`);
     if (stillEstimated) console.log(`  Still estimates      ${num(stillEstimated)}  ${color(tty, C.gray, 'left untouched — a new guess is not more honest than the old one')}`);
+    if (report.cacheDurationUnknown) console.log(`  Cache duration       ${num(report.cacheDurationUnknown)}  ${color(tty, C.gray, 'rows recorded before Segreant kept the cache-write duration; their writes are priced at the 5-minute rate')}`);
     if (updates.length) {
       console.log('');
       for (const [model, v] of [...byModel.entries()].sort((a, b) => b[1].after - a[1].after).slice(0, 10)) {
