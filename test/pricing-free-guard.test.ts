@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 // A cap counts a free model's requests as $0, so `--free` on a model the rate
@@ -71,6 +71,35 @@ test('a refresh caught mid-activation still counts (PR #153 review)', async () =
     writeFileSync(join(home, 'pricing', 'models.json'), text);
     assert.throws(() => declarePrice('acme-mid-refresh', { kind: 'free' }), /cloud model the rate card prices/);
   } finally {
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
+
+test('a free price that was not forced never zeroes a model a card prices, whatever the order (PR #153 review)', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { rateFor } = await import('../src/cost/pricing.ts');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  const now = new Date().toISOString();
+  mkdirSync(dirname(overridesPath()), { recursive: true });
+  // The race's end state: a free declaration stored for a model the card prices.
+  writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { [cardModel]: { kind: 'free', declaredAt: now } } }));
+  try {
+    const plain = rateFor('anthropic', cardModel);
+    assert.equal(plain.pricing.rateMatchKind, 'exact_provider', 'the card price counts');
+    assert.ok(plain.rate.input > 0);
+    writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { [cardModel]: { kind: 'free', force: true, declaredAt: now } } }));
+    assert.equal(rateFor('anthropic', cardModel).pricing.rateMatchKind, 'user_declared_free', 'a forced free price applies');
+    // A local model stays free until a card starts pricing it.
+    writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { 'acme-later-cloud': { kind: 'free', declaredAt: now } } }));
+    assert.equal(rateFor('openai', 'acme-later-cloud').pricing.rateMatchKind, 'user_declared_free');
+    const card = structuredClone(loadPricing());
+    card.providers['openai']!.models['acme-later-cloud'] = { input: 5, output: 20 };
+    mkdirSync(join(home, 'pricing', 'cards'), { recursive: true });
+    writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
+    const later = rateFor('openai', 'acme-later-cloud');
+    assert.notEqual(later.pricing.rateMatchKind, 'user_declared_free', 'a refreshed card on disk ends the free price');
+  } finally {
+    rmSync(overridesPath(), { force: true });
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
   }
 });

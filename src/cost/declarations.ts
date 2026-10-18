@@ -6,7 +6,13 @@ import { cardEntryAnywhere, loadPricing, rateFor, type Provider } from './pricin
 
 export function declarePrice(model: string, input: PriceOverrideInput, options: { force?: boolean } = {}): PriceOverride {
   if (isDemo()) throw new PriceOverridesError('Demo mode only shows sample data; run without --demo to declare a price.');
-  if (input.kind === 'free' && options.force !== true) {
+  // Only the CLI's --force can store a forced free price; a force arriving in
+  // the input itself (a dashboard body) is refused, never honoured.
+  if (input.kind === 'free' && (input as { force?: unknown }).force !== undefined) {
+    throw new PriceOverridesError('force is set only by segreant pricing set <model> --free --force.');
+  }
+  if (input.kind === 'free' && options.force === true) return setPriceOverride(model, { ...input, force: true });
+  if (input.kind === 'free') {
     // A free price on a model the card prices makes a cap count real cloud
     // spend as $0. A zero rate is refused for the same reason; `free` is for a
     // model that runs locally, so a card match needs an explicit --force

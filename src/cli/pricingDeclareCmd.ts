@@ -50,7 +50,11 @@ function priceInput(flags: Flags): PriceOverrideInput {
 }
 
 function storedLine(model: string, price: PriceOverride): string {
-  if (price.kind === 'free') return `Stored user-declared price for ${model}: free ($0 per request).`;
+  if (price.kind === 'free') {
+    return price.force === true
+      ? `Stored user-declared price for ${model}: free ($0 per request), forced: a cap counts it as $0 even though a rate card prices this name.`
+      : `Stored user-declared price for ${model}: free ($0 per request).`;
+  }
   if (price.kind === 'like') return `Stored user-declared price for ${model}: like ${price.like} (exact rate-card model).`;
   const cache = [
     ...(price.cacheRead === undefined ? [] : [`cache-read $${price.cacheRead}`]),

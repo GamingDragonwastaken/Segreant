@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -460,6 +460,24 @@ export function cardEntryAnywhere(model: string): { provider: string; input: num
     }
   }
   return null;
+}
+
+/**
+ * Whether any card prices this model, for applying a free price that was not
+ * forced. Rechecked whenever the on-disk card or the archive changes, so a
+ * refresh in another process counts at once without re-reading cards on every
+ * request (PR #153 review).
+ */
+const cardPricedMemo = new Map<string, { key: string; priced: boolean }>();
+function cardPricesModel(model: string): boolean {
+  const stamp = (path: string): string => { try { return String(statSync(path).mtimeMs); } catch { return '-'; } };
+  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(join(segreantHome(), 'pricing', 'cards')), cached === null ? null : pricingCardHash(cached)]);
+  const hit = cardPricedMemo.get(model);
+  if (hit && hit.key === key) return hit.priced;
+  const priced = cardEntryAnywhere(model) !== null;
+  if (cardPricedMemo.size > 1000) cardPricedMemo.clear();
+  cardPricedMemo.set(model, { key, priced });
+  return priced;
 }
 
 export interface RefreshResult {
@@ -1150,7 +1168,12 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    that no longer resolves exactly on the card is ignored, so the request
   //    falls to the ordinary ladder rather than to a guess built on a guess.
   const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
-  if (declared?.kind === 'free') return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  // A free price counts a model as $0. Unless it was forced, it never applies
+  // to a model a card prices, whatever order the declaration and a refresh
+  // happened in: the card's price counts instead (PR #153 review).
+  if (declared?.kind === 'free' && (declared.force === true || !cardPricesModel(model))) {
+    return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
+  }
   if (declared?.kind === 'rate') return resolved(declaredRate(declared), 'user_declared', null, model, declarationRevision(declared));
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);
