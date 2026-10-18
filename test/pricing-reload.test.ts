@@ -153,3 +153,17 @@ test('a wall clock set back does not stop the card being checked', () => {
     mono.mock.restore();
   }
 });
+
+test('a first refresh still in progress in another process is not adopted', () => {
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  loadPricing(true);
+  // The other process has written the active card but not yet its provenance.
+  refreshOnDisk(cardAt(9), { stopBeforeProvenance: true });
+  resetPricingFreshnessForTests();
+  assert.equal(rateFor('openai', MODEL).pricing.rateMatchKind, 'fallback', 'the uncommitted card is not used');
+  // Once its provenance is committed, the card is picked up.
+  refreshOnDisk(cardAt(9));
+  resetPricingFreshnessForTests();
+  assert.equal(rateFor('openai', MODEL).rate.input, 9);
+  rmSync(join(home, 'pricing'), { recursive: true, force: true });
+});

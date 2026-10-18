@@ -97,8 +97,16 @@ test('a free price that was not forced never zeroes a model a card prices, whate
     // for the whole plan. At the next freshness check the new card is loaded
     // and its price counts.
     const { withPricingSnapshot, resetPricingFreshnessForTests } = await import('../src/cost/pricing.ts');
+    const { createHash } = await import('node:crypto');
     const inPlan = withPricingSnapshot(() => {
-      writeFileSync(join(home, 'pricing', 'models.json'), JSON.stringify(card));
+      // A committed refresh: the active card and its provenance, as another
+      // process's refresh leaves them. A card without provenance is not adopted.
+      const text = JSON.stringify(card);
+      const sha = createHash('sha256').update(text, 'utf8').digest('hex');
+      writeFileSync(join(home, 'pricing', 'models.json'), text);
+      writeFileSync(join(home, 'pricing', 'provenance.json'), JSON.stringify({ schemaVersion: 1, sourceUrl: null, sourceUrlSha256: null,
+        sourceKind: 'manual', fetchedAt: now, lastCheckedAt: now, upstreamDeclaredUpdated: null, cardSha256: sha,
+        modelCount: 1, etag: null, lastModified: null }));
       resetPricingFreshnessForTests();
       return rateFor('openai', 'acme-later-cloud').pricing.rateMatchKind;
     });
