@@ -13,10 +13,12 @@ team rollup. [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) is the complete,
 current outbound and retention contract.
 
 **Can I make Segreant itself refuse all cloud traffic?**
-Yes. New configuration begins in `local_locked` mode, where Segreant refuses
-non-loopback HTTP(S) targets before DNS, with one exception: its own download of
-the public price list, which sends nothing about you. `segreant pricing --auto
-off` stops Segreant making that download by itself. A local model at `localhost` or
+Yes, for everything Segreant would send on its own. New configuration begins in
+`local_locked` mode, where Segreant refuses non-loopback HTTP(S) targets before
+DNS, with two built-in routes: your own requests to the official OpenAI and
+Anthropic APIs (they were going there anyway; Segreant meters them on the way),
+and its download of the public price list, which sends nothing about you.
+`segreant pricing --auto off` stops Segreant making that download by itself. A local model at `localhost` or
 `127.0.0.1` remains available. To permit a cloud route, use `segreant egress
 plan` to inspect one exact rule and `segreant egress apply --apply` to persist it;
 `segreant egress verify` validates the redacted local receipt chain. This is a
@@ -222,8 +224,9 @@ it from PowerShell or cmd, where `/v1/` arrives unchanged.
 `segreant pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of
 contributors within days of every model release; the GET sends nothing about
-you). It needs a reviewed `pricing_refresh` egress rule in controlled-cloud
-mode. For self-maintenance, `segreant pricing --auto` refreshes on start
+you). The public price list is a built-in route in either egress mode, so it
+needs no rule; a custom `pricing.manifestUrl` needs an exact `pricing_refresh`
+rule in controlled-cloud mode. For self-maintenance, `segreant pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 

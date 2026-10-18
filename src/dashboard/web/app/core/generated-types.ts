@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 44c07ff040b509ef725d96444091f757b767d12f7df57d569e817c2a62dec4c3 */
+/** Source SHA-256: 2a97a9ba8ac2b9a19eebcf48c7b5aa90f76271509d93f460ec339ad773fc43a6 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1620,7 +1620,7 @@ export interface SettingsSnapshot {
   budget: BudgetConfig;
   enforcement: BudgetEnforcement;
   egress: {
-    mode: 'local_locked' | 'controlled_cloud';
+    mode: 'local_locked' | 'controlled_cloud' | 'invalid';
     rules: Array<{
       id: string;
       enabled: boolean;

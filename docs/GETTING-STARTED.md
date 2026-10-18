@@ -126,23 +126,20 @@ $env:ANTHROPIC_BASE_URL="http://localhost:8090"
 $env:OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
 
-**Grant the provider route.** Segreant starts in **local-locked** mode and forwards
-nothing to a cloud provider until you allow that exact route. For OpenAI:
+**No provider setup for OpenAI or Anthropic.** Your requests to their official
+APIs go through as soon as Segreant starts: that traffic was already going to your
+provider, and Segreant meters it on the way. Segreant still starts in
+**local-locked** mode for everything it would send on its own (webhooks, team
+rollups, hosted judging), which stays off until you allow it.
+
+Another provider (OpenRouter, a gateway, a hosted open model) needs one rule for
+its address. A refused request prints the exact command, for example:
 
 ```bash
 segreant egress apply --apply --mode controlled_cloud \
-  --id openai-inference --purpose provider_inference \
+  --id provider-openrouter-ai-8b97b9a4-post --purpose provider_inference \
   --data-class provider_request --method POST \
-  --origin https://api.openai.com --path-prefix /v1/
-```
-
-For Anthropic, add a second rule (the OpenAI rule is kept):
-
-```bash
-segreant egress apply --apply --mode controlled_cloud \
-  --id anthropic-inference --purpose provider_inference \
-  --data-class provider_request --method POST \
-  --origin https://api.anthropic.com --path-prefix /v1/
+  --origin https://openrouter.ai --path-prefix /
 ```
 
 `segreant egress status` shows the active mode and rules. The full behaviour,

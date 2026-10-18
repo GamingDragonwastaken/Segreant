@@ -27,20 +27,20 @@ upstream at the provider.** That's the whole integration.
 | `upstreams.openai` / `upstreams.anthropic` | `~/.segreant/config.json` | where Segreant forwards, after metering |
 | `egress` rule | `segreant egress apply --apply ...` | the exact cloud method/origin/path/data class Segreant may forward |
 
-For native OpenAI or Anthropic, the upstream defaults are correct, but a fresh
-Segreant install is `local_locked` and deliberately refuses cloud forwarding until
-you add an exact `provider_inference` egress rule. This is a second deliberate
-consent step: it records that a provider can receive the routed payload. You
-touch the upstream setting only to meter an OpenAI-*compatible* provider that
-isn't OpenAI (Gemini, OpenRouter, DeepSeek, Ollama, …).
+For native OpenAI or Anthropic, the upstream defaults are correct and need no
+other step: forwarding to their official APIs is built in, because that traffic
+was already going there. You touch the upstream setting only to meter an
+OpenAI-*compatible* provider that isn't OpenAI (Gemini, OpenRouter, DeepSeek,
+Ollama, …). A remote one of those needs one exact `provider_inference` rule; a
+refused request prints the command. A local server on `localhost` needs none.
 
-For example, before routing default OpenAI traffic:
+For example, before routing traffic to a gateway:
 
 ```bash
 segreant egress apply --apply --mode controlled_cloud \
-  --id openai-inference --purpose provider_inference \
+  --id provider-openrouter-ai-8b97b9a4-post --purpose provider_inference \
   --data-class provider_request --method POST \
-  --origin https://api.openai.com --path-prefix /v1/
+  --origin https://openrouter.ai --path-prefix /
 ```
 
 The receipt chain is local and redacted: `segreant egress verify` checks its

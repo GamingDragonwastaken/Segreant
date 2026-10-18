@@ -158,8 +158,9 @@ alert webhooks, an explicitly selected hosted judge, a deliberate OpenAI Costs
 pull, and an opt-in numeric team rollup. The complete, current list and each
 retention control are in [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md).
 
-New installations run Segreant-process HTTP(S) in `local_locked` mode. A
-controlled-cloud action needs an exact purpose/data/method/origin/path rule and
+New installations run Segreant-process HTTP(S) in `local_locked` mode, with two
+built-in routes: the user's own requests to the official provider APIs and the
+public price-list download. Any other controlled-cloud action needs an exact purpose/data/method/origin/path rule and
 creates a redacted local receipt trail. This strengthens the Segreant boundary;
 it does not establish machine-wide egress control or a provider-side privacy
 guarantee.
