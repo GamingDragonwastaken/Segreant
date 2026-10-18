@@ -458,20 +458,27 @@ export function cardEntryAnywhere(model: string): CardEntry | null {
   const bundled = readValidPricing(BUNDLED_PRICING_PATH);
   if (bundled) cards.push([bundled, 'bundled']);
   try {
-    // Hash names carry no order and directory listing order is unspecified, so
-    // archives are taken newest first by the fetch time their provenance
-    // records; a card being activated was archived last and comes first. An
-    // archive with no valid provenance comes after every dated one (PR #153 review).
+    // Archives carry no reliable order through an activation: names are
+    // hashes, listing order is unspecified, and a card being activated is
+    // written before its provenance. So among archived cards the highest
+    // stated rate for this model counts. A cap may then briefly count a
+    // superseded higher rate, but never undercount; budgets fail closed
+    // (PR #153 review). Newer cards above (loaded, verified, active, bundled)
+    // still come first.
     const archiveDir = join(segreantHome(), 'pricing', 'cards');
-    const archives: Array<{ card: PricingFile; fetchedMs: number }> = [];
+    const archives: Array<{ card: PricingFile; weight: number }> = [];
     for (const name of existsSync(archiveDir) ? readdirSync(archiveDir) : []) {
       if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
       const archived = readValidPricing(join(archiveDir, name));
       if (!archived) continue;
-      const fetchedAt = readCardProvenance(name.slice(0, 64))?.fetchedAt;
-      archives.push({ card: archived, fetchedMs: fetchedAt === undefined ? Number.NEGATIVE_INFINITY : Date.parse(fetchedAt) });
+      let weight = Number.NEGATIVE_INFINITY;
+      for (const p of Object.values(archived.providers)) {
+        const rate = Object.hasOwn(p.models, model) ? p.models[model] : undefined;
+        if (rate) weight = Math.max(weight, rate.input + rate.output);
+      }
+      archives.push({ card: archived, weight });
     }
-    archives.sort((a, b) => b.fetchedMs - a.fetchedMs);
+    archives.sort((x, y) => y.weight - x.weight);
     for (const a of archives) cards.push([a.card, 'archive']);
   } catch { /* an unreadable archive adds nothing; the other cards still count */ }
   for (const [card, source] of cards) {
@@ -509,7 +516,8 @@ function cardLookup(model: string): CardLookup {
   cardLookupMemo.set(model, { key, lookup });
   return lookup;
 }
-function cardPricesModel(model: string): boolean {
+/** Whether a rate card prices this model, so a free price not forced for it does not apply. */
+export function cardPricesModel(model: string): boolean {
   return cardLookup(model).entry !== null;
 }
 

@@ -1913,6 +1913,8 @@ export interface DeclaredPrice {
   declaredAt: string;
   /** A free price stored with --force: a cap counts the model as $0 even though a rate card prices it (PR #153 review). */
   forced?: true;
+  /** A free price not forced, for a model a rate card now prices: it is not applied; the card price counts (PR #153 review). */
+  supersededByCard?: true;
   /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
   rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;
