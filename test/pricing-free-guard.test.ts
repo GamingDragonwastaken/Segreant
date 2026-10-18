@@ -30,6 +30,30 @@ test('free is refused for a model the rate card prices, naming the rate', () => 
   assert.equal(priceOverrideFor(cardModel), null, 'nothing stored');
 });
 
+test('a card refreshed on disk by another process counts, without replacing the loaded card (PR #153 review)', async () => {
+  const { mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const before = loadPricing();
+  const card = structuredClone(before);
+  card.providers['openai']!.models['acme-cloud-added'] = { input: 2, output: 8 };
+  const text = JSON.stringify(card);
+  mkdirSync(join(home, 'pricing'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'models.json'), text);
+  const now = new Date().toISOString();
+  writeFileSync(join(home, 'pricing', 'provenance.json'), JSON.stringify({
+    schemaVersion: 1, sourceUrl: null, sourceUrlSha256: null, sourceKind: 'manual', fetchedAt: now, lastCheckedAt: now,
+    upstreamDeclaredUpdated: null, cardSha256: createHash('sha256').update(text, 'utf8').digest('hex'),
+    modelCount: Object.values(card.providers).reduce((n, p) => n + Object.keys(p.models).length, 0), etag: null, lastModified: null,
+  }));
+  try {
+    assert.throws(() => declarePrice('acme-cloud-added', { kind: 'free' }), /cloud model the rate card prices \(openai: \$2 in/);
+    assert.equal(loadPricing(), before, 'the loaded card is not replaced by the check');
+    assert.equal(readFileSync(join(home, 'pricing', 'models.json'), 'utf8'), text);
+  } finally {
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
+
 test('free stays allowed for a model the card does not know', () => {
   assert.equal(declarePrice('acme-local-llm', { kind: 'free' }).kind, 'free');
 });
