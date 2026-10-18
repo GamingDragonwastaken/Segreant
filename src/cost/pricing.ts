@@ -489,16 +489,28 @@ export function cardEntryAnywhere(model: string): CardEntry | null {
  * refresh in another process counts at once without re-reading cards on every
  * request (PR #153 review).
  */
-const cardPricedMemo = new Map<string, { key: string; priced: boolean }>();
-function cardPricesModel(model: string): boolean {
+interface CardLookup {
+  entry: CardEntry | null;
+  /** The verified card on disk prices this model and is not the card this process loaded: a refresh it has not picked up. */
+  verifiedIsNewer: boolean;
+}
+const cardLookupMemo = new Map<string, { key: string; lookup: CardLookup }>();
+function cardLookup(model: string): CardLookup {
   const stamp = (path: string): string => { try { return String(statSync(path).mtimeMs); } catch { return '-'; } };
-  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(join(segreantHome(), 'pricing', 'cards')), cached === null ? null : pricingCardHash(cached)]);
-  const hit = cardPricedMemo.get(model);
-  if (hit && hit.key === key) return hit.priced;
-  const priced = cardEntryAnywhere(model) !== null;
-  if (cardPricedMemo.size > 1000) cardPricedMemo.clear();
-  cardPricedMemo.set(model, { key, priced });
-  return priced;
+  const key = JSON.stringify([segreantHome(), stamp(cachePath()), stamp(provenancePath()), stamp(join(segreantHome(), 'pricing', 'cards')), cached === null ? null : pricingCardHash(cached)]);
+  const hit = cardLookupMemo.get(model);
+  if (hit && hit.key === key) return hit.lookup;
+  const verified = loadVerifiedCache();
+  const loaded = loadPricing();
+  const verifiedIsNewer = verified !== null && pricingCardHash(verified.file) !== pricingCardHash(loaded)
+    && Object.values(verified.file.providers).some((p) => Object.hasOwn(p.models, model));
+  const lookup = { entry: cardEntryAnywhere(model), verifiedIsNewer };
+  if (cardLookupMemo.size > 1000) cardLookupMemo.clear();
+  cardLookupMemo.set(model, { key, lookup });
+  return lookup;
+}
+function cardPricesModel(model: string): boolean {
+  return cardLookup(model).entry !== null;
 }
 
 export interface RefreshResult {
@@ -1200,13 +1212,14 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   if (declared?.kind === 'free') {
     // Set aside: the request is charged at the card rate, not the generic
     // fallback (PR #153 review). A refresh in another process leaves this
-    // process's card stale; reload the verified card when it is the one that
-    // prices the model, as a restart would.
-    let entry = cardEntryAnywhere(model);
-    if (entry?.source === 'disk') {
+    // process's card stale, whether it added the model or changed its rate;
+    // reload the verified card when it prices the model and differs from the
+    // loaded one, as a restart would. Memoized until the card files change.
+    let { entry } = cardLookup(model);
+    if (cardLookup(model).verifiedIsNewer) {
       pricing = loadPricing(true);
       here = pricing.providers[provider]?.models;
-      entry = cardEntryAnywhere(model);
+      ({ entry } = cardLookup(model));
     }
     // Still not on the loaded card (a refresh mid-activation, or only an
     // archived card has it): charge the matching card's rate, labelled with

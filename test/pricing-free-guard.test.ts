@@ -171,3 +171,33 @@ test('archived cards are taken newest first by recorded fetch time, not listing 
     rmSync(join(home, 'pricing'), { recursive: true, force: true });
   }
 });
+
+test('a refresh that changes the rate of a model the loaded card already has is charged at the new rate (PR #153 review)', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const { rateFor } = await import('../src/cost/pricing.ts');
+  const { overridesPath } = await import('../src/cost/overrides.ts');
+  const loadedRate = loadPricing().providers['anthropic']!.models[cardModel]!;
+  const card = structuredClone(loadPricing());
+  card.providers['anthropic']!.models[cardModel] = { ...loadedRate, input: loadedRate.input * 10, output: loadedRate.output * 10 };
+  const text = JSON.stringify(card);
+  const now = new Date().toISOString();
+  mkdirSync(join(home, 'pricing'), { recursive: true });
+  writeFileSync(join(home, 'pricing', 'models.json'), text);
+  writeFileSync(join(home, 'pricing', 'provenance.json'), JSON.stringify({
+    schemaVersion: 1, sourceUrl: null, sourceUrlSha256: null, sourceKind: 'manual', fetchedAt: now, lastCheckedAt: now,
+    upstreamDeclaredUpdated: null, cardSha256: createHash('sha256').update(text, 'utf8').digest('hex'),
+    modelCount: Object.values(card.providers).reduce((n, p) => n + Object.keys(p.models).length, 0), etag: null, lastModified: null,
+  }));
+  mkdirSync(dirname(overridesPath()), { recursive: true });
+  writeFileSync(overridesPath(), JSON.stringify({ version: 1, models: { [cardModel]: { kind: 'free', declaredAt: now } } }));
+  try {
+    const charged = rateFor('anthropic', cardModel);
+    assert.equal(charged.pricing.rateMatchKind, 'exact_provider');
+    assert.equal(charged.rate.input, loadedRate.input * 10, 'the refreshed rate, not the stale loaded one');
+    assert.equal(charged.pricing.rateCardSourceKind, 'manual');
+  } finally {
+    rmSync(overridesPath(), { force: true });
+    rmSync(join(home, 'pricing'), { recursive: true, force: true });
+  }
+});
