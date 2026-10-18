@@ -8,6 +8,10 @@
  * window with no requests is not a fresh install, sample data has its own
  * banner, and a ledger whose requests retention deleted had usage: Spend's
  * retention warning says so instead (PR #155 review).
+ *
+ * The note says what is observed, that the ledger is empty, never that it was
+ * always empty: a ledger pruned before prunes were recorded cannot say whether
+ * it was used, and the wording holds either way (PR #155 review).
  */
 
 import { h } from '../core/dom.ts';
@@ -23,10 +27,10 @@ export function emptyLedgerNotice(): Node {
   return h('div', null, () => (empty()
     ? h('div', { class: 'banner banner-first', role: 'note' },
         h('p', null,
-          h('strong', { text: () => (isPrecise() ? 'The ledger has no requests. ' : 'Nothing recorded yet. ') }),
+          h('strong', { text: () => (isPrecise() ? 'The ledger has no requests. ' : 'Your ledger is empty. ') }),
           h('span', { text: () => (isPrecise()
             ? 'Import native tool logs, or route a tool through the proxy, to populate these claims. '
-            : 'These figures stay at $0.00 until your usage comes in. Segreant reads what Claude Code, Codex and other tools have already recorded on this machine. ') }),
+            : 'These figures stay at $0.00 until usage comes in. Segreant reads what Claude Code, Codex and other tools have already recorded on this machine. ') }),
           h('a', { class: 'banner-link', href: '#/data', text: () => (isPrecise() ? 'Open Data' : 'Bring in your usage') })))
     : null));
 }
