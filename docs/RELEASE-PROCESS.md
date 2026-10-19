@@ -71,6 +71,8 @@ publishes it. The workflow refuses, before publishing anything, when:
 - the commit is not on `main`;
 - CI did not pass on that exact commit;
 - `CHANGELOG.md` has no section for the version.
+- the version is older than the one its dist-tag (`latest`, or `next` for a
+  prerelease) points to, which would move that tag backwards.
 
 It then runs the `prepublishOnly` checks, packs the tarball once, publishes
 that file, confirms the registry serves the same bytes (the `dist.integrity`
