@@ -52,6 +52,31 @@ are intentionally not automated from a local coding task:
 6. Create a release/tag only after the registry install succeeds — availability
    is never claimed before that check passes.
 
+## How a release is published
+
+Since 0.2.1, releases are published by `.github/workflows/publish.yml` through
+npm trusted publishing: GitHub Actions authenticates to npm with a short-lived
+OIDC token, so no npm token is stored anywhere, and every published version
+carries a provenance attestation naming this repository, the workflow and the
+exact commit. The owner configured the trusted publisher on npmjs.com and has
+delegated releases to the maintainer: after the release gate in
+`RELEASE-GATE.md` passes on a commit, pushing the tag `vX.Y.Z` on that commit
+publishes it. The workflow refuses, before publishing anything, when:
+
+- the tag does not name the `package.json` version;
+- the commit is not on `main`;
+- CI did not pass on that exact commit;
+- `CHANGELOG.md` has no section for the version.
+
+It then runs the `prepublishOnly` checks, packs the tarball once, publishes
+that file, confirms the registry serves the same bytes (the `dist.integrity`
+of the published version equals the packed file's sha512), installs the
+registry copy into a clean directory and starts its dashboard. Only then does
+it create the GitHub release, with the tarball and its `.sha256` attached, so
+step 6's rule holds: availability is claimed after the registry install
+succeeds. A prerelease version (`1.2.3-rc.1`) is published under the `next`
+dist-tag and never becomes the default install.
+
 ## Separate gate: the team server
 
 `team-server/` has its own gate in `RELEASE-GATE.md` ("Separate gate: optional
@@ -63,6 +88,6 @@ completing that separate gate in a disposable environment.
 
 ## What this document is not
 
-It does not grant anyone but the owner the ability to publish, tag, or deploy,
-and it does not shortcut `RELEASE-GATE.md`'s requirement that every claim be
+It does not grant anyone the ability to publish, tag, or deploy beyond the
+delegation recorded above, and it does not shortcut `RELEASE-GATE.md`'s requirement that every claim be
 bound to an exact, observed commit and CI run.
