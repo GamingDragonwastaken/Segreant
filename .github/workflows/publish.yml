@@ -48,15 +48,24 @@ jobs:
           status="$(curl --silent --show-error -o exchange.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $id_token" \
             https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/segreant)"
-          if [ "$status" = 200 ]; then
-            echo "::add-mask::$(jq -r '.token // empty' exchange.json)"
-            rm -f exchange.json
-            echo "npm accepted this workflow as segreant's trusted publisher; the token was discarded"
-          else
-            echo "npm refused the exchange (HTTP $status): $(cat exchange.json)" >&2
-            rm -f exchange.json
-            exit 1
-          fi
+          # The response can carry a package token: it is masked before anything
+          # is printed, and the raw body is never printed, only its error fields.
+          field() { node -e "try { const o = JSON.parse(require('fs').readFileSync('exchange.json', 'utf8')); console.log($1) } catch {}" 2>/dev/null || true; }
+          token="$(field "o.token ?? ''")"
+          if [ -n "$token" ]; then echo "::add-mask::$token"; fi
+          reason="$(field "[o.error, o.message].filter((v) => typeof v === 'string').join(': ')")"
+          rm -f exchange.json
+          unset token
+          case "$status" in
+            200|201)
+              echo "npm accepted this workflow's identity for segreant (HTTP $status); the token was discarded."
+              echo "This proves the trusted publisher entry matches. Publishing directly also needs 'npm publish' ticked under its allowed actions on npmjs.com."
+              ;;
+            *)
+              echo "npm refused the exchange (HTTP $status)${reason:+: $reason}" >&2
+              exit 1
+              ;;
+          esac
 
   publish:
     if: github.event_name == 'push'
@@ -253,6 +262,12 @@ jobs:
                 echo "$name attached"
               fi
             done
+            # The title, notes and prerelease flag are set to what this run
+            # derives (the changelog section and the dist-tag): editing them is
+            # non-destructive, and a release made some other way is corrected.
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Segreant $version" \
+              --notes-file ../release/notes.md --prerelease="$([ "${{ steps.release.outputs.dist_tag }}" = next ] && echo true || echo false)"
+            echo "the release's title, notes and prerelease flag match this version"
             exit 0
           fi
           if [ "$is_draft" = true ]; then

@@ -88,8 +88,12 @@ dist-tag and never becomes the default install.
 To check the npm side without releasing anything, run the workflow by hand
 (Actions, Publish, Run workflow): its `trust-check` job exchanges the run's
 identity token with npm exactly as a release would and reports whether npm
-accepts this workflow as the package's trusted publisher. Nothing is built or
-published, and the token npm issues is discarded.
+accepts this workflow's identity for the package: that the trusted publisher
+entry matches. It does not prove the entry may publish directly; that is the
+"npm publish" allowed action on npmjs.com, which this workflow needs (an
+entry allowing only staged publishing would stop at `npm publish`). Nothing
+is built or published, and the token npm issues is masked and discarded; the
+response body is never printed.
 
 ## Separate gate: the team server
 
