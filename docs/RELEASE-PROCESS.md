@@ -85,6 +85,12 @@ packed file's exact bytes it finishes the remaining steps, and when the bytes
 differ it stops. It never replaces a file already attached to a published GitHub release: a missing file is added, and one that differs stops the run. Tags pushed while a release is running wait their turn in order. A prerelease version (`1.2.3-rc.1`) is published under the `next`
 dist-tag and never becomes the default install.
 
+To check the npm side without releasing anything, run the workflow by hand
+(Actions, Publish, Run workflow): its `trust-check` job exchanges the run's
+identity token with npm exactly as a release would and reports whether npm
+accepts this workflow as the package's trusted publisher. Nothing is built or
+published, and the token npm issues is discarded.
+
 ## Separate gate: the team server
 
 `team-server/` has its own gate in `RELEASE-GATE.md` ("Separate gate: optional
