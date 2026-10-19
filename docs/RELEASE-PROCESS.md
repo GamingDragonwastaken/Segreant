@@ -49,8 +49,11 @@ are intentionally not automated from a local coding task:
 5. Inspect the generated tarball one final time, publish intentionally, then
    install the registry package into a clean directory and smoke its CLI and
    dashboard.
-6. Create a release/tag only after the registry install succeeds — availability
-   is never claimed before that check passes.
+6. Create the GitHub release, the public statement that a version is
+   available, only after the registry install succeeds — availability is never
+   claimed before that check passes. Since 0.2.1 the version tag is what starts
+   a release (see below), so the tag exists before publication; the GitHub
+   release is created last.
 
 ## How a release is published
 
@@ -72,9 +75,13 @@ It then runs the `prepublishOnly` checks, packs the tarball once, publishes
 that file, confirms the registry serves the same bytes (the `dist.integrity`
 of the published version equals the packed file's sha512), installs the
 registry copy into a clean directory and starts its dashboard. Only then does
-it create the GitHub release, with the tarball and its `.sha256` attached, so
-step 6's rule holds: availability is claimed after the registry install
-succeeds. A prerelease version (`1.2.3-rc.1`) is published under the `next`
+it create the GitHub release, with the tarball and its `.sha256` attached:
+availability is claimed after the registry install succeeds (step 6). The
+release notes are extracted from `CHANGELOG.md` before anything is published,
+so a missing or empty section stops the release first. A re-run of the same
+tag never publishes twice: when that version is already on npm with the
+packed file's exact bytes it finishes the remaining steps, and when the bytes
+differ it stops. A prerelease version (`1.2.3-rc.1`) is published under the `next`
 dist-tag and never becomes the default install.
 
 ## Separate gate: the team server

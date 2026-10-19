@@ -55,8 +55,18 @@ jobs:
             echo "$GITHUB_SHA is not on main; releases are cut from main only" >&2
             exit 1
           fi
-          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
-            echo "CHANGELOG.md has no '## [$version]' section; the release notes come from it" >&2
+          # The release notes are extracted here, before anything is published,
+          # with the same literal lookup the GitHub release uses: a missing or
+          # empty section stops the release instead of stranding a published
+          # version without its notes.
+          mkdir -p ../release
+          awk -v h="## [$version]" '
+            index($0, h) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > ../release/notes.md
+          if ! grep -q '[^[:space:]]' ../release/notes.md; then
+            echo "CHANGELOG.md has no non-empty '## [$version]' section; the release notes come from it" >&2
             exit 1
           fi
           # A prerelease (1.2.3-rc.1) never becomes the version npm installs by default.
@@ -113,12 +123,29 @@ jobs:
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           cat ../release/*.sha256
 
-      - name: Publish that file with provenance
+      - name: Publish that file with provenance (a re-run finishes, never republishes)
         shell: bash
         run: |
           set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          local_integrity="sha512-$(openssl dgst -sha512 -binary "${{ steps.pack.outputs.tarball }}" | base64 -w0)"
+          # npm never accepts the same version twice. When an earlier run of this
+          # tag published and a later step failed, the re-run checks the
+          # registry's copy is this exact file and carries on to finish the
+          # release; a different file under the same version stops it.
+          existing="$(npm view "segreant@$version" dist.integrity 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            if [ "$existing" = "$local_integrity" ]; then
+              echo "segreant@$version is already published with these exact bytes; finishing the release"
+              exit 0
+            fi
+            echo "segreant@$version is already published with different bytes ($existing, packed $local_integrity)" >&2
+            exit 1
+          fi
           npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public \
-            --tag "${{ steps.release.outputs.dist_tag }}" --ignore-scripts
+            --tag "$dist_tag_value" --ignore-scripts
+        env:
+          dist_tag_value: ${{ steps.release.outputs.dist_tag }}
 
       - name: The registry serves the file that was packed
         shell: bash
@@ -165,15 +192,10 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.release.outputs.version }}"
-          # This version's CHANGELOG section, from its heading to the next one.
-          awk -v h="## [$version]" '
-            index($0, h) == 1 { on = 1; next }
-            on && /^## \[/ { exit }
-            on { print }
-          ' CHANGELOG.md > ../release/notes.md
-          if [ ! -s ../release/notes.md ]; then
-            echo "CHANGELOG.md has no section for $version" >&2
-            exit 1
+          # The notes were extracted and checked before publishing.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "the GitHub release for $GITHUB_REF_NAME already exists"
+            exit 0
           fi
           prerelease=()
           if [ "${{ steps.release.outputs.dist_tag }}" = next ]; then prerelease=(--prerelease); fi
