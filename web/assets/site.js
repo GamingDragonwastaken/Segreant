@@ -54,6 +54,36 @@
     });
   });
 
+  // ---- Separators between movements: each carries the movement's number. ----
+  const SVG = 'http://www.w3.org/2000/svg';
+  // A guilloche rope: six strands of one wave, phase-shifted, under a slow swell.
+  const rope = () => {
+    const svg = document.createElementNS(SVG, 'svg');
+    // Wider than any screen and cropped from the middle, so the strands never stretch.
+    svg.setAttribute('viewBox', '0 0 2400 72'); svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    svg.classList.add('sep-full', 'sep-rope', 'sep-gap');
+    // Each strand is cut outward from the number in the middle, one half each way.
+    for (const side of [-1, 1]) for (let k = 0; k < 10; k++) {
+      let d = '';
+      for (let i = 0; i <= 400; i++) {
+        const x = 1200 + side * i * 3;
+        const swell = 0.7 + 0.3 * Math.cos((x / 600) * Math.PI * 2);
+        const y = 36 + 17 * swell * Math.sin((x / 130) * Math.PI * 2 + (k * Math.PI) / 5);
+        d += `${i ? 'L' : 'M'}${x} ${y.toFixed(2)}`;
+      }
+      const path = document.createElementNS(SVG, 'path');
+      path.setAttribute('d', d); path.setAttribute('pathLength', '1');
+      path.style.strokeDasharray = '1'; path.style.setProperty('--i', String(k));
+      svg.append(path);
+    }
+    return svg;
+  };
+  document.querySelectorAll('.sep').forEach((sep) => {
+    const { n, name } = sep.dataset;
+    sep.append(rope());
+    sep.insertAdjacentHTML('beforeend', `<span class="sep-label"><span class="no">No. ${n}</span><span class="name">${name}</span></span>`);
+  });
+
   if (!root.classList.contains('motion')) return;
   const params = new URLSearchParams(location.search);
 

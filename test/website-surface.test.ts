@@ -23,6 +23,8 @@ test('pages load only files bundled in web/', () => {
     const html = read(page);
     for (const m of html.matchAll(/<(?:script|link|img|source|iframe)\b[^>]*\b(?:src|href)="([^"]+)"/gi)) {
       const url = m[1]!;
+      // A canonical link names the page's own address for search engines; nothing is fetched.
+      if (/\brel="canonical"/i.test(m[0])) continue;
       assert.doesNotMatch(url, /^(?:https?:)?\/\//i, `${page} loads a remote resource: ${url}`);
       assert.ok(existsSync(join(WEB, url.split('#')[0]!)), `${page} references a missing file: ${url}`);
     }
