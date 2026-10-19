@@ -29,11 +29,12 @@ A superseded row is never rewritten; a new candidate gets a new row. This
 mirrors `CLAUDE.md`'s release-discipline rule: "Write the CI row PENDING and
 fill it after observing the run — never predict it."
 
-## Owner-reserved steps before a public npm/GitHub release
+## Steps before a public npm/GitHub release
 
 `RELEASE-GATE.md`'s "Required before public npm/GitHub release" section lists
-six steps that only an authorized repository/package owner performs, and they
-are intentionally not automated from a local coding task:
+six steps. The owner decides them; since 0.2.1 releases are delegated to the
+maintainer, who does steps 1 to 4 before pushing the version tag, and the
+publishing workflow described below performs steps 5 and 6:
 
 1. Confirm the public package name/scope is available and that the publisher
    account is authorized to use it — see
