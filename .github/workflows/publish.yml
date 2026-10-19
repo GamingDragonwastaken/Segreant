@@ -193,9 +193,20 @@ jobs:
           set -euo pipefail
           version="${{ steps.release.outputs.version }}"
           # The notes were extracted and checked before publishing.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "the GitHub release for $GITHUB_REF_NAME already exists"
+          # A re-run finishes what an earlier run left: a published release gets
+          # its two files (re)attached; a draft, which `gh release create` makes
+          # before uploading and publishing, is removed and the release recreated.
+          # Deleting a release never deletes its tag.
+          is_draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$is_draft" = false ]; then
+            gh release upload "$GITHUB_REF_NAME" ../release/segreant-*.tgz ../release/segreant-*.tgz.sha256 \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            echo "the GitHub release for $GITHUB_REF_NAME exists; its tarball and checksum are attached"
             exit 0
+          fi
+          if [ "$is_draft" = true ]; then
+            gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes
+            echo "removed an unfinished draft release for $GITHUB_REF_NAME; recreating it"
           fi
           prerelease=()
           if [ "${{ steps.release.outputs.dist_tag }}" = next ]; then prerelease=(--prerelease); fi
