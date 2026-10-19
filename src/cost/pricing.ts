@@ -11,7 +11,7 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
@@ -403,8 +403,54 @@ function loadVerifiedCache(): { file: PricingFile; provenance: PricingProvenance
   return null;
 }
 
+/**
+ * A refresh in another process (`segreant pricing --refresh`, or another
+ * Segreant running alongside) replaces the card on disk without telling this
+ * one, so a long-running proxy or dashboard kept pricing with the old card
+ * until restart. At most once a second, loadPricing compares the card on disk
+ * with the one it loaded and reloads when it changed.
+ *
+ * The comparison is by the card hash its provenance records (written last by
+ * a refresh, so a refresh in progress or one that failed changes nothing),
+ * plus the active file's size and timestamp for a card that has no provenance
+ * record. Inside withPricingSnapshot the card is pinned, so one reprice plan
+ * never mixes two cards.
+ */
+const FRESHNESS_INTERVAL_MS = 1000;
+let loadedIdentity: string | null = null;
+// A monotonic clock: a wall clock set back (a manual correction, a resumed VM)
+// would otherwise hold the loaded card until wall time caught up (PR #154 review).
+let lastFreshnessCheckMs = Number.NEGATIVE_INFINITY;
+let pinnedDepth = 0;
+
+function diskIdentity(): string {
+  let file: [number, number] | null = null;
+  try { const st = statSync(cachePath()); file = [st.size, st.mtimeMs]; } catch { /* no active card on disk */ }
+  return JSON.stringify([segreantHome(), readProvenance()?.cardSha256 ?? null, file]);
+}
+
+/** Tests only: run the next freshness check now instead of waiting out the interval. */
+export function resetPricingFreshnessForTests(): void {
+  lastFreshnessCheckMs = Number.NEGATIVE_INFINITY;
+}
+
 export function loadPricing(force = false): PricingFile {
-  if (cached && !force) return cached;
+  if (cached && !force) {
+    const now = performance.now();
+    if (pinnedDepth > 0 || now - lastFreshnessCheckMs < FRESHNESS_INTERVAL_MS) return cached;
+    lastFreshnessCheckMs = now;
+    if (diskIdentity() === loadedIdentity) return cached;
+  }
+  // A running process, forced or not, switches only to a committed card: an
+  // active card with no provenance that appears after startup is a refresh in
+  // progress or one that failed, and the loaded card stands. A process that
+  // started on a legacy card (no provenance) keeps following that file's edits.
+  // A legacy card that first appears after startup is read at the next start
+  // (PR #154 review).
+  const runningOnLegacy = cachedSource === 'cache' && cachedProvenance === null;
+  if (cached && !runningOnLegacy && existsSync(cachePath()) && readProvenance() === null) return cached;
+  lastFreshnessCheckMs = performance.now();
+  loadedIdentity = diskIdentity();
   // Prefer the refreshed cache when present AND structurally valid; otherwise
   // fall back to the bundled table. A corrupt cache degrades to bundled rather
   // than breaking pricing — and `pricingStatus()` always reports which won, so
@@ -680,6 +726,13 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     lastModified: options.lastModified ?? null,
   };
 
+  // A failed activation leaves the active card as it found it: the card it
+  // replaced is put back, or removed if there was none. Without that, a first
+  // activation or one over a legacy card (neither has provenance to recover
+  // from) would leave a card that was never committed for the next load.
+  let priorActiveText: string | null = null;
+  try { priorActiveText = readFileSync(cachePath(), 'utf8'); } catch { /* no active card */ }
+  const priorProvenanceSha = readProvenance()?.cardSha256 ?? null;
   try {
     const dir = join(segreantHome(), 'pricing');
     const archiveDir = join(dir, 'cards');
@@ -714,6 +767,16 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
     writeAtomically(cachePath(), cardText);
     writeAtomically(provenancePath(), JSON.stringify(provenance, null, 2) + '\n');
   } catch (e) {
+    // Only this attempt's own uncommitted card is rolled back, and only while
+    // no other provenance has been committed: another process may have
+    // committed its card meanwhile (PR #154 review).
+    const active = readValidPricing(cachePath());
+    if ((readProvenance()?.cardSha256 ?? null) === priorProvenanceSha && active && pricingCardHash(active) === cardSha256) {
+      try {
+        if (priorActiveText === null) unlinkSync(cachePath());
+        else writeAtomically(cachePath(), priorActiveText);
+      } catch { /* the next load reports what it finds */ }
+    }
     return { ok: false, error: `could not write verified pricing cache: ${String(e)}` };
   }
   cached = null;
@@ -1128,9 +1191,8 @@ export function withoutDeclaredPrices<T>(fn: () => T): T {
  * Run `fn` against one read of the declarations. A plan priced row by row
  * re-read the file at each row, so a `pricing set` from another process midway
  * gave earlier and later rows of the same model different prices in one
- * correction (PR #146 review). The card needs no snapshot: it is cached for
- * the life of the process and changes only by a refresh in this process,
- * which cannot run inside a synchronous plan.
+ * correction (PR #146 review). The card is pinned for the same span, since a
+ * refresh in another process is now picked up by a running one (loadPricing).
  */
 /** Run `fn` against declarations read earlier (a proxied request keeps the ones it was checked against). */
 export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: () => T): T {
@@ -1138,15 +1200,35 @@ export function withDeclarations<T>(models: Record<string, PriceOverride>, fn: (
 }
 
 export function withPricingSnapshot<T>(fn: () => T): T {
-  if (declarationSource !== null) return fn();
-  const models = activePriceOverrides();
-  return withDeclarationSource((model) => models[model] ?? null, fn);
+  // The card is pinned for the whole plan as well: a refresh in another
+  // process is picked up after it, never midway (see loadPricing).
+  loadPricing();
+  pinnedDepth++;
+  try {
+    if (declarationSource !== null) return fn();
+    const models = activePriceOverrides();
+    return withDeclarationSource((model) => models[model] ?? null, fn);
+  } finally {
+    pinnedDepth--;
+  }
 }
 
 const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 }) as ModelRate;
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
+  // One resolution reads one card: the card is pinned for the whole lookup, so a
+  // refresh that lands midway cannot price the free check, the rate and its
+  // evidence from two different cards (PR #154 review).
   const pricing = loadPricing();
+  pinnedDepth++;
+  try {
+    return rateFromCard(pricing, provider, model);
+  } finally {
+    pinnedDepth--;
+  }
+}
+
+function rateFromCard(pricing: PricingFile, provider: Provider, model: string): ResolvedRate {
   const here = pricing.providers[provider]?.models;
 
   // 0) A price the user declared for this exact model name wins: it is the one
