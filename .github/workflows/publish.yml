@@ -1,0 +1,303 @@
+name: Publish
+
+# Publishes a release to npm through trusted publishing (OIDC): no npm token is
+# stored anywhere, and the package carries a provenance attestation naming this
+# repository, this workflow and the exact commit. A release is a version tag
+# (vX.Y.Z) pushed on a main commit whose CI already passed; this workflow
+# refuses anything else before it publishes.
+#
+# The order keeps the rule in docs/RELEASE-PROCESS.md: the GitHub release (the
+# public statement that a version is available) is created only after the
+# registry's copy has been installed into a clean directory and smoked.
+
+on:
+  push:
+    tags: ['v*']
+  # Check only: proves npm accepts this workflow as segreant's trusted
+  # publisher, by exchanging this run's identity token exactly as a release
+  # would. Nothing is built or published, and the short-lived token npm issues
+  # is masked and discarded.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# One release at a time, and every tag waits its turn: the default keeps a
+# single pending run and cancels it when another tag is pushed.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  trust-check:
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: npm accepts this workflow as segreant's trusted publisher (nothing is published)
+        shell: bash
+        run: |
+          set -euo pipefail
+          id_token="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)"
+          echo "::add-mask::$id_token"
+          status="$(curl --silent --show-error -o exchange.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $id_token" \
+            https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/segreant)"
+          # The response can carry a package token: it is masked before anything
+          # is printed, and the raw body is never printed, only its error fields.
+          field() { node -e "try { const o = JSON.parse(require('fs').readFileSync('exchange.json', 'utf8')); console.log($1) } catch {}" 2>/dev/null || true; }
+          token="$(field "o.token ?? ''")"
+          if [ -n "$token" ]; then echo "::add-mask::$token"; fi
+          reason="$(field "[o.error, o.message].filter((v) => typeof v === 'string').join(': ')")"
+          rm -f exchange.json
+          unset token
+          case "$status" in
+            200|201)
+              echo "npm accepted this workflow's identity for segreant (HTTP $status); the token was discarded."
+              echo "This proves the trusted publisher entry matches. Publishing directly also needs 'npm publish' ticked under its allowed actions on npmjs.com."
+              ;;
+            *)
+              echo "npm refused the exchange (HTTP $status)${reason:+: $reason}" >&2
+              exit 1
+              ;;
+          esac
+
+  publish:
+    if: github.event_name == 'push'
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # npm trusted publishing and the provenance attestation
+      actions: read # reading this commit's CI run
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          # No dependency cache in a release build: what is published is
+          # installed from the lockfiles alone.
+
+      - name: The tag names this package's version, on a main commit
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not name package.json version $version" >&2
+            exit 1
+          fi
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "$GITHUB_SHA is not on main; releases are cut from main only" >&2
+            exit 1
+          fi
+          # The release notes are extracted here, before anything is published,
+          # with the same literal lookup the GitHub release uses: a missing or
+          # empty section stops the release instead of stranding a published
+          # version without its notes.
+          mkdir -p ../release
+          awk -v h="## [$version]" '
+            index($0, h) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > ../release/notes.md
+          if ! grep -q '[^[:space:]]' ../release/notes.md; then
+            echo "CHANGELOG.md has no non-empty '## [$version]' section; the release notes come from it" >&2
+            exit 1
+          fi
+          # A prerelease (1.2.3-rc.1) never becomes the version npm installs by default.
+          case "$version" in *-*) dist_tag=next ;; *) dist_tag=latest ;; esac
+          # Publishing under a dist-tag moves it to this version, so an older
+          # version must never take it: `npm install segreant` would go back in
+          # time. The same version is allowed (a re-run finishing its release).
+          current="$(npm view segreant "dist-tags.$dist_tag" 2>/dev/null || true)"
+          if [ -n "$current" ]; then
+            order="$(node -e '
+              const parse = (v) => { const [main, pre] = v.split("-"); return { n: main.split(".").map(Number), pre: pre ?? null }; };
+              const cmp = (a, b) => {
+                const x = parse(a), y = parse(b);
+                for (let i = 0; i < 3; i++) if (x.n[i] !== y.n[i]) return x.n[i] < y.n[i] ? -1 : 1;
+                if (x.pre === y.pre) return 0;
+                if (x.pre === null) return 1;
+                if (y.pre === null) return -1;
+                return x.pre.localeCompare(y.pre, "en", { numeric: true }) < 0 ? -1 : 1;
+              };
+              console.log(cmp(process.argv[1], process.argv[2]));
+            ' "$version" "$current")"
+            if [ "$order" = -1 ]; then
+              echo "$version is older than $current, which '$dist_tag' points to; publishing it would move '$dist_tag' backwards" >&2
+              exit 1
+            fi
+            echo "'$dist_tag' is at $current; $version does not move it backwards"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+          echo "releasing $version from $GITHUB_SHA as $dist_tag"
+
+      - name: CI passed on this exact commit (three operating systems)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --event push --json conclusion,status --jq '[.[] | select(.status == "completed")][0].conclusion // "none"')"
+          if [ "$conclusion" != "success" ]; then
+            echo "CI on $GITHUB_SHA is '$conclusion', not success; tag only a commit whose CI has passed" >&2
+            exit 1
+          fi
+          echo "CI on $GITHUB_SHA: success"
+
+      - name: npm supports trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm_version="$(npm --version)"
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11 || (a===11 && (b<5 || (b===5 && c<1)))) { console.error('npm '+process.argv[1]+' is older than 11.5.1, which trusted publishing needs'); process.exit(1); }" "$npm_version"
+          echo "npm $npm_version"
+
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: team-server
+
+      # The same checks prepublishOnly runs, run here explicitly because the
+      # tarball is packed once below and that exact file is what gets published.
+      - run: npm run verify:security
+      - run: npm run verify:supply-chain
+      - run: npm run audit:runtime
+      - run: npm run build
+      - run: npm run typecheck:all
+      - run: npm test
+      - run: npm run test:team-server
+
+      - name: Pack once
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../release
+          npm pack --pack-destination ../release
+          tarball="$(ls ../release/segreant-*.tgz)"
+          ( cd ../release && sha256sum "$(basename "$tarball")" > "$(basename "$tarball").sha256" )
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          cat ../release/*.sha256
+
+      - name: Publish that file with provenance (a re-run finishes, never republishes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          local_integrity="sha512-$(openssl dgst -sha512 -binary "${{ steps.pack.outputs.tarball }}" | base64 -w0)"
+          # npm never accepts the same version twice. When an earlier run of this
+          # tag published and a later step failed, the re-run checks the
+          # registry's copy is this exact file and carries on to finish the
+          # release; a different file under the same version stops it.
+          existing="$(npm view "segreant@$version" dist.integrity 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            if [ "$existing" = "$local_integrity" ]; then
+              echo "segreant@$version is already published with these exact bytes; finishing the release"
+              exit 0
+            fi
+            echo "segreant@$version is already published with different bytes ($existing, packed $local_integrity)" >&2
+            exit 1
+          fi
+          npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public \
+            --tag "$dist_tag_value" --ignore-scripts
+        env:
+          dist_tag_value: ${{ steps.release.outputs.dist_tag }}
+
+      - name: The registry serves the file that was packed
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          local_integrity="sha512-$(openssl dgst -sha512 -binary "${{ steps.pack.outputs.tarball }}" | base64 -w0)"
+          for attempt in $(seq 1 30); do
+            remote="$(npm view "segreant@$version" dist.integrity 2>/dev/null || true)"
+            [ -n "$remote" ] && break
+            sleep 10
+          done
+          echo "local  $local_integrity"
+          echo "remote $remote"
+          if [ "$remote" != "$local_integrity" ]; then
+            echo "the registry's segreant@$version is not the file this run packed" >&2
+            exit 1
+          fi
+
+      - name: Install the registry copy into a clean directory and smoke it
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          mkdir -p ../registry-install && cd ../registry-install
+          export SEGREANT_HOME="$PWD/.segreant-home"
+          npm install --ignore-scripts --no-package-lock "segreant@$version"
+          ./node_modules/.bin/segreant --help >/dev/null
+          ./node_modules/.bin/segreant demo >/dev/null
+          ./node_modules/.bin/segreant start --demo --port 18190 --dashboard-port 18191 >dashboard.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:18191/api/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18191/api/health >/dev/null
+          echo "segreant@$version from the registry starts and serves its dashboard"
+
+      - name: GitHub release with the published tarball and its checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          # The notes were extracted and checked before publishing.
+          # A re-run finishes what an earlier run left. A published release keeps
+          # every file it has: a missing file is uploaded, a present one must be
+          # byte-identical to this run's, and nothing is ever replaced (replacing
+          # deletes first, and published assets may be immutable). A draft, which
+          # `gh release create` makes before uploading and publishing, is removed
+          # and the release recreated; deleting a release never deletes its tag.
+          is_draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$is_draft" = false ]; then
+            mkdir -p ../existing-assets
+            for file in ../release/segreant-*.tgz ../release/segreant-*.tgz.sha256; do
+              name="$(basename "$file")"
+              if gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$name" \
+                   --dir ../existing-assets --clobber 2>/dev/null; then
+                if ! cmp -s "$file" "../existing-assets/$name"; then
+                  echo "the published release's $name differs from this run's; not replacing it" >&2
+                  exit 1
+                fi
+                echo "$name already attached and identical"
+              else
+                gh release upload "$GITHUB_REF_NAME" "$file" --repo "$GITHUB_REPOSITORY"
+                echo "$name attached"
+              fi
+            done
+            # The title, notes and prerelease flag are set to what this run
+            # derives (the changelog section and the dist-tag): editing them is
+            # non-destructive, and a release made some other way is corrected.
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Segreant $version" \
+              --notes-file ../release/notes.md --prerelease="$([ "${{ steps.release.outputs.dist_tag }}" = next ] && echo true || echo false)"
+            echo "the release's title, notes and prerelease flag match this version"
+            exit 0
+          fi
+          if [ "$is_draft" = true ]; then
+            gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes
+            echo "removed an unfinished draft release for $GITHUB_REF_NAME; recreating it"
+          fi
+          prerelease=()
+          if [ "${{ steps.release.outputs.dist_tag }}" = next ]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" ../release/segreant-*.tgz ../release/segreant-*.tgz.sha256 \
+            --repo "$GITHUB_REPOSITORY" --title "Segreant $version" --notes-file ../release/notes.md --verify-tag "${prerelease[@]}"

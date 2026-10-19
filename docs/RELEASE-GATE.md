@@ -690,8 +690,11 @@ production deployment, or a published npm package for any version after 0.2.0 (0
 
 ## Required before public npm/GitHub release
 
-An authorized repository/package owner must decide and perform the external
-actions below. They are intentionally not automated from a local coding task.
+The owner decides the external actions below. Since 0.2.1 the owner has
+delegated releases to the maintainer, and publishing is automated by
+`.github/workflows/publish.yml` (npm trusted publishing; see
+`RELEASE-PROCESS.md`, "How a release is published"): steps 1 to 4 are done
+before the version tag is pushed, and the workflow performs 5 and 6.
 
 1. Confirm the public package name/scope is available and that the publisher
    account is authorized to use it.
@@ -704,9 +707,12 @@ actions below. They are intentionally not automated from a local coding task.
    against the provider/optional-service configuration actually shipped.
 5. Inspect the generated tarball one final time, publish intentionally, then
    install the registry package into a clean directory and smoke its CLI and
-   dashboard.
-6. Create a release/tag only after the registry install succeeds. Do not claim
-   availability before that check.
+   dashboard. The workflow publishes only the tarball it packed, confirms the
+   registry serves the same bytes, and installs and starts the registry copy.
+6. Create the GitHub release, the statement that a version is available, only
+   after the registry install succeeds. Do not claim availability before that
+   check. The version tag is what starts the workflow, so it exists before
+   publication; the GitHub release is created last.
 
 ## Separate gate: optional team server
 
