@@ -13,6 +13,11 @@ name: Publish
 on:
   push:
     tags: ['v*']
+  # Check only: proves npm accepts this workflow as segreant's trusted
+  # publisher, by exchanging this run's identity token exactly as a release
+  # would. Nothing is built or published, and the short-lived token npm issues
+  # is masked and discarded.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -25,7 +30,36 @@ concurrency:
   queue: max
 
 jobs:
+  trust-check:
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: npm accepts this workflow as segreant's trusted publisher (nothing is published)
+        shell: bash
+        run: |
+          set -euo pipefail
+          id_token="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)"
+          echo "::add-mask::$id_token"
+          status="$(curl --silent --show-error -o exchange.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $id_token" \
+            https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/segreant)"
+          if [ "$status" = 200 ]; then
+            echo "::add-mask::$(jq -r '.token // empty' exchange.json)"
+            rm -f exchange.json
+            echo "npm accepted this workflow as segreant's trusted publisher; the token was discarded"
+          else
+            echo "npm refused the exchange (HTTP $status): $(cat exchange.json)" >&2
+            rm -f exchange.json
+            exit 1
+          fi
+
   publish:
+    if: github.event_name == 'push'
     timeout-minutes: 40
     runs-on: ubuntu-latest
     permissions:
