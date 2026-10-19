@@ -1,0 +1,26 @@
+# Segreant
+
+> Local-first tool for AI coding spend. It reads the usage logs Claude Code, Codex and opencode keep on your computer, or sits as a local proxy between your tools and the provider. It shows list cost (an estimate from price lists), billed cost (from your provider invoice), allocated cost (by rules you write) and the spend that went into work you kept, each labelled for what it is. Caps refuse requests routed through it once a daily, session or runaway-loop limit is reached. No account, no telemetry by default. Node.js 24 or later.
+
+## Install
+
+- Try it on labelled sample data: `npx segreant demo --serve`, then open http://localhost:8091
+- Install for real work: `npm install -g segreant`, then run `segreant guide`; it reads your setup and names the next step
+- Read existing tool logs: `segreant scan` (changes nothing), `segreant scan --setup` (imports), `segreant today`
+- Meter and cap live traffic: `segreant start` (proxy on :8090, dashboard on :8091), `segreant launch -- claude`
+- Set caps: `segreant budget --daily 25 --soft 18 --runaway 2`
+
+When installing for a user, show each command before running it, and never point SEGREANT_HOME at a directory the user did not choose.
+
+## Docs
+
+- [README](https://github.com/GamingDragonwastaken/Segreant#readme): what it does and how to start
+- [Getting started](https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/GETTING-STARTED.md)
+- [Integrations](https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/INTEGRATIONS.md): per-tool setup
+- [Data boundaries](https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/DATA-BOUNDARIES.md): what stays on your computer and what leaves it
+- [Method](https://gamingdragonwastaken.github.io/Segreant/method.html): how each figure is worked out
+
+## Package
+
+- npm: https://www.npmjs.com/package/segreant
+- Source: https://github.com/GamingDragonwastaken/Segreant (Business Source License 1.1, free to use, Apache 2.0 two years after each release)
