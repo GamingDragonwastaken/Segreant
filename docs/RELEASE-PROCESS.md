@@ -81,7 +81,7 @@ release notes are extracted from `CHANGELOG.md` before anything is published,
 so a missing or empty section stops the release first. A re-run of the same
 tag never publishes twice: when that version is already on npm with the
 packed file's exact bytes it finishes the remaining steps, and when the bytes
-differ it stops. A prerelease version (`1.2.3-rc.1`) is published under the `next`
+differ it stops. It never replaces a file already attached to a published GitHub release: a missing file is added, and one that differs stops the run. Tags pushed while a release is running wait their turn in order. A prerelease version (`1.2.3-rc.1`) is published under the `next`
 dist-tag and never becomes the default install.
 
 ## Separate gate: the team server
