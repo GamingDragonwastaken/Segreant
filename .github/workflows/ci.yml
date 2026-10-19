@@ -85,7 +85,8 @@ jobs:
       # generator (no dependency added to make one). The zero-runtime-dependency
       # rule is asserted against the SBOM, not against a sentence: a runtime
       # package appearing here fails the job. The SBOM is an unsigned build
-      # fact; signed provenance needs `id-token: write`, which is owner-reserved.
+      # fact; signed provenance is attached at release by publish.yml, the one
+      # workflow granted `id-token: write`.
       - name: Runtime SBOM (CycloneDX) and zero-dependency assertion
         shell: bash
         run: |
@@ -164,7 +165,7 @@ jobs:
   # Repository-side security evidence that does not require release identity or
   # write permissions: production-source credential/dynamic-code scan, supply-
   # chain policy audit, and high-severity runtime dependency audit for both npm
-  # packages. Signed release provenance remains a release-time owner gate.
+  # packages. Signed release provenance is attached by publish.yml at release.
   # A stranger's folder can be called "Projects & Learning". Pack the tarball,
   # install it under a path with a space and an ampersand, and run the routes
   # docs/GETTING-STARTED.md recommends, on all three operating systems. npm's
