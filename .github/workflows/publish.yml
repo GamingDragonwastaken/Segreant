@@ -117,6 +117,29 @@ jobs:
           fi
           # A prerelease (1.2.3-rc.1) never becomes the version npm installs by default.
           case "$version" in *-*) dist_tag=next ;; *) dist_tag=latest ;; esac
+          # Publishing under a dist-tag moves it to this version, so an older
+          # version must never take it: `npm install segreant` would go back in
+          # time. The same version is allowed (a re-run finishing its release).
+          current="$(npm view segreant "dist-tags.$dist_tag" 2>/dev/null || true)"
+          if [ -n "$current" ]; then
+            order="$(node -e '
+              const parse = (v) => { const [main, pre] = v.split("-"); return { n: main.split(".").map(Number), pre: pre ?? null }; };
+              const cmp = (a, b) => {
+                const x = parse(a), y = parse(b);
+                for (let i = 0; i < 3; i++) if (x.n[i] !== y.n[i]) return x.n[i] < y.n[i] ? -1 : 1;
+                if (x.pre === y.pre) return 0;
+                if (x.pre === null) return 1;
+                if (y.pre === null) return -1;
+                return x.pre.localeCompare(y.pre, "en", { numeric: true }) < 0 ? -1 : 1;
+              };
+              console.log(cmp(process.argv[1], process.argv[2]));
+            ' "$version" "$current")"
+            if [ "$order" = -1 ]; then
+              echo "$version is older than $current, which '$dist_tag' points to; publishing it would move '$dist_tag' backwards" >&2
+              exit 1
+            fi
+            echo "'$dist_tag' is at $current; $version does not move it backwards"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
           echo "releasing $version from $GITHUB_SHA as $dist_tag"
