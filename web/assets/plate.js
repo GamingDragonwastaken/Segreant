@@ -120,10 +120,11 @@ export class Plate {
   }
 
   async load(ink, fibres) {
-    const [i, f] = await Promise.all([loadImage(ink), loadImage(fibres)]);
+    const [i, f] = await Promise.all([loadImage(ink), fibres ? loadImage(fibres) : null]);
     this.texture(0, 'uInk', i, false);
     // WebGL1 repeats only power-of-two textures: redraw the fibre tile to 1024.
-    const c = document.createElement('canvas'); c.width = c.height = 1024; c.getContext('2d').drawImage(f, 0, 0, 1024, 1024);
+    // Without fibres (no lamp), a blank 1x1 tile keeps the sampler bound.
+    const c = document.createElement('canvas'); c.width = c.height = f ? 1024 : 1; if (f) c.getContext('2d').drawImage(f, 0, 0, 1024, 1024);
     this.texture(1, 'uFibres', c, true);
     this.ready = true;
   }

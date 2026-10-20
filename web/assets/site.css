@@ -177,17 +177,18 @@ h3 { font-size: var(--step-1); line-height: 1.25; }
 .hero h1 { font-size: var(--step-4); line-height: 0.96; letter-spacing: -0.02em; }
 .hero h1 .w { display: inline-block; }
 .hero h1 em { font-style: italic; font-weight: 540; color: var(--or); }
-.hero .lede { margin-top: 28px; }
+.hero .dream { margin-top: 28px; max-width: 24em; font: italic 400 clamp(1.35rem, 1.05rem + 0.9vw, 1.75rem)/1.3 var(--display); color: var(--ink); }
+.hero .lede { margin-top: 16px; }
 .hero .cta { margin-top: 34px; }
 .hero .note { margin-top: 22px; font-size: 15.5px; color: var(--ink-soft); max-width: 34em; }
 
-/* ====== 2026-10-06: the plate, the lamp, the bill, the reverse ====== */
+/* ====== 2026-10-06: the plate, the bill, the reverse ====== */
 /* The hero: the plate is the focus. It is sized to the screen's height as well
    as its width, so the whole griffin is in the first view on any display. */
 .hero { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: 24px 40px; min-height: min(calc(100svh - 96px), 900px); padding-block: 24px 72px; }
 .hero-plate { position: relative; margin: 0 0 34px; aspect-ratio: 1; width: min(100%, calc(100svh - 230px), 800px); min-width: min(100%, 300px);
   justify-self: end; align-self: center; translate: 0 calc(var(--lift, 0) * 30px); }
-/* The canvas edge is feathered, so the lamp's light can never show a rectangle. */
+/* The canvas edge is feathered, so the plate never shows a rectangle. */
 .hero-plate canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block;
   -webkit-mask: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent), linear-gradient(transparent, #000 5%, #000 95%, transparent);
   -webkit-mask-composite: source-in;
@@ -203,17 +204,7 @@ html.motion.settled .hero-plate:not(.gl) .print { opacity: 1; transition: opacit
   font: italic 15px var(--display); color: var(--ink-soft); }
 .hero-plate .cap .no { font: 500 14px var(--figs); font-style: normal; letter-spacing: 0.08em; color: var(--ink-soft); white-space: nowrap; transition: color 0.4s; }
 .hero-plate.numbered .cap .no { color: var(--note-red); }
-.hero-plate.lamp-on { cursor: none; }
 
-/* The UV lamp control: a real button, so the lamp works by keyboard and touch. */
-.lamp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 24px; }
-.lamp { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 7px 14px 7px 10px; cursor: pointer;
-  font: 500 14px var(--body); color: var(--ink); background: transparent; border: 1px solid var(--rule-strong); border-radius: 999px; }
-.lamp:hover { border-color: #7b5cff; }
-.lamp i { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle, #b8a2ff 0 30%, #5b3db3 60%, transparent 72%); box-shadow: 0 0 0 1px var(--rule-strong); }
-.lamp[aria-pressed="true"] { border-color: #7b5cff; background: rgba(91, 61, 179, 0.12); }
-.lamp[aria-pressed="true"] i { box-shadow: 0 0 10px 2px rgba(150, 110, 255, 0.85); }
-.lamp-note { font: italic 15px var(--display); color: var(--ink-soft); }
 
 /* Cards are paper on paper: a whiter cotton, never a flat fill. */
 .frame, .slip, .loop { background: var(--paper-tex) 0 0 / 640px repeat, var(--card); background-blend-mode: var(--card-blend); }
@@ -308,7 +299,6 @@ html.settled .note-cert .nf-griffin { opacity: 1 !important; }
   .hero-plate .cap { font-size: 13px; }
   .hero-plate .cap .no { font-size: 12px; }
 }
-html.capture-card .lamp-row { display: none; }
 
 /* ---------- Sections ---------- */
 section.band { padding-block: 88px; border-top: 1px solid var(--rule); }
@@ -421,8 +411,24 @@ td.n, th.n { text-align: right; font-family: var(--figs); font-variant-numeric: 
 .order li + li { padding-left: 18px; border-left: 1px solid var(--rule); }
 .order li::before { content: counter(o); font: 500 14px var(--figs); color: var(--or); }
 .note-line { margin-top: 36px; max-width: 58ch; color: var(--ink-soft); }
+/* 2026-10-19 rebalance: no section leaves a column standing empty. */
+.why-side { position: sticky; top: 32px; }
+.pair { margin-top: 40px; display: flex; gap: 40px; flex-wrap: wrap; }
+.pair span { display: grid; gap: 6px; font-size: 14px; color: var(--ink-soft); }
+.pair b { font-size: clamp(2.4rem, 1.6rem + 2.4vw, 3.6rem); font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
+.prose.cols { max-width: none; margin-top: 32px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.prose.cols p { margin: 0; }
+.facts.flush { margin-top: 0; }
+.split h2 + .prose { margin-top: 18px; }
+.order.stacked { grid-template-columns: minmax(0, 1fr); border-top-color: var(--rule); margin-top: 20px; }
+.order.stacked li, .order.stacked li + li { grid-template-columns: 2rem minmax(0, 1fr); align-items: baseline; padding: 12px 0; border-left: 0; border-bottom: 1px solid var(--rule); }
+.facts.two { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 64px; }
+@media (max-width: 960px) { .why-side { position: static; } .prose.cols, .facts.two { grid-template-columns: minmax(0, 1fr); } .prose.cols p + p { margin-top: 16px; } }
 
 /* Start */
+.agent-title { margin-top: 40px; font-size: var(--step-1, 1.35rem); }
+.agent-note { margin-top: 8px; color: var(--ink-soft); }
+.term.agent { margin-top: 14px; white-space: pre-wrap; }
 .start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 40px 64px; align-items: start; }
 
 /* Footer */
@@ -512,7 +518,7 @@ html.settled .slip { clip-path: none !important; }
   html.motion.intro .hero h1 .w:nth-child(1) { --i: 0; } html.motion.intro .hero h1 .w:nth-child(2) { --i: 1; }
   html.motion.intro .hero h1 .w:nth-child(3) { --i: 2; } html.motion.intro .hero h1 .w:nth-child(4) { --i: 3; }
   html.motion.intro .hero h1 .w:nth-child(5) { --i: 4.6; }
-  html.motion.intro .hero .lede, html.motion.intro .hero .cta, html.motion.intro .hero .note { animation: surface 0.6s 0.95s ease-out both; }
+  html.motion.intro .hero .dream, html.motion.intro .hero .lede, html.motion.intro .hero .cta, html.motion.intro .hero .note { animation: surface 0.6s 0.95s ease-out both; }
 
   /* As each plate reaches the reader: engravings are cut, the note is struck,
      figures roll on their wheels, the stamp comes down, rope borders print across. */
@@ -574,6 +580,41 @@ html.settled .dg > span { transform: translateY(calc(var(--n) * -1.2em)) !import
   .loop-stamp { top: 46px; right: 12px; }
 }
 @media print {
-  .theme, .lamp-row, .hero-plate canvas, .nf-glare { display: none; }
+  .theme, .hero-plate canvas, .nf-glare { display: none; }
   .sheet { transform: none; } .sheet-paper { filter: none; }
 }
+
+/* ====== 2026-10-19: separators between movements ======
+   Each movement of the page is announced by the press: its number is stamped
+   down, then a guilloche rope is engraved outward from it across the page. */
+section.band { border-top: 0; }
+.sep { position: relative; display: flex; align-items: center; justify-content: center; min-height: 72px; margin-top: 16px; }
+.sep + section.band { padding-top: 64px; }
+.sep-full { position: absolute; left: calc(50% - 50vw); width: 100vw; max-width: none; }
+.sep-label { position: relative; display: flex; align-items: center; gap: 12px; font: 600 12px/1 var(--figs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap; }
+.sep-label .no { color: var(--note-red); border: 1.5px solid currentColor; border-radius: 2px; padding: 6px 9px 5px; rotate: -3deg; opacity: 0.9; }
+.sep-gap { -webkit-mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px));
+  mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px)); }
+/* Without the script, a plain printed rule runs behind the number. */
+.sep::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule-strong);
+  -webkit-mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px));
+  mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px)); }
+.sep.roped::before { display: none; }
+.sep-rope { top: 0; height: 100%; overflow: visible; }
+.sep-rope path { fill: none; stroke: var(--engrave); stroke-width: 0.7; opacity: 0.55; }
+.sep-rope path:nth-child(3n) { stroke: var(--or); opacity: 0.6; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The stamp comes down, the name is struck beside it, then the rope is cut outward. */
+  html.motion .sep.roped:not(.inked) .sep-label .no, html.motion .sep.roped:not(.inked) .sep-label .name { opacity: 0; }
+  html.motion .sep.inked .sep-label .no { animation: stamp-down 0.42s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
+  html.motion .sep.inked .sep-label .name { animation: strike 0.5s 0.28s var(--ease-press) both; }
+  html.motion .sep.inked .sep-label { animation: jolt 0.25s 0.3s ease-out; }
+  html.motion .sep:not(.inked) .sep-rope path { stroke-dashoffset: 1; }
+  html.motion .sep.inked .sep-rope path { animation: trace 1.6s calc(0.38s + var(--i, 0) * 0.05s) cubic-bezier(0.4, 0, 0.2, 1) both; }
+}
+/* A separator scrolled past before it was seen is simply printed, finished. */
+html.motion .sep.settle .sep-label, html.motion .sep.settle .sep-label > span, html.motion .sep.settle .sep-rope path { animation: none; }
+@keyframes stamp-down { 0% { opacity: 0; transform: scale(2.1); filter: blur(3px); } 62% { opacity: 1; transform: scale(0.94); filter: blur(0); } 100% { opacity: 0.9; transform: none; } }
+@media (max-width: 620px) { .sep-gap { -webkit-mask: linear-gradient(90deg, #000 calc(50% - 120px), transparent calc(50% - 100px), transparent calc(50% + 100px), #000 calc(50% + 120px)); mask: linear-gradient(90deg, #000 calc(50% - 120px), transparent calc(50% - 100px), transparent calc(50% + 100px), #000 calc(50% + 120px)); } }
+@media print { .sep { display: none; } }

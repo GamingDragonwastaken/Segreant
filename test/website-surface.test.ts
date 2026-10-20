@@ -23,6 +23,8 @@ test('pages load only files bundled in web/', () => {
     const html = read(page);
     for (const m of html.matchAll(/<(?:script|link|img|source|iframe)\b[^>]*\b(?:src|href)="([^"]+)"/gi)) {
       const url = m[1]!;
+      // A canonical link names the page's own address for search engines; nothing is fetched.
+      if (/\brel="canonical"/i.test(m[0])) continue;
       assert.doesNotMatch(url, /^(?:https?:)?\/\//i, `${page} loads a remote resource: ${url}`);
       assert.ok(existsSync(join(WEB, url.split('#')[0]!)), `${page} references a missing file: ${url}`);
     }
@@ -125,4 +127,13 @@ test('the loop-guard simulation is labelled and quotes the guard it simulates', 
   const guard = readFileSync(join(dirname(WEB), 'src', 'budget', 'guard.ts'), 'utf8');
   assert.match(guard, /Runaway loop guard: \$\$\{window\.costUsd\.toFixed\(2\)\} spent in the last \$\{cfg\.runawayWindowSec\}s exceeds the \$\$\{cfg\.runawayMaxUsd!\.toFixed\(2\)\} threshold\./);
   assert.match(loop, /Runaway loop guard: \$2\.04 spent in the last 60s exceeds the \$2\.00 threshold\./);
+});
+
+test('section separators are printed in the page, not made by the script', () => {
+  // Without site.js the counters and a plain rule must still show (PR #157 review).
+  const html = read('index.html');
+  const seps = [...html.matchAll(/<div class="sep ink-on"[^>]*>(.*?)<\/div>/g)];
+  assert.ok(seps.length >= 9, 'every section after the hero is announced by a separator');
+  for (const [, inner] of seps) assert.match(inner!, /<span class="no">No\. \d{2}<\/span><span class="name">[^<]+<\/span>/);
+  assert.match(read('assets', 'site.css'), /\.sep::before \{[^}]*border-top/, 'a static rule stands in for the rope without the script');
 });

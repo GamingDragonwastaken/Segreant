@@ -54,6 +54,33 @@
     });
   });
 
+  // ---- Separators between movements: each carries the movement's number. ----
+  const SVG = 'http://www.w3.org/2000/svg';
+  // A guilloche rope: six strands of one wave, phase-shifted, under a slow swell.
+  const rope = () => {
+    const svg = document.createElementNS(SVG, 'svg');
+    // Wider than any screen and cropped from the middle, so the strands never stretch.
+    svg.setAttribute('viewBox', '0 0 2400 72'); svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    svg.classList.add('sep-full', 'sep-rope', 'sep-gap');
+    // Each strand is cut outward from the number in the middle, one half each way.
+    for (const side of [-1, 1]) for (let k = 0; k < 10; k++) {
+      let d = '';
+      for (let i = 0; i <= 400; i++) {
+        const x = 1200 + side * i * 3;
+        const swell = 0.7 + 0.3 * Math.cos((x / 600) * Math.PI * 2);
+        const y = 36 + 17 * swell * Math.sin((x / 130) * Math.PI * 2 + (k * Math.PI) / 5);
+        d += `${i ? 'L' : 'M'}${x} ${y.toFixed(2)}`;
+      }
+      const path = document.createElementNS(SVG, 'path');
+      path.setAttribute('d', d); path.setAttribute('pathLength', '1');
+      path.style.strokeDasharray = '1'; path.style.setProperty('--i', String(k));
+      svg.append(path);
+    }
+    return svg;
+  };
+  // The number and name are printed in the page; the script only adds the rope.
+  document.querySelectorAll('.sep').forEach((sep) => { sep.prepend(rope()); sep.classList.add('roped'); });
+
   if (!root.classList.contains('motion')) return;
   const params = new URLSearchParams(location.search);
 
@@ -105,7 +132,19 @@
       io.unobserve(entry.target);
     }
   }, { threshold: 0.22 });
-  document.querySelectorAll('.ink-on').forEach((el) => (inkAll ? el.classList.add('inked') : io.observe(el)));
+  document.querySelectorAll('.ink-on:not(.sep)').forEach((el) => (inkAll ? el.classList.add('inked') : io.observe(el)));
+
+  // Separators are stamped where the eye is: when they cross the middle band of
+  // the screen, not the moment they peek in at the bottom. One flung past the
+  // band before a frame could see it is printed finished, never left blank.
+  const seps = [...document.querySelectorAll('.sep')];
+  const stampIo = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('inked'); stampIo.unobserve(entry.target); }
+  }, { rootMargin: '-30% 0px -30% 0px' });
+  const passed = () => seps.forEach((s) => { if (!s.classList.contains('inked') && s.getBoundingClientRect().bottom < innerHeight * 0.3) { s.classList.add('settle', 'inked'); stampIo.unobserve(s); } });
+  seps.forEach((s) => (inkAll ? s.classList.add('inked') : stampIo.observe(s)));
+  addEventListener('scroll', passed, { passive: true });
+  passed();
 
   // ---- The sheet lifts away as you scroll past it. ----
   const sheet = document.querySelector('.sheet');
