@@ -135,7 +135,19 @@
       io.unobserve(entry.target);
     }
   }, { threshold: 0.22 });
-  document.querySelectorAll('.ink-on').forEach((el) => (inkAll ? el.classList.add('inked') : io.observe(el)));
+  document.querySelectorAll('.ink-on:not(.sep)').forEach((el) => (inkAll ? el.classList.add('inked') : io.observe(el)));
+
+  // Separators are stamped where the eye is: when they cross the middle band of
+  // the screen, not the moment they peek in at the bottom. One flung past the
+  // band before a frame could see it is printed finished, never left blank.
+  const seps = [...document.querySelectorAll('.sep')];
+  const stampIo = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('inked'); stampIo.unobserve(entry.target); }
+  }, { rootMargin: '-30% 0px -30% 0px' });
+  const passed = () => seps.forEach((s) => { if (!s.classList.contains('inked') && s.getBoundingClientRect().bottom < innerHeight * 0.3) { s.classList.add('settle', 'inked'); stampIo.unobserve(s); } });
+  seps.forEach((s) => (inkAll ? s.classList.add('inked') : stampIo.observe(s)));
+  addEventListener('scroll', passed, { passive: true });
+  passed();
 
   // ---- The sheet lifts away as you scroll past it. ----
   const sheet = document.querySelector('.sheet');
