@@ -75,7 +75,24 @@ the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
 
-### Current local candidate record — commit `e8a8f24`, 0.2.0, 2026-10-18
+### Current release record — commit `6c1a8d5`, 0.2.1, 2026-10-20
+
+The first release published by the tag workflow (`.github/workflows/publish.yml`,
+#156). This record supersedes the `e8a8f24` record below as the current one
+without rewriting it. Candidate: `6c1a8d54f9d171f8be16ade7ac30280f6b091421`, the
+merge of #158 on `main` (version 0.2.1, changelog section, README).
+
+| Check | Result |
+|---|---|
+| Source validation (clean checkout of the candidate) | **Pass.** Root `npm ci --ignore-scripts` → `npm audit` 0 vulnerabilities. `team-server` `npm ci --ignore-scripts` → `npm audit` 0 vulnerabilities. Root, browser-app and team-server typechecks exit 0. `npm run build` exit 0. `npm test` → **3152 tests, 3146 pass, 0 fail, 6 intentional platform skips**. `npm run test:browser` → **37/37**. `team-server` `npm test` → **131 pass, 0 fail**. `verify:security`, `verify:supply-chain` and `audit:runtime` exit 0. |
+| Intended CI | **Pass.** CI run `39425097675` on the push of `6c1a8d5`: conclusion success; every job passed on Linux, macOS and Windows, including `package-smoke`, `install-paths` and `browser-accessibility`. `candidate-head` is pull-request-only and was skipped. |
+| Package name and publisher | **Pass.** Before the tag the registry held 0.2.0 as `latest` and no 0.2.1. The trusted publisher was proven by the `workflow_dispatch` trust check on 2026-10-19 (HTTP 201). |
+| Publication | **Pass.** Tag `v0.2.1` (annotated, on `6c1a8d5`) started publish run `39426499646`, which repeated the gate and published with provenance: conclusion success. |
+| Registry and provenance | **Pass.** `segreant@0.2.1`: integrity `sha512-HnFx7xUy…fydtw==`, shasum `bffa208e…7fc4`, 350 files, `latest` = 0.2.1. The SLSA v1 provenance names `GamingDragonwastaken/Segreant`, `.github/workflows/publish.yml`, `refs/tags/v0.2.1` and commit `6c1a8d5`. `npm audit signatures` in a clean project: 1 package with a verified attestation. |
+| Clean registry install | **Pass.** `npm install -g --prefix <tmp> segreant@0.2.1` with an isolated `SEGREANT_HOME`: `segreant --version` → 0.2.1; `segreant demo` built the sample data; `segreant start --demo` served the dashboard, which loaded with no page errors or failed requests (first-run chooser inspected). |
+| GitHub release | **Pass.** "Segreant 0.2.1" (not draft, not prerelease) with `segreant-0.2.1.tgz` and its `.sha256`; the attached tarball's sha512 equals the registry integrity. |
+
+### Superseded record — commit `e8a8f24`, 0.2.0, 2026-10-18
 
 This record supersedes the `81ffa49` record below without rewriting it. 0.2.0 was
 not published from `81ffa49`. Pricing, egress, reprice and review work landed
