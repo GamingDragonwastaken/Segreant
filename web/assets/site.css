@@ -595,13 +595,18 @@ section.band { border-top: 0; }
 .sep-label .no { color: var(--note-red); border: 1.5px solid currentColor; border-radius: 2px; padding: 6px 9px 5px; rotate: -3deg; opacity: 0.9; }
 .sep-gap { -webkit-mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px));
   mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px)); }
+/* Without the script, a plain printed rule runs behind the number. */
+.sep::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule-strong);
+  -webkit-mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px));
+  mask: linear-gradient(90deg, #000 calc(50% - 150px), transparent calc(50% - 124px), transparent calc(50% + 124px), #000 calc(50% + 150px)); }
+.sep.roped::before { display: none; }
 .sep-rope { top: 0; height: 100%; overflow: visible; }
 .sep-rope path { fill: none; stroke: var(--engrave); stroke-width: 0.7; opacity: 0.55; }
 .sep-rope path:nth-child(3n) { stroke: var(--or); opacity: 0.6; }
 
 @media (prefers-reduced-motion: no-preference) {
   /* The stamp comes down, the name is struck beside it, then the rope is cut outward. */
-  html.motion .sep:not(.inked) .sep-label .no, html.motion .sep:not(.inked) .sep-label .name { opacity: 0; }
+  html.motion .sep.roped:not(.inked) .sep-label .no, html.motion .sep.roped:not(.inked) .sep-label .name { opacity: 0; }
   html.motion .sep.inked .sep-label .no { animation: stamp-down 0.42s cubic-bezier(0.3, 0.6, 0.3, 1.2) both; }
   html.motion .sep.inked .sep-label .name { animation: strike 0.5s 0.28s var(--ease-press) both; }
   html.motion .sep.inked .sep-label { animation: jolt 0.25s 0.3s ease-out; }

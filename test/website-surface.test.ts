@@ -128,3 +128,12 @@ test('the loop-guard simulation is labelled and quotes the guard it simulates', 
   assert.match(guard, /Runaway loop guard: \$\$\{window\.costUsd\.toFixed\(2\)\} spent in the last \$\{cfg\.runawayWindowSec\}s exceeds the \$\$\{cfg\.runawayMaxUsd!\.toFixed\(2\)\} threshold\./);
   assert.match(loop, /Runaway loop guard: \$2\.04 spent in the last 60s exceeds the \$2\.00 threshold\./);
 });
+
+test('section separators are printed in the page, not made by the script', () => {
+  // Without site.js the counters and a plain rule must still show (PR #157 review).
+  const html = read('index.html');
+  const seps = [...html.matchAll(/<div class="sep ink-on"[^>]*>(.*?)<\/div>/g)];
+  assert.ok(seps.length >= 9, 'every section after the hero is announced by a separator');
+  for (const [, inner] of seps) assert.match(inner!, /<span class="no">No\. \d{2}<\/span><span class="name">[^<]+<\/span>/);
+  assert.match(read('assets', 'site.css'), /\.sep::before \{[^}]*border-top/, 'a static rule stands in for the rope without the script');
+});
