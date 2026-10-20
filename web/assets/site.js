@@ -78,11 +78,8 @@
     }
     return svg;
   };
-  document.querySelectorAll('.sep').forEach((sep) => {
-    const { n, name } = sep.dataset;
-    sep.append(rope());
-    sep.insertAdjacentHTML('beforeend', `<span class="sep-label"><span class="no">No. ${n}</span><span class="name">${name}</span></span>`);
-  });
+  // The number and name are printed in the page; the script only adds the rope.
+  document.querySelectorAll('.sep').forEach((sep) => { sep.prepend(rope()); sep.classList.add('roped'); });
 
   if (!root.classList.contains('motion')) return;
   const params = new URLSearchParams(location.search);
