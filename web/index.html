@@ -10,10 +10,15 @@
 <meta property="og:title" content="Segreant: where your AI spend went">
 <meta property="og:description" content="A local-first tool for AI costs: list cost, billed cost, allocated cost and the spend that went into work you kept, each labelled for what it is.">
 <meta property="og:type" content="website">
-<!-- OG image is a relative path; crawlers need an absolute URL. Set the domain at deploy. -->
-<meta property="og:image" content="assets/brand/social-card-1600.jpg">
+<link rel="canonical" href="https://gamingdragonwastaken.github.io/Segreant/">
+<meta property="og:url" content="https://gamingdragonwastaken.github.io/Segreant/">
+<meta property="og:image" content="https://gamingdragonwastaken.github.io/Segreant/assets/brand/social-card-1600.jpg">
+<meta property="og:image:alt" content="The Segreant griffin engraved on a banknote, with the words: where your AI spend went.">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/mark-32.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Segreant","applicationCategory":"DeveloperApplication","operatingSystem":"Windows, macOS, Linux (Node.js 24 or later)","description":"A local-first tool that shows what AI coding tools cost, caps runaway spending on the requests it handles, and shows which spend went into work you kept.","url":"https://gamingdragonwastaken.github.io/Segreant/","downloadUrl":"https://www.npmjs.com/package/segreant","codeRepository":"https://github.com/GamingDragonwastaken/Segreant","license":"https://github.com/GamingDragonwastaken/Segreant/blob/main/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
 <link rel="apple-touch-icon" href="assets/brand/mark-180.png">
 <link rel="preload" href="assets/fonts/castoro-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/schibsted-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
@@ -63,13 +68,13 @@
     <div class="hero">
       <div class="hero-copy">
         <h1 id="hero-title"><span class="w">Where</span> <span class="w">your</span> <span class="w">AI</span> <span class="w">spend</span> <em class="w">went.</em></h1>
-        <p class="lede">Segreant reads the usage logs your AI tools keep on your computer, or sits between them and your provider. It shows what they cost, estimated from price lists or taken from your invoice, caps runaway spending on the requests it handles, and shows which spend went into work you kept. It all runs on your computer.</p>
+        <p class="dream">One day we'll pay AI for the work it does, not the words it spends. Segreant starts keeping that account today.</p>
+        <p class="lede">It runs on your computer and reads the usage logs your AI tools already keep, or sits between them and your provider. It shows what they cost, estimated from price lists or taken from your invoice, caps runaway spending on the requests it handles, and shows which spend went into work you kept.</p>
         <div class="cta">
           <a class="btn primary" href="#start">Try the demo</a>
           <a class="btn ghost" href="#sample">See a sample month</a>
         </div>
         <p class="note">No telemetry by default. Requests you route through Segreant still go to your AI provider. <a href="https://github.com/GamingDragonwastaken/Segreant/blob/main/docs/DATA-BOUNDARIES.md">See what stays on your computer</a></p>
-        <div class="lamp-row"><button class="lamp" type="button" aria-pressed="false" data-lamp hidden><i aria-hidden="true"></i>UV lamp</button><span class="lamp-note" data-lamp-note hidden></span></div>
       </div>
 
       <figure class="hero-plate" data-plate aria-hidden="true">
@@ -102,6 +107,7 @@
       </ol>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 02</span><span class="name">Sample month</span></span></div>
     <section class="band" id="sample" aria-labelledby="sample-title">
       <div class="head note-head">
         <div>
@@ -180,12 +186,13 @@
       </div>
     </section>
 
-    <div class="rope-rule ink-on" aria-hidden="true"></div>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 03</span><span class="name">Why</span></span></div>
     <section class="band" id="why" aria-labelledby="why-title">
       <div class="split">
         <div class="why-side">
           <h2 id="why-title">Count tokens, and people spend tokens.</h2>
+          <p class="pair" aria-hidden="true"><span><b class="figs kept">$0.002</b>a request</span><span><b class="figs notkept">$0.40</b>a loop</span></p>
         </div>
         <div class="prose">
           <p>AI coding agents bill by the token, and a stuck loop runs up the bill without a warning. When usage itself becomes the target, it gets worse: people chase the number.</p>
@@ -199,6 +206,7 @@
       </div>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 04</span><span class="name">Caps</span></span></div>
     <section class="band" id="caps" aria-labelledby="caps-title">
       <div class="head">
         <div>
@@ -224,6 +232,12 @@
             <button class="btn ghost loop-replay" type="button" hidden>Run the loop again</button>
           </figure>
           <pre class="term" aria-label="Example command"><span class="p">$ </span>segreant budget --daily 25 --soft 18 --runaway 2</pre>
+        </div>
+        <div>
+          <p class="limit"><b>Caps cover requests sent through Segreant.</b> They apply only when traffic is explicitly routed through Segreant. Usage imported from your tools' logs has already happened, so it can't be stopped and doesn't count toward a cap.</p>
+          <p class="limit"><b>Caps are off until you set one.</b> A fresh install measures but never blocks.</p>
+          <p class="limit"><b>If Segreant can't read its settings or its ledger, it stops forwarding.</b> A damaged configuration never turns into unlimited, unmeasured spending.</p>
+          <p class="limit">Each non-streaming response carries its cost in an <code>X-Segreant-Cost-USD</code> header. Streaming responses carry the remaining budget instead, because the cost isn't known until the stream ends; the final cost is recorded then.</p>
           <dl class="facts">
             <div><dt><code>--daily 25</code></dt><dd>Refuse requests once today's spend through Segreant reaches $25.</dd></div>
             <div><dt><code>--soft 18</code></dt><dd>Warn at $18.</dd></div>
@@ -231,15 +245,10 @@
             <div><dt><code>--session N</code></dt><dd>Cap a single agent session.</dd></div>
           </dl>
         </div>
-        <div>
-          <p class="limit"><b>Caps cover requests sent through Segreant.</b> They apply only when traffic is explicitly routed through Segreant. Usage imported from your tools' logs has already happened, so it can't be stopped and doesn't count toward a cap.</p>
-          <p class="limit"><b>Caps are off until you set one.</b> A fresh install measures but never blocks.</p>
-          <p class="limit"><b>If Segreant can't read its settings or its ledger, it stops forwarding.</b> A damaged configuration never turns into unlimited, unmeasured spending.</p>
-          <p class="limit">Each non-streaming response carries its cost in an <code>X-Segreant-Cost-USD</code> header. Streaming responses carry the remaining budget instead, because the cost isn't known until the stream ends; the final cost is recorded then.</p>
-        </div>
       </div>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 05</span><span class="name">How it works</span></span></div>
     <section class="band" id="how" aria-labelledby="how-title">
       <h2 id="how-title">Two ways in. Neither needs an account.</h2>
       <div class="steps">
@@ -255,21 +264,21 @@
         </div>
         <div class="step">
           <h3><span class="n">2</span>Route requests through Segreant</h3>
-          <p>Point a tool at the local proxy to measure it as it runs and enforce caps. There's no certificate to install, and it sees only traffic you send to it. Segreant forwards each request to the provider you configure, and it starts locked: nothing is forwarded until you allow that route.</p>
+          <p>Point a tool at the local proxy to measure it as it runs and enforce caps. There's no certificate to install, and it sees only traffic you send to it. Requests to OpenAI's and Anthropic's official APIs go straight through; another provider or gateway stays blocked until you add the one rule a refused request prints.</p>
           <pre class="term"><span class="c"># proxy on :8090, dashboard on :8091</span>
 <span class="p">$ </span>segreant start
 <span class="c"># run one tool through it (or codex, opencode, aider)</span>
 <span class="p">$ </span>segreant launch -- claude</pre>
         </div>
       </div>
-      <div class="prose" style="margin-top:32px">
+      <div class="prose cols">
         <p>Point <code>segreant audit --repo</code> at a repository and each commit gets the spend logged since the one before it, with the cost per 100 changed lines. Those two figures are all it reports: no invented efficiency score to chase.</p>
         <p>Each routed call is priced against a dated price list and written to a ledger on your computer. Ordinary metering doesn't store prompt text in that ledger. The optional capture of the AI's suggestions, used to measure how much of them you accepted, stays on your computer and can be switched off.</p>
       </div>
     </section>
 
-    <div class="rope-rule ink-on" aria-hidden="true"></div>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 06</span><span class="name">Receipts</span></span></div>
     <section class="band" id="receipts" aria-labelledby="receipts-title">
       <div class="receipt">
         <div>
@@ -295,46 +304,49 @@
       </div>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 07</span><span class="name">Method</span></span></div>
     <section class="band" id="method" aria-labelledby="method-title">
-      <div class="head">
+      <div class="split">
         <div>
           <h2 id="method-title">The arithmetic is published. Check it.</h2>
           <div class="prose">
             <p>Every figure comes with the way it was worked out, and with what it can't tell you. A calculation on your computer is never presented as your provider's bill, or as proof that AI made you more productive.</p>
           </div>
+          <div class="cta" style="margin-top:28px"><a class="btn ghost" href="method.html">Read the method</a></div>
         </div>
-      </div>
-      <dl class="facts">
+      <dl class="facts flush">
         <div><dt>Value score</dt><dd>Combines four measures so that one strong result can't hide a weak one. A measure you don't track stays open and is shown as missing; it is never scored as a pass.</dd></div>
         <div><dt>95% range</dt><dd>The share of spend that went into kept work comes with a range that stays valid however often you check it. The cost is a wider range, about 1.5 to 2 times an ordinary interval.</dd></div>
         <div><dt>Change alert</dt><dd>Fires when your kept-work rate shifts. It can't say why: a new model and a gamed number both set it off, and telling them apart takes evidence the rate doesn't carry.</dd></div>
         <div><dt>Savings</dt><dd>Segreant doesn't promise a percentage. What you save depends on how much waste there was to find; its job is to show you where it is.</dd></div>
       </dl>
-      <div class="cta" style="margin-top:28px"><a class="btn ghost" href="method.html">Read the method</a></div>
+      </div>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 08</span><span class="name">Teams</span></span></div>
     <section class="band" id="team" aria-labelledby="team-title">
       <div class="split">
         <div>
           <h2 id="team-title">Built so developers want it switched on.</h2>
+          <p class="note-line">When two goals conflict, the higher one wins. This order is part of the design, not a promise added later.</p>
+          <ol class="order stacked">
+            <li>Security and privacy</li>
+            <li>Speed of each request</li>
+            <li>Enforcing budgets</li>
+            <li>Interface and overrides</li>
+          </ol>
         </div>
         <div class="prose">
           <p>A cost tool that developers route around measures nothing. Personal views belong to the person. Team views are opt-in, show totals and spreads rather than individuals, and hide any group smaller than five people.</p>
           <p>Team sync, when you turn it on, sends numbers only: no prompts, no code.</p>
         </div>
       </div>
-      <p class="note-line">When two goals conflict, the higher one wins. This order is part of the design, not a promise added later.</p>
-      <ol class="order">
-        <li>Security and privacy</li>
-        <li>Speed of each request</li>
-        <li>Enforcing budgets</li>
-        <li>Interface and overrides</li>
-      </ol>
     </section>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 09</span><span class="name">What it fits</span></span></div>
     <section class="band" id="fits" aria-labelledby="fits-title">
       <h2 id="fits-title">It reads your logs and controls live traffic, on your computer.</h2>
-      <dl class="facts" style="margin-top:32px">
+      <dl class="facts two" style="margin-top:32px">
         <div><dt>Where it runs</dt><dd>Measurement, ledger and dashboard all run on your computer. Built on Node's own SQLite, with no runtime dependencies.</dd></div>
         <div><dt>Stops spending</dt><dd>Daily, session and loop caps on the requests it handles.</dd></div>
         <div><dt>Links cost to commits</dt><dd>Yes, from your local git history.</dd></div>
@@ -344,8 +356,8 @@
       </dl>
     </section>
 
-    <div class="rope-rule ink-on" aria-hidden="true"></div>
 
+    <div class="sep ink-on" aria-hidden="true"><span class="sep-label"><span class="no">No. 10</span><span class="name">Start</span></span></div>
     <section class="band" id="start" aria-labelledby="start-title">
       <div class="start">
         <div>
@@ -363,6 +375,12 @@
           <div class="cta" style="margin-top:14px">
             <button class="btn ghost" type="button" data-copy="install-cmds" hidden>Copy commands</button>
             <a class="btn ghost" href="https://github.com/GamingDragonwastaken/Segreant#use-it-on-your-real-work">Set it up for real work</a>
+          </div>
+          <h3 class="agent-title">Or ask your coding agent</h3>
+          <p class="agent-note">Paste this into Claude Code, Codex or another agent. It shows you each step before it runs it.</p>
+          <pre class="term agent" id="agent-prompt">Install Segreant for me with npm (npm install -g segreant), then run `segreant guide` and follow what it says. Show me each command before you run it.</pre>
+          <div class="cta" style="margin-top:14px">
+            <button class="btn ghost" type="button" data-copy="agent-prompt" hidden>Copy the prompt</button>
           </div>
         </div>
       </div>

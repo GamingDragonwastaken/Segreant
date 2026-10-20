@@ -37,7 +37,6 @@ vignette was removed by hand. They print as the reverse of the note.
 - `paper-uv.webp` (dark) and `paper-light.webp` (light) are paper-stock textures
   generated with ChatGPT image generation on 2026-09-30, made tileable with a
   half-offset cross-blend.
-- `uv-fibres.webp`: fluorescent security fibres, drawn as seeded random curves.
 - `tear.svg` / `tear-core.svg`: the hero sheet's torn edge (midpoint-displacement
   tear with fibre jitter) and the lighter core that shows where paper tears.
 - `guilloche-border.svg`: a rope border of phase-shifted sine strands.
