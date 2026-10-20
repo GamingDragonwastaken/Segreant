@@ -110,8 +110,7 @@ run `node node_modules/segreant/bin/segreant.mjs` instead.
 
 **Option A: no wiring at all.** If you use Claude Code, Codex or opencode,
 Segreant reads the usage those tools already log on your machine, including
-subscription usage a proxy never sees. Antigravity is read from 0.2.0, which is
-unreleased and not yet on npm:
+subscription usage a proxy never sees. Antigravity is read too, from 0.2.0 on:
 
 ```bash
 segreant scan            # finds your AI tools and git repos; changes nothing
