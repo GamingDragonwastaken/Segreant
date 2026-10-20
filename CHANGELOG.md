@@ -1,7 +1,8 @@
 # Changelog
 
-Segreant is pre-1.0. 0.1.0 (2026-10-08) and 0.2.0 (2026-10-18) are published
-on npm; 0.2.0 is tagged `v0.2.0` with a GitHub release. From 0.2.1, a version is
+Segreant is pre-1.0. 0.1.0 (2026-10-08), 0.2.0 (2026-10-18) and 0.2.1
+(2026-10-20) are published on npm, and 0.2.0 and 0.2.1 are tagged with GitHub
+releases. From 0.2.1, a version is
 published by pushing its tag: GitHub Actions builds, checks and publishes it with
 npm provenance, and the GitHub release follows a clean registry install. This file records user-visible changes
 from the point at which release discipline was formalized; Git history remains
