@@ -1,7 +1,9 @@
 # Changelog
 
 Segreant is pre-1.0. 0.1.0 (2026-10-08) and 0.2.0 (2026-10-18) are published
-on npm; 0.2.0 is tagged `v0.2.0` with a GitHub release. This file records user-visible changes
+on npm; 0.2.0 is tagged `v0.2.0` with a GitHub release. From 0.2.1, a version is
+published by pushing its tag: GitHub Actions builds, checks and publishes it with
+npm provenance, and the GitHub release follows a clean registry install. This file records user-visible changes
 from the point at which release discipline was formalized; Git history remains
 the authoritative record for earlier development. The verification procedure in
 `docs/RELEASE-PROCESS.md` remains the release authority — an entry here is not
@@ -10,6 +12,8 @@ release evidence.
 The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
+
+## [0.2.1] - 2026-10-20
 
 - **Releases are published from GitHub Actions with npm provenance.** From this version on, each published version carries a provenance attestation naming the repository, the workflow and the exact commit it was built from, and no npm token exists that could be stolen to publish a fake version. Check it on the package page or with `npm audit signatures`.
 - **A running Segreant picks up a price-list refresh without a restart.** When `segreant pricing --refresh` (or another Segreant) updated the price list, a proxy or dashboard that was already running kept pricing with the old list until it was restarted. It now notices the new list within a second. A refresh still in progress, or one that failed, changes nothing, and a reprice never switches lists partway through.
