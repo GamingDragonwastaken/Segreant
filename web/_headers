@@ -14,3 +14,5 @@
 
 /assets/fonts/*
   Cache-Control: public, max-age=2592000, immutable
+  # the GitHub Pages mirror's 404 page loads the stylesheet, and so these fonts, cross-origin
+  Access-Control-Allow-Origin: *
