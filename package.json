@@ -70,7 +70,7 @@
     "type": "git",
     "url": "git+https://github.com/GamingDragonwastaken/Segreant.git"
   },
-  "homepage": "https://github.com/GamingDragonwastaken/Segreant#readme",
+  "homepage": "https://segreant.pages.dev/",
   "bugs": "https://github.com/GamingDragonwastaken/Segreant/issues",
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",
