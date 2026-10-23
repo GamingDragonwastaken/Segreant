@@ -1,4 +1,17 @@
+# Search engines and AI answer engines are welcome to read and cite this site.
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: CCBot
+Allow: /
+
 User-agent: *
 Allow: /
 
-Sitemap: https://gamingdragonwastaken.github.io/Segreant/sitemap.xml
+Sitemap: https://segreant.pages.dev/sitemap.xml
