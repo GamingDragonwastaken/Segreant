@@ -14,7 +14,7 @@
     "test:postgres": "node --disable-warning=ExperimentalWarning --test integration/postgres.test.ts"
   },
   "dependencies": {
-    "jose": "6.2.12",
+    "jose": "6.2.13",
     "pg": "^8.23.1"
   },
   "devDependencies": {
