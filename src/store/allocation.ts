@@ -550,12 +550,22 @@ function validateExactAllocationSourceConservationWithLedger(
   }
 }
 
+/**
+ * The handles here belong to an opened Store, which owns the source-link scan.
+ * Repeating that scan of every economic event per call (once per row when
+ * listing run history) added about 0.6 s each at 100k requests. The reader still
+ * refuses an event whose links diverge.
+ */
+function allocationLedger(db: DatabaseSync): EconomicLedger {
+  return new EconomicLedger(db, { checkSourceLinks: false });
+}
+
 /** Validate one exact allocation against the economic ledger on a database handle. */
 export function validateExactAllocationSourceConservation(
   db: DatabaseSync,
   result: ExactAllocationRunResult,
 ): void {
-  validateExactAllocationSourceConservationWithLedger(new EconomicLedger(db), result);
+  validateExactAllocationSourceConservationWithLedger(allocationLedger(db), result);
 }
 
 /** Persist one canonical exact allocation result without mutating an earlier run. */
@@ -565,7 +575,7 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
   const serialized = serializeExactAllocationRun(result);
   const canonical = deserializeExactAllocationRun(serialized);
   const allocationRunId = exactRunId(serialized);
-  const economicLedger = new EconomicLedger(db);
+  const economicLedger = allocationLedger(db);
   runScript(db, 'BEGIN IMMEDIATE');
   try {
     const existing = db.prepare(
@@ -620,7 +630,7 @@ export function exactAllocationRun(db: DatabaseSync, allocationRunId: string): E
   if (String(row.allocationRunId) !== allocationRunId || Number(row.periodStartMs) !== result.periodStartMs || Number(row.periodEndMs) !== result.periodEndMs || Number(row.runAtMs) !== result.runAtMs || Boolean(row.complete) !== result.complete || Boolean(row.conserves) !== result.conserves) throw new Error(`exact allocation run ${allocationRunId} failed physical identity verification`);
   if (!Number.isSafeInteger(Number(row.computedAtMs))) throw new Error(`exact allocation run ${allocationRunId} has an invalid computedAt timestamp`);
   const binding = closeBindingRow(db, allocationRunId);
-  const economicLedger = new EconomicLedger(db);
+  const economicLedger = allocationLedger(db);
   validateCloseBinding(economicLedger, result, binding);
   validateExactAllocationSourceConservationWithLedger(economicLedger, result);
   verifyExactAllocationLineage(db, allocationRunId, result);
