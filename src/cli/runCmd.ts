@@ -230,9 +230,10 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
   line(color(tty, C.gray, `  $env:ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`));
   line(color(tty, C.gray, `  $env:OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`));
   console.log('');
-  if (cfg.budget.dailyUsd !== null) {
-    line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: segreant budget --daily N)')}`);
-  } else {
+  if (cfg.budget.dailyUsd !== null) line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: segreant budget --daily N)')}`);
+  if (cfg.budget.sessionUsd !== null) line(`Session cap  ${usd(cfg.budget.sessionUsd)}  ${color(tty, C.gray, '(set with: segreant budget --session N)')}`);
+  if (cfg.budget.runawayMaxUsd !== null) line(`Runaway guard  ${usd(cfg.budget.runawayMaxUsd)} in ${cfg.budget.runawayWindowSec}s  ${color(tty, C.gray, '(set with: segreant budget --runaway N --window S)')}`);
+  if (cfg.budget.dailyUsd === null && cfg.budget.sessionUsd === null && cfg.budget.runawayMaxUsd === null) {
     line(color(tty, C.gray, 'No budget cap set. Add one: segreant budget --daily 25 --soft 18'));
   }
   // The one request Segreant makes on its own: said where the user starts it.
