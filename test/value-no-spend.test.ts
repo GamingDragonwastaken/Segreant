@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,18 +15,24 @@ for (const command of ['realize', 'roi', 'frontier', 'yield']) {
   test(`${command} on a ledger with no spend says so instead of scoring git history`, () => {
     const home = mkdtempSync(join(tmpdir(), 'segreant-nospend-'));
     try {
+      // Git's own trace is the proof that history was not walked. A wall-clock
+      // bound here failed on a loaded machine with nothing wrong (24 s for a
+      // command that takes 2 s alone).
+      const gitTrace = join(home, 'git-trace.log');
       const run = (extra: string[]) => execFileSync(process.execPath, ['bin/segreant.mjs', command, '--repo', '.', ...extra], {
         cwd: process.cwd(),
         encoding: 'utf8',
-        env: { ...process.env, SEGREANT_HOME: home, NO_COLOR: '1' },
+        env: { ...process.env, SEGREANT_HOME: home, NO_COLOR: '1', GIT_TRACE: gitTrace },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      const started = Date.now();
       const payload = JSON.parse(run(['--json'])) as { status: string; measured: boolean; next: string[] };
       assert.equal(payload.status, 'no_spend_recorded');
       assert.equal(payload.measured, false);
       assert.ok(payload.next.includes('segreant scan --setup'));
-      assert.ok(Date.now() - started < 20_000, 'answered without a git scan');
+      assert.ok(existsSync(gitTrace), 'the repository check ran under the trace');
+      const gitCommands = readFileSync(gitTrace, 'utf8');
+      assert.match(gitCommands, /git rev-parse/, 'the trace saw the repository check');
+      assert.doesNotMatch(gitCommands, /git (log|rev-list|show|blame|diff)\b/, 'answered without a git scan');
 
       const text = run([]);
       assert.match(text, /No AI spend is recorded yet/);
