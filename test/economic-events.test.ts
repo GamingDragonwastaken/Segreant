@@ -186,6 +186,11 @@ test('economic schema upgrade backfills normalized source links without rewritin
     ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
   }
   const before = db.prepare('SELECT event_json, event_digest FROM economic_events ORDER BY event_id').all();
+  // An open that skips the scan (a Store between daily integrity passes) adds
+  // no links, and the reader still refuses the unlinked event.
+  const unscanned = new EconomicLedger(db, { checkSourceLinks: false });
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM economic_event_sources').get() as { n: number }).n, 0);
+  assert.throws(() => unscanned.read(credit.id), /source.*link|reference|diverge/i);
   const ledger = new EconomicLedger(db);
   assert.deepEqual(
     (db.prepare('SELECT event_id AS eventId, source_event_id AS sourceEventId FROM economic_event_sources').all() as Array<{ eventId: string; sourceEventId: string }>).map((row) => ({ eventId: row.eventId, sourceEventId: row.sourceEventId })),
