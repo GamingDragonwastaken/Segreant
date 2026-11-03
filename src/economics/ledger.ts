@@ -248,10 +248,17 @@ function closeBalances(events: readonly EconomicEvent[]): CloseProjectionBalance
 export class EconomicLedger {
   private readonly db: DatabaseSync;
 
-  public constructor(db: DatabaseSync) {
+  /**
+   * `checkSourceLinks: false` skips the open-time scan for links missing from
+   * pre-link databases. Every published release writes an event and its links
+   * in one transaction, so only ledgers older than the link table can lack
+   * them; `Store` runs the scan with its daily integrity pass, and `readStored`
+   * still refuses any event whose links diverge.
+   */
+  public constructor(db: DatabaseSync, options: { checkSourceLinks?: boolean } = {}) {
     this.db = db;
     initializeEconomicSchema(this.db);
-    this.backfillSourceLinks();
+    if (options.checkSourceLinks !== false) this.backfillSourceLinks();
   }
 
   /**

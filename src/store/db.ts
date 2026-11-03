@@ -799,7 +799,7 @@ export class Store {
       // caller can persist canonical evidence/claims alongside the operational
       // ledger without introducing a second database or transaction boundary.
       this.epistemicLedger = new EpistemicLedger(this.db);
-      this.economicLedger = new EconomicLedger(this.db);
+      this.economicLedger = new EconomicLedger(this.db, { checkSourceLinks: fullIntegrityCheck });
     } catch {
       let closeConfirmed = true;
       try {
