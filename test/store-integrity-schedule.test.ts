@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 
 const home = mkdtempSync(join(tmpdir(), 'seg-integrity-sched-'));
@@ -46,4 +47,29 @@ test('opening a file ledger runs the pass once, stamps it, and the next open wit
   new Store(path).close();
   const second = JSON.parse(readFileSync(path + '-integrity.json', 'utf8')).checkedAtMs;
   assert.equal(second, first, 'an open within the interval neither runs nor re-stamps the full pass');
+});
+
+test('a budget-enforcing open runs the full pass even inside the interval', () => {
+  const path = join(home, 'enforcing.db');
+  new Store(path).close();
+  const earlier = Date.now() - 60_000;
+  stamp(path, JSON.stringify({ checkedAtMs: earlier }));
+  assert.equal(integrityCheckDue(path), false);
+  new Store(path, { enforcesBudget: true }).close();
+  const after = JSON.parse(readFileSync(path + '-integrity.json', 'utf8')).checkedAtMs;
+  assert.ok(after > earlier, 'the enforcing open ran and stamped a fresh full pass');
+});
+
+test('an open whose source-link upgrade fails leaves no stamp, so the next open retries it', () => {
+  const path = join(home, 'failed-upgrade.db');
+  new Store(path).close();
+  rmSync(path + '-integrity.json');
+  const raw = new DatabaseSync(path);
+  raw.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run('event:unreadable', 'charge_estimated', 'request:x', '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'not json', 'digest');
+  raw.close();
+  assert.throws(() => new Store(path));
+  assert.equal(existsSync(path + '-integrity.json'), false, 'no stamp after a failed upgrade');
+  assert.equal(integrityCheckDue(path), true);
 });

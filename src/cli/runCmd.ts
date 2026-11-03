@@ -70,7 +70,8 @@ export async function cmdStart(flags: Flags): Promise<void> {
   if (flags.port) cfg.port = Number(flags.port);
   if (flags['dashboard-port']) cfg.dashboardPort = Number(flags['dashboard-port']);
 
-  const store = new Store(dbPath());
+  // The proxy's budget guard reads spend from this handle for its lifetime.
+  const store = new Store(dbPath(), { enforcesBudget: true });
   const tty = process.stdout.isTTY ?? false;
   if (isDemo()) {
     const seeded = ensureDemoSeeded(store);
