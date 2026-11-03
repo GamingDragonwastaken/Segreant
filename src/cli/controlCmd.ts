@@ -204,7 +204,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
     }
     const cfg = loadConfig();
     if (flags.apply) recoverPending(policy, cfg.budget.dailyUsd);
-    const store = new Store(dbPath());
+    const store = new Store(dbPath(), { enforcesBudget: true });
     try {
     const now = new Date().toISOString();
     const days = flags.days ? Number(flags.days) : 30;

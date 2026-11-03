@@ -717,7 +717,14 @@ export class Store {
   private requestMarks: AppendMark | null = null;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
-  constructor(path: string) {
+  /**
+   * `enforcesBudget: true` runs the full integrity pass on this open whatever
+   * the stamp says. A damaged index can make ordinary reads silently omit
+   * rows, so an open whose spend reads decide whether provider traffic may
+   * proceed (the proxy, budget control) never trusts a pass from earlier in
+   * the day. Report-only opens follow the daily schedule.
+   */
+  constructor(path: string, options: { enforcesBudget?: boolean } = {}) {
     const databasePath = path === ':memory:' ? path : resolve(path);
     this.databasePath = databasePath;
     const existingFile = databasePath !== ':memory:' && existsSync(databasePath);
@@ -787,19 +794,21 @@ export class Store {
           backupVerified = true;
         }
       }
-      const fullIntegrityCheck = integrityCheckDue(databasePath);
+      const fullIntegrityCheck = options.enforcesBudget === true || integrityCheckDue(databasePath);
       initializeSchema(this.db, {
         expectedCausalV2State: causalV2Preflight.state,
         migrationBackupVerified: backupVerified,
         allowUnbackedCausalV2Create: !existingFile,
         fullIntegrityCheck,
       });
-      if (fullIntegrityCheck) recordIntegrityCheck(databasePath);
       // The Trusted Epistemic Kernel uses the same SQLite connection so a
       // caller can persist canonical evidence/claims alongside the operational
       // ledger without introducing a second database or transaction boundary.
       this.epistemicLedger = new EpistemicLedger(this.db);
       this.economicLedger = new EconomicLedger(this.db, { checkSourceLinks: fullIntegrityCheck });
+      // Stamped only once the pass and the source-link backfill both
+      // committed, so an interrupted upgrade is retried on the next open.
+      if (fullIntegrityCheck) recordIntegrityCheck(databasePath);
     } catch {
       let closeConfirmed = true;
       try {
