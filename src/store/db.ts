@@ -24,6 +24,7 @@ import {
   openSync,
   readFileSync,
   realpathSync,
+  writeFileSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
@@ -663,6 +664,48 @@ function sameImportedCharge(a: EconomicEvent, b: EconomicEvent): boolean {
   );
 }
 
+/**
+ * How often opening a ledger runs SQLite's full `integrity_check`. It is
+ * O(N log N) in rows and was 94% of the open time: 4.1 s of 4.4 s at 100k
+ * requests, 14 s at 300k. That was paid by every command. SQLite still reports
+ * damage it meets during normal reads and writes (SQLITE_CORRUPT), and those
+ * errors stop the command, so budget enforcement stays fail-closed between
+ * passes. The cheap checks run on every open. Precedent: Firefox runs the same
+ * pass on places.sqlite once every 7 days, during idle maintenance
+ * (PlacesDBUtils, MAINTENANCE_INTERVAL_SECONDS); Chromium does not check on
+ * open and recovers when SQLITE_CORRUPT surfaces. A day keeps Segreant stricter
+ * than both.
+ */
+export const INTEGRITY_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The last successful full pass is stamped in a sidecar file beside the
+ * ledger, not inside it, so recording it needs no schema change. The stamp can
+ * only ever skip a check, never weaken one: a missing, unreadable, malformed,
+ * future-dated or stale stamp makes the pass due. An in-memory ledger is
+ * always checked, because its check is free.
+ */
+export function integrityCheckDue(databasePath: string, now = Date.now()): boolean {
+  if (databasePath === ':memory:') return true;
+  try {
+    const stamp = JSON.parse(readFileSync(databasePath + '-integrity.json', 'utf8')) as { checkedAtMs?: unknown };
+    const at = stamp.checkedAtMs;
+    if (typeof at !== 'number' || !Number.isFinite(at) || at > now) return true;
+    return now - at >= INTEGRITY_CHECK_INTERVAL_MS;
+  } catch {
+    return true;
+  }
+}
+
+function recordIntegrityCheck(databasePath: string): void {
+  if (databasePath === ':memory:') return;
+  try {
+    writeFileSync(databasePath + '-integrity.json', JSON.stringify({ checkedAtMs: Date.now() }) + '\n');
+  } catch {
+    // An unwritable stamp only means the next open checks again.
+  }
+}
+
 export class Store {
   private db: DatabaseSync;
   private readonly databasePath: string;
@@ -674,7 +717,14 @@ export class Store {
   private requestMarks: AppendMark | null = null;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
-  constructor(path: string) {
+  /**
+   * `enforcesBudget: true` runs the full integrity pass on this open whatever
+   * the stamp says. A damaged index can make ordinary reads silently omit
+   * rows, so an open whose spend reads decide whether provider traffic may
+   * proceed (the proxy, budget control) never trusts a pass from earlier in
+   * the day. Report-only opens follow the daily schedule.
+   */
+  constructor(path: string, options: { enforcesBudget?: boolean } = {}) {
     const databasePath = path === ':memory:' ? path : resolve(path);
     this.databasePath = databasePath;
     const existingFile = databasePath !== ':memory:' && existsSync(databasePath);
@@ -744,16 +794,21 @@ export class Store {
           backupVerified = true;
         }
       }
+      const fullIntegrityCheck = options.enforcesBudget === true || integrityCheckDue(databasePath);
       initializeSchema(this.db, {
         expectedCausalV2State: causalV2Preflight.state,
         migrationBackupVerified: backupVerified,
         allowUnbackedCausalV2Create: !existingFile,
+        fullIntegrityCheck,
       });
       // The Trusted Epistemic Kernel uses the same SQLite connection so a
       // caller can persist canonical evidence/claims alongside the operational
       // ledger without introducing a second database or transaction boundary.
       this.epistemicLedger = new EpistemicLedger(this.db);
-      this.economicLedger = new EconomicLedger(this.db);
+      this.economicLedger = new EconomicLedger(this.db, { checkSourceLinks: fullIntegrityCheck });
+      // Stamped only once the pass and the source-link backfill both
+      // committed, so an interrupted upgrade is retried on the next open.
+      if (fullIntegrityCheck) recordIntegrityCheck(databasePath);
     } catch {
       let closeConfirmed = true;
       try {

@@ -2356,6 +2356,14 @@ export function initializeSchema(
     expectedCausalV2State?: CausalV2SchemaState;
     migrationBackupVerified?: boolean;
     allowUnbackedCausalV2Create?: boolean;
+    /**
+     * Whether to run the full O(N log N) `integrity_check` b-tree pass before
+     * the DDL. Default true. The Store passes false when a full pass succeeded
+     * within the last day (see INTEGRITY_CHECK_INTERVAL_MS in db.ts); the cheap
+     * checks (schema text, trigger authority, foreign keys) run on every open
+     * regardless, and a schema change still forces the full pass below.
+     */
+    fullIntegrityCheck?: boolean;
   } = {},
 ): void {
   configureDatabaseConnection(db);
@@ -2380,7 +2388,7 @@ export function initializeSchema(
     // Inspect the retained database while the migration lock is held.  This
     // must precede idempotent DDL, which would otherwise recreate a deleted
     // trigger and erase the evidence of tampering.
-    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true, btree: options.fullIntegrityCheck !== false });
     const schemaVersionBeforeDdl = (db.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version;
     runScript(db, SCHEMA);
     initializeEpistemicSchema(db);
@@ -2397,10 +2405,11 @@ export function initializeSchema(
         (finalAttestation.defectIds.join(',') || 'CAUSAL_V2_SCHEMA_INCOMPLETE'),
       );
     }
-    // The full structural pass already ran above, inside this same lock. It is
-    // repeated only when the DDL and migrations actually changed the schema
-    // (PRAGMA schema_version moved); otherwise the schema-text, foreign-key and
-    // trigger-authority checks run again on their own, which are cheap.
+    // The full structural pass (when due) already ran above, inside this same
+    // lock. It runs here whenever the DDL and migrations actually changed the
+    // schema (PRAGMA schema_version moved), due or not; otherwise the
+    // schema-text, foreign-key and trigger-authority checks run again on their
+    // own, which are cheap.
     const schemaChanged = (db.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version !== schemaVersionBeforeDdl;
     assertDatabaseIntegrity(db, { appendOnlyTriggers: true, btree: schemaChanged });
     const schemaVersion = readSchemaVersion(db);
