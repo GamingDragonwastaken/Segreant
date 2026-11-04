@@ -43,6 +43,27 @@ test('demo seed: populates every store-backed surface', () => {
   store.close();
 });
 
+// CI on main failed at 00:00:26 UTC: today's rows were dated up to half an hour
+// ahead, so the "today" overview a user opens first had nothing in it.
+for (const [label, afterMidnightMs] of [
+  ['at local midnight', 0],
+  ['26 seconds after midnight', 26_000],
+  ['10 minutes after midnight', 10 * 60_000],
+  ['1 hour after midnight', 60 * 60_000],
+] as const) {
+  test(`demo seed: today is populated and nothing is future-dated ${label}`, () => {
+    const store = new Store(':memory:');
+    const now = startOfLocalDay(Date.now()) + afterMidnightMs;
+    const res = seedDemo(store, { now });
+    const today = store.summary(startOfLocalDay(now), now + 1);
+    assert.ok(today.requests > 0, 'the today window holds the hot session');
+    assert.ok(today.costUsd > 0, 'and it costs something');
+    assert.equal(store.summary(now + 1, now + 400 * 24 * 60 * 60 * 1000).requests, 0, 'no row is dated after the seed');
+    assert.equal(res.blocked, 5, 'the throttling story survives the short day');
+    store.close();
+  });
+}
+
 test('demo seed: costs are priced by the real engine, never invented or NaN', () => {
   const store = new Store(':memory:');
   seedDemo(store, { now: noonToday() });
