@@ -820,10 +820,11 @@ function seedDemoFromCard(store: Store, opts: { now?: number; days?: number }): 
   // (budget alert), exceed 2x the prior active-day p90 (spend-spike), and —
   // having hit the cap — get throttled (429s). All of today's data is anchored
   // to the current local day so it lands in the "today" window at any wall-clock
-  // hour, then walks up to `now`.
+  // hour, then walks up to `now`. Just after midnight the session squeezes into
+  // what has happened of the day: a row dated ahead of `now` is outside "today".
   const dayStartMs = startOfLocalDay(now);
-  const hotStart = Math.max(dayStartMs + 30 * 60 * 1000, now - 150 * 60 * 1000);
-  const hotEnd = Math.max(hotStart + 1, now - 60 * 1000);
+  const hotStart = Math.max(dayStartMs, now - 150 * 60 * 1000);
+  const hotEnd = Math.max(hotStart, now - 60 * 1000);
   const span = hotEnd - hotStart;
   const hotSession = 'demo-sess-code-5';
   ctx.store.upsertSession(hotSession, 'backend-api', 'claude-code', hotStart);
@@ -844,7 +845,7 @@ function seedDemoFromCard(store: Store, opts: { now?: number; days?: number }): 
       cacheReadTokens: i === 0 ? 0 : int(ctx.rng, 15_000, 90_000),
     });
   }
-  addProposal(ctx, 5, hotSession, 'backend-api', hotStart + 1000);
+  addProposal(ctx, 5, hotSession, 'backend-api', Math.min(now, hotStart + 1000));
 
   for (let i = 0; i < int(ctx.rng, 4, 7); i++) {
     backgroundCall(ctx, hotStart + Math.floor(ctx.rng() * span));
@@ -853,7 +854,7 @@ function seedDemoFromCard(store: Store, opts: { now?: number; days?: number }): 
   // A handful of blocked (429) requests in the last hour — the cap doing its job.
   for (let i = 0; i < 5; i++) {
     addRequest(ctx, {
-      tsEpochMs: Math.max(dayStartMs + 60 * 1000, now - int(ctx.rng, 2 * 60 * 1000, 50 * 60 * 1000)),
+      tsEpochMs: Math.max(dayStartMs, now - int(ctx.rng, 2 * 60 * 1000, 50 * 60 * 1000)),
       model: OPUS,
       project: 'backend-api',
       user: 'alice@team',
