@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated": "2026-10-17",
+  "updated": "2026-11-24",
   "currency": "USD",
   "unit": "per_million_tokens",
   "notes": [
@@ -12,8 +12,10 @@
     "Models marked with their own \"source\" were added on 2026-10-17 from the public price list (LiteLLM), not from the provider’s pricing page; the provider-level \"verified\" and \"source\" fields describe the other entries only. They are still list prices, with the same exclusions as the rest of the card.",
     "Google/Gemini values verified against ai.google.dev/gemini-api/docs/pricing: the 2.5 models were read in 2026-06, and the 3.x models on 2026-10-09 from the same page (updated 2026-10-07). Gemini 2.5 Pro lists the <=200k-token base rate; prompts over 200k bill at input 2.50 / output 15.0 / cache_read 0.25.",
     "Gemini is metered through Segreant's OpenAI-compatible path (Google's .../v1beta/openai/ base URL). The cost engine resolves a rate by model family ACROSS providers, so the price follows the model id regardless of which wire protocol carried it.",
-    "Not modelled. These make a request cost MORE than this card shows: OpenAI long-context rates (the page's 'Long context' column), OpenAI cache-write rates, Fast mode on either provider, and the 1.1x data-residency uplift (Anthropic inference_geo, OpenAI regional processing). Batch and Flex discounts make it cost LESS.",
-    "Gemini 3.6, 3.7 and 3.8 Flash carry Google's rates through 2026-12-31; the page lists higher rates from 2027-01-01. This card cannot express a rate that expires, so it keeps the current rates, and those rows read low from 2027-01-01 until the card is updated. Gemini models not listed here fall back to a flagged family or unknown estimate."
+    "Not modelled. These make a request cost MORE than this card shows: OpenAI cache-write rates, Fast mode on either provider, and the 1.1x data-residency uplift (Anthropic inference_geo, OpenAI regional processing). Batch and Flex discounts make it cost LESS.",
+    "Gemini 3.6, 3.7 and 3.8 Flash carry Google's rates through 2026-12-31; the page lists higher rates from 2027-01-01. This card cannot express a rate that expires, so it keeps the current rates, and those rows read low from 2027-01-01 until the card is updated. Gemini models not listed here fall back to a flagged family or unknown estimate.",
+    "above: the rates every token of a request takes once its prompt (input, cache-read and cache-write tokens together) is longer than prompt_tokens. Read from the public price list on 2026-11-24; the claude-haiku-5-5 ones were checked against Anthropic's pricing page the same day.",
+    "On 2026-11-24 every entry the public price list also carries was compared with it. All agreed except the claude-sonnet-5-5 cache read, which this card had at 0.20; it is 0.10 on the list and on Anthropic’s pricing page."
   ],
   "providers": {
     "anthropic": {
@@ -67,13 +69,13 @@
           "output": 10,
           "cache_write_5m": 2.5,
           "cache_write_1h": 4,
-          "cache_read": 0.2,
+          "cache_read": 0.1,
           "exact": {
             "input": "2",
             "output": "10",
             "cache_write_5m": "2.5",
             "cache_write_1h": "4",
-            "cache_read": "0.2"
+            "cache_read": "0.1"
           }
         },
         "claude-fable-5": {
@@ -295,9 +297,11 @@
             "input": "10",
             "output": "50",
             "cache_read": "1",
-            "cache_write_5m": "12.5"
+            "cache_write_5m": "12.5",
+            "cache_write_1h": "20"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "cache_write_1h": 20
         },
         "claude-haiku-5-5": {
           "input": 0.1,
@@ -308,9 +312,133 @@
             "input": "0.1",
             "output": "0.5",
             "cache_read": "0.01",
-            "cache_write_5m": "0.125"
+            "cache_write_5m": "0.125",
+            "cache_write_1h": "0.2"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 100000,
+              "input": 0.5,
+              "output": 2.5,
+              "cache_write_5m": 0.625,
+              "cache_write_1h": 1,
+              "cache_read": 0.05,
+              "exact": {
+                "input": "0.5",
+                "output": "2.5",
+                "cache_write_5m": "0.625",
+                "cache_write_1h": "1",
+                "cache_read": "0.05"
+              }
+            }
+          ],
+          "cache_write_1h": 0.2
+        },
+        "claude-haiku-4-5-20251001": {
+          "input": 1,
+          "output": 5,
+          "cache_write_5m": 1.25,
+          "cache_write_1h": 2,
+          "cache_read": 0.1,
+          "exact": {
+            "input": "1",
+            "output": "5",
+            "cache_write_5m": "1.25",
+            "cache_write_1h": "2",
+            "cache_read": "0.1"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-sonnet-4-5-20250929": {
+          "input": 3,
+          "output": 15,
+          "cache_write_5m": 3.75,
+          "cache_write_1h": 6,
+          "cache_read": 0.3,
+          "exact": {
+            "input": "3",
+            "output": "15",
+            "cache_write_5m": "3.75",
+            "cache_write_1h": "6",
+            "cache_read": "0.3"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-opus-4-5-20251101": {
+          "input": 5,
+          "output": 25,
+          "cache_write_5m": 6.25,
+          "cache_write_1h": 10,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "5",
+            "output": "25",
+            "cache_write_5m": "6.25",
+            "cache_write_1h": "10",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-opus-4-6-20260205": {
+          "input": 5,
+          "output": 25,
+          "cache_write_5m": 6.25,
+          "cache_write_1h": 10,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "5",
+            "output": "25",
+            "cache_write_5m": "6.25",
+            "cache_write_1h": "10",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-opus-4-7-20260416": {
+          "input": 5,
+          "output": 25,
+          "cache_write_5m": 6.25,
+          "cache_write_1h": 10,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "5",
+            "output": "25",
+            "cache_write_5m": "6.25",
+            "cache_write_1h": "10",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cache_write_5m": 10,
+          "cache_write_1h": 16,
+          "cache_read": 0.2,
+          "exact": {
+            "input": "8",
+            "output": "40",
+            "cache_write_5m": "10",
+            "cache_write_1h": "16",
+            "cache_read": "0.2"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cache_write_5m": 10,
+          "cache_write_1h": 16,
+          "cache_read": 0.2,
+          "exact": {
+            "input": "8",
+            "output": "40",
+            "cache_write_5m": "10",
+            "cache_write_1h": "16",
+            "cache_read": "0.2"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
         }
       }
     },
@@ -326,7 +454,22 @@
             "input": "10",
             "output": "50",
             "cache_read": "1"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 20,
+              "output": 75,
+              "cache_write_5m": 25,
+              "cache_read": 2,
+              "exact": {
+                "input": "20",
+                "output": "75",
+                "cache_write_5m": "25",
+                "cache_read": "2"
+              }
+            }
+          ]
         },
         "gpt-6.1-sol": {
           "input": 2,
@@ -336,7 +479,22 @@
             "input": "2",
             "output": "10",
             "cache_read": "0.1"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 4,
+              "output": 15,
+              "cache_write_5m": 5,
+              "cache_read": 0.2,
+              "exact": {
+                "input": "4",
+                "output": "15",
+                "cache_write_5m": "5",
+                "cache_read": "0.2"
+              }
+            }
+          ]
         },
         "gpt-6-sol": {
           "input": 2,
@@ -346,7 +504,22 @@
             "input": "2",
             "output": "10",
             "cache_read": "0.2"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 4,
+              "output": 15,
+              "cache_write_5m": 5,
+              "cache_read": 0.4,
+              "exact": {
+                "input": "4",
+                "output": "15",
+                "cache_write_5m": "5",
+                "cache_read": "0.4"
+              }
+            }
+          ]
         },
         "gpt-6-luna": {
           "input": 0.1,
@@ -356,7 +529,22 @@
             "input": "0.1",
             "output": "0.5",
             "cache_read": "0.01"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 0.2,
+              "output": 0.75,
+              "cache_write_5m": 0.25,
+              "cache_read": 0.02,
+              "exact": {
+                "input": "0.2",
+                "output": "0.75",
+                "cache_write_5m": "0.25",
+                "cache_read": "0.02"
+              }
+            }
+          ]
         },
         "gpt-5.6-sol": {
           "input": 4,
@@ -366,7 +554,22 @@
             "input": "4",
             "output": "20",
             "cache_read": "0.4"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 8,
+              "output": 30,
+              "cache_write_5m": 10,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "8",
+                "output": "30",
+                "cache_write_5m": "10",
+                "cache_read": "0.8"
+              }
+            }
+          ]
         },
         "gpt-5.6-terra": {
           "input": 2,
@@ -376,7 +579,22 @@
             "input": "2",
             "output": "12",
             "cache_read": "0.2"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 4,
+              "output": 18,
+              "cache_write_5m": 5,
+              "cache_read": 0.4,
+              "exact": {
+                "input": "4",
+                "output": "18",
+                "cache_write_5m": "5",
+                "cache_read": "0.4"
+              }
+            }
+          ]
         },
         "gpt-5.6-luna": {
           "input": 0.2,
@@ -386,7 +604,22 @@
             "input": "0.2",
             "output": "1.2",
             "cache_read": "0.02"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 0.4,
+              "output": 1.8,
+              "cache_write_5m": 0.5,
+              "cache_read": 0.04,
+              "exact": {
+                "input": "0.4",
+                "output": "1.8",
+                "cache_write_5m": "0.5",
+                "cache_read": "0.04"
+              }
+            }
+          ]
         },
         "gpt-5.6-cyber": {
           "input": 12.5,
@@ -396,7 +629,22 @@
             "input": "12.5",
             "output": "75",
             "cache_read": "1.25"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 25,
+              "output": 112.5,
+              "cache_write_5m": 31.25,
+              "cache_read": 2.5,
+              "exact": {
+                "input": "25",
+                "output": "112.5",
+                "cache_write_5m": "31.25",
+                "cache_read": "2.5"
+              }
+            }
+          ]
         },
         "gpt-5.5": {
           "input": 5,
@@ -406,7 +654,20 @@
             "input": "5",
             "output": "30",
             "cache_read": "0.5"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 10,
+              "output": 45,
+              "cache_read": 1,
+              "exact": {
+                "input": "10",
+                "output": "45",
+                "cache_read": "1"
+              }
+            }
+          ]
         },
         "gpt-5.5-pro": {
           "input": 30,
@@ -414,7 +675,18 @@
           "exact": {
             "input": "30",
             "output": "180"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 60,
+              "output": 270,
+              "exact": {
+                "input": "60",
+                "output": "270"
+              }
+            }
+          ]
         },
         "gpt-5.4": {
           "input": 2.5,
@@ -424,7 +696,20 @@
             "input": "2.5",
             "output": "15",
             "cache_read": "0.25"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 5,
+              "output": 22.5,
+              "cache_read": 0.5,
+              "exact": {
+                "input": "5",
+                "output": "22.5",
+                "cache_read": "0.5"
+              }
+            }
+          ]
         },
         "gpt-5.4-pro": {
           "input": 30,
@@ -432,7 +717,18 @@
           "exact": {
             "input": "30",
             "output": "180"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 60,
+              "output": 270,
+              "exact": {
+                "input": "60",
+                "output": "270"
+              }
+            }
+          ]
         },
         "gpt-5.4-mini": {
           "input": 0.75,
@@ -891,7 +1187,22 @@
             "cache_read": "0.4",
             "cache_write_5m": "5"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 8,
+              "output": 30,
+              "cache_write_5m": 10,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "8",
+                "output": "30",
+                "cache_write_5m": "10",
+                "cache_read": "0.8"
+              }
+            }
+          ]
         },
         "daybreak-red-latest": {
           "input": 12.5,
@@ -904,7 +1215,22 @@
             "cache_read": "1.25",
             "cache_write_5m": "15.625"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 25,
+              "output": 112.5,
+              "cache_write_5m": 31.25,
+              "cache_read": 2.5,
+              "exact": {
+                "input": "25",
+                "output": "112.5",
+                "cache_write_5m": "31.25",
+                "cache_read": "2.5"
+              }
+            }
+          ]
         },
         "gpt-daybreak-red-latest": {
           "input": 12.5,
@@ -917,7 +1243,22 @@
             "cache_read": "1.25",
             "cache_write_5m": "15.625"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 25,
+              "output": 112.5,
+              "cache_write_5m": 31.25,
+              "cache_read": 2.5,
+              "exact": {
+                "input": "25",
+                "output": "112.5",
+                "cache_write_5m": "31.25",
+                "cache_read": "2.5"
+              }
+            }
+          ]
         },
         "daybreak-blue-latest": {
           "input": 4,
@@ -930,7 +1271,22 @@
             "cache_read": "0.4",
             "cache_write_5m": "5"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 8,
+              "output": 30,
+              "cache_write_5m": 10,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "8",
+                "output": "30",
+                "cache_write_5m": "10",
+                "cache_read": "0.8"
+              }
+            }
+          ]
         },
         "gpt-daybreak-blue-latest": {
           "input": 4,
@@ -943,7 +1299,22 @@
             "cache_read": "0.4",
             "cache_write_5m": "5"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 8,
+              "output": 30,
+              "cache_write_5m": 10,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "8",
+                "output": "30",
+                "cache_write_5m": "10",
+                "cache_read": "0.8"
+              }
+            }
+          ]
         },
         "gpt-5-chat": {
           "input": 1.25,
@@ -1074,6 +1445,722 @@
             "cache_read": "0.5"
           },
           "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+        },
+        "computer-use-preview-2025-03-11": {
+          "input": 3,
+          "output": 12,
+          "exact": {
+            "input": "3",
+            "output": "12"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4o-2024-08-06": {
+          "input": 3.75,
+          "output": 15,
+          "cache_read": 1.875,
+          "exact": {
+            "input": "3.75",
+            "output": "15",
+            "cache_read": "1.875"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4o-2024-11-20": {
+          "input": 3.75,
+          "output": 15,
+          "cache_write_5m": 1.875,
+          "exact": {
+            "input": "3.75",
+            "output": "15",
+            "cache_write_5m": "1.875"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4o-mini-2024-07-18": {
+          "input": 0.3,
+          "output": 1.2,
+          "cache_read": 0.15,
+          "exact": {
+            "input": "0.3",
+            "output": "1.2",
+            "cache_read": "0.15"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4.1-2025-04-14": {
+          "input": 3,
+          "output": 12,
+          "cache_read": 0.75,
+          "exact": {
+            "input": "3",
+            "output": "12",
+            "cache_read": "0.75"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4.1-mini-2025-04-14": {
+          "input": 0.8,
+          "output": 3.2,
+          "cache_read": 0.2,
+          "exact": {
+            "input": "0.8",
+            "output": "3.2",
+            "cache_read": "0.2"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:gpt-4.1-nano-2025-04-14": {
+          "input": 0.2,
+          "output": 0.8,
+          "cache_read": 0.05,
+          "exact": {
+            "input": "0.2",
+            "output": "0.8",
+            "cache_read": "0.05"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "ft:o4-mini-2025-04-16": {
+          "input": 4,
+          "output": 16,
+          "cache_read": 1,
+          "exact": {
+            "input": "4",
+            "output": "16",
+            "cache_read": "1"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4-turbo-2024-04-09": {
+          "input": 10,
+          "output": 30,
+          "exact": {
+            "input": "10",
+            "output": "30"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4.1-2025-04-14": {
+          "input": 2,
+          "output": 8,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "2",
+            "output": "8",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4.1-mini-2025-04-14": {
+          "input": 0.4,
+          "output": 1.6,
+          "cache_read": 0.1,
+          "exact": {
+            "input": "0.4",
+            "output": "1.6",
+            "cache_read": "0.1"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4.1-nano-2025-04-14": {
+          "input": 0.1,
+          "output": 0.4,
+          "cache_read": 0.025,
+          "exact": {
+            "input": "0.1",
+            "output": "0.4",
+            "cache_read": "0.025"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-2024-05-13": {
+          "input": 5,
+          "output": 15,
+          "exact": {
+            "input": "5",
+            "output": "15"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-2024-08-06": {
+          "input": 2.5,
+          "output": 10,
+          "cache_read": 1.25,
+          "exact": {
+            "input": "2.5",
+            "output": "10",
+            "cache_read": "1.25"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-2024-11-20": {
+          "input": 2.5,
+          "output": 10,
+          "cache_read": 1.25,
+          "exact": {
+            "input": "2.5",
+            "output": "10",
+            "cache_read": "1.25"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-audio-preview-2024-12-17": {
+          "input": 2.5,
+          "output": 10,
+          "exact": {
+            "input": "2.5",
+            "output": "10"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-audio-preview-2025-06-03": {
+          "input": 2.5,
+          "output": 10,
+          "exact": {
+            "input": "2.5",
+            "output": "10"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-audio-2025-08-28": {
+          "input": 2.5,
+          "output": 10,
+          "exact": {
+            "input": "2.5",
+            "output": "10"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-audio-mini-2025-10-06": {
+          "input": 0.6,
+          "output": 2.4,
+          "exact": {
+            "input": "0.6",
+            "output": "2.4"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-audio-mini-2025-12-15": {
+          "input": 0.6,
+          "output": 2.4,
+          "exact": {
+            "input": "0.6",
+            "output": "2.4"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-mini-2024-07-18": {
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.075,
+          "exact": {
+            "input": "0.15",
+            "output": "0.6",
+            "cache_read": "0.075"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-mini-audio-preview-2024-12-17": {
+          "input": 0.15,
+          "output": 0.6,
+          "exact": {
+            "input": "0.15",
+            "output": "0.6"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-mini-search-preview-2025-03-11": {
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.075,
+          "exact": {
+            "input": "0.15",
+            "output": "0.6",
+            "cache_read": "0.075"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-4o-search-preview-2025-03-11": {
+          "input": 2.5,
+          "output": 10,
+          "cache_read": 1.25,
+          "exact": {
+            "input": "2.5",
+            "output": "10",
+            "cache_read": "1.25"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.1-2025-11-13": {
+          "input": 1.25,
+          "output": 10,
+          "cache_read": 0.125,
+          "exact": {
+            "input": "1.25",
+            "output": "10",
+            "cache_read": "0.125"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.2-2025-12-11": {
+          "input": 1.75,
+          "output": 14,
+          "cache_read": 0.175,
+          "exact": {
+            "input": "1.75",
+            "output": "14",
+            "cache_read": "0.175"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.2-pro-2025-12-11": {
+          "input": 21,
+          "output": 168,
+          "exact": {
+            "input": "21",
+            "output": "168"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.5-2026-04-23": {
+          "input": 5,
+          "output": 30,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "5",
+            "output": "30",
+            "cache_read": "0.5"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 10,
+              "output": 45,
+              "cache_read": 1,
+              "exact": {
+                "input": "10",
+                "output": "45",
+                "cache_read": "1"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.5-pro-2026-04-23": {
+          "input": 30,
+          "output": 180,
+          "exact": {
+            "input": "30",
+            "output": "180"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 60,
+              "output": 270,
+              "exact": {
+                "input": "60",
+                "output": "270"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.4-2026-03-05": {
+          "input": 2.5,
+          "output": 15,
+          "cache_read": 0.25,
+          "exact": {
+            "input": "2.5",
+            "output": "15",
+            "cache_read": "0.25"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 5,
+              "output": 22.5,
+              "cache_read": 0.5,
+              "exact": {
+                "input": "5",
+                "output": "22.5",
+                "cache_read": "0.5"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.4-pro-2026-03-05": {
+          "input": 30,
+          "output": 180,
+          "exact": {
+            "input": "30",
+            "output": "180"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 60,
+              "output": 270,
+              "exact": {
+                "input": "60",
+                "output": "270"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.4-mini-2026-03-17": {
+          "input": 0.75,
+          "output": 4.5,
+          "cache_read": 0.075,
+          "exact": {
+            "input": "0.75",
+            "output": "4.5",
+            "cache_read": "0.075"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5.4-nano-2026-03-17": {
+          "input": 0.2,
+          "output": 1.25,
+          "cache_read": 0.02,
+          "exact": {
+            "input": "0.2",
+            "output": "1.25",
+            "cache_read": "0.02"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5-pro-2025-10-06": {
+          "input": 15,
+          "output": 120,
+          "exact": {
+            "input": "15",
+            "output": "120"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5-2025-08-07": {
+          "input": 1.25,
+          "output": 10,
+          "cache_read": 0.125,
+          "exact": {
+            "input": "1.25",
+            "output": "10",
+            "cache_read": "0.125"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5-mini-2025-08-07": {
+          "input": 0.25,
+          "output": 2,
+          "cache_read": 0.025,
+          "exact": {
+            "input": "0.25",
+            "output": "2",
+            "cache_read": "0.025"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5-nano-2025-08-07": {
+          "input": 0.05,
+          "output": 0.4,
+          "cache_read": 0.005,
+          "exact": {
+            "input": "0.05",
+            "output": "0.4",
+            "cache_read": "0.005"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o1-2024-12-17": {
+          "input": 15,
+          "output": 60,
+          "cache_read": 7.5,
+          "exact": {
+            "input": "15",
+            "output": "60",
+            "cache_read": "7.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o1-pro-2025-03-19": {
+          "input": 150,
+          "output": 600,
+          "exact": {
+            "input": "150",
+            "output": "600"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o3-deep-research-2025-06-26": {
+          "input": 10,
+          "output": 40,
+          "cache_read": 2.5,
+          "exact": {
+            "input": "10",
+            "output": "40",
+            "cache_read": "2.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o3-2025-04-16": {
+          "input": 2,
+          "output": 8,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "2",
+            "output": "8",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o3-mini-2025-01-31": {
+          "input": 1.1,
+          "output": 4.4,
+          "cache_read": 0.55,
+          "exact": {
+            "input": "1.1",
+            "output": "4.4",
+            "cache_read": "0.55"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o3-pro-2025-06-10": {
+          "input": 20,
+          "output": 80,
+          "exact": {
+            "input": "20",
+            "output": "80"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o4-mini-deep-research-2025-06-26": {
+          "input": 2,
+          "output": 8,
+          "cache_read": 0.5,
+          "exact": {
+            "input": "2",
+            "output": "8",
+            "cache_read": "0.5"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "o4-mini-2025-04-16": {
+          "input": 1.1,
+          "output": 4.4,
+          "cache_read": 0.275,
+          "exact": {
+            "input": "1.1",
+            "output": "4.4",
+            "cache_read": "0.275"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-5-search-api-2025-10-14": {
+          "input": 1.25,
+          "output": 10,
+          "cache_read": 0.125,
+          "exact": {
+            "input": "1.25",
+            "output": "10",
+            "cache_read": "0.125"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6.1-terra": {
+          "input": 1,
+          "output": 5,
+          "cache_write_5m": 1.25,
+          "cache_read": 0.05,
+          "exact": {
+            "input": "1",
+            "output": "5",
+            "cache_write_5m": "1.25",
+            "cache_read": "0.05"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 2,
+              "output": 7.5,
+              "cache_write_5m": 2.5,
+              "cache_read": 0.1,
+              "exact": {
+                "input": "2",
+                "output": "7.5",
+                "cache_write_5m": "2.5",
+                "cache_read": "0.1"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6-rosalind": {
+          "input": 10,
+          "output": 50,
+          "cache_write_5m": 12.5,
+          "cache_read": 1,
+          "exact": {
+            "input": "10",
+            "output": "50",
+            "cache_write_5m": "12.5",
+            "cache_read": "1"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 20,
+              "output": 75,
+              "cache_write_5m": 25,
+              "cache_read": 2,
+              "exact": {
+                "input": "20",
+                "output": "75",
+                "cache_write_5m": "25",
+                "cache_read": "2"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6-cyber": {
+          "input": 20,
+          "output": 100,
+          "cache_write_5m": 25,
+          "cache_read": 2,
+          "exact": {
+            "input": "20",
+            "output": "100",
+            "cache_write_5m": "25",
+            "cache_read": "2"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 40,
+              "output": 150,
+              "cache_read": 4,
+              "cache_write_5m": 50,
+              "exact": {
+                "input": "40",
+                "output": "150",
+                "cache_write_5m": "50",
+                "cache_read": "4"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6-astra-law": {
+          "input": 10,
+          "output": 50,
+          "cache_read": 1,
+          "exact": {
+            "input": "10",
+            "output": "50",
+            "cache_read": "1"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 20,
+              "output": 75,
+              "cache_read": 2,
+              "exact": {
+                "input": "20",
+                "output": "75",
+                "cache_read": "2"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cache_write_5m": 10,
+          "cache_read": 0.4,
+          "exact": {
+            "input": "8",
+            "output": "40",
+            "cache_write_5m": "10",
+            "cache_read": "0.4"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 16,
+              "output": 60,
+              "cache_write_5m": 20,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "16",
+                "output": "60",
+                "cache_write_5m": "20",
+                "cache_read": "0.8"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cache_write_5m": 2.5,
+          "cache_read": 0.1,
+          "exact": {
+            "input": "2",
+            "output": "10",
+            "cache_write_5m": "2.5",
+            "cache_read": "0.1"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 4,
+              "output": 15,
+              "cache_write_5m": 5,
+              "cache_read": 0.2,
+              "exact": {
+                "input": "4",
+                "output": "15",
+                "cache_write_5m": "5",
+                "cache_read": "0.2"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gpt-6.2-astra-law": {
+          "input": 8,
+          "output": 40,
+          "cache_write_5m": 10,
+          "cache_read": 0.4,
+          "exact": {
+            "input": "8",
+            "output": "40",
+            "cache_write_5m": "10",
+            "cache_read": "0.4"
+          },
+          "above": [
+            {
+              "prompt_tokens": 272000,
+              "input": 16,
+              "output": 60,
+              "cache_write_5m": 20,
+              "cache_read": 0.8,
+              "exact": {
+                "input": "16",
+                "output": "60",
+                "cache_write_5m": "20",
+                "cache_read": "0.8"
+              }
+            }
+          ],
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
         }
       }
     },
@@ -1089,7 +2176,20 @@
             "input": "1.25",
             "output": "10",
             "cache_read": "0.125"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 200000,
+              "input": 2.5,
+              "output": 15,
+              "cache_read": 0.25,
+              "exact": {
+                "input": "2.5",
+                "output": "15",
+                "cache_read": "0.25"
+              }
+            }
+          ]
         },
         "gemini-2.5-flash": {
           "input": 0.3,
@@ -1179,7 +2279,20 @@
             "input": "2",
             "output": "12",
             "cache_read": "0.2"
-          }
+          },
+          "above": [
+            {
+              "prompt_tokens": 200000,
+              "input": 4,
+              "output": 18,
+              "cache_read": 0.4,
+              "exact": {
+                "input": "4",
+                "output": "18",
+                "cache_read": "0.4"
+              }
+            }
+          ]
         },
         "gemini-3.1-pro": {
           "input": 2,
@@ -1279,7 +2392,18 @@
             "input": "1.25",
             "output": "10"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 200000,
+              "input": 2.5,
+              "output": 15,
+              "exact": {
+                "input": "2.5",
+                "output": "15"
+              }
+            }
+          ]
         },
         "gemini-omni-flash-preview": {
           "input": 1.5,
@@ -1299,7 +2423,20 @@
             "output": "12",
             "cache_read": "0.2"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 200000,
+              "input": 4,
+              "output": 18,
+              "cache_read": 0.4,
+              "exact": {
+                "input": "4",
+                "output": "18",
+                "cache_read": "0.4"
+              }
+            }
+          ]
         },
         "gemini-2.5-pro-preview-tts": {
           "input": 1,
@@ -1339,7 +2476,20 @@
             "output": "12",
             "cache_read": "0.2"
           },
-          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page",
+          "above": [
+            {
+              "prompt_tokens": 200000,
+              "input": 4,
+              "output": 18,
+              "cache_read": 0.4,
+              "exact": {
+                "input": "4",
+                "output": "18",
+                "cache_read": "0.4"
+              }
+            }
+          ]
         },
         "gemini-exp-1206": {
           "input": 0.3,
@@ -1380,6 +2530,57 @@
             "cache_read": "0.1"
           },
           "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-10-17); not checked against the provider’s own pricing page"
+        },
+        "gemini-omni-1.2-flash": {
+          "input": 1.5,
+          "output": 9,
+          "exact": {
+            "input": "1.5",
+            "output": "9"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gemini-4-carbon": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1,
+          "exact": {
+            "input": "2",
+            "output": "10",
+            "cache_read": "0.1"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gemini-4-hydrogen": {
+          "input": 1.5,
+          "output": 7.5,
+          "cache_read": 0.075,
+          "exact": {
+            "input": "1.5",
+            "output": "7.5",
+            "cache_read": "0.075"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "gemini-4-neon": {
+          "input": 3,
+          "output": 15,
+          "cache_read": 0.15,
+          "exact": {
+            "input": "3",
+            "output": "15",
+            "cache_read": "0.15"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
+        },
+        "genie-4": {
+          "input": 1.5,
+          "output": 9,
+          "exact": {
+            "input": "1.5",
+            "output": "9"
+          },
+          "source": "public price list (LiteLLM model_prices_and_context_window.json, read 2026-11-24); not checked against the provider’s own pricing page"
         }
       }
     }

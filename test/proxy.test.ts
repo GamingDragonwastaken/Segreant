@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
+import type { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -9,6 +10,7 @@ import { Store } from '../src/store/db.ts';
 import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
 import { StreamUsageAccumulator } from '../src/proxy/usage.ts';
+import { RESOURCE_LIMITS } from '../src/util/resource-limits.ts';
 import { DEFAULT_CONFIG, type SegreantConfig } from '../src/config.ts';
 
 const originalSegreantHome = process.env.SEGREANT_HOME;
@@ -250,7 +252,7 @@ test('proxy rejects an oversized inbound request before opening an upstream conn
   try {
     const oversized = JSON.stringify({
       model: 'claude-opus-4-8',
-      messages: [{ role: 'user', content: 'x'.repeat(9 * 1024 * 1024) }],
+      messages: [{ role: 'user', content: 'x'.repeat(RESOURCE_LIMITS.inboundRequestBytes) }],
     });
     const res = await fetch(`${proxy.base}/v1/messages`, {
       method: 'POST',
@@ -952,4 +954,122 @@ test('proxy: a header-less client can declare its project in the URL, and the up
   await proxy.close();
   await upstream.close();
   store.close();
+});
+
+/** An upstream that answers however the test says. */
+function startUpstream(answer: (res: http.ServerResponse) => void): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = http.createServer(async (req, res) => {
+    for await (const _ of req) { /* drain */ }
+    answer(res);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({
+        url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+        close: () => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }),
+      });
+    });
+  });
+}
+
+/** Send one request through the proxy and return what the caller saw and what was recorded. */
+async function throughProxy(answer: (res: http.ServerResponse) => void, path: string, body: Record<string, unknown>) {
+  const upstream = await startUpstream(answer);
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  try {
+    let failed = false;
+    let status: number | null = null;
+    let costHeader: string | null = null;
+    try {
+      const res = await fetch(`${proxy.base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' }, body: JSON.stringify(body) });
+      status = res.status;
+      costHeader = res.headers.get('x-segreant-cost-usd');
+      await res.text();
+    } catch {
+      failed = true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const row = (store as unknown as { db: DatabaseSync }).db.prepare('SELECT input_tokens AS input, cost_usd AS cost, capture_coverage AS coverage, cost_basis AS basis, estimated FROM requests').all() as unknown as Array<Record<string, unknown>>;
+    return { failed, status, costHeader, rows: row.map((r) => ({ ...r })) };
+  } finally {
+    await proxy.close();
+    await upstream.close();
+    store.close();
+  }
+}
+
+test('a stream the provider drops partway is recorded with what it reported, and the caller sees it fail', async () => {
+  const got = await throughProxy((res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(sse({ type: 'message_start', message: { model: 'claude-opus-4-8', usage: { input_tokens: 100_000, output_tokens: 1 } } }));
+    setTimeout(() => res.destroy(), 50);
+  }, '/v1/messages', { model: 'claude-opus-4-8', stream: true });
+  assert.equal(got.failed, true);
+  assert.equal(got.rows.length, 1);
+  assert.equal(got.rows[0]!['input'], 100_000);
+  assert.ok((got.rows[0]!['cost'] as number) > 0);
+  assert.equal(got.rows[0]!['coverage'], 'truncated');
+});
+
+test('an answer cut off by the provider is recorded at an unknown cost', async () => {
+  const got = await throughProxy((res) => {
+    res.writeHead(200, { 'content-type': 'application/json', 'content-length': '5000' });
+    res.write('{"model":"claude-opus-4-8",');
+    setTimeout(() => res.destroy(), 50);
+  }, '/v1/messages', { model: 'claude-opus-4-8' });
+  assert.equal(got.status, 502);
+  assert.deepEqual(got.rows, [{ input: 0, cost: 0, coverage: 'truncated', basis: 'unpriced', estimated: 1 }]);
+});
+
+test('a successful answer that reports no usage is unknown, never a measured zero', async () => {
+  const unknown = [{ input: 0, cost: 0, coverage: 'truncated', basis: 'unpriced', estimated: 1 }];
+  const json = await throughProxy((res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"model":"claude-opus-4-8","content":[]}');
+  }, '/v1/messages', { model: 'claude-opus-4-8' });
+  assert.deepEqual([json.status, json.costHeader, json.rows], [200, null, unknown]);
+  const stream = await throughProxy((res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(sse({ model: 'gpt-4o', choices: [] }) + 'data: [DONE]\n\n');
+  }, '/v1/chat/completions', { model: 'gpt-4o', stream: true });
+  assert.deepEqual([stream.status, stream.rows], [200, unknown]);
+});
+
+test('a refused request and a token count are not charges, so they stay at zero', async () => {
+  const refused = await throughProxy((res) => {
+    res.writeHead(429, { 'content-type': 'application/json' });
+    res.end('{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}');
+  }, '/v1/messages', { model: 'claude-opus-4-8' });
+  assert.equal(refused.rows[0]!['coverage'], 'complete');
+  const counted = await throughProxy((res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"input_tokens":12}');
+  }, '/v1/messages/count_tokens', { model: 'claude-opus-4-8' });
+  assert.equal(counted.rows[0]!['coverage'], 'complete');
+});
+
+test('a web page on another site is refused and leaves no record; local pages, editors and programs are not', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  // fetch refuses to set Origin, so this speaks HTTP directly, as a browser would.
+  const from = (origin: string | null): Promise<number> => new Promise((resolve, reject) => {
+    const req = http.request(`${proxy.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-api-key': 'sk-test', ...(origin === null ? {} : { origin }) } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode ?? 0));
+    });
+    req.on('error', reject);
+    req.end(JSON.stringify({ model: 'claude-opus-4-8' }));
+  });
+  try {
+    for (const origin of ['https://evil.example', 'http://localhost.evil.example', 'http://127.0.0.1.evil.example', 'null']) assert.equal(await from(origin), 403, origin);
+    assert.equal(upstream.connections(), 0);
+    assert.equal(store.summary(0, Date.now() + 1000).requests, 0);
+    for (const origin of [null, 'http://localhost:3000', 'http://127.0.0.1:8788', 'http://[::1]:3000', 'http://app.localhost', 'vscode-webview://abc']) assert.equal(await from(origin), 200, String(origin));
+  } finally {
+    await proxy.close();
+    await upstream.close();
+    store.close();
+  }
 });

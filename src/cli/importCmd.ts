@@ -555,7 +555,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
   if (prices.stale && !flags.json) {
     const age = prices.ageDays === null ? 'of unknown age' : `${num(prices.ageDays)} days old`;
     console.log(color(tty, C.yellow, `  Prices are ${age}: models released since then will be priced by a fallback estimate.`));
-    console.log(color(tty, C.gray, '  Update them first with  segreant pricing --refresh  (it prints the one permission it needs),'));
+    console.log(color(tty, C.gray, '  Update them first with  segreant pricing --refresh  (it downloads the public price list),'));
     console.log(color(tty, C.gray, '  or afterwards with  segreant reprice  to re-price what was imported.'));
     console.log('');
   }

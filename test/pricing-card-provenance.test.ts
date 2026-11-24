@@ -1,4 +1,4 @@
-// The bundled card says where each price came from: the 63 models added from
+// The bundled card says where each price came from: the models added from
 // the public price list are not presented as checked against a provider's page
 // (PR #146 review).
 import { test } from 'node:test';
@@ -12,7 +12,7 @@ const card = JSON.parse(readFileSync(new URL('../pricing/models.json', import.me
 
 test('models added from the public price list carry that source, and the notes say what "verified" covers', () => {
   const fromList = Object.values(card.providers).flatMap((p) => Object.entries(p.models).filter(([, r]) => r.source !== undefined));
-  assert.equal(fromList.length, 63);
+  assert.equal(fromList.length, 128);
   assert.ok(fromList.every(([, r]) => /public price list/.test(r.source!) && /not checked against the provider/.test(r.source!)));
   assert.match(card.providers['anthropic']!.models['claude-haiku-5-5']!.source ?? '', /public price list/);
   assert.equal(card.providers['anthropic']!.models['claude-sonnet-4-6']!.source, undefined, 'a page-checked model keeps the provider source');

@@ -441,6 +441,16 @@ async function handle(
     return;
   }
 
+  // A page on some website can reach a port on this machine. It holds none of
+  // the user's keys, but what it sent would be recorded as theirs and count
+  // toward their cap. Browsers name the page in Origin; other clients send none.
+  if (isWebPageElsewhere(req.headers.origin)) {
+    req.resume();
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'segreant_origin_refused', message: 'Segreant accepts requests from programs and pages on this machine, not from other websites.' } }));
+    return;
+  }
+
   const route = detectRoute(req, config);
   if (state.accountingFailure) {
     const message = 'Segreant cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Segreant.';
@@ -718,6 +728,7 @@ async function handle(
   let pricedForHeaders: ReturnType<typeof computeCost> | null = null;
   let resolvedModel = parsed.model;
   let captureCoverage: RequestRow['captureCoverage'] = 'complete';
+  let usageSeen = false;
 
   if (isStream && upstream.body) {
     // Stream through, teeing into the usage accumulator AND the proposal
@@ -729,6 +740,7 @@ async function handle(
     const decoder = new TextDecoder();
     const reader = upstream.body.getReader();
     let clientClosed = false;
+    let interrupted = false;
     const onClose = (): void => {
       if (res.writableEnded) return;
       clientClosed = true;
@@ -750,6 +762,9 @@ async function handle(
           propAcc.push(textChunk);
         }
       }
+    } catch {
+      // The provider's connection failed partway, after it had begun to charge.
+      interrupted = true;
     } finally {
       res.off('close', onClose);
     }
@@ -762,9 +777,11 @@ async function handle(
     }
     acc.end();
     propAcc.end();
-    if (!res.writableEnded && !res.destroyed) res.end();
+    if (interrupted) res.destroy(); // the caller must see a failed answer, not a short complete one
+    else if (!res.writableEnded && !res.destroyed) res.end();
     usage = acc.usage;
-    captureCoverage = clientClosed ? 'truncated' : acc.captureCoverage;
+    usageSeen = acc.usageSeen;
+    captureCoverage = clientClosed || interrupted ? 'truncated' : acc.captureCoverage;
     if (acc.model) resolvedModel = acc.model;
     // Capture proposed edits reassembled from the SSE tool-call fragments — the
     // in-path Accepted-gate signal for streamed agent traffic.
@@ -772,7 +789,7 @@ async function handle(
       deps,
       { requestId, sessionId, tsEpochMs: startedAt, provider, model: resolvedModel, project },
       propAcc.proposals(),
-      clientClosed ? 'truncated' : propAcc.captureCoverage,
+      clientClosed || interrupted ? 'truncated' : propAcc.captureCoverage,
     );
   } else {
     // Buffer the full response, parse usage, add cost headers, then send.
@@ -780,47 +797,51 @@ async function handle(
     try {
       text = await readResponseText(upstream);
     } catch (error) {
-      if (error instanceof ResourceLimitError) {
-        res.writeHead(502, {
-          'content-type': 'application/json',
-          'x-segreant-resource-limit': error.kind,
-        });
-        res.end(providerResourceLimitBody(provider, error.message));
-        safeLog(deps, {
-          requestId,
-          sessionId,
-          tsEpochMs: startedAt,
-          provider,
-          model: parsed.model,
-          project,
-          attributionBasis,
-          user,
-          source,
-          cwd,
-          taskWeight,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheWriteTokens: 0,
-          cacheReadTokens: 0,
-          reasoningTokens: 0,
-          costUsd: 0,
-          estimated: true,
-          pricing: unpricedPricingEvidence(),
-          streamed: false,
-          statusCode: 502,
-          durationMs: Date.now() - startedAt,
-          captureCoverage: 'truncated',
-          ...scopeCapture,
-        }, decision, () => { state.accountingFailure = true; });
-        return;
-      }
-      throw error;
+      // Too large to hold, or cut off by the provider's connection. Either way
+      // the provider answered and may charge for it, so the attempt is recorded
+      // with an unknown cost.
+      const tooLarge = error instanceof ResourceLimitError ? error : null;
+      res.writeHead(502, {
+        'content-type': 'application/json',
+        ...(tooLarge ? { 'x-segreant-resource-limit': tooLarge.kind } : { 'x-segreant-upstream-error': '1' }),
+      });
+      res.end(tooLarge
+        ? providerResourceLimitBody(provider, tooLarge.message)
+        : providerUpstreamErrorBody(provider, 'upstream connection failed before its answer was complete', 'upstream_unreachable'));
+      safeLog(deps, {
+        requestId,
+        sessionId,
+        tsEpochMs: startedAt,
+        provider,
+        model: parsed.model,
+        project,
+        attributionBasis,
+        user,
+        source,
+        cwd,
+        taskWeight,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheWriteTokens: 0,
+        cacheReadTokens: 0,
+        reasoningTokens: 0,
+        costUsd: 0,
+        estimated: true,
+        pricing: unpricedPricingEvidence(),
+        streamed: false,
+        statusCode: 502,
+        durationMs: Date.now() - startedAt,
+        captureCoverage: 'truncated',
+        ...scopeCapture,
+      }, decision, () => { state.accountingFailure = true; });
+      return;
     }
     try {
       const json = JSON.parse(text) as Record<string, unknown>;
       if (typeof json.model === 'string') resolvedModel = json.model;
       const rawUsage = json.usage as Record<string, unknown> | undefined;
       if (rawUsage) {
+        usageSeen = true;
         usage = provider === 'anthropic' ? normalizeAnthropicUsage(rawUsage) : normalizeOpenAIUsage(rawUsage);
       }
       // Capture proposed edits — the in-path signal for the Accepted gate.
@@ -838,7 +859,7 @@ async function handle(
     }
     const cost = withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
     pricedForHeaders = cost;
-    downHeaders['x-segreant-cost-usd'] = cost.costUsd.toFixed(6);
+    if (usageSeen) downHeaders['x-segreant-cost-usd'] = cost.costUsd.toFixed(6);
     if (decision.sessionSpendUsd !== null && config.budget.sessionUsd !== null) {
       const remaining = Math.max(0, config.budget.sessionUsd - decision.sessionSpendUsd - cost.costUsd);
       downHeaders['x-segreant-session-remaining-usd'] = remaining.toFixed(4);
@@ -849,6 +870,11 @@ async function handle(
 
   // --- Cost + log (after the client has its bytes) ---
   const cost = pricedForHeaders ?? withDeclarations(declarations, () => computeCost(provider, resolvedModel, usage));
+  // A successful answer that reported no usage was charged for, by an amount
+  // nothing here observed. It is recorded as unknown: zero tokens at list price
+  // would be a measured $0.
+  const unmeasured = !usageSeen && upstream.ok && chargesForTokens(req.method, upstreamPath);
+  if (unmeasured) captureCoverage = 'truncated';
   safeLog(deps, {
     requestId,
     sessionId,
@@ -869,16 +895,34 @@ async function handle(
     ...(usage.cacheWriteTtl === undefined || !usage.cacheWriteTtlObserved ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,
-    costUsd: cost.costUsd,
-    economicAmount: cost.exact?.total,
-    estimated: cost.estimated,
-    pricing: cost.pricing,
+    costUsd: unmeasured ? 0 : cost.costUsd,
+    economicAmount: unmeasured ? undefined : cost.exact?.total,
+    estimated: unmeasured || cost.estimated,
+    pricing: unmeasured ? unpricedPricingEvidence() : cost.pricing,
     streamed: isStream,
     statusCode: upstream.status,
     durationMs: Date.now() - startedAt,
     captureCoverage,
     ...scopeCapture,
   }, decision, () => { state.accountingFailure = true; });
+}
+
+function isWebPageElsewhere(origin: string | undefined): boolean {
+  if (origin === undefined) return false;
+  if (origin === 'null') return true; // a sandboxed frame, which any site can make
+  if (!/^https?:/i.test(origin)) return false; // an editor or app's own scheme
+  try {
+    const host = new URL(origin).hostname;
+    return host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]' && !host.endsWith('.localhost');
+  } catch {
+    return true;
+  }
+}
+
+/** Whether a successful answer on this path is one the provider charges tokens for. */
+function chargesForTokens(method: string | undefined, path: string): boolean {
+  const pathname = path.split('?', 1)[0]!.replace(/\/+$/, '');
+  return method === 'POST' && /\/(?:messages|chat\/completions|completions|responses|embeddings)$/.test(pathname);
 }
 
 function headerStr(req: http.IncomingMessage, name: string): string | undefined {
