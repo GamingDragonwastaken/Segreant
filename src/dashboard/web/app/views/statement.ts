@@ -15,6 +15,7 @@
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type StatementPayload, type StatementBilledRun, type StatementAllocatedRun } from '../core/api.ts';
+import { keptTable } from '../components/keptTable.ts';
 import { isPrecise, usd, usdFromMicros, count, pct, share, date, relative } from '../core/fmt.ts';
 import { quantizationWords } from '../core/reconcileWords.ts';
 import { meteredBasisLine } from '../core/claimLayers.ts';
@@ -225,21 +226,8 @@ function realizedCard(d: StatementPayload): Node {
       h('p', { class: 'statement-none', text: r.measuredAt === null ? r.reason : 'No work had its check in this month.' }),
       goLink('value', 'Open Value'));
   }
-  const pieces = (n: number): string => `${count(n)} ${n === 1 ? 'piece' : 'pieces'} of work`;
-  const line = (label: string, c: { units: number; costUsd: number }, tone: string): Node =>
-    h('div', { class: 'statement-kept-row' },
-      h('span', { class: `statement-kept-key ${tone}`, text: label }),
-      h('span', { class: 'statement-kept-val', text: `${pieces(c.units)} · ${usd(c.costUsd)} list cost` }));
-  const due = r.tooEarly.nextCheckMs === null ? '' : `, first check ${new Date(r.tooEarly.nextCheckMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   return card(title, { text: 'counts, not value', tone: 'pill-estimate' },
-    h('div', { class: 'statement-kept' },
-      line('Kept', r.kept, 'gate-pass'),
-      line('Not kept', r.notKept, 'gate-fail'),
-      r.contested.units > 0 ? line('Results disagree', r.contested, 'gate-unchecked') : null,
-      r.unknown.units > 0 ? line('No signal', r.unknown, 'gate-unchecked') : null,
-      r.tooEarly.units > 0 ? h('div', { class: 'statement-kept-row' },
-        h('span', { class: 'statement-kept-key gate-unchecked', text: 'Too early to tell' }),
-        h('span', { class: 'statement-kept-val', text: `${pieces(r.tooEarly.units)}${due}` })) : null),
+    keptTable(r),
     h('span', { class: 'basis', text: r.reason }),
     goLink('value', 'Open Value'));
 }

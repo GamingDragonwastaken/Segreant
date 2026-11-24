@@ -179,3 +179,36 @@ test('competing finalizations are surfaced as conflicted and keep late evidence 
   );
   db.close();
 });
+
+test('a close is verified against what it binds when its own period is asked about, not for every other event', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  ledger.append(economicEvent(charge('bind:first')));
+  ledger.append(economicEvent(charge('bind:second', '2026-08-01T10:00:00.000Z', '2026-08-01T10:01:00.000Z', '2')));
+  ledger.finalizePeriod({ periodStartMs: START, periodEndMs: END, recordedAt: '2026-08-03T00:00:00.000Z' });
+  // Someone removes an event the close counted.
+  for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name IN ('economic_events', 'economic_event_sources')").all() as Array<{ name: string }>) db.exec(`DROP TRIGGER "${name}"`);
+  db.prepare("DELETE FROM economic_event_sources WHERE source_event_id = 'bind:second'").run();
+  db.prepare("DELETE FROM economic_events WHERE event_id = 'bind:second'").run();
+
+  assert.equal(ledger.append(economicEvent(charge('later', '2026-09-05T09:00:00.000Z', '2026-09-05T09:01:00.000Z'))), 'inserted', 'a later month is unaffected and pays nothing for it');
+  assert.throws(() => ledger.append(economicEvent(charge('late', '2026-08-01T11:00:00.000Z', '2026-08-04T00:00:00.000Z'))), 'an event inside it still meets the check');
+  assert.throws(() => ledger.periodCloseStatus(START, END), 'and so does asking about it');
+  db.close();
+});
+
+test("a period's state is read from its close events alone", () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  for (let i = 0; i < 50; i++) ledger.append(economicEvent(charge(`open:${i}`)));
+  let parsed = 0;
+  const parse = JSON.parse;
+  JSON.parse = ((...args: Parameters<typeof parse>) => { parsed++; return parse(...args); }) as typeof parse;
+  try {
+    assert.equal(ledger.periodCloseStatus(START, END).status, 'open');
+  } finally {
+    JSON.parse = parse;
+  }
+  assert.equal(parsed, 0, 'none of the 50 charges was read');
+  db.close();
+});

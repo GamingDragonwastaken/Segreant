@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "091eee97ad7c0c25229b772500099f7965dc73471aa2dca2892fc50a7f2bd1d6";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "42d59e238b8f9375d70d770cac61795ca88cbc615aca6681eac8a8dbde1da6e2";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1060,6 +1060,38 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "costUsd",
       "optional": false,
       "type": "number"
+    }
+  ],
+  "KeptWork": [
+    {
+      "name": "windowDays",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "kept",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "notKept",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "contested",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "unknown",
+      "optional": false,
+      "type": "StatementKeptCount"
+    },
+    {
+      "name": "tooEarly",
+      "optional": false,
+      "type": "StatementKeptCount & { nextCheckMs: number | null }"
     }
   ],
   "StatementRealized": [

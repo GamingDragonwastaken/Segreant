@@ -549,6 +549,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
         (cell) =>
           cell.identity !== incumbent.identity &&
           cell.costPerUnit < incumbent.costPerUnit &&
+          // Never seen to succeed is not an observed rate, however cheap.
+          cell.realized > 0 &&
           cell.realizationRate >= incumbent.realizationRate,
       )
       .sort((a, b) => a.costPerUnit - b.costPerUnit || b.realizationRate - a.realizationRate)[0];

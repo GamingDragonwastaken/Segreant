@@ -88,7 +88,7 @@ export function meteredBasisLine(basis: Basis | undefined): string {
       return free ? `${line}; no charge on models you marked free (${modelsOf(free)})` : line;
     }
     default: {
-      const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
+      const weak = basis.cohorts.filter((c) => (c.id === 'fallback' || c.id === 'list_family' || c.id === 'tool_reported' || c.id === 'unrecorded') && c.costUsd >= 0.005);
       // A declared price IS the model's own rate, the one its operator set, so
       // it is named on its own rather than counted as "priced without" a rate. It still
       // makes the total an estimate: it is not a
@@ -334,6 +334,8 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   // caught it; they are distinct identifiers now (AII-012).
   const matured = v?.realization?.matured;
   const realizedUnits = matured?.realizedUnits ?? 0;
+  const kept = v?.realization?.kept;
+  const judgedUnits = kept === undefined ? 0 : kept.kept.units + kept.notKept.units + kept.contested.units;
   const ret = v?.roi?.returnRatio ?? null;
   // `basis: 'usd'` is the payload's own statement that the value figure is
   // priced. Without it there is a ratio but no dollars, and a dollar figure must
@@ -362,14 +364,18 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     basis: v === null
       ? 'could not read the outcome report'
       : realizedUnits === 0
-      ? 'no finished work old enough to judge yet'
+      ? judgedUnits === 0
+        ? 'no finished work old enough to judge yet'
+        : `${kept?.kept.units ?? 0} of ${judgedUnits} finished pieces of work stayed in the code; too few checks to value them`
       : valued
         ? `${realizedUnits} of ${matured?.units ?? 0} finished pieces of work kept; valued at what the work would cost by hand, less rework`
         : `${realizedUnits} of ${matured?.units ?? 0} finished pieces of work kept, but no hourly rate is set to value them`,
     nextStep: v === null
       ? 'Check that Segreant is running, then retry the outcome report.'
       : realizedUnits === 0
-      ? 'Connect a repository so Segreant can see which work you kept.'
+      ? judgedUnits === 0
+        ? 'Connect a repository so Segreant can see which work you kept.'
+        : 'Report test, merge and ship results (segreant report) to value kept work.'
       : valued
         ? undefined
         : 'Set an hourly rate to put a dollar value on kept work.',
@@ -400,7 +406,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       missingEvidence: v === null
         ? ['a readable outcome report']
         : realizedUnits === 0
-        ? ['matured outcome evidence']
+        ? [judgedUnits === 0 ? 'matured outcome evidence' : 'accepted, tested, merged and shipped results']
         : valued
           ? []
           : ['a labour rate, so realized work can be priced'],

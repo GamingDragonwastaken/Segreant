@@ -574,7 +574,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `  ${''.padEnd(20)}${Math.round(roi.coverage * 4)}/4 lenses measured · ${sensitivity} — a measured lens may move the observed score up or down`));
   }
   const eff = roi.realizedEfficiency;
-  console.log(`  Realized efficiency  ${eff === null ? '—' : color(tty, C.green, pct(eff))}   ${color(tty, C.gray, `of $${(roi.tokenCostUsd + roi.effortTaxUsd).toFixed(2)} spent (tokens${roi.effortTaxUsd > 0 ? ' + effort' : ''})`)}`);
+  console.log(`  Realized efficiency  ${eff === null ? color(tty, C.gray, 'not measured') : color(tty, C.green, pct(eff))}   ${color(tty, C.gray, `of $${(roi.tokenCostUsd + roi.effortTaxUsd).toFixed(2)} spent (tokens${roi.effortTaxUsd > 0 ? ' + effort' : ''})`)}`);
 
   // The money number is an observed/manual-equivalent scenario until a separate
   // qualified randomized study supplies an economic estimand.

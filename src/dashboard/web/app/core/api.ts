@@ -107,6 +107,7 @@ import type {
 } from './generated-types.ts';
 
 export type {
+  KeptWork,
   Summary,
   PricingCardProvenancePayload,
   PricingEvidencePayload,

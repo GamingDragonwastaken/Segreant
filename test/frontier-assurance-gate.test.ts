@@ -99,3 +99,7 @@ test('a trial names the next evidence to acquire in its one-line recommendation 
   assert.match(line, /next evidence: The intervals do not separate/);
   assert.doesNotMatch(line, /probab|expected value/i, 'no probability model is invented to rank acquisitions');
 });
+
+test('two models with nothing realized on either side are not compared on price alone', () => {
+  assert.deepEqual(computeFrontier([...many('incumbent', 0, 8, 4), ...many('candidate', 0, 8, 2)]).modelSwitches, []);
+});

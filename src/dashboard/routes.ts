@@ -40,7 +40,7 @@ import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, typ
 import { serveHtml } from './static.ts';
 import { capBasisSpend, resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
 import { driftDetectability } from '../value/drift.ts';
-import { loadRealization, realizeDiscoveredProjects, realizationFromStore, keptSummary } from '../value/realization.ts';
+import { loadRealization, realizeDiscoveredProjects, realizationFromStore, keptSummary, type RealizationReport } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
 import { valueReport } from '../value/report.ts';
@@ -76,7 +76,7 @@ import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { stringifyJson } from '../util/json.ts';
 import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
-import type { DashboardResponseFor, ImportNotePayload, StatementRealized } from './shared-types.ts';
+import type { DashboardResponseFor, ImportNotePayload, KeptWork, StatementRealized } from './shared-types.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -90,6 +90,11 @@ export interface ConfigPersistence {
 }
 
 /** Everything a handler is allowed to reach for. Nothing else is in scope. */
+function keptWork(report: Pick<RealizationReport, 'units' | 'windowDays'>): KeptWork {
+  const { maturing, ...judged } = keptSummary(report);
+  return { windowDays: report.windowDays, ...judged, tooEarly: { units: maturing.units, costUsd: maturing.costUsd, nextCheckMs: maturing.nextVerdictMs } };
+}
+
 export interface RouteContext {
   req: http.IncomingMessage;
   res: http.ServerResponse;
@@ -1357,6 +1362,7 @@ async function computeValuePayload(
         proposalCoverage: rep.proposalCoverage,
         projectScoped: rep.projectScoped,
         costStaleUnits: rep.costStaleUnits,
+        kept: keptWork(rep),
         units: rep.units,
       }
     : null;

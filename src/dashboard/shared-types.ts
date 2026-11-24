@@ -558,6 +558,16 @@ export interface StatementKeptCount {
  * measurement (no git work on load). Counts and the list cost behind them only:
  * a value figure needs an hourly rate and is read on the Value page.
  */
+/** What git shows of finished work, without the checks a realized outcome needs. Counts and list cost, not value. */
+export interface KeptWork {
+  windowDays: number;
+  kept: StatementKeptCount;
+  notKept: StatementKeptCount;
+  contested: StatementKeptCount;
+  unknown: StatementKeptCount;
+  tooEarly: StatementKeptCount & { nextCheckMs: number | null };
+}
+
 export interface StatementRealized {
   standing: 'judged_in_month' | 'none_judged';
   /** The default survival window, in days; units that recorded their own window use it. */
@@ -1402,6 +1412,7 @@ export interface ValuePayload {
     proposalCoverage?: number | null;
     projectScoped?: boolean | null;
     costStaleUnits?: number;
+    kept?: KeptWork;
   } | null;
   roi?: {
     roiIndex?: number | null;

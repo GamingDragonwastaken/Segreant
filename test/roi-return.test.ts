@@ -117,3 +117,25 @@ test('Impact is not reconstructed from production gates already counted by Reali
   assert.equal(measured.lenses.impact.value, 0.8);
   assert.equal(measured.lenses.impact.how, 'customer exposure sample');
 });
+
+test('checks nobody made are not a realization rate of zero', async () => {
+  const { GATE_LADDER } = await import('../src/value/gates.ts');
+  type Verdict = 'pass' | 'fail' | 'unknown';
+  const unit = (verdicts: Record<string, Verdict>) => ({
+    maturing: false, acceptance: null,
+    funnel: { realized: false, results: GATE_LADDER.map((gate) => ({ gate, verdict: verdicts[gate] ?? 'unknown' as Verdict })) },
+  });
+  const of = (units: Array<ReturnType<typeof unit>>) => computeReturnOnIntelligence({
+    firstPassAcceptance: null, units, matured: { realizationRate: 0, totalCostUsd: 10, spendOnRealizedUnitsUsd: 0, acceptanceWeightedSpendUsd: 0 },
+  });
+  // What git alone gives: committed, still in the code, nothing about tests, merge or ship.
+  const gitOnly = of([unit({ committed: 'pass', survived: 'pass' }), unit({ committed: 'pass', survived: 'fail' })]);
+  assert.deepEqual([gitOnly.lenses.realization.value, gitOnly.roiIndex, gitOnly.realizedEfficiency, gitOnly.realizationInterval], [null, null, null, null]);
+  assert.match(gitOnly.notes.join(' '), /Realization not measured: no finished work has a result for .*tested.*merged.*shipped/);
+  // Everything demonstrably failed: that is a rate of zero.
+  const failed = of([unit({ committed: 'pass', survived: 'fail' })]);
+  assert.deepEqual([failed.lenses.realization.value, failed.realizedEfficiency], [0, 0]);
+  // Every check was made somewhere and none of the work passed them all: also zero.
+  const checked = of([unit(Object.fromEntries(GATE_LADDER.map((g) => [g, g === 'shipped' ? 'fail' : 'pass']))), unit({ committed: 'pass' })]);
+  assert.equal(checked.lenses.realization.value, 0);
+});

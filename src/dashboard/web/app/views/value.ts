@@ -25,6 +25,7 @@ import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type CausalPayload, type ValuePayload, type OutcomeRecordPayload, type MarketPayload, type MarketBoardPayload, type MarketBenchmarkRowPayload, type MarketRatingRowPayload, type MarketConsensusPayload } from '../core/api.ts';
 import { usd, count, pct, share, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
+import { keptTable } from '../components/keptTable.ts';
 
 /** Each gate as a step name, for the passed / failed / not checked table. */
 const GATE_WORDS: Record<string, string> = {
@@ -420,10 +421,20 @@ export function valueView(): Node {
 
       const matured = d.realization?.matured ?? null;
       const established = (matured?.realizedUnits ?? 0) > 0;
+      const kept = d.realization?.kept;
+      const judged = kept !== undefined && kept.kept.units + kept.notKept.units + kept.contested.units > 0;
 
       if (!established) {
         return h('div', null,
-          h('div', { class: 'notyet' },
+          judged ? h('div', { class: 'card' },
+            h('div', { class: 'card-head' },
+              h('span', { class: 'card-title', text: 'Did the AI work stay in the code?' }),
+              h('span', { class: 'pill pill-estimate', text: 'counts, not value' })),
+            keptTable(kept),
+            h('p', { class: 'basis', text: () => (isPrecise()
+              ? `From git history, checked ${kept.windowDays} days after each commit. The dollars are the list cost of the work, not its value. Realized value needs every check to pass (accepted, tested, merged and shipped as well), and no finished work here has results for all of them.`
+              : `From your git history, ${kept.windowDays} days after each commit. The dollars are what the work cost at list price. To say what it was worth, Segreant also needs its test, merge and ship results.`) }))
+          : h('div', { class: 'notyet' },
             h('h2', { text: () => (isPrecise() ? 'Realized value is not established' : 'Nothing to show yet') }),
             h('p', { text: () => (isPrecise()
               ? 'No work units have matured into verified outcomes on this machine. This is an absence of evidence, not a realized value of zero — the two must not be reported alike.'

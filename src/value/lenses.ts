@@ -29,7 +29,7 @@
  * not git specifics, so non-coding usage can feed the same lenses later.
  */
 
-import type { Gate, Verdict } from './gates.ts';
+import { GATE_LADDER, type Gate, type Verdict } from './gates.ts';
 import { anytimeRateInterval } from './anytime.ts';
 
 interface UnitLike {
@@ -253,17 +253,33 @@ export function weightedPowerMean(pairs: Array<{ value: number; weight: number }
   return Math.pow(acc / wSum, 1 / theta);
 }
 
+/**
+ * The checks that leave the realization rate unmeasured: no finished work was
+ * ever checked for them, so none could have been realized, and a rate of zero
+ * would describe the missing checks rather than the work. Empty when the rate
+ * is a measurement.
+ */
+function checksNeverMade(mature: readonly UnitLike[]): Gate[] {
+  if (mature.length === 0 || mature.some((u) => u.funnel.realized)) return [];
+  const unresolved = mature.some((u) => !u.funnel.results.some((r) => r.verdict === 'fail'));
+  if (!unresolved) return [];
+  return GATE_LADDER.filter((gate) => mature.every((u) => u.funnel.results.every((r) => r.gate !== gate || r.verdict === 'unknown')));
+}
+
 export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOptions = {}): RoIResult {
   const notes: string[] = [];
   const mature = report.units.filter((u) => !u.maturing);
 
   // --- Lens 1: Realization (did spend become something real & kept?) ---
+  const neverMade = checksNeverMade(mature);
+  const measured = mature.length > 0 && neverMade.length === 0;
   const realization: LensValue = {
-    value: mature.length > 0 ? report.matured.realizationRate : null,
-    instrumented: mature.length > 0,
+    value: measured ? report.matured.realizationRate : null,
+    instrumented: measured,
     how: 'verified-outcome conversion (the Realization funnel)',
   };
-  if (!realization.instrumented) notes.push('Realization uninstrumented: no matured units yet.');
+  if (mature.length === 0) notes.push('Realization uninstrumented: no matured units yet.');
+  else if (!measured) notes.push(`Realization not measured: no finished work has a result for ${neverMade.join(', ')}. What git alone shows is in segreant realize.`);
 
   // --- Lens 2: Acceptance (did you keep it first try?) ---
   const acceptance: LensValue = {
@@ -397,7 +413,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   // less); falls back to gross realized value when the net isn't supplied.
   const totalCost = tokenCostUsd + effortTaxUsd;
   const realizedValueForEff = report.matured.acceptanceWeightedSpendUsd ?? report.matured.spendOnRealizedUnitsUsd;
-  const realizedEfficiency = totalCost > 0 ? realizedValueForEff / totalCost : null;
+  const realizedEfficiency = totalCost > 0 && neverMade.length === 0 ? realizedValueForEff / totalCost : null;
 
   // --- The money number: Return on Intelligence as a real ratio --------------
   // Numerator: realized, rework-discounted, manual-EQUIVALENT value (priced by
@@ -478,7 +494,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   // under that use. Computed on matured units (realized k of n), display-only:
   // it never feeds the Index, so the composite's meaning is unchanged.
   let realizationCS: { low: number; high: number; level: number } | null = null;
-  if (mature.length > 0) {
+  if (measured) {
     const kRealized = mature.filter((u) => u.funnel.realized).length;
     const cs = anytimeRateInterval(kRealized, mature.length, { level: 0.95 });
     realizationCS = { low: cs.low, high: cs.high, level: cs.level };

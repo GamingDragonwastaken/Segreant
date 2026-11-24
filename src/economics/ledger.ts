@@ -981,7 +981,9 @@ export class EconomicLedger {
   periodCloseStatus(startMs: number, endMs: number, asOf?: Instant): EconomicPeriodCloseStatus {
     const period = canonicalPeriod(startMs, endMs);
     const boundary = asOf === undefined ? null : canonicalBoundary(asOf);
-    const values = this.events(boundary ?? undefined);
+    // Only these events decide a period's state, and each is validated against
+    // everything it binds. The rest of the ledger says nothing about it.
+    const values = this.closeControlEvents(boundary);
     let status: PeriodCloseState = 'open';
     let activeFinalizationId: string | null = null;
     let latestFinalizationId: string | null = null;
@@ -1088,7 +1090,19 @@ export class EconomicLedger {
     // Only close-control events can make a period refuse this append. Reading
     // just those keeps an append O(closes) instead of O(ledger): the full read
     // here made every proxied request slower than the last.
-    for (const control of this.closeControlEvents()) {
+    const controls = this.closeControlRows(null);
+    const inAClosedPeriod = controls.some((control) => {
+      if (control.kind !== 'close_finalized') return false;
+      const { periodStartMs, periodEndMs } = closeFinalizationMetadata(control.metadata);
+      return eventTimes.some((time) => time >= periodStartMs && time < periodEndMs);
+    });
+    // An event in no period that was ever closed is never refused, so the
+    // closes it has nothing to do with are not verified again for it. Each
+    // verification reads every event of the closed period, which made every
+    // proxied request slower once a month had been closed.
+    if (!inAClosedPeriod) return;
+    this.validateAll(controls);
+    for (const control of controls) {
       if (control.kind === 'close_finalized') {
         const metadata = closeFinalizationMetadata(control.metadata);
         const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
@@ -1411,15 +1425,24 @@ export class EconomicLedger {
     return value;
   }
 
-  /** Validated close_finalized / close_reopened events, in recorded order. */
-  private closeControlEvents(): readonly EconomicEvent[] {
-    const rows = prepared(this.db, 
-      "SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_kind IN ('close_finalized', 'close_reopened') ORDER BY recorded_at ASC, event_id ASC",
-    ).all() as unknown as StoredEconomicRow[];
-    const values = rows.map(storedRecord);
+  /** Validated close events, in recorded order, up to a boundary when one is given. */
+  private closeControlEvents(boundary: string | null): readonly EconomicEvent[] {
+    const values = this.closeControlRows(boundary);
+    this.validateAll(values);
+    return values;
+  }
+
+  /** The same events, authenticated but not verified against what they bind. */
+  private closeControlRows(boundary: string | null): readonly EconomicEvent[] {
+    const rows = prepared(this.db,
+      "SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_kind IN ('close_finalized', 'close_reopened', 'close_invalidated') AND (?1 IS NULL OR recorded_at <= ?1) ORDER BY recorded_at ASC, event_id ASC",
+    ).all(boundary) as unknown as StoredEconomicRow[];
+    return rows.map(storedRecord);
+  }
+
+  private validateAll(values: readonly EconomicEvent[]): void {
     const validated = new Set<string>();
     for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
-    return values;
   }
 
   /**

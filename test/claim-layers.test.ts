@@ -31,6 +31,7 @@ import {
 } from '../src/dashboard/claim-support.ts';
 import { summarizeBasis } from '../src/cost/basis.ts';
 
+const unvalued = {} as ValuePayload['claimSupport'];
 const NOTHING: ClaimInputs = { overview: null, billing: null, allocation: null, value: null };
 
 const anOverview = (costUsd: number, requests: number): Overview => ({
@@ -408,4 +409,28 @@ test('doctor names a price you set instead of calling it a list rate (PR #146 re
   assert.equal(doctorPricingLine(summarizeBasis([listed])), "30d spend priced at each model's own list rate (an estimate, not a bill)");
   const free = { provider: 'ollama', model: 'llama-local', costBasis: 'user_declared_price', rateMatchKind: 'user_declared_free', requests: 3, costUsd: 0 } as const;
   assert.equal(doctorPricingLine(summarizeBasis([free])), '3 requests on models you marked free (no charge)');
+});
+
+test('work git shows was kept is named when there is no value to show for it', () => {
+  const none = { units: 0, costUsd: 0 };
+  const value = {
+    demo: false, claimSupport: unvalued, allocation: null, projects: null, valueSource: 'store', gitRepo: false, projectScoped: true,
+    realization: { matured: { units: 5, realizedUnits: 0 }, kept: { windowDays: 14, kept: { units: 3, costUsd: 3 }, notKept: { units: 2, costUsd: 2 }, contested: none, unknown: none, tooEarly: { ...none, nextCheckMs: null } } },
+  } as unknown as ValuePayload;
+  const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
+  assert.equal(realized.valueUsd, null);
+  assert.match(realized.basis, /^3 of 5 finished pieces of work stayed in the code/);
+  assert.doesNotMatch(realized.nextStep ?? '', /Connect a repository/);
+});
+
+test('the two parts of one card give the same share of guessed prices', () => {
+  const overview = anOverview(100, 4);
+  overview.pricing.basis = summarizeBasis([
+    { provider: 'anthropic', model: 'a', costBasis: 'local_list_price', rateMatchKind: 'exact_provider', requests: 2, costUsd: 70 },
+    { provider: 'anthropic', model: 'b', costBasis: 'local_list_price', rateMatchKind: 'family_provider', requests: 1, costUsd: 20 },
+    { provider: 'x', model: 'c', costBasis: 'fallback_estimate', rateMatchKind: 'fallback', requests: 1, costUsd: 10 },
+  ]);
+  const metered = buildClaimLayers({ ...NOTHING, overview }, '30d')[0]!;
+  assert.match(metered.basis, /^estimated: 30% priced without the model's own rate/);
+  assert.match(metered.nextStep ?? '', /^30% is priced by a guess/);
 });

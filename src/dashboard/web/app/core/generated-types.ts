@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 091eee97ad7c0c25229b772500099f7965dc73471aa2dca2892fc50a7f2bd1d6 */
+/** Source SHA-256: 42d59e238b8f9375d70d770cac61795ca88cbc615aca6681eac8a8dbde1da6e2 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -560,6 +560,16 @@ export interface StatementKeptCount {
  * measurement (no git work on load). Counts and the list cost behind them only:
  * a value figure needs an hourly rate and is read on the Value page.
  */
+/** What git shows of finished work, without the checks a realized outcome needs. Counts and list cost, not value. */
+export interface KeptWork {
+  windowDays: number;
+  kept: StatementKeptCount;
+  notKept: StatementKeptCount;
+  contested: StatementKeptCount;
+  unknown: StatementKeptCount;
+  tooEarly: StatementKeptCount & { nextCheckMs: number | null };
+}
+
 export interface StatementRealized {
   standing: 'judged_in_month' | 'none_judged';
   /** The default survival window, in days; units that recorded their own window use it. */
@@ -1404,6 +1414,7 @@ export interface ValuePayload {
     proposalCoverage?: number | null;
     projectScoped?: boolean | null;
     costStaleUnits?: number;
+    kept?: KeptWork;
   } | null;
   roi?: {
     roiIndex?: number | null;
