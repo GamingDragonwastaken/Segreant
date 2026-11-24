@@ -222,3 +222,29 @@ test('a correction to closed books waits for them to be reopened, and the next i
   assert.deepEqual(tokens(store), [1, 2, 800]);
   store.close();
 });
+
+test('a corrected request and the value snapshot that counts it commit together or not at all', async () => {
+  const unfinished = claudeLine('req_1', { input: 2, output: 8 });
+  const root = claudeRoot({ 'a.jsonl': [unfinished] });
+  const store = freshStore();
+  await importClaudeCode(store, { root });
+  const cost = (): number => store.summary(0, Date.now()).costUsd;
+  const before = cost();
+  const at = store.requestsInRange(0, Date.now())[0]!;
+  const snapshot = (): number => (store.raw().prepare('SELECT attributed_cost_usd AS c FROM realization_units').get() as { c: number }).c;
+  store.saveRealizationUnits([{
+    commitHash: 'c1', project: at.project, tsEpochMs: at.tsEpochMs + 1000, computedAtMs: at.tsEpochMs + 2000, attributedCostUsd: before, maturing: false, realized: true, costScope: 'project',
+    unitJson: JSON.stringify({ hash: 'c1', tsEpochMs: at.tsEpochMs + 1000, windowStartMs: at.tsEpochMs - 1000, windowEndMs: at.tsEpochMs + 1000, linesAdded: 10, attributedCostUsd: before, attributedRequests: 1, costStale: false }),
+  }]);
+  writeFileSync(join(root, 'proj', 'a.jsonl'), [unfinished, claudeLine('req_1', { input: 2, output: 800 })].join('\n'));
+
+  store.raw().prepare("CREATE TRIGGER refuse BEFORE UPDATE ON realization_units BEGIN SELECT RAISE(ABORT, 'refused'); END").run();
+  await assert.rejects(importClaudeCode(store, { root }), /refused/);
+  assert.deepEqual([cost(), snapshot()], [before, before], 'neither half was kept');
+
+  store.raw().prepare('DROP TRIGGER refuse').run();
+  assert.equal((await importClaudeCode(store, { root })).completedObservations, 1, 'the file is read again');
+  assert.ok(cost() > before * 10);
+  assert.ok(Math.abs(snapshot() - cost()) < 1e-9, 'and the snapshot carries the same cost');
+  store.close();
+});

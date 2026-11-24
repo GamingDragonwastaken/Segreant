@@ -855,14 +855,12 @@ export class Store {
    * batch only removes the per-row commit. Always `end()` it, in a finally.
    */
   importBatch(opts?: { maxRows?: number; maxMs?: number }): WriteBatch {
-    const inner = writeBatch(this.db, opts);
+    const inner = writeBatch(this.db, { ...opts, beforeCommit: () => this.syncCompletedCosts() });
     const outer: WriteBatch = {
       tick: () => inner.tick(),
       end: () => {
-        const closing = this.activeBatch === outer;
-        if (closing) this.activeBatch = null;
+        if (this.activeBatch === outer) this.activeBatch = null;
         inner.end();
-        if (closing) this.syncCompletedCosts();
       },
     };
     if (this.activeBatch === null) this.activeBatch = outer;
@@ -1147,7 +1145,7 @@ export class Store {
     });
   }
 
-  /** Requests corrected since the last sync, whose realized-value snapshots still carry the old cost. */
+  /** Requests corrected since the last commit, whose realized-value snapshots still carry the old cost. Both commit together. */
   private completedInBatch: Array<{ tsEpochMs: number; project: string }> = [];
 
   private syncCompletedCosts(): void {
