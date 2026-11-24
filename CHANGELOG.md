@@ -14,6 +14,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **Priority, flex, batch and fast requests take their own price.** Providers charge about twice as much for priority and fast service, and half for flex and batch. Segreant priced every request at the standard rate, so a cap counted a priority request at half. The service level is now recorded from the provider's answer (proxy), from Claude Code logs, and from the level a Codex session was set to. A level with no list price stays at the standard rate and is marked an estimate.
 - **The proxy refuses requests from web pages on other sites.** A website open in a browser could reach the proxy's port on this machine. It held none of your keys, but its requests were recorded as yours. Programs, editors and pages served from this machine are unaffected.
 - **The daily cap counts the whole day when the clocks go back.** It counted 24 hours from midnight, so on the 25-hour day spend in the last hour was not seen.
 - **A request the provider drops partway is recorded.** When the provider's connection failed in the middle of an answer, the proxy recorded nothing, so neither the ledger nor a cap saw what had been charged. A dropped stream now keeps the usage it had reported, and a dropped answer is recorded at an unknown cost. The caller sees a failed connection rather than a short answer that looks finished.

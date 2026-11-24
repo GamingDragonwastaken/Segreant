@@ -87,7 +87,7 @@ const TEXT: Record<BasisCohortId, { label: string; meaning: string }> = {
   },
   list_standard: {
     label: 'list price, standard rate',
-    meaning: "the model's own rate on the rate card, where which of its rates the provider used is not known (a total of several requests hides each prompt's length)",
+    meaning: "the model's own rate on the rate card, where which of its rates the provider used is not known (a total of several requests hides each prompt's length; some service levels have no published price)",
   },
   list_family: {
     label: 'list price, nearest model',

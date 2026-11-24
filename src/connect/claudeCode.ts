@@ -25,7 +25,7 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
-import { cacheWriteDuration, computeCost } from '../cost/pricing.ts';
+import { anthropicServiceTier, cacheWriteDuration, computeCost, type ServiceTier } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import {
   type ImportSummary,
@@ -68,6 +68,7 @@ export interface TranscriptUsageEvent {
   cacheReadTokens: number;
   cacheWriteTtl?: '5m' | '1h';
   cacheWriteTtlObserved?: boolean;
+  serviceTier?: ServiceTier;
 }
 
 /** Default transcript root: ~/.claude/projects (override for tests / unusual installs). */
@@ -81,6 +82,8 @@ interface RawUsage {
   cache_creation_input_tokens?: unknown;
   cache_read_input_tokens?: unknown;
   cache_creation?: { ephemeral_5m_input_tokens?: unknown; ephemeral_1h_input_tokens?: unknown } | null;
+  service_tier?: unknown;
+  speed?: unknown;
 }
 
 /** Parse one transcript line into a usage event, or null for everything that is not billable traffic. */
@@ -113,6 +116,7 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
   const cacheWrite = tokenField(u.cache_creation_input_tokens);
   const ttl5m = tokenField(u.cache_creation?.ephemeral_5m_input_tokens);
   const ttl1h = tokenField(u.cache_creation?.ephemeral_1h_input_tokens);
+  const serviceTier = anthropicServiceTier(u.service_tier, u.speed);
   const cwd = textField(e.cwd) ?? '';
   const { project, basis: attributionBasis } = projectKeyWithBasis(cwd, 'claude-code');
 
@@ -128,6 +132,7 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
     outputTokens: tokenField(u.output_tokens),
     cacheWriteTokens: cacheWrite,
     cacheReadTokens: tokenField(u.cache_read_input_tokens),
+    ...(serviceTier === undefined ? {} : { serviceTier }),
     ...(cacheWrite > 0 ? (() => {
       const d = cacheWriteDuration(ttl5m, ttl1h);
       return { ...(d.ttl === undefined ? {} : { cacheWriteTtl: d.ttl }), cacheWriteTtlObserved: d.observed };
@@ -244,6 +249,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
           inputTokens: ev.inputTokens, outputTokens: ev.outputTokens,
           cacheWriteTokens: ev.cacheWriteTokens, cacheReadTokens: ev.cacheReadTokens,
           cacheWriteTtl: ev.cacheWriteTtl, cacheWriteTtlObserved: ev.cacheWriteTtlObserved,
+          ...(ev.serviceTier === undefined ? {} : { serviceTier: ev.serviceTier }),
         });
       }
     }
@@ -258,6 +264,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         cacheWriteTokens: ev.cacheWriteTokens,
         cacheReadTokens: ev.cacheReadTokens,
         cacheWriteTtl: ev.cacheWriteTtl,
+        serviceTier: ev.serviceTier,
       });
 
       const row: RequestRow = {
@@ -274,6 +281,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
         cacheWriteTokens: ev.cacheWriteTokens,
         cacheReadTokens: ev.cacheReadTokens,
         ...(ev.cacheWriteTtl === undefined || !ev.cacheWriteTtlObserved ? {} : { cacheWriteTtl: ev.cacheWriteTtl }),
+        ...(ev.serviceTier === undefined ? {} : { serviceTier: ev.serviceTier }),
         reasoningTokens: 0,
         costUsd: cost.costUsd,
         economicAmount: cost.exact?.total,

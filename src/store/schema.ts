@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS requests (
   attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown',
   capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown',
   cache_write_ttl   TEXT NOT NULL DEFAULT 'legacy_unknown',
-  several_requests  INTEGER
+  several_requests  INTEGER,
+  service_tier      TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -1219,6 +1220,12 @@ function migrate(db: DatabaseSync): void {
     // size for one prompt's length; 0 when it is one. Older rows were not asked,
     // and NULL says so.
     db.prepare('ALTER TABLE requests ADD COLUMN several_requests INTEGER').run();
+  }
+  if (!cols.some((c) => c.name === 'service_tier')) {
+    // The service level a request was priced at; 'not_recorded' when its source
+    // did not say. No backfill: an older row reads 'legacy_unknown' until its
+    // own log is read again and says.
+    db.prepare("ALTER TABLE requests ADD COLUMN service_tier TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
   }
   if (!cols.some((c) => c.name === 'source')) {
     db.prepare('ALTER TABLE requests ADD COLUMN source TEXT').run();

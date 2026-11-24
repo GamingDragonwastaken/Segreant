@@ -69,10 +69,38 @@ export interface ModelRate {
   exact?: ExactModelRate;
   /** Rates for longer prompts, shortest first. A provider may charge the whole request more past a length. */
   above?: LongPromptRate[];
+  /** Rates for requests the provider serves faster, slower or in a batch. A tier with no rate here has no known price. */
+  service_tiers?: Partial<Record<PricedServiceTier, Omit<ModelRate, 'service_tiers'>>>;
+}
+
+/** Service levels a provider charges differently for. */
+const PRICED_SERVICE_TIERS = ['priority', 'flex', 'batch', 'fast'] as const;
+export type PricedServiceTier = typeof PRICED_SERVICE_TIERS[number];
+/** The service level a request ran at; `other` is one no list price is known for. */
+export type ServiceTier = 'standard' | PricedServiceTier | 'other';
+export const SERVICE_TIERS: readonly ServiceTier[] = ['standard', ...PRICED_SERVICE_TIERS, 'other'];
+
+/** A provider's or log's name for the service level, or undefined when it gives none. */
+export function serviceTierNamed(value: unknown): ServiceTier | undefined {
+  if (typeof value !== 'string' || value === '' || value === 'auto') return undefined;
+  const name = value.toLowerCase();
+  if (name === 'default' || name === 'standard') return 'standard';
+  return PRICED_SERVICE_TIERS.find((tier) => tier === name) ?? 'other';
+}
+
+/** OpenAI's "fast" is its priority service under the name its apps show. */
+export function openAIServiceTier(value: unknown): ServiceTier | undefined {
+  const tier = serviceTierNamed(value);
+  return tier === 'fast' ? 'priority' : tier;
+}
+
+/** Anthropic names its fast mode apart from the service tier, which then still reads standard. */
+export function anthropicServiceTier(tier: unknown, speed: unknown): ServiceTier | undefined {
+  return speed === 'fast' ? 'fast' : serviceTierNamed(tier);
 }
 
 /** What every token of a request costs once its prompt is longer than `prompt_tokens`. */
-export interface LongPromptRate extends Omit<ModelRate, 'above'> {
+export interface LongPromptRate extends Omit<ModelRate, 'above' | 'service_tiers'> {
   /** Input, cache-read and cache-write tokens together. */
   prompt_tokens: number;
 }
@@ -190,6 +218,8 @@ export interface NormalizedUsage {
   reasoningTokens?: number;
   /** True when these counts add up several requests, so no one prompt's length is known. */
   severalRequests?: boolean;
+  /** The service level it ran at, when the source said. */
+  serviceTier?: ServiceTier;
 }
 
 export interface CostBreakdown {
@@ -287,10 +317,25 @@ function pricingValidationError(obj: unknown): string | null {
       }
       const above = longPromptError(rate['above']);
       if (above !== null) return `model ${model} ${above}`;
+      const tiers = serviceTiersError(rate['service_tiers']);
+      if (tiers !== null) return `model ${model} ${tiers}`;
       modelCount += 1;
     }
   }
   return modelCount > 0 ? null : 'manifest contains no models';
+}
+
+function serviceTiersError(tiers: unknown): string | null {
+  if (tiers === undefined) return null;
+  if (!tiers || typeof tiers !== 'object' || Array.isArray(tiers)) return 'has service-tier rates that are not an object';
+  for (const [name, rawRate] of Object.entries(tiers as Record<string, unknown>)) {
+    if (!rawRate || typeof rawRate !== 'object') return `has an invalid ${name} rate`;
+    const rate = rawRate as Record<string, unknown>;
+    // A tier rate has the shape of a long-prompt one, for prompts of any length.
+    const error = longPromptError([{ ...rate, prompt_tokens: 1 }]) ?? longPromptError(rate['above']);
+    if (error !== null) return `${error} (${name} service)`;
+  }
+  return null;
 }
 
 function longPromptError(above: unknown): string | null {
@@ -636,23 +681,57 @@ function feedRate(e: LiteLLMEntry, suffix: string, input: number, output: number
   return rate;
 }
 
-/** The feed's long-prompt rates, which it writes as `input_cost_per_token_above_200k_tokens` beside the standard key. */
-function longPromptRates(e: LiteLLMEntry, standard: ModelRate): LongPromptRate[] {
+/** A cache price the feed gives only for the standard rate moves with the input price it is a share of. */
+function withCachePricesFrom(standard: ModelRate, rate: ModelRate): void {
+  for (const part of ['cache_write_5m', 'cache_write_1h', 'cache_read'] as const) {
+    if (rate[part] === undefined && standard[part] !== undefined) {
+      rate[part] = Number((standard[part] * (rate.input / standard.input)).toPrecision(10));
+    }
+  }
+}
+
+/** Every price in this rate, times a multiplier. */
+function multiplied(rate: ModelRate, by: number): ModelRate {
+  const out: ModelRate = { input: 0, output: 0 };
+  for (const part of ['input', 'output', 'cache_write_5m', 'cache_write_1h', 'cache_read'] as const) {
+    if (rate[part] !== undefined) out[part] = Number((rate[part] * by).toPrecision(10));
+  }
+  if (rate.above !== undefined) out.above = rate.above.map((tier) => ({ prompt_tokens: tier.prompt_tokens, ...multiplied(tier, by) }));
+  return out;
+}
+
+/** The feed's rates for each service level a response can name. */
+function serviceTierRates(e: LiteLLMEntry, standard: ModelRate, provider: string): NonNullable<ModelRate['service_tiers']> {
+  const fields = e as unknown as Record<string, unknown>;
+  const tiers: NonNullable<ModelRate['service_tiers']> = {};
+  const named: Array<[PricedServiceTier, string]> = [['priority', '_priority'], ['flex', '_flex']];
+  if (provider === 'anthropic') named.push(['batch', '_batches']); // only Anthropic's answers name their batch service
+  for (const [tier, suffix] of named) {
+    const input = fields[`input_cost_per_token${suffix}`];
+    const output = fields[`output_cost_per_token${suffix}`];
+    if (typeof input !== 'number' || typeof output !== 'number' || input <= 0 || output <= 0) continue;
+    const rate = feedRate(e, suffix, input, output);
+    withCachePricesFrom(standard, rate);
+    const above = longPromptRates(e, rate, suffix);
+    tiers[tier] = withExactCompanion({ ...rate, ...(above.length === 0 ? {} : { above }) });
+  }
+  const fast = (fields.provider_specific_entry as { fast?: unknown } | undefined)?.fast;
+  if (typeof fast === 'number' && fast > 0) tiers.fast = withExactCompanion(multiplied(standard, fast));
+  return tiers;
+}
+
+/** The feed's long-prompt rates, which it writes as `input_cost_per_token_above_200k_tokens`, with any service tier after it. */
+function longPromptRates(e: LiteLLMEntry, standard: ModelRate, tier = ''): LongPromptRate[] {
   const fields = e as unknown as Record<string, unknown>;
   const tiers: LongPromptRate[] = [];
   for (const key of Object.keys(fields)) {
-    const named = /^input_cost_per_token(_above_([0-9]+)k_tokens)$/.exec(key);
-    if (named === null) continue;
+    const named = /^input_cost_per_token(_above_([0-9]+)k_tokens)(_[a-z]+)?$/.exec(key);
+    if (named === null || (named[3] ?? '') !== tier) continue;
     const input = fields[key];
-    const output = fields[`output_cost_per_token${named[1]!}`] ?? e.output_cost_per_token;
+    const output = fields[`output_cost_per_token${named[1]!}${tier}`] ?? fields[`output_cost_per_token${tier}`];
     if (typeof input !== 'number' || typeof output !== 'number' || input <= 0 || output <= 0) continue;
-    const rate = feedRate(e, named[1]!, input, output);
-    // A cache price the feed gives only for short prompts rises with the input price it is a share of.
-    for (const part of ['cache_write_5m', 'cache_write_1h', 'cache_read'] as const) {
-      if (rate[part] === undefined && standard[part] !== undefined) {
-        rate[part] = Number((standard[part] * (rate.input / standard.input)).toPrecision(10));
-      }
-    }
+    const rate = feedRate(e, `${named[1]!}${tier}`, input, output);
+    withCachePricesFrom(standard, rate);
     tiers.push({ prompt_tokens: Number(named[2]) * 1000, ...withExactCompanion(rate) });
   }
   return tiers.sort((a, b) => a.prompt_tokens - b.prompt_tokens);
@@ -695,7 +774,12 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     // that had been recorded against the bundled card's exact fallback.
     const standard = feedRate(e, '', e.input_cost_per_token, e.output_cost_per_token);
     const above = longPromptRates(e, standard);
-    bucket.models[name] = { ...withExactCompanion(standard), ...(above.length === 0 ? {} : { above }) };
+    const tiers = serviceTierRates(e, { ...standard, ...(above.length === 0 ? {} : { above }) }, provider);
+    bucket.models[name] = {
+      ...withExactCompanion(standard),
+      ...(above.length === 0 ? {} : { above }),
+      ...(Object.keys(tiers).length === 0 ? {} : { service_tiers: tiers }),
+    };
   }
 
   const total = Object.values(providers).reduce((n, p) => n + Object.keys(p.models).length, 0);
@@ -1211,7 +1295,10 @@ function declarationRevision(o: PriceOverride): string {
 /** The rate with decimal companions for any it lacks, written from its own numbers. */
 function withExactCompanion(rate: ModelRate): ModelRate {
   const above = rate.above?.map((tier) => ({ ...tier, ...withExactCompanion(tier) }));
-  if (rate.exact !== undefined) return above === undefined ? rate : { ...rate, above };
+  const tiers = rate.service_tiers === undefined ? undefined
+    : Object.fromEntries(Object.entries(rate.service_tiers).map(([name, tier]) => [name, withExactCompanion(tier)]));
+  const nested = { ...(above === undefined ? {} : { above }), ...(tiers === undefined ? {} : { service_tiers: tiers }) };
+  if (rate.exact !== undefined) return { ...rate, ...nested };
   const exact: { input: string; output: string; cache_write_5m?: string; cache_write_1h?: string; cache_read?: string } = {
     input: plainDecimal(rate.input),
     output: plainDecimal(rate.output),
@@ -1219,7 +1306,7 @@ function withExactCompanion(rate: ModelRate): ModelRate {
   if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
   if (rate.cache_write_1h !== undefined) exact.cache_write_1h = plainDecimal(rate.cache_write_1h);
   if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
-  return { ...rate, exact, ...(above === undefined ? {} : { above }) };
+  return { ...rate, exact, ...nested };
 }
 
 /** A free (local) model: every rate is zero, cache rates included. */
@@ -1383,12 +1470,21 @@ function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): { rate: ModelRa
   return usage.severalRequests === true || prompt > LONGEST_PROMPT_TOKENS ? { rate, known: false } : { rate: tier, known: true };
 }
 
+/** The rate for the service level it ran at, or null when that level has no list price. */
+function rateForTier(rate: ModelRate, tier: ServiceTier | undefined): ModelRate | null {
+  if (tier === undefined || tier === 'standard') return rate;
+  return (tier === 'other' ? undefined : rate.service_tiers?.[tier]) ?? null;
+}
+
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
   const { rate: listed, estimated: unmatched, pricing: matched } = rateFor(provider, model);
-  const { rate, known: promptKnown } = rateForPrompt(listed, usage);
-  const estimated = unmatched || !promptKnown;
+  // A price the user declared is what the model costs them at any service level.
+  const declaredPrice = matched.costBasis === 'user_declared_price' && matched.rateMatchProvider === null;
+  const tiered = declaredPrice ? listed : rateForTier(listed, usage.serviceTier);
+  const { rate, known: promptKnown } = rateForPrompt(tiered ?? listed, usage);
+  const estimated = unmatched || tiered === null || !promptKnown;
   // The model is on the card, but which of its rates applied is not known.
-  const assumed = !promptKnown && (matched.rateMatchKind === 'exact_provider' || matched.rateMatchKind === 'exact_cross_provider');
+  const assumed = (tiered === null || !promptKnown) && (matched.rateMatchKind === 'exact_provider' || matched.rateMatchKind === 'exact_cross_provider');
   const pricing: RequestPricingEvidence = assumed ? { ...matched, rateMatchKind: 'standard_rate_assumed' } : matched;
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input

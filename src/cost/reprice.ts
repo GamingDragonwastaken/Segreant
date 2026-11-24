@@ -64,6 +64,7 @@ function planReprice(store: Store) {
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
       ...(r.cacheWriteTtl === null ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
       severalRequests: r.severalRequests,
+      ...(r.serviceTier === null ? {} : { serviceTier: r.serviceTier }),
     });
     if (c.estimated) { stillEstimated++; continue; }
     // A row with an exact economic event can only be corrected by an exact

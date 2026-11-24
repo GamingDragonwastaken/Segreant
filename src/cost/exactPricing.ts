@@ -36,6 +36,8 @@ export interface ExactNormalizedUsage {
   readonly reasoningTokens?: number;
   /** Already applied: the rate passed in is the one for these counts. */
   readonly severalRequests?: boolean;
+  /** Already applied: the rate passed in is the one for this service level. */
+  readonly serviceTier?: string;
 }
 
 export interface ExactCostBreakdown {
@@ -49,7 +51,7 @@ export interface ExactCostBreakdown {
 }
 
 const RATE_KEYS = new Set(['input', 'output', 'cache_write_5m', 'cache_write_1h', 'cache_read']);
-const USAGE_KEYS = new Set(['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'cacheWriteTtl', 'cacheWriteTtlObserved', 'reasoningTokens', 'severalRequests']);
+const USAGE_KEYS = new Set(['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'cacheWriteTtl', 'cacheWriteTtlObserved', 'reasoningTokens', 'severalRequests', 'serviceTier']);
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);

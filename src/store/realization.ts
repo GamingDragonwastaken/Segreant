@@ -19,7 +19,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { runScript } from './schema.ts';
 import { prepared } from '../util/statements.ts';
-import type { RequestPricingEvidence } from '../cost/pricing.ts';
+import type { RequestPricingEvidence, ServiceTier } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { RequestRow, SpendBucket } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
@@ -251,6 +251,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
   cacheReadTokens: number;
   cacheWriteTtl: '5m' | '1h' | null;
   severalRequests: boolean;
+  serviceTier: ServiceTier | null;
   costUsd: number;
   usageCaptured: boolean;
 }> {
@@ -262,6 +263,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
                 CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
                 -- Not recorded: only a log can hold a total of several requests; the proxy sees one.
                 COALESCE(several_requests, CASE WHEN via = 'import' THEN 1 ELSE 0 END) AS severalRequests,
+                CASE WHEN service_tier NOT IN ('not_recorded', 'legacy_unknown') THEN service_tier END AS serviceTier,
                 cost_usd AS costUsd,
                 -- An unpriced row with no token counts has no captured usage to
                 -- price (a response cut off at the resource limit): repricing it
@@ -285,6 +287,7 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
     severalRequests: number;
+    serviceTier: ServiceTier | null;
     costUsd: number;
     usageCaptured: number;
   }>;
@@ -421,6 +424,8 @@ export interface CorrectedUsage {
   cacheReadTokens: number;
   reasoningTokens: number;
   cacheWriteTtl: string;
+  severalRequests: boolean;
+  serviceTier: string;
   costUsd: number;
   estimated: boolean;
   pricing: RequestPricingEvidence;
@@ -449,11 +454,11 @@ export function correctImportedUsage(db: DatabaseSync, ledger: EconomicLedger, u
   }
   prepared(db,
     `UPDATE requests SET input_tokens = ?, output_tokens = ?, cache_write_tokens = ?, cache_read_tokens = ?, reasoning_tokens = ?,
-            cache_write_ttl = ?, cost_usd = ?, estimated = ?, cost_basis = ?, rate_card_sha256 = ?, rate_card_source_kind = ?,
+            cache_write_ttl = ?, several_requests = ?, service_tier = ?, cost_usd = ?, estimated = ?, cost_basis = ?, rate_card_sha256 = ?, rate_card_source_kind = ?,
             rate_match_kind = ?, rate_match_provider = ?, rate_match_model = ?
       WHERE request_id = ?`,
   ).run(
-    u.inputTokens, u.outputTokens, u.cacheWriteTokens, u.cacheReadTokens, u.reasoningTokens, u.cacheWriteTtl,
+    u.inputTokens, u.outputTokens, u.cacheWriteTokens, u.cacheReadTokens, u.reasoningTokens, u.cacheWriteTtl, u.severalRequests ? 1 : 0, u.serviceTier,
     u.costUsd, u.estimated ? 1 : 0, u.pricing.costBasis, u.pricing.rateCardSha256, u.pricing.rateCardSourceKind,
     u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel, u.requestId,
   );

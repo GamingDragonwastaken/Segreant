@@ -28,7 +28,7 @@
  * `usage` at `event.response.usage`, not `event.usage`). See consumeOpenAI.
  */
 
-import { cacheWriteDuration, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
+import { anthropicServiceTier, cacheWriteDuration, openAIServiceTier, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
 interface AnthropicUsage {
@@ -40,6 +40,8 @@ interface AnthropicUsage {
     ephemeral_5m_input_tokens?: number;
     ephemeral_1h_input_tokens?: number;
   };
+  service_tier?: unknown;
+  speed?: unknown;
 }
 
 interface OpenAIUsage {
@@ -65,6 +67,7 @@ export function normalizeAnthropicUsage(u: AnthropicUsage): NormalizedUsage {
   const ephem5m = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
   const cacheWrite = u.cache_creation_input_tokens ?? ephem5m + ephem1h;
   const duration = cacheWriteDuration(ephem5m, ephem1h);
+  const serviceTier = anthropicServiceTier(u.service_tier, u.speed);
   return {
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
@@ -72,10 +75,14 @@ export function normalizeAnthropicUsage(u: AnthropicUsage): NormalizedUsage {
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
     ...(duration.ttl === undefined ? {} : { cacheWriteTtl: duration.ttl }),
     cacheWriteTtlObserved: duration.observed,
+    ...(serviceTier === undefined ? {} : { serviceTier }),
   };
 }
 
-export function normalizeOpenAIUsage(u: OpenAIUsage): NormalizedUsage {
+/** OpenAI names the service level beside the usage, not in it. */
+export function normalizeOpenAIUsage(u: OpenAIUsage, tierName?: unknown): NormalizedUsage {
+  const serviceTier = openAIServiceTier(tierName);
+  const tier = serviceTier === undefined ? {} : { serviceTier };
   // Responses API and Chat Completions never share field names, so presence
   // of either input_tokens or output_tokens is an unambiguous shape signal.
   if (u.input_tokens !== undefined || u.output_tokens !== undefined) {
@@ -87,6 +94,7 @@ export function normalizeOpenAIUsage(u: OpenAIUsage): NormalizedUsage {
       cacheWriteTokens: 0, // OpenAI auto-caches with no separate write charge
       cacheReadTokens: cached,
       reasoningTokens: u.output_tokens_details?.reasoning_tokens ?? 0,
+      ...tier,
     };
   }
   const cached = u.prompt_tokens_details?.cached_tokens ?? 0;
@@ -97,6 +105,7 @@ export function normalizeOpenAIUsage(u: OpenAIUsage): NormalizedUsage {
     cacheWriteTokens: 0, // OpenAI auto-caches with no separate write charge
     cacheReadTokens: cached,
     reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? 0,
+    ...tier,
   };
 }
 
@@ -122,6 +131,7 @@ export class StreamUsageAccumulator {
   private seenModel: string | null = null;
   private sawUsage = false;
   private maxOutput = 0;
+  private tierName: unknown;
   private readonly provider: Provider;
 
   constructor(provider: Provider) {
@@ -221,6 +231,7 @@ export class StreamUsageAccumulator {
         if (n.cacheWriteTtl === undefined) delete this.partial.cacheWriteTtl;
         else this.partial.cacheWriteTtl = n.cacheWriteTtl;
         this.partial.cacheWriteTtlObserved = n.cacheWriteTtlObserved;
+        if (n.serviceTier !== undefined) this.partial.serviceTier = n.serviceTier;
         this.maxOutput = Math.max(this.maxOutput, n.outputTokens);
       }
     } else if (obj.usage) {
@@ -242,14 +253,16 @@ export class StreamUsageAccumulator {
     const obj = json as {
       model?: string;
       usage?: OpenAIUsage | null;
-      response?: { model?: string; usage?: OpenAIUsage | null };
+      service_tier?: unknown;
+      response?: { model?: string; usage?: OpenAIUsage | null; service_tier?: unknown };
     };
     const model = obj.model ?? obj.response?.model;
     if (model) this.seenModel = model;
+    this.tierName = obj.service_tier ?? obj.response?.service_tier ?? this.tierName;
     const usage = obj.usage ?? obj.response?.usage;
     if (usage) {
       this.sawUsage = true;
-      const n = normalizeOpenAIUsage(usage);
+      const n = normalizeOpenAIUsage(usage, this.tierName);
       this.partial = { ...n };
       this.maxOutput = Math.max(this.maxOutput, n.outputTokens);
     }

@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
+import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, SERVICE_TIERS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence, type ServiceTier } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
 import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
@@ -248,6 +248,8 @@ export interface RequestRow {
   cacheWriteTtl?: '5m' | '1h';
   /** True when this row is known to add up several requests. */
   severalRequests?: boolean;
+  /** The service level this row was priced at, when the source said; absent is unknown. */
+  serviceTier?: ServiceTier;
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -320,7 +322,8 @@ const REQUEST_ROW_SELECT = `SELECT request_id AS requestId, session_id AS sessio
                 provider_scope_declaration_id AS providerScopeDeclarationId,
                 attribution_basis AS attributionBasis,
                 capture_coverage AS captureCoverage, cache_write_ttl AS cacheWriteTtlRecorded,
-                several_requests AS severalRequestsRecorded
+                several_requests AS severalRequestsRecorded,
+                service_tier AS serviceTierRecorded
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project`;
 
 /**
@@ -514,6 +517,7 @@ export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 const SCOPE_CAPTURE_STATUSES = ['legacy_unknown', 'unscoped', 'declared_unverified', 'not_observed'] as const satisfies readonly ScopeCaptureStatus[];
 const CAPTURE_COVERAGES = ['complete', 'truncated', 'unknown', 'legacy_unknown'] as const;
 const CACHE_WRITE_TTLS = ['5m', '1h', 'not_recorded', 'legacy_unknown'] as const;
+const RECORDED_SERVICE_TIERS = [...SERVICE_TIERS, 'not_recorded', 'legacy_unknown'] as const;
 
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
@@ -525,15 +529,18 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     rateMatchModel,
     cacheWriteTtlRecorded,
     severalRequestsRecorded,
+    serviceTierRecorded,
     ...row
   } = record;
   // 'not_recorded' and 'legacy_unknown' read as absent; any other string is
   // damage and refuses rather than passing through.
   const ttl = vocabularyValue(cacheWriteTtlRecorded, CACHE_WRITE_TTLS, 'cacheWriteTtl', 'legacy_unknown');
+  const tier = vocabularyValue(serviceTierRecorded, RECORDED_SERVICE_TIERS, 'serviceTier', 'legacy_unknown');
   return {
     ...(row as unknown as RequestRow),
     ...(ttl === '5m' || ttl === '1h' ? { cacheWriteTtl: ttl } : {}),
     ...(Number(severalRequestsRecorded) === 1 ? { severalRequests: true } : {}),
+    ...(tier === 'not_recorded' || tier === 'legacy_unknown' ? {} : { serviceTier: tier as ServiceTier }),
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
@@ -984,8 +991,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl, several_requests
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl, several_requests, service_tier
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
       const info = prepared(this.db, sql).run(
         row.requestId,
         row.sessionId,
@@ -1021,6 +1028,7 @@ export class Store {
         row.captureCoverage ?? 'complete',
         row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
         row.severalRequests === true ? 1 : 0,
+        row.serviceTier ?? 'not_recorded',
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (!inserted && row.via === 'import') return this.reconcileImportedRow(row, costUsd, pricing, identity);
@@ -1075,11 +1083,11 @@ export class Store {
     const recorded = prepared(this.db,
       `SELECT ts_epoch_ms AS tsEpochMs, provider, model, project, COALESCE(via, 'proxy') AS via,
               input_tokens AS inputTokens, output_tokens AS outputTokens, cache_write_tokens AS cacheWriteTokens,
-              cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens
+              cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens, service_tier AS serviceTier
          FROM requests WHERE request_id = ?`,
     ).get(row.requestId) as {
       tsEpochMs: number; provider: string; model: string; project: string; via: string; inputTokens: number; outputTokens: number;
-      cacheWriteTokens: number; cacheReadTokens: number; reasoningTokens: number;
+      cacheWriteTokens: number; cacheReadTokens: number; reasoningTokens: number; serviceTier: string;
     };
     const classes = ['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens'] as const;
     const more = classes.some((k) => row[k] > recorded[k]);
@@ -1089,7 +1097,10 @@ export class Store {
         || (!sameUsage && (identity.idIsPosition === true || Math.abs(recorded.tsEpochMs - row.tsEpochMs) > ONE_REQUEST_SPAN_MS))) {
       throw new RequestObservationConflictError(row.requestId);
     }
-    if (!more) {
+    // Recorded before the service level was read, and the log names one with a price of its own.
+    const tierLearned = sameUsage && recorded.via === 'import' && recorded.serviceTier === 'legacy_unknown'
+      && row.serviceTier !== undefined && row.serviceTier !== 'standard';
+    if (!more && !tierLearned) {
       // The exact ledger must hold the charge its request row claims to have.
       if (row.economicAmount !== undefined && this.economicLedger.read(requestEconomicEventId(row.requestId)) === null) {
         throw new Error(`exact economic event is missing for existing request ${row.requestId}`);
@@ -1108,6 +1119,8 @@ export class Store {
       cacheReadTokens: row.cacheReadTokens,
       reasoningTokens: row.reasoningTokens,
       cacheWriteTtl: row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
+      severalRequests: row.severalRequests === true,
+      serviceTier: row.serviceTier ?? 'not_recorded',
       costUsd,
       estimated: row.estimated,
       pricing,
@@ -1140,6 +1153,8 @@ export class Store {
         requestId,
         inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
         cacheWriteTtl: 'not_recorded',
+        severalRequests: false,
+        serviceTier: 'not_recorded',
         costUsd: 0,
         estimated: false,
         pricing: pricingEvidenceFromRecord(recorded),
@@ -2812,6 +2827,7 @@ export class Store {
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
     severalRequests: boolean;
+    serviceTier: ServiceTier | null;
     costUsd: number;
     usageCaptured: boolean;
   }> {

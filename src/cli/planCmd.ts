@@ -39,6 +39,7 @@ export function importedListWork(store: Store, source: PlanSource, startMs: numb
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
       ...(r.cacheWriteTtl === undefined ? {} : { cacheWriteTtl: r.cacheWriteTtl }),
       ...(r.severalRequests === true ? { severalRequests: true } : {}),
+      ...(r.serviceTier === undefined ? {} : { serviceTier: r.serviceTier }),
     }));
     if (card.estimated) { withheldRequests++; continue; }
     listCostUsd += card.costUsd;

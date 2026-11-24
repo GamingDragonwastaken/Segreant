@@ -34,7 +34,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
-import { computeCost, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
+import { computeCost, openAIServiceTier, unpricedPricingEvidence, type Provider, type ServiceTier } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import {
   type ImportSummary,
@@ -126,6 +126,8 @@ export interface CodexUsageRow {
   reasoningTokens: number;
   /** The count covers more than the request it names: a shortened log's carried total. */
   severalRequests?: boolean;
+  /** The service level the session asked for; the log does not say what each request was given. */
+  serviceTier?: ServiceTier;
 }
 
 /** The child thread id of a forked rollout file, or null for an ordinary one. */
@@ -169,6 +171,7 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
   let resets = 0;
   let provider = 'openai';
   let model: string | null = null;
+  let serviceTier: ServiceTier | undefined;
   let project = 'codex';
   // A rollout that never emits a cwd keeps the tool-name placeholder, so the
   // basis starts as a fallback and is upgraded only when a real path arrives.
@@ -251,6 +254,11 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
       await releaseUnnamed();
       continue;
     }
+    if (o.type === 'event_msg' && p.type === 'thread_settings_applied') {
+      const settings = p.thread_settings;
+      if (settings !== null && typeof settings === 'object') serviceTier = openAIServiceTier((settings as Record<string, unknown>).service_tier);
+      continue;
+    }
     if (o.type === 'event_msg' && p.type === 'token_count' && options.onRateLimit && p.rate_limits !== undefined) {
       const ts = Date.parse(o.timestamp ?? '');
       if (Number.isFinite(ts)) {
@@ -325,6 +333,7 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         cacheReadTokens: dCached,
         reasoningTokens: dReason,
         ...(severalRequests ? { severalRequests } : {}),
+        ...(serviceTier === undefined ? {} : { serviceTier }),
       };
       emittedRows += 1;
       if (model === null) unnamed.push(row);
@@ -404,6 +413,7 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
                 cacheWriteTokens: 0,
                 cacheReadTokens: ev.cacheReadTokens,
                 severalRequests: ev.severalRequests,
+                serviceTier: ev.serviceTier,
               })
             : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence(), exact: undefined };
 
@@ -422,6 +432,7 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
             cacheReadTokens: ev.cacheReadTokens,
             reasoningTokens: ev.reasoningTokens,
             ...(ev.severalRequests === true ? { severalRequests: true } : {}),
+            ...(ev.serviceTier === undefined ? {} : { serviceTier: ev.serviceTier }),
             costUsd: c.costUsd,
             economicAmount: prov ? c.exact?.total : undefined,
             estimated: c.estimated,

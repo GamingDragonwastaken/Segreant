@@ -21,7 +21,7 @@ export function importNotes(sum: ImportSummary): ImportNote[] {
     notes.push({ label: 'Cut short', missing: true, text: `A size limit was reached (${parts.filter(([n]) => n).map(([n, what]) => `${count(n!)} ${what}`).join(', ')}); the usage past it is not counted.` });
   }
   if (sum.completedObservations) {
-    notes.push({ label: 'Completed', missing: false, text: `${count(sum.completedObservations)} request(s) recorded earlier from an unfinished log line now carry their full usage.` });
+    notes.push({ label: 'Completed', missing: false, text: `${count(sum.completedObservations)} request(s) recorded earlier from an unfinished log line, or without their service tier, now carry what the log says.` });
   }
   if (sum.retractedObservations) {
     notes.push({ label: 'Corrected', missing: false, text: `${count(sum.retractedObservations)} request(s) an earlier import counted a second time, from a forked session's copy of its parent's log, now count once.` });

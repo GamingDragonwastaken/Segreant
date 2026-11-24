@@ -842,7 +842,7 @@ async function handle(
       const rawUsage = json.usage as Record<string, unknown> | undefined;
       if (rawUsage) {
         usageSeen = true;
-        usage = provider === 'anthropic' ? normalizeAnthropicUsage(rawUsage) : normalizeOpenAIUsage(rawUsage);
+        usage = provider === 'anthropic' ? normalizeAnthropicUsage(rawUsage) : normalizeOpenAIUsage(rawUsage, json.service_tier);
       }
       // Capture proposed edits — the in-path signal for the Accepted gate.
       // Same extraction as the streaming path; what can't be parsed stays
@@ -893,6 +893,7 @@ async function handle(
     // Kept so a later reprice prices the writes at the same duration, and only when it was
     // observed rather than chosen.
     ...(usage.cacheWriteTtl === undefined || !usage.cacheWriteTtlObserved ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
+    ...(usage.serviceTier === undefined ? {} : { serviceTier: usage.serviceTier }),
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,
     costUsd: unmeasured ? 0 : cost.costUsd,
