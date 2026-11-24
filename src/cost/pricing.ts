@@ -187,6 +187,8 @@ export interface NormalizedUsage {
   cacheWriteTtlObserved?: boolean;
   /** Reasoning tokens — reporting only, billed inside outputTokens. */
   reasoningTokens?: number;
+  /** True when these counts add up several requests, so no one prompt's length is known. */
+  severalRequests?: boolean;
 }
 
 export interface CostBreakdown {
@@ -1369,17 +1371,23 @@ export function cacheWriteDuration(ephemeral5m: number, ephemeral1h: number): { 
 /** No model reads a prompt this long, so a row over it is several requests recorded as one. */
 const LONGEST_PROMPT_TOKENS = 4_000_000;
 
-/** The rate this request's whole usage is charged at, given how long its prompt was. */
-function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): ModelRate {
-  if (rate.above === undefined) return rate;
+/**
+ * The rate this usage is charged at, given how long its prompt was. Several
+ * requests added together take the short-prompt rate; `known` is false when one
+ * of them could have been long enough for a higher one.
+ */
+function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): { rate: ModelRate; known: boolean } {
+  if (rate.above === undefined) return { rate, known: true };
   const prompt = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
-  if (prompt > LONGEST_PROMPT_TOKENS) return rate;
-  return rate.above.findLast((tier) => prompt > tier.prompt_tokens) ?? rate;
+  const tier = rate.above.findLast((t) => prompt > t.prompt_tokens);
+  if (tier === undefined) return { rate, known: true };
+  return usage.severalRequests === true || prompt > LONGEST_PROMPT_TOKENS ? { rate, known: false } : { rate: tier, known: true };
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
-  const { rate: listed, estimated, pricing } = rateFor(provider, model);
-  const rate = rateForPrompt(listed, usage);
+  const { rate: listed, estimated: unmatched, pricing } = rateFor(provider, model);
+  const { rate, known: promptKnown } = rateForPrompt(listed, usage);
+  const estimated = unmatched || !promptKnown;
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input
   // (the standard Anthropic 5-minute write premium) so we never silently bill $0.

@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS requests (
   provider_scope_declaration_id TEXT,
   attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown',
   capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown',
-  cache_write_ttl   TEXT NOT NULL DEFAULT 'legacy_unknown'
+  cache_write_ttl   TEXT NOT NULL DEFAULT 'legacy_unknown',
+  several_requests  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -1212,6 +1213,11 @@ function migrate(db: DatabaseSync): void {
     // reads 'legacy_unknown', and a reprice says how many rows it priced at the
     // 5-minute rate for that reason (PR #146 review).
     db.prepare("ALTER TABLE requests ADD COLUMN cache_write_ttl TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+  }
+  if (!cols.some((c) => c.name === 'several_requests')) {
+    // 1 when the row is known to add up several requests, so a reprice does not
+    // take its size for one prompt's length. Older rows were not asked.
+    db.prepare('ALTER TABLE requests ADD COLUMN several_requests INTEGER NOT NULL DEFAULT 0').run();
   }
   if (!cols.some((c) => c.name === 'source')) {
     db.prepare('ALTER TABLE requests ADD COLUMN source TEXT').run();

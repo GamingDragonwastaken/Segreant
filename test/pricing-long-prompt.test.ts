@@ -69,3 +69,28 @@ test('a card with unordered or non-positive long-prompt rates is refused', () =>
   assert.match(refused([{ prompt_tokens: 100, input: 0, output: 1 }]), /positive/);
   assert.match(refused({}), /not a list/);
 });
+
+test('several requests added together take the short-prompt rate, as an estimate a reprice keeps', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { importCodex } = await import('../src/connect/codex.ts');
+  const { previewReprice } = await import('../src/cost/reprice.ts');
+  const { Store } = await import('../src/store/db.ts');
+  const thread = '01a09c97-1058-7451-8461-e7e0d16685b2';
+  const root = mkdtempSync(join(tmpdir(), 'codex-carried-'));
+  const day = join(root, 'sessions', '2026', '09', '22');
+  mkdirSync(day, { recursive: true });
+  const count = (total: number, last: number) => ({ type: 'event_msg', payload: { type: 'token_count', info: {
+    total_token_usage: { input_tokens: total, cached_input_tokens: 0, output_tokens: 0 }, last_token_usage: { input_tokens: last, cached_input_tokens: 0, output_tokens: 0 },
+  } } });
+  // A shortened log opens with everything the thread had used: 500,000 tokens of earlier requests and this one's 50,000.
+  const lines = [{ type: 'session_meta', payload: { id: thread, cwd: '/work/app', model_provider: 'openai', model: 'gpt-6.1-sol' } }, count(500_000, 50_000), count(800_000, 300_000)]
+    .map((l, i) => JSON.stringify({ timestamp: `2026-09-22T10:0${i}:00.000Z`, ...l }));
+  writeFileSync(join(day, `rollout-2026-09-22T10-00-00-${thread}.jsonl`), lines.join('\n') + '\n');
+  const store = new Store(':memory:');
+  await importCodex(store, { root });
+  const rows = store.requestsInRange(0, Date.now()).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
+  assert.deepEqual(rows.map((r) => [r.severalRequests ?? false, r.estimated, Number(r.costUsd.toFixed(6))]), [[true, true, 1], [false, false, 1.2]]);
+  const plan = previewReprice(store);
+  assert.deepEqual([plan.estimatedRows, plan.stillEstimated], [1, 1]);
+  store.close();
+});
