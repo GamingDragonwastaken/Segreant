@@ -257,7 +257,7 @@ export async function valueSpine(
     grossRealizedValueUsd: money.grossRealizedValueUsd,
     supervisionMinutes: money.supervisionMinutes,
     riskAversion: opts.riskAversion ?? 0,
-    // Why the Acceptance lens went dark, when the store can say (D-179).
+    // Why the Acceptance lens went dark, when the store can say.
     proposalRetention: proposalRetentionForUnits(store, report.units),
   });
   roi.notes.unshift(...liftNotes);
@@ -342,7 +342,7 @@ export type BudgetAdvice = BudgetRecommendation & {
 };
 
 /**
- * The product's own kernel profiles for the cap decision's basis (D-220): the
+ * The product's own kernel profiles for the cap decision's basis: the
  * metered daily-spend series is always declared, since a cap is never proposed
  * without one; the realized-value share is declared only when instrumented,
  * since an absent lens is `undefined`/`null` rather than a fabricated zero.
@@ -421,7 +421,7 @@ export function budgetAdvice(
   // every other page, so name the basis and the two ways forward instead.
   if (liveOnly && rec.status === 'cold_start') {
     // "No requests went through the proxy" is a claim about requests, so it
-    // is decided by counting them, on the guard's own projection (review 4, F3).
+    // is decided by counting them, on the guard's own projection.
     const live = capBasisSpend(store, config.budget, startMs, endMs);
     const liveUsd = series.reduce((a, s) => a + s.costUsd, 0);
     const importedUsd = store.economicSeries(startMs, endMs, DAY_MS, false).reduce((a, s) => a + s.costUsd, 0) - liveUsd;

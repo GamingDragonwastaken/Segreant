@@ -18,7 +18,7 @@ import { pricingStatus, rateFor, type Provider, type RateMatchKind, type Refresh
 export const FIRST_SIGHT_MIN_INTERVAL_MS = 60 * 60 * 1000;
 
 const GUESSED: ReadonlySet<RateMatchKind> = new Set(['family_provider', 'family_cross_provider', 'fallback']);
-/** What the refreshed card itself answers; a price the user declared meanwhile is not the list's answer (PR #146 review). */
+/** What the refreshed card itself answers; a price the user declared meanwhile is not the list's answer. */
 const CARD_EXACT: ReadonlySet<RateMatchKind> = new Set(['exact_provider', 'exact_cross_provider']);
 
 /** Whether the card's last check of the price list is older than the interval (or never happened). */
@@ -85,7 +85,7 @@ export function createFirstSightWatcher(options: FirstSightOptions): FirstSightW
         // Every pending model is checked against the refreshed card, including
         // one first seen while this lookup was running: a snapshot taken at the
         // start left it pending for good once the card priced it exactly, since
-        // exact requests never call note() again (PR #146 review). Known or not,
+        // exact requests never call note() again. Known or not,
         // each has had its answer; one the list does not know is not asked about
         // again until the next interval.
         const answered = [...pending.values()];

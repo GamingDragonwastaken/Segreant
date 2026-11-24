@@ -250,7 +250,7 @@ export function claimShowsFigure(layer: Layer): boolean {
  * claim's own standard. An empty `missingEvidence` list means the claim is
  * complete as stated, not that the claim family is complete or that the figure
  * is a measured outcome: "Nothing is missing" read as blanket completeness on
- * a Realized claim that also says "impact uninstrumented" (H018).
+ * a Realized claim that also says "impact uninstrumented".
  */
 export function claimCompletionLine(layer: Layer, precise: boolean): string {
   if (layer.id === 'realized') {
@@ -320,7 +320,7 @@ export interface Layer {
   /**
    * What window or record this claim covers, in a few words ("last 30 days",
    * "latest reconciliation run"). Shown beside the label, so a claim that cannot
-   * follow the chosen period says so instead of looking as if it did (H006).
+   * follow the chosen period says so instead of looking as if it did.
    */
   period: string;
   /** What the evidence reaches, on the axes that decide it. Never one boolean. */

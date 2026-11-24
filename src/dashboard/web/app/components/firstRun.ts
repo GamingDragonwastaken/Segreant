@@ -7,15 +7,15 @@
  * Shown only when the whole ledger is empty and the data is real. A month or a
  * window with no requests is not a fresh install, sample data has its own
  * banner, and a ledger whose requests retention deleted had usage: Spend's
- * retention warning says so instead (PR #155 review).
+ * retention warning says so instead.
  *
  * The note says what is observed, that the ledger is empty, never that it was
  * always empty: a ledger pruned before prunes were recorded cannot say whether
- * it was used, and the wording holds either way (PR #155 review).
+ * it was used, and the wording holds either way.
  *
  * It speaks for the measured claim only. A provider bill can be imported with
  * no request recorded, and the billed figure beside this note is a different
- * claim that this note must not describe (PR #155 review).
+ * claim that this note must not describe.
  */
 
 import { h } from '../core/dom.ts';

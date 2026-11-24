@@ -677,13 +677,13 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
     // `provider_project_period` or roll up into it. Declaring the coarser,
     // different partition labelled the figure as covering the whole billing
     // period when it covers one project inside it. Nothing noticed while the
-    // persistence boundary did not check grain (D-108).
+    // persistence boundary did not check grain.
     grain: grain(['provider_project_period']),
     time: { validTime, asOf: issuedAt },
     epistemic: 'supported',
     // The derived comparison itself is a Segreant assertion even when its
     // provider-side input was fetched from an authenticated endpoint. The same
-    // profile the run's `excludedFrom` was derived from (D-228).
+    // profile the run's `excludedFrom` was derived from.
     profile: reconciliationClaimProfile(),
     measurementModelRef: null,
     evidenceIds: [...input.evidenceIds],

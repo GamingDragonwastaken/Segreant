@@ -425,7 +425,7 @@ export interface ChainInput {
   readonly licensedBasisTransitions?: ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]>;
   /**
    * Re-basings licensed for ONE step, keyed by derivation id — what a
-   * registered `monetary_rebasing` witness on that step declares (D-222).
+   * registered `monetary_rebasing` witness on that step declares.
    *
    * Per step and not chain-wide, because a witness is a declaration about the
    * derivation that cites it: a `mixed -> billed` witness three steps

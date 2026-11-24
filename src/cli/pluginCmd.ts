@@ -1,5 +1,5 @@
 /**
- * `segreant plugin run` — the operator face of the plugin host (D-234).
+ * `segreant plugin run` — the operator face of the plugin host.
  *
  * Runs one bounded exchange with a plugin process and previews the kernel
  * Evidence it would append; `--apply` appends it. The manifest and the

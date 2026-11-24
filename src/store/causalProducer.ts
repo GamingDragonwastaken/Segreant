@@ -576,7 +576,7 @@ export function prepareIndependentCausalLineageBindingV2(
     const bindingMaterial = {
       type: 'segreant.causal-lineage-binding' as const,
       version: 2 as const,
-      // Tuple identity (D-241): causal identifiers admit ':', so a delimiter join
+      // Tuple identity: causal identifiers admit ':', so a delimiter join
       // let two (study, decision) pairs share one binding id.
       bindingId: input.bindingId ?? `lineage:${JSON.stringify([input.studyId, input.decisionId])}`,
       studyId: protocol.studyId,

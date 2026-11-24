@@ -175,7 +175,7 @@ export const CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
 
 /** Evaluate coding gates through the domain-neutral OutcomeAdapter contract. */
 export interface CodingOutcomeEvaluation extends OutcomeEvaluation {
-  /** The adapter that judged this evaluation — carried so a consumer can name the route, not infer it (D-247). */
+  /** The adapter that judged this evaluation — carried so a consumer can name the route, not infer it. */
   readonly adapterId: string;
   /** Compatibility projection retaining the coding funnel's ordered gate detail. */
   readonly funnel: FunnelOutcome;

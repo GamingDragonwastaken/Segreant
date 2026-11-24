@@ -1,6 +1,6 @@
 /**
  * The budget advisor's cap, as a decision problem the decision subsystem can
- * see -- the first product consumer of `src/decision/` (D-220).
+ * see -- the first product consumer of `src/decision/`.
  *
  * WHAT THE ADVISOR OWNS. `recommendBudget` proposes a daily cap from observed
  * spend and, when instrumented, the share of that spend which reached a kept
@@ -134,7 +134,7 @@ export interface BudgetCapActionEvaluation {
 }
 
 /**
- * The admissible preference set for the cap decision (D-249). The declared
+ * The admissible preference set for the cap decision. The declared
  * objective weighs a realized dollar at +1 and an unrealized admitted dollar
  * at -1; an operator who prices realization higher or lower is still acting
  * on the same evidence. Each entry is a point utility per action, so the set
@@ -203,7 +203,7 @@ export interface BudgetCapDecision {
   };
   readonly actions: readonly BudgetCapActionEvaluation[];
   readonly intervals: readonly ActionUtilityInterval[];
-  /** The intervals as the engine's normalized problem: which uncertainty representation they carry (D-249). */
+  /** The intervals as the engine's normalized problem: which uncertainty representation they carry. */
   readonly utilityProblem: UtilityIntervalProblem;
   /** Strict interval dominance, verbatim from the engine. */
   readonly certificate: DecisionCertificate;
@@ -212,8 +212,8 @@ export interface BudgetCapDecision {
   /** The gate for the consequence acting on this decision has: changing spend. */
   readonly assurance: DecisionAssuranceGate;
   /**
-   * Robustness of the pick across the declared admissible preference set
-   * (D-249): which actions stay optimal under every admissible weighting of
+   * Robustness of the pick across the declared admissible preference set: which actions
+   * stay optimal under every admissible weighting of
    * realized against admitted spend, at both ends of the realized interval. A
    * diagnostic beside the certificate; it never moves standing.
    */

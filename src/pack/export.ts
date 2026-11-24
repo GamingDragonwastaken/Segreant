@@ -1,7 +1,7 @@
 /**
  * Export the local epistemic ledger as a `.segreantpack` envelope.
  *
- * The first production producer of a pack (D-229). What travels: every node
+ * The first production producer of a pack. What travels: every node
  * the ledger graph holds — evidence, claims, assumptions, witnesses,
  * derivations — each bound in `includedRecords` by the SHA-256 of its
  * canonical JSON, and the payloads themselves as one attachment,

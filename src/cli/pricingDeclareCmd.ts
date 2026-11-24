@@ -62,10 +62,9 @@ function storedLine(model: string, price: PriceOverride): string {
     ...(price.cacheWrite1h === undefined ? [] : [`cache-write-1h $${price.cacheWrite1h}`]),
   ];
   // A cache price left out is not yours: it is the usual multiple of your
-  // input price. Say so where the price is stored (independent review,
-  // 2026-10-18), naming only the parts that were left out.
+  // input price. Say so where the price is stored, naming only the parts that were left out.
   // --cache-write also prices 1-hour writes unless --cache-write-1h is given
-  // (declaredRate), so 2× is derived only when neither was (PR #150 review).
+  // (declaredRate), so 2× is derived only when neither was.
   const derived = [
     ...(price.cacheWrite === undefined ? ['5-minute cache writes at 1.25×'] : []),
     ...(price.cacheWrite1h === undefined && price.cacheWrite === undefined ? ['1-hour cache writes at 2×'] : []),

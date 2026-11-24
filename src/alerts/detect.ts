@@ -38,8 +38,8 @@ export interface AlertInputs {
   dailySoftUsd: number | null;
   baselineActiveDaySpends: number[]; // trailing per-active-day spend, excluding today
   /**
-   * Whether retention deleted request rows from inside the baseline window
-   * (D-182). Optional so a caller constructing inputs by hand keeps working;
+   * Whether retention deleted request rows from inside the baseline window. Optional so a
+   * caller constructing inputs by hand keeps working;
    * absent reads as "not known truncated", which is the same convention D-176
    * settled for the spend window and NOT a claim the window is intact.
    *
@@ -54,7 +54,7 @@ export interface AlertInputs {
   baselinePrunedBeforeMs?: number | null;
   blocked24h: number; // count of budget-blocked (429) requests in the last 24h
   estimatedShare: number; // 0..1 share of recent spend priced with estimated rates
-  /** 0..1 share of recent spend priced at prices the user set: resolved, but not list prices (PR #146 review). */
+  /** 0..1 share of recent spend priced at prices the user set: resolved, but not list prices. */
   declaredShare?: number;
   /**
    * Total spend the `estimatedShare` window was computed over. The share arrives
@@ -154,8 +154,8 @@ export function alertCoverage(inp: AlertInputs): AlertCoverage {
       channel: 'spend-spike',
       live: baseline > 0,
       // "yet" is a claim about the operator's history, and it is false on a
-      // ledger whose prior days Segreant deleted on their own retention policy
-      // (D-182). This is the surface whose whole job is to give the reason a
+      // ledger whose prior days Segreant deleted on their own retention policy. This is the
+      // surface whose whole job is to give the reason a
       // channel is dark, so giving the wrong one here is worse than anywhere.
       darkBecause: baseline > 0
         ? null
@@ -318,7 +318,7 @@ function gatherAlertInputs(
   const baselineActiveDaySpends = priorSeries.map((s) => s.costUsd).filter((x) => x > 0);
   // Same predicate as every other window in this sweep: truncated when the
   // window STARTS strictly before a recorded boundary, because `prune` deletes
-  // rows strictly older than it. Null is no prune on record (D-170).
+  // rows strictly older than it. Null is no prune on record.
   const baselinePrunedBeforeMs = store.retentionFloor().requestsPrunedBeforeMs;
   const baselineTruncated = baselinePrunedBeforeMs !== null && baselineStartMs < baselinePrunedBeforeMs;
 
@@ -327,7 +327,7 @@ function gatherAlertInputs(
   const estimatedShare = week.totalCostUsd > 0 ? week.estimatedCostUsd / week.totalCostUsd : 0;
   const declaredShare = week.totalCostUsd > 0 ? week.declaredCostUsd / week.totalCostUsd : 0;
   // Carried alongside the share so coverage can tell an unestimated window from
-  // an empty one; the share alone cannot (D-141).
+  // an empty one; the share alone cannot.
   const pricedWindowSpendUsd = week.totalCostUsd;
 
   let runaway: AlertInputs['runaway'] = null;

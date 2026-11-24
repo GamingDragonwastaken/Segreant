@@ -1,5 +1,5 @@
 /**
- * The first-party consumer of the plugin host (D-234): plugin evidence
+ * The first-party consumer of the plugin host: plugin evidence
  * becomes kernel Evidence, and nothing more.
  *
  * `runPluginProcess` mediates one bounded exchange and returns a validated
@@ -60,7 +60,7 @@ export interface PluginIntakeResult extends PluginIntakePlan {
 }
 
 /**
- * Injective over the three parts (D-241). `safeIdentifier` admits ':' in
+ * Injective over the three parts. `safeIdentifier` admits ':' in
  * requestId and evidenceId, so a delimiter join let `r:1`+`e` and `r`+`1:e`
  * share one id — two distinct records from an untrusted plugin reading as one.
  * The JSON tuple is the same idiom D-217 chose for provider/model identity.

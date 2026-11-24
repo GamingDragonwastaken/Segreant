@@ -22,7 +22,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   const key = (model: UnknownPricingModel): string => JSON.stringify([model.provider, model.model]);
   /** A declared price is edited in place: a model already on the card, or whose guessed rows were re-priced, never returns to the list above. */
   const declaredKey = (model: string): string => JSON.stringify(['declared', model]);
-  /** A declared price's draft starts from its stored numbers, so changing the input price keeps the cache prices (PR #146 review). */
+  /** A declared price's draft starts from its stored numbers, so changing the input price keeps the cache prices. */
   function draft(model: { model: string; rate?: DeclaredPrice['rate']; like?: string }) {
     const r = model.rate;
     return { model: model.model, mode: signal('skip'), like: signal(model.like ?? ''), input: signal(r?.input ?? ''), output: signal(r?.output ?? ''),
@@ -31,7 +31,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
   /**
    * Any other model by name: one already on the card (a negotiated rate, a
    * fine-tune billed differently) has no guessed rows and no declaration, so
-   * without this the GUI could not do what `pricing set` does (PR #146 review).
+   * without this the GUI could not do what `pricing set` does.
    */
   const OTHER = JSON.stringify(['other']);
   const other = draft({ model: '' });
@@ -85,7 +85,7 @@ export function pricingUnknownAction(cap: Capability): ActionSpec {
       const model = word(d.model);
       if (!model) return null;
       if (d.mode() === 'free') return `segreant pricing set ${model} --free`;
-      // The same trimmed target the request body sends (PR #146 review).
+      // The same trimmed target the request body sends.
       const like = d.like().trim();
       if (d.mode() === 'like') return word(like) ? `segreant pricing set ${model} --like ${like}` : null;
       const read = d.cacheRead().trim();

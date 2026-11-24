@@ -181,7 +181,7 @@ export function summarizeBasis(rows: readonly BasisRow[]): BasisSummary {
         ? 'tool_reported_cost'
         // A model marked free does not turn list prices into an estimate; any
         // paid declaration does, whatever its amount, because the declaration
-        // itself is retained, not inferred from a zero (PR #146 review).
+        // itself is retained, not inferred from a zero.
         : only('list_exact', 'list_family', 'unpriced', 'user_free') && (has('list_exact') || has('list_family'))
           ? 'list_cost'
           : 'estimated_cost';

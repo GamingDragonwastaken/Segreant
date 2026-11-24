@@ -260,7 +260,7 @@ export function providerEgressRefusalBody(provider: Provider, error: EgressError
   // model is allowed by name, with the one command the refusal prints. A
   // malformed egress section refuses everything, built-ins included, and its
   // repair is the file, not a rule: printing a rule there called
-  // api.openai.com "not a built-in provider API" (independent review, 2026-10-18).
+  // api.openai.com "not a built-in provider API".
   const invalid = egressMode === 'invalid';
   const allow = error.code === 'policy_denied' && !invalid ? providerRuleCommand(targetUrl, method) : null;
   const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
@@ -355,7 +355,7 @@ export function liveBudget(
   let checkedAt = -Infinity;
   // No mtime is recorded up front: the file may have changed between the
   // caller's loadConfig() and this point (start awaits a pricing refresh), so
-  // the first check always re-reads what is on disk now (PR #133 review).
+  // the first check always re-reads what is on disk now.
   let seenMtimeMs: number | null = null;
   let failure: BudgetConfigUnavailable | null = null;
   return () => {
@@ -374,7 +374,7 @@ export function liveBudget(
           // Deleting the file is the documented way back to defaults, so the
           // egress policy returns to its default too: a gateway allowed by a
           // rule in the deleted file is refused on the next request, not at
-          // the next restart (PR #148 review). The built-in provider routes
+          // the next restart. The built-in provider routes
           // hold in the default. A file written again is re-read in full.
           config.egress = { mode: 'local_locked', rules: [] };
           seenMtimeMs = null;
@@ -386,8 +386,8 @@ export function liveBudget(
           config.budget = fresh.budget;
           // The egress rules follow the file the same way: a rule added with
           // `segreant egress apply` (the command a refusal prints) governs the
-          // next request, with no restart, and so does a tightening (PR #148
-          // review). An invalid file throws above and fails closed.
+          // next request, with no restart, and so does a tightening. An invalid file throws
+          // above and fails closed.
           config.egress = fresh.egress;
           seenMtimeMs = mtimeMs;
           failure = null;
@@ -560,11 +560,11 @@ async function handle(
     // Declared prices are read before anything is sent: a hand-edited
     // overrides.json that no longer parses would otherwise throw only when the
     // answer is priced, after the provider had charged for it, leaving the
-    // request out of the ledger and the cap (PR #146 review). Like a broken
+    // request out of the ledger and the cap. Like a broken
     // config.json it does not latch: repairing the file resumes forwarding.
     // The request is later priced from exactly these declarations, so an edit
     // that breaks the file while it is in flight cannot stop its accounting
-    // after the provider has answered (PR #146 review).
+    // after the provider has answered.
     declarations = activePriceOverrides();
     decision = guard.evaluate({ sessionId });
   } catch (error) {
@@ -697,7 +697,7 @@ async function handle(
       // Only a policy or DNS refusal is certainly decided before the dial. A
       // receipt failure can come after the provider answered (the response
       // receipt), and a timeout or dropped connection may have reached it, so
-      // those keep an unknown cost (PR #143 review).
+      // those keep an unknown cost.
       pricing: egressRefusal !== null && (egressRefusal.code === 'policy_denied' || egressRefusal.code === 'dns_denied')
         ? notSentPricingEvidence()
         : unpricedPricingEvidence(),
@@ -724,7 +724,7 @@ async function handle(
   let usage: NormalizedUsage = emptyUsage();
   // A non-streamed response is priced once, before its headers go out, and the
   // ledger records that same cost: pricing it again could read a price card
-  // refreshed in between (PR #154 review).
+  // refreshed in between.
   let pricedForHeaders: ReturnType<typeof computeCost> | null = null;
   let resolvedModel = parsed.model;
   let captureCoverage: RequestRow['captureCoverage'] = 'complete';
@@ -890,8 +890,8 @@ async function handle(
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
-    // Kept so a later reprice prices the writes at the same duration (PR #146
-    // review), and only when it was observed rather than chosen.
+    // Kept so a later reprice prices the writes at the same duration, and only when it was
+    // observed rather than chosen.
     ...(usage.cacheWriteTtl === undefined || !usage.cacheWriteTtlObserved ? {} : { cacheWriteTtl: usage.cacheWriteTtl }),
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,

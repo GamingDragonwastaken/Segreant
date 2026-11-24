@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 54e4933c7c4fca4ba91577aff1b2c33e844b7723a6126216261a735127defe72 */
+/** Source SHA-256: 5dfccd9fe509cfcb4a6c829f8bf039f465ed363b6cc0bb47497b76954d41d752 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -239,7 +239,7 @@ export interface Overview {
   generatedAt: string;
   summary: Summary;
   /**
-   * What retention deleted from inside this window (D-175).
+   * What retention deleted from inside this window.
    *
    * `truncated: false` alone is not coverage: read `prunedBeforeMs` with it,
    * where null means no prune is ON RECORD rather than nothing pruned. A ledger
@@ -308,7 +308,7 @@ export interface Overview {
    * all six are dark, because caps are opt-in, there is no spike baseline and
    * value is uninstrumented. Structurally `AlertCoverage` from
    * `src/alerts/detect.ts`, and `routes.ts` assigns that value straight in, so
-   * the two cannot drift apart without a type error (D-144).
+   * the two cannot drift apart without a type error.
    */
   alertCoverage?: {
     channels: ReadonlyArray<{ channel: string; live: boolean; darkBecause: string | null }>;
@@ -327,7 +327,7 @@ export interface Overview {
  * structurally cannot, and saying so is the point of the type.
  */
 export interface ReconciliationCoverage {
-  /** The declaration the three buckets were split against; null means none was active (D-187). */
+  /** The declaration the three buckets were split against; null means none was active. */
   declaredScopeId: string | null;
   onDeclaredRouteUsd: number;
   onDeclaredRouteRequests: number;
@@ -345,13 +345,13 @@ export interface ReconciliationReadiness {
   /**
    * Null when the query found no OpenAI rows. It used to be documented as "the
    * ledger holds no OpenAI spend at all"; a prune makes that reading false, so
-   * it must be read together with `localLedgerRetention` (D-186). Three states:
+   * it must be read together with `localLedgerRetention`. Three states:
    * null with no prune is a machine that never metered OpenAI; null with a
    * prune is a ledger nothing survives in; non-null with a prune is figures
    * over survivors.
    */
   coverage: ReconciliationCoverage | null;
-  /** Whether a request prune is on record — not a window test, see reconcile.ts (D-186). */
+  /** Whether a request prune is on record — not a window test, see reconcile.ts. */
   localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }
 
@@ -392,7 +392,7 @@ export interface BillingKernelClaimSummary {
 
 /**
  * One kernel node with its neighbourhood, as `/api/kernel?node=<id>[&asOf=]`
- * serves it (D-257). `found: false` means the node does not exist or was not
+ * serves it. `found: false` means the node does not exist or was not
  * yet available at `asOf` — a hindsight-safe read gives the two the same
  * answer. Payloads of billing evidence are withheld and say so.
  */
@@ -713,7 +713,7 @@ export interface StatementPayload {
 
 export interface BillingPayload {
   demo: boolean;
-  /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */
+  /** The knowledge boundary the kernel claims answer at; `null` is a live read. */
   asOf: string | null;
   /** The server's statement of this claim's support, on named axes (AII-014). */
   claimSupport: ClaimSupportPayload;
@@ -1029,10 +1029,10 @@ export interface ReconciliationRunRecord {
     /** The specific day starts whose provider figure changed between observations. */
     unstableDayStartMs?: number[];
     /**
-     * Whether the residual bounds off-path spend from above at all (D-068). A
+     * Whether the residual bounds off-path spend from above at all. A
      * residual below zero refutes the condition rather than reading as "nothing
      * went off-path", and a period whose request rows were partly deleted by
-     * retention classifies nothing at all (D-173).
+     * retention classifies nothing at all.
      */
     offPathBound?:
       | 'upper_bound_conditional'
@@ -1283,7 +1283,7 @@ export interface Matured {
   acceptanceWeightedSpendUsd?: number;
   realizedSpendShare?: number;
   /**
-   * Mature units whose spend window lost rows to retention (D-176).
+   * Mature units whose spend window lost rows to retention.
    *
    * `totalCostUsd`, `spendOnRealizedUnitsUsd` and `realizedSpendShare` above are
    * DENOMINATORS. A unit whose attribution window retention emptied contributes
@@ -1344,7 +1344,7 @@ export interface ModelSwitchRecommendationPayload {
   historicalHeadroomPercent: number;
   confidence: 'trial' | 'observational_separation';
   /**
-   * Derived by the decision assurance gate (D-240), never asserted by the
+   * Derived by the decision assurance gate, never asserted by the
    * frontier. `level` is the weakest-input ladder result; each gate says
    * whether the evidence bar for that consequence class was met and always
    * carries `authorizesAction: false`. The full gate objects travel so the
@@ -1435,7 +1435,7 @@ export interface ValuePayload {
    * FALSE alarms and says nothing about missed ones, and a total regime change
    * does not fire it at n=10 or n=20 — the range where the watch first speaks.
    * Without this the payload could not distinguish a quiet watch from a blind
-   * one, so no wording on the client could have been honest (D-144).
+   * one, so no wording on the client could have been honest.
    */
   drift?: {
     n: number;
@@ -1924,11 +1924,11 @@ export interface DeclaredPrice {
   /** One phrase: "input $0.5, output $2 per 1M tokens", "like claude-haiku-4-5", "free (local model)". */
   summary: string;
   declaredAt: string;
-  /** A free price stored with --force: a cap counts the model as $0 even though a rate card prices it (PR #153 review). */
+  /** A free price stored with --force: a cap counts the model as $0 even though a rate card prices it. */
   forced?: true;
-  /** A free price not forced, for a model a rate card now prices: it is not applied; the card price counts (PR #153 review). */
+  /** A free price not forced, for a model a rate card now prices: it is not applied; the card price counts. */
   supersededByCard?: true;
-  /** The stored numbers, so an edit starts from them rather than dropping the cache rates (PR #146 review). */
+  /** The stored numbers, so an edit starts from them rather than dropping the cache rates. */
   rate?: { input: string; output: string; cacheRead?: string; cacheWrite?: string; cacheWrite1h?: string };
   like?: string;
 }

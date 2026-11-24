@@ -262,8 +262,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
           path,
         );
       }
-      // Deep check against the generated field table of shared-types.ts
-      // (D-243): the same walk the contract test runs against live routes, so a
+      // Deep check against the generated field table of shared-types.ts: the same walk the
+      // contract test runs against live routes, so a
       // declaration that does not match the wire fails here in the browser
       // rather than as NaN in a view. Fail closed: a screen built on a payload
       // the declaration misdescribes is the defect this repository keeps finding.
@@ -312,7 +312,7 @@ export const api = {
   causal: (studyId?: string) => request<CausalPayload>(
     studyId ? routePath('causal') + '?study=' + encodeURIComponent(studyId) : routePath('causal'),
   ),
-  /** One kernel node with its neighbourhood, live or as the ledger had it at `asOf` (D-257). */
+  /** One kernel node with its neighbourhood, live or as the ledger had it at `asOf`. */
   kernel: (nodeId: string, asOf?: string) => request<KernelNodePayload>(
     `${routePath('kernel')}?node=${encodeURIComponent(nodeId)}${asOf ? '&asOf=' + encodeURIComponent(asOf) : ''}`,
   ),

@@ -280,7 +280,7 @@ export function buildCausalStudyKernelIssuance(
       coveredScope: studyScope,
       coveredTime: validTime,
     },
-    // THE RECORD THAT WAS ACTUALLY MEASURED UNDER THE MODEL SAYS SO (D-168).
+    // THE RECORD THAT WAS ACTUALLY MEASURED UNDER THE MODEL SAYS SO.
     // Both claims below cite this model, and while this field was `null` that
     // citation appeared at the claim layer out of nothing -- the reference was
     // written by the adapter rather than declared by any record of the

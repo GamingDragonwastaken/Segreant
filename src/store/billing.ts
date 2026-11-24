@@ -936,7 +936,7 @@ export function openAiReconciliationCoverage(
   declaredScopeId: string | null,
 ): ReconciliationCoverage | null {
   // THE THIRD BUCKET IS WRITTEN AS `NOT (<the first>)`, AND THAT ONLY
-  // PARTITIONS WHILE THE PREDICATE IS TWO-VALUED (D-187).
+  // PARTITIONS WHILE THE PREDICATE IS TWO-VALUED.
   //
   // `provider_scope_declaration_id` is nullable and so is the bound parameter,
   // and `x = NULL` is NULL rather than false. `TRUE AND NULL` is NULL, and
@@ -1072,7 +1072,7 @@ export function openAiCostsObservationStatus(db: DatabaseSync): OpenAiCostsObser
 export function openAiCostsCaptureCoverage(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
-  /** Read by the caller, which owns the retention record (D-185). */
+  /** Read by the caller, which owns the retention record. */
   requestsPrunedBeforeMs: number | null = null,
 ): OpenAiCostsCaptureCoverage | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
@@ -1139,8 +1139,8 @@ export function reconcileOpenAiCosts(
    * The recorded retention boundary for `requests`, or null when no prune is on
    * record. Passed in rather than read here because `retention_prunes` is the
    * ledger's own record and `Store` owns it; the reconciliation needs it because
-   * rows deleted from inside the period silently understate the local total
-   * (D-173). Required, like the field it feeds: a default would let a caller
+   * rows deleted from inside the period silently understate the local total. Required, like
+   * the field it feeds: a default would let a caller
    * reintroduce the defect by saying nothing.
    */
   requestsPrunedBeforeMs: number | null,
