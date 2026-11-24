@@ -15,7 +15,7 @@ what it means.
 
 No account, key, payment or permission is needed for any of that.
 
-## The two things you may not do
+## The three things you may not do
 
 1. **Offer Segreant as a service.** You may not run it, or a modified version
    of it, as a hosted or managed service for other people or other companies.
@@ -23,12 +23,18 @@ No account, key, payment or permission is needed for any of that.
 2. **Sell Segreant itself.** You may not sell, rent, sublicense or otherwise
    charge a fee for Segreant or a modified version of it, including a copy
    relabelled under another name.
+3. **Train AI models on it.** You may not use Segreant's code or documents as
+   training data for a machine-learning model. Letting an AI tool read the
+   repository to help you use or change it is fine. This limit was added in
+   November 2026, so it covers versions published from then on. Earlier
+   versions keep the terms they were published with, and we ask the same of
+   anyone training on those.
 
 ## Every version becomes fully open source
 
 Two years after a version of Segreant is first published, that version
 switches to the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0),
-an Open Source license, and both limits above end for it. Each later version
+an Open Source license, and the limits above end for it. Each later version
 follows on its own two-year clock.
 
 Until then, Segreant is *source-available*, not *open source* in the strict
@@ -44,7 +50,7 @@ resold copy before it is fully open.
 
 ## Something else in mind
 
-If you want to do something the two limits forbid, or you need different
+If you want to do something the limits forbid, or you need different
 terms, open a
 [discussion](https://github.com/GamingDragonwastaken/Segreant/discussions).
 

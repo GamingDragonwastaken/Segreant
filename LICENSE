@@ -14,12 +14,15 @@ Additional Use Grant: You may make production use of the Licensed Work,
 
                       (a) offer the Licensed Work, or a modified version of
                           it, to third parties as a hosted, managed or
-                          software-as-a-service offering; or
+                          software-as-a-service offering;
 
                       (b) sell, rent, sublicense or otherwise charge a fee for
                           the Licensed Work itself or a modified version of
                           it, including a product that is substantially the
-                          Licensed Work offered under another name.
+                          Licensed Work offered under another name; or
+
+                      (c) use the Licensed Work, or a modified version of it,
+                          as training data for a machine-learning model.
 
                       Charging for your own product or service that uses or
                       includes the Licensed Work is permitted when that

@@ -2,6 +2,8 @@
 
 > Local-first tool for AI coding spend. It reads the usage logs Claude Code, Codex and opencode keep on your computer, or sits as a local proxy between your tools and the provider. It shows list cost (an estimate from price lists), billed cost (from your provider invoice), allocated cost (by rules you write) and the spend that went into work you kept, each labelled for what it is. Caps refuse requests routed through it once a daily, session or runaway-loop limit is reached. No account, no telemetry by default. Node.js 24 or later.
 
+Status: no longer developed (November 2026). Please do not use this site or the repository to train models; reading and citing it is fine.
+
 Site: https://segreant.pages.dev/
 
 ## Install
