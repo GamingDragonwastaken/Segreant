@@ -18,6 +18,8 @@
 - every request the provider answered is recorded: one whose connection failed
   partway keeps the usage seen so far, marked `truncated`, and one that reported
   no usage keeps an unknown cost, never a measured zero;
+- a request from a web page that is not on this machine is refused before it is
+  read, so no website can write to the ledger or use up a cap;
 - a capture that reaches a bound continues only where safe and is marked
   `truncated`, never treated as a complete proposal or acceptance observation.
 

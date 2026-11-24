@@ -441,6 +441,16 @@ async function handle(
     return;
   }
 
+  // A page on some website can reach a port on this machine. It holds none of
+  // the user's keys, but what it sent would be recorded as theirs and count
+  // toward their cap. Browsers name the page in Origin; other clients send none.
+  if (isWebPageElsewhere(req.headers.origin)) {
+    req.resume();
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'segreant_origin_refused', message: 'Segreant accepts requests from programs and pages on this machine, not from other websites.' } }));
+    return;
+  }
+
   const route = detectRoute(req, config);
   if (state.accountingFailure) {
     const message = 'Segreant cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Segreant.';
@@ -895,6 +905,18 @@ async function handle(
     captureCoverage,
     ...scopeCapture,
   }, decision, () => { state.accountingFailure = true; });
+}
+
+function isWebPageElsewhere(origin: string | undefined): boolean {
+  if (origin === undefined) return false;
+  if (origin === 'null') return true; // a sandboxed frame, which any site can make
+  if (!/^https?:/i.test(origin)) return false; // an editor or app's own scheme
+  try {
+    const host = new URL(origin).hostname;
+    return host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]' && !host.endsWith('.localhost');
+  } catch {
+    return true;
+  }
 }
 
 /** Whether a successful answer on this path is one the provider charges tokens for. */
