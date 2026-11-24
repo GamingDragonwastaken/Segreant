@@ -115,6 +115,7 @@ export type RateCardSourceKind = (typeof RATE_CARD_SOURCE_KINDS)[number];
 export const RATE_MATCH_KINDS = [
   'exact_provider',
   'exact_cross_provider',
+  'standard_rate_assumed',
   'family_provider',
   'family_cross_provider',
   'fallback',
@@ -1383,9 +1384,12 @@ function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): { rate: ModelRa
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
-  const { rate: listed, estimated: unmatched, pricing } = rateFor(provider, model);
+  const { rate: listed, estimated: unmatched, pricing: matched } = rateFor(provider, model);
   const { rate, known: promptKnown } = rateForPrompt(listed, usage);
   const estimated = unmatched || !promptKnown;
+  // The model is on the card, but which of its rates applied is not known.
+  const assumed = !promptKnown && (matched.rateMatchKind === 'exact_provider' || matched.rateMatchKind === 'exact_cross_provider');
+  const pricing: RequestPricingEvidence = assumed ? { ...matched, rateMatchKind: 'standard_rate_assumed' } : matched;
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input
   // (the standard Anthropic 5-minute write premium) so we never silently bill $0.
