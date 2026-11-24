@@ -320,6 +320,6 @@ organizations alike ([LICENSING.md](LICENSING.md)). Paying never unlocks feature
 [Business Source License 1.1](LICENSE) with an Additional Use Grant: **anyone,
 person or company, may use, change and build on Segreant for free**, including
 selling their own products built on it. The three things not allowed are
-offering Segreant as a hosted service and selling Segreant itself, and using it as training data for a machine-learning model. Two years
-after each version is published, it becomes Apache 2.0 open source. Plain
-words: [LICENSING.md](LICENSING.md).
+offering Segreant as a hosted service, selling Segreant itself, and using it as
+training data for a machine-learning model. Two years after each version is
+published, it becomes Apache 2.0 open source. Plain words: [LICENSING.md](LICENSING.md).
