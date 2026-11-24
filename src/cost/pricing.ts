@@ -67,6 +67,14 @@ export interface ModelRate {
   cache_read?: number;
   /** Optional canonical decimal companion used by the exact accounting path. */
   exact?: ExactModelRate;
+  /** Rates for longer prompts, shortest first. A provider may charge the whole request more past a length. */
+  above?: LongPromptRate[];
+}
+
+/** What every token of a request costs once its prompt is longer than `prompt_tokens`. */
+export interface LongPromptRate extends Omit<ModelRate, 'above'> {
+  /** Input, cache-read and cache-write tokens together. */
+  prompt_tokens: number;
 }
 
 interface PricingFile {
@@ -274,10 +282,36 @@ function pricingValidationError(obj: unknown): string | null {
           return `model ${model} has an invalid exact rate: ${error instanceof Error ? error.message : String(error)}`;
         }
       }
+      const above = longPromptError(rate['above']);
+      if (above !== null) return `model ${model} ${above}`;
       modelCount += 1;
     }
   }
   return modelCount > 0 ? null : 'manifest contains no models';
+}
+
+function longPromptError(above: unknown): string | null {
+  if (above === undefined) return null;
+  if (!Array.isArray(above)) return 'has long-prompt rates that are not a list';
+  let previous = 0;
+  for (const tier of above as Array<Record<string, unknown> | null>) {
+    if (!tier || typeof tier !== 'object') return 'has an invalid long-prompt rate';
+    const from = tier['prompt_tokens'];
+    if (!Number.isSafeInteger(from) || (from as number) <= previous) return 'must list long-prompt rates by increasing prompt_tokens';
+    previous = from as number;
+    if (!validRate(tier['input']) || !validRate(tier['output'])) return 'must have finite positive long-prompt input/output rates';
+    for (const key of ['cache_write_5m', 'cache_write_1h', 'cache_read']) {
+      if (tier[key] !== undefined && !validRate(tier[key])) return `has an invalid long-prompt ${key} rate`;
+    }
+    if (tier['exact'] !== undefined) {
+      try {
+        validateExactModelRate(tier['exact'] as ExactModelRate);
+      } catch (error) {
+        return `has an invalid exact long-prompt rate: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
+  return null;
 }
 
 function isValidPricing(obj: unknown): obj is PricingFile {
@@ -585,6 +619,43 @@ function perMillion(perToken: number): number {
   return Number((perToken * 1e6).toPrecision(10));
 }
 
+/** One rate from a feed entry: the standard one, or the one whose keys carry this suffix. */
+function feedRate(e: LiteLLMEntry, suffix: string, input: number, output: number): ModelRate {
+  const fields = e as unknown as Record<string, unknown>;
+  const rate: ModelRate = { input: perMillion(input), output: perMillion(output) };
+  for (const [key, field] of [
+    ['cache_write_5m', `cache_creation_input_token_cost${suffix}`],
+    ['cache_write_1h', `cache_creation_input_token_cost_above_1hr${suffix}`],
+    ['cache_read', `cache_read_input_token_cost${suffix}`],
+  ] as const) {
+    const value = fields[field];
+    if (typeof value === 'number' && value > 0) rate[key] = perMillion(value);
+  }
+  return rate;
+}
+
+/** The feed's long-prompt rates, which it writes as `input_cost_per_token_above_200k_tokens` beside the standard key. */
+function longPromptRates(e: LiteLLMEntry, standard: ModelRate): LongPromptRate[] {
+  const fields = e as unknown as Record<string, unknown>;
+  const tiers: LongPromptRate[] = [];
+  for (const key of Object.keys(fields)) {
+    const named = /^input_cost_per_token(_above_([0-9]+)k_tokens)$/.exec(key);
+    if (named === null) continue;
+    const input = fields[key];
+    const output = fields[`output_cost_per_token${named[1]!}`] ?? e.output_cost_per_token;
+    if (typeof input !== 'number' || typeof output !== 'number' || input <= 0 || output <= 0) continue;
+    const rate = feedRate(e, named[1]!, input, output);
+    // A cache price the feed gives only for short prompts rises with the input price it is a share of.
+    for (const part of ['cache_write_5m', 'cache_write_1h', 'cache_read'] as const) {
+      if (rate[part] === undefined && standard[part] !== undefined) {
+        rate[part] = Number((standard[part] * (rate.input / standard.input)).toPrecision(10));
+      }
+    }
+    tiers.push({ prompt_tokens: Number(named[2]) * 1000, ...withExactCompanion(rate) });
+  }
+  return tiers.sort((a, b) => a.prompt_tokens - b.prompt_tokens);
+}
+
 /**
  * Convert a LiteLLM price file into our manifest schema. Pure and total: bad
  * input yields `{ ok: false }`, never a throw. Only chat-capable entries from
@@ -617,27 +688,12 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     const name = rawKey.includes('/') ? rawKey.slice(rawKey.lastIndexOf('/') + 1) : rawKey;
     const bucket = (providers[provider] ??= { verified: false, models: {} });
     if (bucket.models[name]) continue; // first entry wins — deterministic on duplicate routes
-    const rate: ModelRate = {
-      input: perMillion(e.input_cost_per_token),
-      output: perMillion(e.output_cost_per_token),
-    };
-    if (typeof e.cache_creation_input_token_cost === 'number' && e.cache_creation_input_token_cost > 0) {
-      rate.cache_write_5m = perMillion(e.cache_creation_input_token_cost);
-    }
-    if (typeof e.cache_read_input_token_cost === 'number' && e.cache_read_input_token_cost > 0) {
-      rate.cache_read = perMillion(e.cache_read_input_token_cost);
-    }
     // The decimal companion, so a model learned from the feed reprices to an
     // exact amount: without it `reprice --apply` refused a first-sight model
     // that had been recorded against the bundled card's exact fallback (PR #146 review).
-    const exact: { input: string; output: string; cache_write_5m?: string; cache_read?: string } = {
-      input: plainDecimal(rate.input),
-      output: plainDecimal(rate.output),
-    };
-    if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
-    if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
-    rate.exact = exact;
-    bucket.models[name] = rate;
+    const standard = feedRate(e, '', e.input_cost_per_token, e.output_cost_per_token);
+    const above = longPromptRates(e, standard);
+    bucket.models[name] = { ...withExactCompanion(standard), ...(above.length === 0 ? {} : { above }) };
   }
 
   const total = Object.values(providers).reduce((n, p) => n + Object.keys(p.models).length, 0);
@@ -1153,7 +1209,8 @@ function declarationRevision(o: PriceOverride): string {
 
 /** The rate with decimal companions for any it lacks, written from its own numbers. */
 function withExactCompanion(rate: ModelRate): ModelRate {
-  if (rate.exact !== undefined) return rate;
+  const above = rate.above?.map((tier) => ({ ...tier, ...withExactCompanion(tier) }));
+  if (rate.exact !== undefined) return above === undefined ? rate : { ...rate, above };
   const exact: { input: string; output: string; cache_write_5m?: string; cache_write_1h?: string; cache_read?: string } = {
     input: plainDecimal(rate.input),
     output: plainDecimal(rate.output),
@@ -1161,7 +1218,7 @@ function withExactCompanion(rate: ModelRate): ModelRate {
   if (rate.cache_write_5m !== undefined) exact.cache_write_5m = plainDecimal(rate.cache_write_5m);
   if (rate.cache_write_1h !== undefined) exact.cache_write_1h = plainDecimal(rate.cache_write_1h);
   if (rate.cache_read !== undefined) exact.cache_read = plainDecimal(rate.cache_read);
-  return { ...rate, exact };
+  return { ...rate, exact, ...(above === undefined ? {} : { above }) };
 }
 
 /** A free (local) model: every rate is zero, cache rates included. */
@@ -1309,8 +1366,20 @@ export function cacheWriteDuration(ephemeral5m: number, ephemeral1h: number): { 
   return { ttl: ephemeral1h > ephemeral5m ? '1h' : '5m', observed: true };
 }
 
+/** No model reads a prompt this long, so a row over it is several requests recorded as one. */
+const LONGEST_PROMPT_TOKENS = 4_000_000;
+
+/** The rate this request's whole usage is charged at, given how long its prompt was. */
+function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): ModelRate {
+  if (rate.above === undefined) return rate;
+  const prompt = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+  if (prompt > LONGEST_PROMPT_TOKENS) return rate;
+  return rate.above.findLast((tier) => prompt > tier.prompt_tokens) ?? rate;
+}
+
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
-  const { rate, estimated, pricing } = rateFor(provider, model);
+  const { rate: listed, estimated, pricing } = rateFor(provider, model);
+  const rate = rateForPrompt(listed, usage);
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input
   // (the standard Anthropic 5-minute write premium) so we never silently bill $0.
