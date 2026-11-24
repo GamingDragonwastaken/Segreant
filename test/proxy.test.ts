@@ -1048,3 +1048,28 @@ test('a refused request and a token count are not charges, so they stay at zero'
   }, '/v1/messages/count_tokens', { model: 'claude-opus-4-8' });
   assert.equal(counted.rows[0]!['coverage'], 'complete');
 });
+
+test('a web page on another site is refused and leaves no record; local pages, editors and programs are not', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  // fetch refuses to set Origin, so this speaks HTTP directly, as a browser would.
+  const from = (origin: string | null): Promise<number> => new Promise((resolve, reject) => {
+    const req = http.request(`${proxy.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-api-key': 'sk-test', ...(origin === null ? {} : { origin }) } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode ?? 0));
+    });
+    req.on('error', reject);
+    req.end(JSON.stringify({ model: 'claude-opus-4-8' }));
+  });
+  try {
+    for (const origin of ['https://evil.example', 'http://localhost.evil.example', 'http://127.0.0.1.evil.example', 'null']) assert.equal(await from(origin), 403, origin);
+    assert.equal(upstream.connections(), 0);
+    assert.equal(store.summary(0, Date.now() + 1000).requests, 0);
+    for (const origin of [null, 'http://localhost:3000', 'http://127.0.0.1:8788', 'http://[::1]:3000', 'http://app.localhost', 'vscode-webview://abc']) assert.equal(await from(origin), 200, String(origin));
+  } finally {
+    await proxy.close();
+    await upstream.close();
+    store.close();
+  }
+});
