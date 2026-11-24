@@ -22,6 +22,11 @@ import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
 type Builder = (cap: Capability) => ActionSpec;
 
+/** An import's result, followed by whatever it could not read or had to leave out. */
+function withNotes(message: string, notes: ReadonlyArray<{ tool: string; text: string }>): string {
+  return [message, ...notes.map((n) => `${n.tool}: ${n.text}`)].join(' ');
+}
+
 /**
  * Sample data runs against a read-only configuration: the server refuses every
  * settings write. The preview says so before Apply is offered, instead of
@@ -133,9 +138,11 @@ const BUILDERS: Record<string, Builder> = {
       const result = await api.write.runImport('all');
       return {
         ok: result.ok,
-        message: result.totalNew > 0
+        message: withNotes(result.totalNew > 0
           ? `Done. ${count(result.totalNew)} new record${result.totalNew === 1 ? '' : 's'} imported.`
-          : 'Done. Nothing new — everything these tools recorded was already in the ledger.',
+          : result.notes.some((n) => n.missing)
+            ? 'Done. Nothing new was imported.'
+            : 'Done. Nothing new — everything these tools recorded was already in the ledger.', result.notes),
       };
     },
   }),
@@ -180,7 +187,7 @@ const BUILDERS: Record<string, Builder> = {
       const result = await api.write.runScan();
       return {
         ok: result.ok,
-        message: `Done. ${count(result.totalNew)} new record${result.totalNew === 1 ? '' : 's'} imported, ${count(result.correlated)} project(s) correlated.`,
+        message: withNotes(`Done. ${count(result.totalNew)} new record${result.totalNew === 1 ? '' : 's'} imported, ${count(result.correlated)} project(s) correlated.`, result.notes),
       };
     },
   }),

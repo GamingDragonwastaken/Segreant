@@ -11,6 +11,8 @@
 ## Guarantees
 
 - importers never route traffic or read provider credentials;
+- `importNotes.ts` words what an import changed or could not read, for the CLI
+  and the dashboard alike;
 - `logFiles.ts` finds and reads every line log; a log found but not read to the
   end is counted in `ImportSummary.unreadFiles`, and no cursor is kept for it;
 - a Claude Code request is recorded with its finished usage, and a forked Codex
