@@ -54,7 +54,7 @@ export interface WriteBatch {
   end(): void;
 }
 
-export function writeBatch(db: DatabaseSync, opts: { maxRows?: number; maxMs?: number } = {}): WriteBatch {
+export function writeBatch(db: DatabaseSync, opts: { maxRows?: number; maxMs?: number; beforeCommit?: () => void } = {}): WriteBatch {
   const maxRows = opts.maxRows ?? 2000;
   const maxMs = opts.maxMs ?? 200;
   // Already inside someone else's transaction: nest nothing, own nothing.
@@ -64,7 +64,15 @@ export function writeBatch(db: DatabaseSync, opts: { maxRows?: number; maxMs?: n
   let since = Date.now();
   prepared(db, 'BEGIN IMMEDIATE').run();
   const commit = () => {
-    if (db.isTransaction) prepared(db, 'COMMIT').run();
+    if (!db.isTransaction) return;
+    try {
+      opts.beforeCommit?.();
+    } catch (error) {
+      // What the batch wrote is not whole without it, so none of it is kept.
+      prepared(db, 'ROLLBACK').run();
+      throw error;
+    }
+    prepared(db, 'COMMIT').run();
   };
   return {
     tick() {
