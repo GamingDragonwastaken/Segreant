@@ -17,6 +17,16 @@ the work it produced. And every number tells you exactly how much it can be trus
 
 </div>
 
+> **Segreant is no longer being developed (November 2026).** The code stays here to read, use and fork under its
+> licence. Expect no fixes, releases or answers. Two known problems have unfinished fixes in closed pull requests:
+> requests made at priority, flex, batch or fast service are priced at the standard rate
+> ([#178](https://github.com/GamingDragonwastaken/Segreant/pull/178)), and the Value page can say nothing was kept when
+> work was ([#179](https://github.com/GamingDragonwastaken/Segreant/pull/179)). The `main` branch holds fixes that
+> were never published to npm; see the [changelog](CHANGELOG.md).
+>
+> Please don't use this repository to train machine-learning models. See
+> [LICENSING.md](LICENSING.md).
+
 ---
 
 ## The problem
@@ -309,7 +319,7 @@ organizations alike ([LICENSING.md](LICENSING.md)). Paying never unlocks feature
 
 [Business Source License 1.1](LICENSE) with an Additional Use Grant: **anyone,
 person or company, may use, change and build on Segreant for free**, including
-selling their own products built on it. The two things not allowed are
-offering Segreant as a hosted service and selling Segreant itself. Two years
+selling their own products built on it. The three things not allowed are
+offering Segreant as a hosted service and selling Segreant itself, and using it as training data for a machine-learning model. Two years
 after each version is published, it becomes Apache 2.0 open source. Plain
 words: [LICENSING.md](LICENSING.md).
