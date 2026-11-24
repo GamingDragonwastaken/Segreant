@@ -1096,25 +1096,19 @@ export class Store {
     if (row.economicAmount === undefined && this.economicLedger.read(requestEconomicEventId(row.requestId)) !== null) {
       throw new RequestObservationConflictError(row.requestId);
     }
-    try {
-      realization.correctImportedUsage(this.db, this.economicLedger, {
-        requestId: row.requestId,
-        inputTokens: row.inputTokens,
-        outputTokens: row.outputTokens,
-        cacheWriteTokens: row.cacheWriteTokens,
-        cacheReadTokens: row.cacheReadTokens,
-        reasoningTokens: row.reasoningTokens,
-        cacheWriteTtl: row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
-        costUsd,
-        estimated: row.estimated,
-        pricing,
-        ...(row.economicAmount === undefined ? {} : { economicAmount: row.economicAmount }),
-      }, Date.now());
-    } catch (error) {
-      // Somebody closed this period's books. They stay as closed.
-      if (error instanceof EconomicPeriodClosedError) throw new RequestObservationConflictError(row.requestId);
-      throw error;
-    }
+    realization.correctImportedUsage(this.db, this.economicLedger, {
+      requestId: row.requestId,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheWriteTokens: row.cacheWriteTokens,
+      cacheReadTokens: row.cacheReadTokens,
+      reasoningTokens: row.reasoningTokens,
+      cacheWriteTtl: row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
+      costUsd,
+      estimated: row.estimated,
+      pricing,
+      ...(row.economicAmount === undefined ? {} : { economicAmount: row.economicAmount }),
+    }, Date.now());
     this.completedInBatch.push({ tsEpochMs: recorded.tsEpochMs, project: recorded.project });
     if (this.activeBatch === null) this.syncCompletedCosts();
     return 'completed';
@@ -1123,7 +1117,8 @@ export class Store {
   /**
    * An import recorded a request that turns out to repeat one counted elsewhere:
    * it keeps its row and its history and counts for nothing. False when there is
-   * no such row, it already counts for nothing, or its period's books are closed.
+   * no such row or it already counts for nothing. Throws when its period's books
+   * are closed: they stay as closed.
    */
   retractImportedRequest(requestId: string): boolean {
     return this.transaction(() => {
@@ -1137,20 +1132,15 @@ export class Store {
       ).get(requestId) as ({ tsEpochMs: number; project: string } & Record<string, unknown>) | undefined;
       if (recorded === undefined) return false;
       const charge = this.economicLedger.read(requestEconomicEventId(requestId));
-      try {
-        realization.correctImportedUsage(this.db, this.economicLedger, {
-          requestId,
-          inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
-          cacheWriteTtl: 'not_recorded',
-          costUsd: 0,
-          estimated: false,
-          pricing: pricingEvidenceFromRecord(recorded),
-          ...(charge === null ? {} : { economicAmount: money('0', charge.amount!.currency, charge.amount!.basis) }),
-        }, Date.now());
-      } catch (error) {
-        if (error instanceof EconomicPeriodClosedError) return false;
-        throw error;
-      }
+      realization.correctImportedUsage(this.db, this.economicLedger, {
+        requestId,
+        inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+        cacheWriteTtl: 'not_recorded',
+        costUsd: 0,
+        estimated: false,
+        pricing: pricingEvidenceFromRecord(recorded),
+        ...(charge === null ? {} : { economicAmount: money('0', charge.amount!.currency, charge.amount!.basis) }),
+      }, Date.now());
       this.completedInBatch.push({ tsEpochMs: recorded.tsEpochMs, project: recorded.project });
       if (this.activeBatch === null) this.syncCompletedCosts();
       return true;

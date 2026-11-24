@@ -7,7 +7,7 @@
  * form this build does not read is counted and reported, never skipped in silence.
  */
 
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { closeSync, createReadStream, fstatSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { createGunzip, createZstdDecompress } from 'node:zlib';
 import { basename, join } from 'node:path';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
@@ -89,6 +89,52 @@ export function isUnreadableLog(error: unknown): boolean {
     || ['ENOENT', 'EACCES', 'EPERM', 'EBUSY', 'EIO', 'EISDIR', 'EMFILE', 'ENFILE', 'ESTALE', 'UNKNOWN'].includes(code));
 }
 
+const ZSTD_FRAME = 0xfd2fb528;
+const ZSTD_SKIPPABLE_FRAME = 0x184d2a50;
+
+/**
+ * Whether a zstd file holds whole frames to its last byte (RFC 8878). Node's
+ * decompressor may end normally on a file cut off partway, which would read as a
+ * complete, shorter log. Only the block headers are read.
+ */
+function zstdFramesAreWhole(file: string): boolean {
+  const fd = openSync(file, 'r');
+  try {
+    const size = fstatSync(fd).size;
+    const header = Buffer.alloc(8);
+    const read = (at: number, length: number): number | null => (
+      at + length <= size && readSync(fd, header, 0, length, at) === length ? header.readUIntLE(0, length) : null
+    );
+    let at = 0;
+    while (at < size) {
+      const magic = read(at, 4);
+      if (magic === null) return false;
+      if ((magic & 0xfffffff0) >>> 0 === ZSTD_SKIPPABLE_FRAME) {
+        const length = read(at + 4, 4);
+        if (length === null) return false;
+        at += 8 + length;
+        continue;
+      }
+      const descriptor = read(at + 4, 1);
+      if (magic !== ZSTD_FRAME || descriptor === null) return false;
+      const singleSegment = (descriptor >> 5) & 1;
+      const contentSizeBytes = [singleSegment, 2, 4, 8][descriptor >> 6]!;
+      at += 5 + (1 - singleSegment) + [0, 1, 2, 4][descriptor & 3]! + contentSizeBytes;
+      for (let last = 0; last === 0;) {
+        const block = read(at, 3);
+        if (block === null) return false;
+        last = block & 1;
+        const repeatedByte = ((block >> 1) & 3) === 1;
+        at += 3 + (repeatedByte ? 1 : block >> 3);
+      }
+      if ((descriptor >> 2) & 1) at += 4; // content checksum
+    }
+    return at === size;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 const NEWLINE = 0x0a;
 const CARRIAGE_RETURN = 0x0d;
 const BYTE_ORDER_MARK = 0xfeff;
@@ -154,6 +200,9 @@ export async function* readLogLines(file: string, onOversizedLine?: (kind: strin
     if (heldBytes > 0) {
       const line = release();
       if (line !== null) yield line;
+    }
+    if (lower.endsWith('.zst') && !zstdFramesAreWhole(file)) {
+      throw Object.assign(new Error(`${basename(file)} ends partway through its compressed data`), { code: 'ZSTD_frame_incomplete' });
     }
   } finally {
     raw.destroy();

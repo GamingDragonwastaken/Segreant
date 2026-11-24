@@ -139,6 +139,7 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
   const lo = [recent.earliestMs, rest.earliestMs].filter((v): v is number => v !== null);
   const hi = [recent.latestMs, rest.latestMs].filter((v): v is number => v !== null);
   const conflicts = (recent.conflictingObservations ?? 0) + (rest.conflictingObservations ?? 0);
+  const closed = (recent.closedPeriodObservations ?? 0) + (rest.closedPeriodObservations ?? 0);
   const retracted = (recent.retractedObservations ?? 0) + (rest.retractedObservations ?? 0);
   const completed = (recent.completedObservations ?? 0) + (rest.completedObservations ?? 0);
   return {
@@ -153,6 +154,7 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
     relabelled: [...recent.relabelled, ...rest.relabelled],
     ...(conflicts > 0 ? { conflictingObservations: conflicts } : {}),
     ...(completed > 0 ? { completedObservations: completed } : {}),
+    ...(closed > 0 ? { closedPeriodObservations: closed } : {}),
     ...(retracted > 0 ? { retractedObservations: retracted } : {}),
   };
 }
@@ -168,6 +170,9 @@ function importNotes(sum: ImportSummary): Array<{ label: string; text: string; m
   }
   if (sum.retractedObservations) {
     notes.push({ label: 'Corrected', missing: false, text: `${num(sum.retractedObservations)} request(s) an earlier import counted a second time, from a forked session's copy of its parent's log, now count once.` });
+  }
+  if (sum.closedPeriodObservations) {
+    notes.push({ label: 'Closed books', missing: true, text: `${num(sum.closedPeriodObservations)} correction(s) fall in an accounting period you have closed and were not made. Reopen the period, then import again.` });
   }
   if (sum.conflictingObservations) {
     notes.push({ label: 'Conflicts', missing: true, text: `${num(sum.conflictingObservations)} request(s) already recorded with different usage; kept the first record, left these out.` });

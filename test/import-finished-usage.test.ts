@@ -202,3 +202,23 @@ test('a large line that could not hold usage does not mark the import incomplete
     store.close();
   }
 });
+
+test('a correction to closed books waits for them to be reopened, and the next import makes it', async () => {
+  const unfinished = claudeLine('req_1', { input: 2, output: 8 });
+  const root = claudeRoot({ 'a.jsonl': [unfinished] });
+  const store = freshStore();
+  await importClaudeCode(store, { root });
+  const period = { periodStartMs: Date.parse('2026-07-01T00:00:00.000Z'), periodEndMs: Date.parse('2026-08-01T00:00:00.000Z') };
+  store.finalizeEconomicPeriod(period);
+
+  writeFileSync(join(root, 'proj', 'a.jsonl'), [unfinished, claudeLine('req_1', { input: 2, output: 800 })].join('\n'));
+  const blocked = await importClaudeCode(store, { root });
+  assert.deepEqual([blocked.closedPeriodObservations, blocked.completedObservations ?? 0, blocked.conflictingObservations ?? 0], [1, 0, 0]);
+  assert.deepEqual(tokens(store), [1, 2, 8], 'closed books stay as closed');
+
+  store.reopenEconomicPeriod({ ...period, reason: 'late usage' });
+  const made = await importClaudeCode(store, { root });
+  assert.deepEqual([made.closedPeriodObservations ?? 0, made.completedObservations], [0, 1]);
+  assert.deepEqual(tokens(store), [1, 2, 800]);
+  store.close();
+});
