@@ -83,6 +83,19 @@ export async function isGitRepo(repoPath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Whether nobody has committed to this repository yet. `git log` reports that as
+ * a failure, though such a repository is sound and holds no work. False when git
+ * could not say, so a damaged repository is never taken for an empty one.
+ */
+export async function hasNoCommits(repoPath: string): Promise<boolean> {
+  try {
+    return (await git(repoPath, ['rev-list', '--all', '-n1'])).trim() === '';
+  } catch {
+    return false;
+  }
+}
+
 /** Resolve a ref (short hash, branch, HEAD~2) to a full commit hash, or null. */
 export async function resolveCommit(repoPath: string, ref: string): Promise<string | null> {
   try {
@@ -174,8 +187,12 @@ export async function readCommits(repoPath: string, limit: number): Promise<Comm
   // trailing --numstat block stays in the SAME chunk when we split. Fields
   // inside the line are unit-separated (\x1f): hash, author-epoch, subject.
   const fmt = '%x1e%H%x1f%at%x1f%s';
-  const out = await git(repoPath, ['log', `-n${limit}`, `--pretty=format:${fmt}`, '--numstat']);
-  return parseCommitLog(out);
+  try {
+    return parseCommitLog(await git(repoPath, ['log', `-n${limit}`, `--pretty=format:${fmt}`, '--numstat']));
+  } catch (error) {
+    if (await hasNoCommits(repoPath)) return [];
+    throw error;
+  }
 }
 
 /**
