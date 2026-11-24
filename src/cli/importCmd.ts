@@ -541,7 +541,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
   // ask for (the running proxy still looks models up on first sight). Only the
   // built-in public list, which is what this line and the privacy statement
   // disclose: a custom pricing.manifestUrl is refreshed when its operator asks
-  // (segreant pricing --refresh, or autoRefresh), never by scan (PR #146 review).
+  // (segreant pricing --refresh, or autoRefresh), never by scan.
   const builtInList = pricingCfg.manifestUrl === null || pricingCfg.manifestUrl === undefined || pricingCfg.manifestUrl === DEFAULT_MANIFEST_URL;
   if (flags.setup && !flags.json && tty && !isDemo() && pricingCfg.lookupUnknownModels && builtInList && priceCheckDue(prices)) {
     console.log(color(tty, C.gray, '  Checking the public price list so imported requests get current prices (sends nothing about you)…'));

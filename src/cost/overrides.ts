@@ -127,7 +127,7 @@ let cache: { path: string; text: string; file: PriceOverridesFile } | null = nul
  * Only a missing file means "no declarations". A path the process cannot
  * reach (a directory that lost search permission, an I/O error) used to read
  * as absent, so a negotiated price silently dropped out of accounting and the
- * cap (PR #146 review). The cache is keyed on the text itself, not on mtime and
+ * cap. The cache is keyed on the text itself, not on mtime and
  * size: an edit that keeps both, such as a restored backup, is still seen.
  */
 export function loadPriceOverrides(): PriceOverridesFile {
@@ -163,7 +163,7 @@ export function loadPriceOverrides(): PriceOverridesFile {
 /**
  * The declarations that price requests: none while showing sample data. The
  * demo is advertised as isolated, so a real negotiated rate or private model
- * name must never change or appear in it (PR #146 review).
+ * name must never change or appear in it.
  */
 export function activePriceOverrides(): Record<string, PriceOverride> {
   return isDemo() ? Object.create(null) as Record<string, PriceOverride> : loadPriceOverrides().models;
@@ -180,7 +180,7 @@ function writeOverrides(file: PriceOverridesFile): void {
   const sorted: Record<string, PriceOverride> = {};
   for (const model of Object.keys(file.models).sort()) sorted[model] = file.models[model]!;
   // Private like the config and backups: model names and negotiated rates are
-  // not for other local users (PR #146 review). chmod covers a leftover temp
+  // not for other local users. chmod covers a leftover temp
   // file, which writeFileSync's mode would not narrow.
   writeFileSync(tmp, `${JSON.stringify({ version: 1, models: sorted }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   chmodSync(tmp, 0o600);
@@ -192,7 +192,7 @@ function writeOverrides(file: PriceOverridesFile): void {
 /**
  * One read-modify-write at a time, across processes: two writers that each
  * loaded the same file would otherwise both succeed while the later rename
- * dropped the other's declaration (PR #146 review). The configuration lock is
+ * dropped the other's declaration. The configuration lock is
  * shared, so a price edit also never interleaves with a config edit; a second
  * writer is refused with the reason rather than waiting or losing data.
  */

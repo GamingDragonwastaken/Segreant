@@ -45,11 +45,11 @@ async function answeredNothingSpent(store: Store, flags: Flags, repo: string): P
   if (store.earliestRequestMs() !== null) return false;
   // A path that is not a repository is the user's real problem, and the
   // command's own check reports it with a failing status; answering "nothing
-  // spent" first hid that behind exit 0 (PR #131 review).
+  // spent" first hid that behind exit 0.
   if (!(await isGitRepo(repo))) return false;
   // No surviving request is not "nothing spent" once retention has pruned
   // rows or a realization snapshot is stored: the stored report is the answer
-  // then, and the command must reach it (review 4, F2).
+  // then, and the command must reach it.
   if (store.retentionFloor().requestsPrunedBeforeMs !== null || store.countRealizationUnits() > 0) return false;
   const next = ['segreant scan --setup', 'segreant demo --serve'];
   if (flags.json) {
@@ -82,10 +82,9 @@ function plainCapVerdict(
   const recommended = label(recommendedCap);
   const current = label(currentCap);
   // Equal caps are one setting, not two options: there is nothing to compare,
-  // and blaming partly observed days for "no winner" would be a false reason
-  // (PR #142 review).
+  // and blaming partly observed days for "no winner" would be a false reason.
   // The soft warning is part of the recommendation too: an equal daily cap
-  // with a different soft warning is a change, and is said as one (PR #145 review).
+  // with a different soft warning is a change, and is said as one.
   if (recommendedCap !== null && recommendedCap !== undefined && recommendedCap === currentCap) {
     const first = soft.current === soft.recommended
       ? `  Your current ${current} cap and ${usd(soft.recommended)} soft warning already match the recommendation; nothing to change.`
@@ -355,7 +354,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
 
   // Contribution evidence: how each unit's proposals relate to its commit.
   // An association tally, printed with its non-claims; silent when no unit
-  // was assessed rather than reporting zeros as a finding (D-246).
+  // was assessed rather than reporting zeros as a finding.
   const contribution = contributionEvidenceLines(summarizeContributionEvidence(report.units));
   if (contribution.length > 0) {
     console.log('');
@@ -457,7 +456,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   const truncation = retentionNotice(rep.retention);
   if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
   if (rep.units.length === 0) {
-    // THE ERRAND IS ONLY HONEST WHEN THE EMPTINESS IS NOT A DELETION (D-174).
+    // THE ERRAND IS ONLY HONEST WHEN THE EMPTINESS IS NOT A DELETION.
     // Telling an operator to tag sessions they tagged, and whose measurements
     // retention removed on their own policy, is worse than saying nothing: it
     // sends them to do work already done and reads as evidence they never did
@@ -625,7 +624,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
       // missed ones, so a silent watch is the absence of a result rather than a
       // result: the most extreme drift a binary stream can hold does not fire it
       // at n=20. Printing it as a verdict beside DRIFT DETECTED told the operator
-      // something no evidence here supports (D-140).
+      // something no evidence here supports.
       const watched = driftStreams.map((s) => s.stream).join(', ');
       const quietest = driftStreams.reduce((fewest, s) => (s.report.n < fewest.report.n ? s : fewest), driftStreams[0]!);
       console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.yellow, 'no alarm')}   ${color(tty, C.gray, `${driftStreams.length} watched stream(s): ${watched}`)}`);
@@ -747,7 +746,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // separately gated same-task model-switch trial, never a generic allocator.
   const allocation = null;
 
-  // The decision subsystem reaches this operator here (D-220): a cap that can
+  // The decision subsystem reaches this operator here: a cap that can
   // be applied carries a decision problem, a certificate, the minimax-regret
   // pick and the derived assurance level. `certificates` is every persisted
   // bundle for THIS problem, revalidated as-of now — empty until the first
@@ -768,7 +767,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }) : null;
   const certificates = decision ? readBudgetCapCertificates(store.epistemic(), nowIso) : [];
 
-  // A heuristic cap changes spend behaviour (D-213). --apply is honoured only
+  // A heuristic cap changes spend behaviour. --apply is honoured only
   // when the canonical adapter can issue decision fitness AND the separate
   // changes-spend assurance reaches its required level.
   const applyPermitted = decision !== null
@@ -849,8 +848,8 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
       : plainCapVerdict(decision, canonicalDecision!, { current: cfg.budget.dailySoftUsd, recommended: softCap });
     for (const line of lines) console.log(color(tty, C.gray, line));
   }
-  // Raw allocation and frontier trim/grow hints are withheld from this surface
-  // (D-248): generic contexts can be unlike work, and comparable model guidance
+  // Raw allocation and frontier trim/grow hints are withheld from this surface: generic
+  // contexts can be unlike work, and comparable model guidance
   // reaches the operator only through the gated frontier trial.
   if (flags.apply && applyPermitted && decision) {
     mutateConfig((latest) => {
@@ -864,7 +863,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     });
     console.log('');
     console.log(color(tty, C.green, `  Applied: daily cap ${usd(dailyCap)}, soft ${usd(softCap)} written to config.`));
-    // Persist the certificate the cap was set under (D-220): the record is never
+    // Persist the certificate the cap was set under: the record is never
     // authorization and never executes anything; it exists so a later
     // withdrawal of the basis evidence is visible on read.
     const issued = issueBudgetCapDecision(store.epistemic(), decision, {
@@ -879,7 +878,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     console.log('');
     // Three different reasons, said differently: the evidence picks no winner,
     // it picks the current cap, or it picks the new cap but its inputs are not
-    // verified enough to change spend (PR #142 review).
+    // verified enough to change spend.
     const dominance = canonicalDecision?.certificateBundle.dominance;
     console.log(color(tty, C.gray, budgetClosingLine(decision !== null && applyPermitted, dominance ?? null,
       cfg.budget.dailyUsd === dailyCap ? { softRecommended: softCap, softMatches: cfg.budget.dailySoftUsd === softCap } : null)));

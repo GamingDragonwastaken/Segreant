@@ -22,7 +22,7 @@ import {
  * as the sentinel; `null`, a number, or a string outside the vocabulary was
  * never written by any Segreant path and refuses rather than reading as the
  * sentinel — laundering corruption into "unknown" would hide it behind the one
- * label the column exists to keep honest (D-251).
+ * label the column exists to keep honest.
  */
 export function vocabularyValue<const T extends readonly string[]>(
   value: unknown,

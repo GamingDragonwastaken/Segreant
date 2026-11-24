@@ -170,7 +170,7 @@ function readinessPanel(d: BillingPayload): Node | null {
   // machine that never metered OpenAI -- and the null used to be rendered as
   // silence on the strength of a comment that read "no OpenAI spend at all:
   // nothing to warn about". That silence is the whole panel, so a prune turned
-  // the credential warning OFF (D-186). An emptied ledger says so instead.
+  // the credential warning OFF. An emptied ledger says so instead.
   const truncated = r.localLedgerRetention?.truncated === true;
   if (!c) {
     if (!truncated) return null;
@@ -195,7 +195,7 @@ function readinessPanel(d: BillingPayload): Node | null {
   if (c.proxyOffScopeUsd > 0 && c.declaredScopeId === null) {
     // Right verdict, wrong reason if left unbranched: no scope is active, so
     // nothing CAN be on a declared route, and that is not a fact about these
-    // rows (D-187).
+    // rows.
     lines.push(h('li', { text: () => (isPrecise()
       ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) were metered while no scope is active — nothing can be on a declared route until one is`
       : `${usd(c.proxyOffScopeUsd)} went through the proxy, but no project is declared right now, so there is nothing to match it against`) }));

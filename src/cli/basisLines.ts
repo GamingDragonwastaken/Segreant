@@ -27,7 +27,7 @@ export function basisLines(basis: BasisSummary, indent = '              '): stri
       out.push(`${indent}${''.padStart(10)}  ${num(c.requests)} requests on models you marked free: ${cohortModels(c)}`);
       continue;
     }
-    const models = c.id === 'fallback' || c.id === 'list_family' || c.id === 'user_declared' || c.id === 'unrecorded'
+    const models = c.id === 'fallback' || c.id === 'list_standard' || c.id === 'list_family' || c.id === 'user_declared' || c.id === 'unrecorded'
       ? `: ${cohortModels(c)}`
       : '';
     out.push(`${indent}${usd(c.costUsd).padStart(10)}  ${c.label}${models}`);

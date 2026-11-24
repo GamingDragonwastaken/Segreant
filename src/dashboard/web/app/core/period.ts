@@ -3,7 +3,7 @@
  *
  * The Metered view had its own range buttons while the four claims above it
  * stayed on 30 days, so choosing Today showed a $40 table under an $89 headline
- * with nothing to say the two covered different windows (H006). The period now
+ * with nothing to say the two covered different windows. The period now
  * lives here: every claim and view that can be scoped by time reads it, and
  * every claim that cannot says its own scope instead.
  *

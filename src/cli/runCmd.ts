@@ -112,14 +112,13 @@ export async function cmdStart(flags: Flags): Promise<void> {
   // `segreant reprice` previews the correction.
   const firstSight = createFirstSightWatcher({
     // Read from the file at each sighting: `segreant pricing --auto off` in
-    // another terminal must stop the next lookup without a restart (PR #146
-    // review). A config that no longer reads is treated as off.
+    // another terminal must stop the next lookup without a restart. A config that no longer
+    // reads is treated as off.
     enabled: () => {
       try {
         // Only against the built-in public list, which is what the banner and
         // the privacy statement disclose: an operator who points
-        // pricing.manifestUrl at their own card refreshes it themselves
-        // (PR #146 review).
+        // pricing.manifestUrl at their own card refreshes it themselves.
         const pricing = loadConfig().pricing;
         return pricing.lookupUnknownModels && pricingSourceLabel(pricing.manifestUrl) === 'the public price list';
       } catch {
@@ -128,7 +127,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
     },
     // The source the live config selects, not the one at start: enabled() has
     // just confirmed it is the built-in list, and a source changed since then
-    // is never fetched behind the operator's back (PR #146 review).
+    // is never fetched behind the operator's back.
     refresh: async () => {
       let url: string | null;
       try { url = loadConfig().pricing.manifestUrl; } catch { return { ok: false, error: 'the configuration could not be read' }; }
@@ -138,7 +137,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
     onLearned: (models) => {
       const names = models.map((m) => m.model).join(', ');
       // refresh() above fetches only the built-in list, so that is the source
-      // that learned them, whatever the config said at start (PR #146 review).
+      // that learned them, whatever the config said at start.
       console.log(color(tty, C.green, `  ↻ the public price list now prices ${names}: new requests use that price.`));
       console.log(color(tty, C.gray, '    Requests already recorded keep their estimate until you run: segreant reprice (preview), then segreant reprice --apply'));
     },
@@ -252,7 +251,7 @@ function printBanner(cfg: SegreantConfig, tty: boolean): void {
 
 /**
  * The source a price refresh reads, in words. The built-in list is spelled two
- * ways, no URL configured or its own URL; both are the public price list (PR #146 review).
+ * ways, no URL configured or its own URL; both are the public price list.
  */
 /**
  * The running total on each live log line. With a daily cap it is the spend the

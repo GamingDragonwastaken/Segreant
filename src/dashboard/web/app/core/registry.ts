@@ -67,7 +67,7 @@ export interface Capability {
    */
   coverageNote?: string;
   /**
-   * Where in this app the claimed surface is (D-239). A `full` or `partial`
+   * Where in this app the claimed surface is. A `full` or `partial`
    * row is checked against the app source by `test/dashboard-coverage-value.test.ts`:
    * an action builder keyed by its id, or its id in a view, is evidence on its
    * own; a row the GUI covers WITHOUT naming the id names the file and a token
@@ -216,7 +216,7 @@ export const CAPABILITIES: readonly Capability[] = [
 
   // ---- Data ---------------------------------------------------------------
   { id: 'sources', label: 'Sources', plain: 'Which tools are feeding data in.', territory: 'data', consequence: 'read', coverage: 'full', command: 'segreant sources' },
-  // `core/api.ts` binds POST /api/discover and no view calls it (D-239): an
+  // `core/api.ts` binds POST /api/discover and no view calls it: an
   // API binding is not a screen.
   { id: 'discover', label: 'Match projects to repositories', plain: 'Match imported projects to their git repositories and measure each one.', territory: 'data', consequence: 'read', coverage: 'planned', command: 'segreant discover' },
   { id: 'connect', label: 'Connect a tool', plain: 'Point a tool at Segreant so its spend is metered.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'segreant connect <tool>' },
@@ -254,7 +254,7 @@ export const CAPABILITIES: readonly Capability[] = [
     warning: 'Rewrites the recorded cost of past requests. Value snapshots are re-attributed on their own basis, and outcomes are never moved — but the money figures you have already reported will change.',
   },
   { id: 'doctor', label: 'Doctor', plain: 'Check that everything is wired up correctly.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'segreant doctor' },
-  // `core/api.ts` binds GET /api/guide and no view calls it (D-239).
+  // `core/api.ts` binds GET /api/guide and no view calls it.
   { id: 'guide', label: 'What next', plain: 'The most useful next step, given your setup.', territory: 'system', consequence: 'read', coverage: 'planned', command: 'segreant guide' },
   {
     id: 'team-push', label: 'Push to team server', plain: 'Send a signed, aggregated rollup to your team server.',

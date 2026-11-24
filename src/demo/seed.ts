@@ -585,7 +585,7 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     attributedOutputTokens: int(ctx.rng, 1_500, 12_000),
     // The demo ledger is synthesised whole and never pruned, so its attribution
     // windows are intact by construction. Declaring it rather than defaulting
-    // keeps the demo from being the one place a truncation could hide (D-176).
+    // keeps the demo from being the one place a truncation could hide.
     spendWindowTruncated: false,
     spendWindowPrunedBeforeMs: null,
     costPerHundredLines: spec.linesAdded > 0 ? (spec.costUsd / spec.linesAdded) * 100 : null,

@@ -15,7 +15,7 @@ export interface RepriceModel {
 /**
  * What priced the replacement amounts, from every row that will change: a
  * report built from the first row alone claimed "local rate card only" for a
- * batch that also held prices the user typed (PR #146 review).
+ * batch that also held prices the user typed.
  */
 function repriceEvidence(updates: readonly RepriceUpdate[]) {
   if (updates.length === 0) return null;
@@ -54,7 +54,7 @@ function planReprice(store: Store) {
   let stillEstimated = 0;
   // Rows with cache writes whose duration was never recorded (before Segreant
   // kept it): priced at the 5-minute rate, as they were first priced, and
-  // counted so the preview says so (PR #146 review).
+  // counted so the preview says so.
   let cacheDurationUnknown = 0;
   for (const r of rows) {
     // No captured usage: nothing to price it from, so it stays an estimate.
@@ -69,7 +69,7 @@ function planReprice(store: Store) {
     // A row with an exact economic event can only be corrected by an exact
     // amount. A custom card may omit the decimal companions, and the plan used
     // to promise such a row, then --apply refused it and rolled back the whole
-    // batch (PR #146 review). It stays an estimate until a card can price it exactly.
+    // batch. It stays an estimate until a card can price it exactly.
     if (c.exact === undefined && store.economic().read(requestEconomicEventId(r.requestId)) !== null) { stillEstimated++; continue; }
     // Counted only for rows the plan will rewrite, so the preview never says a
     // row's writes are priced at the 5-minute rate when it is left untouched.
@@ -118,7 +118,7 @@ function summarize(updates: RepriceUpdate[], meta: ReadonlyMap<string, PlannedRo
  * Compute once, write that plan through the Store's audited transaction, and
  * report only the rows the transaction wrote. Another process may reprice the
  * same rows between the plan and the write; the store skips a row that is no
- * longer an estimate, and the result used to claim it anyway (PR #146 review).
+ * longer an estimate, and the result used to claim it anyway.
  */
 export function applyReprice(store: Store) {
   const preview = previewReprice(store);

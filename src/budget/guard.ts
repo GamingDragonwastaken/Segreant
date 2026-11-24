@@ -210,7 +210,7 @@ export function resolveEnforcedSpend(
  * as the guard projects it (resolveEnforcedSpend), with the number of requests
  * behind it. The guide and the budget advisor read this rather than a series
  * of their own: a separate series could say "no proxied spend" while the guard
- * was blocking on it (review 4, F3).
+ * was blocking on it.
  */
 export function capBasisSpend(
   store: Pick<Store, 'spendBetween'> & Partial<Pick<Store, 'exactSpendBetween'>>,
@@ -241,7 +241,7 @@ export function describeSpendBasis(basis: SpendBasis): string {
  * against a $5 cap read "$5.00 of $5.00". When the two would round alike but
  * differ, add digits (to the microdollar) until they do not. A difference
  * below the microdollar is said in words, so two different amounts never
- * print as the same figure (PR #142 review).
+ * print as the same figure.
  */
 export function spendBesideCap(spendUsd: number, capUsd: number): string {
   let digits = 2;

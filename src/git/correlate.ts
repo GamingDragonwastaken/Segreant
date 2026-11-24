@@ -40,8 +40,7 @@ export interface CommitAttribution extends CommitInfo {
   attributedRequests: number;
   attributedOutputTokens: number;
   /**
-   * Whether retention deleted request rows from inside this attribution window
-   * (D-176).
+   * Whether retention deleted request rows from inside this attribution window.
    *
    * `attributedCostUsd` still reports the SURVIVING spend, which is what it
    * honestly is. This field is what stops that number being read as the cost of
@@ -316,7 +315,7 @@ export async function attributeCommits(
     const attributedCostUsd = economicAttributionNumber(economic, spend.costUsd);
     // Did retention delete rows from inside this window? Strictly before the
     // boundary, because `prune` removes rows older than it; a null boundary is
-    // "no prune on record" and licenses nothing either way (D-170, D-176).
+    // "no prune on record" and licenses nothing either way.
     const coverage = {
       truncated: floor.prunedBeforeMs !== null && windowStartMs < floor.prunedBeforeMs,
       prunedBeforeMs: floor.prunedBeforeMs,

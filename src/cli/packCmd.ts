@@ -1,5 +1,5 @@
 /**
- * `segreant pack export|verify|inspect` — the CLI face of `src/pack/` (D-229).
+ * `segreant pack export|verify|inspect` — the CLI face of `src/pack/`.
  *
  * `export` reads the local epistemic ledger and writes a `.segreantpack`
  * envelope to `--out`; nothing is written without `--out`, and an existing

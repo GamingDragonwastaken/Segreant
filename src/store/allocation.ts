@@ -178,7 +178,7 @@ export function allocatePeriod(
   periodStartMs: number,
   periodEndMs: number,
   runAtMs: number,
-  /** Read by the caller, which owns the retention record (D-183). */
+  /** Read by the caller, which owns the retention record. */
   requestsPrunedBeforeMs: number | null = null,
 ): AllocationRunResult {
   const rows: AllocatableRow[] = requestsInRange(periodStartMs, periodEndMs).map((r) => ({

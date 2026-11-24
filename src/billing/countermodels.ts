@@ -115,7 +115,7 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
  * The retention world is `realized` WHENEVER IT APPEARS, and for a different
  * reason: the condition is only on the run because Segreant recorded performing
  * the deletion itself, so it is a fact rather than an unexcluded possibility.
- * Reporting it as `live` would understate what is known (D-173). The rest are
+ * Reporting it as `live` would understate what is known. The rest are
  * `live` — nothing on the run decides them.
  *
  * A condition absent from the run yields no countermodel. The fifth condition

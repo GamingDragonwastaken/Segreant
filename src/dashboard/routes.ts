@@ -197,7 +197,7 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
   // ...which means resolving it the same WAY, not merely over the same rows. The
   // guard enforces on the exact effective projection whenever one is available;
   // reading the raw float here made the bar disagree with the blocker by exactly
-  // the corrections the economic ledger had recorded (D-107).
+  // the corrections the economic ledger had recorded.
   const liveOnly = !config.budget.capIncludesImported;
   const exactDay = (from: number, to: number, live: boolean) =>
     (typeof store.exactSpendBetween === 'function' ? store.exactSpendBetween(from, to, live) : null);
@@ -214,7 +214,7 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
   const provenance = store.pricingEvidenceByModel(startMs, endMs);
   // What retention deleted from inside this window. Read from the ledger's own
   // record, because an absence of rows is exactly what cannot distinguish a
-  // quiet window from a pruned one (D-175).
+  // quiet window from a pruned one.
   const retention = store.windowCoverage(startMs);
 
   return {
@@ -280,7 +280,7 @@ export function buildOverview(store: Store, config: SegreantConfig, range: Range
     alerts: computeAlerts(store, config, { now }),
     // Beside the alerts, not instead of them: an empty list is a finding only
     // when the detectors could have produced an entry, and on a default install
-    // none of the six can (D-144).
+    // none of the six can.
     alertCoverage: computeAlertCoverage(store, config, { now }),
   };
 }
@@ -700,7 +700,7 @@ function buildStatement(store: Store, raw: string | null, top: number | null): S
  */
 export function handleBilling({ res, url, store }: RouteContext): void {
   try {
-    // An optional knowledge boundary for the kernel claims (D-230): what the
+    // An optional knowledge boundary for the kernel claims: what the
     // ledger had learned by `asOf`, not what it knows now. The recorded runs
     // and summary below are not replayed — they are store rows, not kernel
     // nodes — so the payload says which instant the claims answer at.
@@ -883,7 +883,7 @@ export function handleAllocation({ res, store }: RouteContext): void {
       trust: 'derived_allocation_of_local_estimates',
       /** Showback, never chargeback: a chargeback implies a settlement this product does not have. */
       basis: 'showback_only',
-      // The surface-level floor; each run carries its own derived list (D-228).
+      // The surface-level floor; each run carries its own derived list.
       excludedFrom: [...EXACT_ALLOCATION_EXCLUDED_FLOOR],
       costCentres,
       rules: store.allocationRules(),
@@ -1004,12 +1004,12 @@ export function handlePricingUnknown({ res, store }: RouteContext): void {
       declared: Object.entries(activePriceOverrides()).sort(([a], [b]) => a.localeCompare(b)).map(([model, price]) => {
         // An unforced free price for a model a card now prices is stored but
         // not applied; saying "free" there would show the opposite of what a
-        // cap counts (PR #153 review).
+        // cap counts.
         const superseded = price.kind === 'free' && price.force !== true && cardPricesModel(model);
         return {
         model, kind: price.kind, declaredAt: price.declaredAt,
         // A forced free price makes a cap ignore a known card rate, so it never
-        // reads as an ordinary local-model price (PR #153 review).
+        // reads as an ordinary local-model price.
         summary: price.kind === 'free' && price.force === true
           ? 'free, forced: a cap counts this model as $0 even though a rate card prices it'
           : superseded ? 'free, not applied: a rate card now prices this model, so its card price counts'
@@ -1064,8 +1064,7 @@ function pricingWrite(
   void (async () => {
     try {
       const body = await pricingBody(context.req, allowed);
-      // A preview writes nothing, so the sample data can show one (independent
-      // review, 2026-10-18); only a write is refused there.
+      // A preview writes nothing, so the sample data can show one; only a write is refused there.
       if (isDemo() && !readOnly(body)) return json(context.res, 409, { error: new DemoWriteBlockedError('the pricing change').message });
       json(context.res, 200, action(body));
     } catch (error) {
@@ -1156,7 +1155,7 @@ export function handleRealization({ res, url, store }: RouteContext): void {
 }
 
 /**
- * A kernel node and its neighbourhood, read-only (D-257). The as-of boundary
+ * A kernel node and its neighbourhood, read-only. The as-of boundary
  * is the same hindsight-safe replay `/api/billing` uses for its claims; a node
  * that did not exist yet answers `found: false` exactly like one that never
  * existed. Nothing here writes, and the id is looked up, never pattern-matched.

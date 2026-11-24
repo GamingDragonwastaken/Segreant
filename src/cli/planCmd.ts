@@ -25,7 +25,7 @@ export function importedListCost(store: Store, source: PlanSource, startMs: numb
  * model. "List-price work" means list prices: a declared row is priced from
  * the card here, so a declaration never inflates, shrinks or hides the plan
  * line, and a private model the card only estimates (family or fallback) is
- * withheld rather than shown as a published price (PR #146 review). Other
+ * withheld rather than shown as a published price. Other
  * rows keep the price they were recorded at.
  */
 export function importedListWork(store: Store, source: PlanSource, startMs: number, endMs: number): { listCostUsd: number; withheldRequests: number } {

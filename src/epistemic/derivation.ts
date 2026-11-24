@@ -406,8 +406,8 @@ function sameProposition(a: TypedProposition, b: TypedProposition): boolean {
  * `DerivationWitness` reference carries no epistemic state and no
  * `basisChange`, and this pure rule cannot resolve evidence records. What a
  * witness must CONTAIN is decided against the REGISTERED record at the
- * ledger: `supported` (D-190) and the per-kind content obligations in
- * `obligation.ts` (D-201). Callers of this function alone get the weaker
+ * ledger: `supported` and the per-kind content obligations in
+ * `obligation.ts`. Callers of this function alone get the weaker
  * answer, and `epistemic-derivation-object.test.ts` relies on that: an
  * inline reference with only an id and a kind satisfies it here.
  */

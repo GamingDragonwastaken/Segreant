@@ -115,6 +115,7 @@ export type RateCardSourceKind = (typeof RATE_CARD_SOURCE_KINDS)[number];
 export const RATE_MATCH_KINDS = [
   'exact_provider',
   'exact_cross_provider',
+  'standard_rate_assumed',
   'family_provider',
   'family_cross_provider',
   'fallback',
@@ -455,7 +456,7 @@ function loadVerifiedCache(): { file: PricingFile; provenance: PricingProvenance
 const FRESHNESS_INTERVAL_MS = 1000;
 let loadedIdentity: string | null = null;
 // A monotonic clock: a wall clock set back (a manual correction, a resumed VM)
-// would otherwise hold the loaded card until wall time caught up (PR #154 review).
+// would otherwise hold the loaded card until wall time caught up.
 let lastFreshnessCheckMs = Number.NEGATIVE_INFINITY;
 let pinnedDepth = 0;
 
@@ -481,8 +482,7 @@ export function loadPricing(force = false): PricingFile {
   // active card with no provenance that appears after startup is a refresh in
   // progress or one that failed, and the loaded card stands. A process that
   // started on a legacy card (no provenance) keeps following that file's edits.
-  // A legacy card that first appears after startup is read at the next start
-  // (PR #154 review).
+  // A legacy card that first appears after startup is read at the next start.
   const runningOnLegacy = cachedSource === 'cache' && cachedProvenance === null;
   if (cached && !runningOnLegacy && existsSync(cachePath()) && readProvenance() === null) return cached;
   lastFreshnessCheckMs = performance.now();
@@ -542,7 +542,7 @@ export function cardEntryAnywhere(model: string): CardEntry | null {
  * model, so a free price that was not forced does not apply to it. The same
  * card every other price in this process uses, so a reprice plan cannot change
  * its mind midway; noticing a refresh another process made is the card
- * loader's job, for every model alike (PR #153 review).
+ * loader's job, for every model alike.
  */
 export function cardPricesModel(model: string): boolean {
   return entryIn(loadPricing(), model, 'loaded') !== null;
@@ -692,7 +692,7 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
     if (bucket.models[name]) continue; // first entry wins — deterministic on duplicate routes
     // The decimal companion, so a model learned from the feed reprices to an
     // exact amount: without it `reprice --apply` refused a first-sight model
-    // that had been recorded against the bundled card's exact fallback (PR #146 review).
+    // that had been recorded against the bundled card's exact fallback.
     const standard = feedRate(e, '', e.input_cost_per_token, e.output_cost_per_token);
     const above = longPromptRates(e, standard);
     bucket.models[name] = { ...withExactCompanion(standard), ...(above.length === 0 ? {} : { above }) };
@@ -827,7 +827,7 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
   } catch (e) {
     // Only this attempt's own uncommitted card is rolled back, and only while
     // no other provenance has been committed: another process may have
-    // committed its card meanwhile (PR #154 review).
+    // committed its card meanwhile.
     const active = readValidPricing(cachePath());
     if ((readProvenance()?.cardSha256 ?? null) === priorProvenanceSha && active && pricingCardHash(active) === cardSha256) {
       try {
@@ -1091,7 +1091,7 @@ function resolved(
   const declared = rateMatchKind === 'user_declared' || rateMatchKind === 'user_declared_free';
   // A rate or free declaration is priced by the declaration alone: stamping it
   // with the active card's hash made a card refresh look like a price change
-  // for requests whose price had not moved (PR #146 review). Only `like`
+  // for requests whose price had not moved. Only `like`
   // depends on the card, and it names the card model it follows.
   const fromCard = !declared || rateMatchProvider !== null;
   return {
@@ -1103,8 +1103,7 @@ function resolved(
       costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : declared ? 'user_declared_price' : 'local_list_price',
       // A rate or free declaration carries a revision of the declaration itself,
       // labelled as the user's, never the card's: a changed price is then a new
-      // revision that value comparisons see, and a card refresh is not
-      // (PR #146 review).
+      // revision that value comparisons see, and a card refresh is not.
       rateCardSha256: fromCard ? pricingCardHash(card) : declarationSha256,
       rateCardSourceKind: fromCard ? activeRateCardSourceKind() : declarationSha256 ? 'user_declaration' : 'none',
       rateMatchKind,
@@ -1240,7 +1239,7 @@ function withDeclarationSource<T>(source: (model: string) => PriceOverride | nul
 /**
  * Run `fn` pricing from the card alone. The demo is fixed sample data: a real
  * declaration (say, gpt-4o marked free) must not change its spend, evidence or
- * comparisons (PR #146 review).
+ * comparisons.
  */
 export function withoutDeclaredPrices<T>(fn: () => T): T {
   return withDeclarationSource(() => null, fn);
@@ -1250,7 +1249,7 @@ export function withoutDeclaredPrices<T>(fn: () => T): T {
  * Run `fn` against one read of the declarations. A plan priced row by row
  * re-read the file at each row, so a `pricing set` from another process midway
  * gave earlier and later rows of the same model different prices in one
- * correction (PR #146 review). The card is pinned for the same span, since a
+ * correction. The card is pinned for the same span, since a
  * refresh in another process is now picked up by a running one (loadPricing).
  */
 /** Run `fn` against declarations read earlier (a proxied request keeps the ones it was checked against). */
@@ -1277,7 +1276,7 @@ const FREE_RATE: ModelRate = Object.freeze({ input: 0, output: 0, cache_read: 0,
 export function rateFor(provider: Provider, model: string): ResolvedRate {
   // One resolution reads one card: the card is pinned for the whole lookup, so a
   // refresh that lands midway cannot price the free check, the rate and its
-  // evidence from two different cards (PR #154 review).
+  // evidence from two different cards.
   const pricing = loadPricing();
   pinnedDepth++;
   try {
@@ -1297,7 +1296,7 @@ function rateFromCard(pricing: PricingFile, provider: Provider, model: string): 
   const declared = declarationSource ? declarationSource(model) : priceOverrideFor(model);
   // A free price counts a model as $0. Unless it was forced, it never applies
   // to a model the card this process prices with lists: that card's price
-  // counts instead, whenever the free price was declared (PR #153 review).
+  // counts instead, whenever the free price was declared.
   if (declared?.kind === 'free' && (declared.force === true || !cardPricesModel(model))) {
     return resolved(FREE_RATE, 'user_declared_free', null, model, declarationRevision(declared));
   }
@@ -1305,8 +1304,8 @@ function rateFromCard(pricing: PricingFile, provider: Provider, model: string): 
   if (declared?.kind === 'like') {
     const target = exactCardRate(pricing, declared.like);
     // A card entry without decimal companions (a hand-written manifest may omit
-    // them) would leave a reprice with no exact replacement and roll it back
-    // (PR #146 review); the companion is the card's own stated numbers.
+    // them) would leave a reprice with no exact replacement and roll it back; the companion
+    // is the card's own stated numbers.
     if (target) return resolved(withExactCompanion(target.rate), 'user_declared', target.provider, declared.like);
   }
 
@@ -1359,9 +1358,9 @@ function per(tokens: number, rate: number | undefined): number {
  * breakdown. No breakdown: no duration (priced at the standard 5-minute rate,
  * recorded as not recorded). One duration only: that one. Both: the larger
  * share, which is what the request is priced with, and the ledger records it
- * so a later reprice prices it the same way (PR #150 review). A missing
+ * so a later reprice prices it the same way. A missing
  * breakdown used to be stored as '1h' by the Claude Code import and '5m' by
- * the proxy, each as if it were seen (independent review, 2026-10-18).
+ * the proxy, each as if it were seen.
  */
 export function cacheWriteDuration(ephemeral5m: number, ephemeral1h: number): { ttl?: '5m' | '1h'; observed: boolean } {
   if (ephemeral5m <= 0 && ephemeral1h <= 0) return { observed: false };
@@ -1385,9 +1384,12 @@ function rateForPrompt(rate: ModelRate, usage: NormalizedUsage): { rate: ModelRa
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
-  const { rate: listed, estimated: unmatched, pricing } = rateFor(provider, model);
+  const { rate: listed, estimated: unmatched, pricing: matched } = rateFor(provider, model);
   const { rate, known: promptKnown } = rateForPrompt(listed, usage);
   const estimated = unmatched || !promptKnown;
+  // The model is on the card, but which of its rates applied is not known.
+  const assumed = !promptKnown && (matched.rateMatchKind === 'exact_provider' || matched.rateMatchKind === 'exact_cross_provider');
+  const pricing: RequestPricingEvidence = assumed ? { ...matched, rateMatchKind: 'standard_rate_assumed' } : matched;
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input
   // (the standard Anthropic 5-minute write premium) so we never silently bill $0.
