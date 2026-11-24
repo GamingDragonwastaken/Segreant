@@ -15,7 +15,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Store } from '../store/db.ts';
-import { attributeCommits, type CommitAttribution } from './correlate.ts';
+import { attributeCommits, hasNoCommits, type CommitAttribution } from './correlate.ts';
 import { measurementModel, type MeasurementModel } from '../measurement/model.ts';
 import { scope } from '../epistemic/scope.ts';
 import { storedCommitFiles, rememberCommitFiles, reusableBlame, rememberBlame, flushSurvivalStore } from './survivalStore.ts';
@@ -459,13 +459,16 @@ export async function revertScan(repoPath: string, limit: number): Promise<Rever
   // %ct (committer timestamp) rather than %at: the boundary is about the order
   // commits entered this history, not when they were originally authored, and a
   // rebase can move %at behind an ancestor's.
-  const stampsOut = await git(repoPath, ['log', `-n${requested}`, '--format=%ct']);
+  const stampsOut = await git(repoPath, ['log', `-n${requested}`, '--format=%ct']).catch(async (error) => {
+    if (await hasNoCommits(repoPath)) return '';
+    throw error;
+  });
   const stamps = stampsOut
     .split(/\r?\n/)
     .map((line) => Number.parseInt(line.trim(), 10))
     .filter((seconds) => Number.isFinite(seconds));
 
-  const bodies = await git(repoPath, ['log', `-n${requested}`, '--format=%b']);
+  const bodies = stamps.length === 0 ? '' : await git(repoPath, ['log', `-n${requested}`, '--format=%b']);
   const reverted = new Set<string>();
   // Normalize to the 7-char prefix so detection works regardless of the
   // abbreviation length git wrote into the revert message (7, 8, ..., 40).

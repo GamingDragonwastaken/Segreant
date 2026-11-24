@@ -167,3 +167,30 @@ test('realizeDiscoveredProjects: clones of one repository are measured once, on 
     rmSync(cloneDir, { recursive: true, force: true });
   }
 });
+
+test('realizeDiscoveredProjects: a repository with no commits, or one git refuses, does not stop the others', async () => {
+  const good = makeRepo();
+  const empty = makeRepo();
+  const broken = makeRepo();
+  const store = new Store(':memory:');
+  try {
+    const t = new Date(Date.now() - 60 * 60_000).toISOString();
+    commit(good, 'a.txt', 'one\n', 'feat: base', new Date().toISOString());
+    commit(broken, 'a.txt', 'one\n', 'feat: base', new Date().toISOString());
+    const names = await Promise.all([good, empty, broken].map((dir) => projectName(dir)));
+    [good, empty, broken].forEach((dir, i) => store.insertRequest(row(names[i]!, dir, 'codex', t, 0.5, `r${i}`)));
+    // The branch points at a commit that does not exist: `git log` fails, though the folder is still a repository.
+    writeFileSync(join(broken, '.git', 'HEAD'), 'd'.repeat(40) + '\n');
+
+    const results = await realizeDiscoveredProjects(store, {});
+    const of = (dir: string) => results.find((r) => r.repoPath === dir);
+    assert.equal(of(good)?.measured, true);
+    assert.ok((of(good)?.units ?? 0) > 0);
+    assert.notEqual(of(empty)?.skipped, 'git-failed', 'a repository nobody has committed to holds no work; it is not broken');
+    assert.equal(of(broken)?.skipped, 'git-failed');
+    assert.match(of(broken)?.gitError ?? '', /\S/);
+  } finally {
+    store.close();
+    for (const dir of [good, empty, broken]) rmSync(dir, { recursive: true, force: true });
+  }
+});

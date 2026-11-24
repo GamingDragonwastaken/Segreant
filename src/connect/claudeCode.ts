@@ -9,8 +9,9 @@
  * proxy, which is exactly the traffic a cooperative proxy cannot see.
  *
  * Honesty notes, enforced here rather than assumed:
- *  - One API request streams as SEVERAL transcript lines sharing a requestId
- *    with identical usage — dedupe on requestId, first entry wins.
+ *  - One API request streams as SEVERAL transcript lines sharing a requestId.
+ *    Early lines can carry unfinished counts (zero input, a handful of output
+ *    tokens), so the line with the most usage is the request, dated by its first.
  *  - Resuming a session copies its earlier requests into the NEW transcript
  *    file under the new session id; the store keeps the first record and
  *    counts a copy whose charge differs (importShared.recordInsert).
@@ -21,8 +22,6 @@
  *    this wherever the number is shown.
  */
 
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
@@ -36,6 +35,8 @@ import {
   createRepoResolver,
   noteRelabel,
   boundedJsonlFiles,
+  readLogLines,
+  noteUnreadFiles,
   markImportTruncated,
   fileStampForImport,
   noteFileImported,
@@ -43,6 +44,7 @@ import {
   truncationMark,
   commitObservationsInLine,
 } from './importShared.ts';
+import { isUnreadableLog } from './logFiles.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { claudeLimitEvent } from '../quota/limits.ts';
 
@@ -132,11 +134,17 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
   };
 }
 
+function usageTokens(ev: TranscriptUsageEvent): number {
+  return ev.inputTokens + ev.outputTokens + ev.cacheWriteTokens + ev.cacheReadTokens;
+}
+
 /**
  * Scan every transcript under `root` and insert each API request exactly once.
  * Idempotent by construction (request_id is the store's natural key), so
  * re-running after new sessions only picks up the new traffic.
  */
+const LINES_WITHOUT_USAGE = new Set(['user', 'attachment', 'file-history-snapshot', 'progress', 'queue-operation', 'system', 'summary']);
+
 /** Imports in periodic commits rather than one commit per row (see Store.importBatch). */
 export async function importClaudeCode(store: Store, opts: ImportOptions = {}): Promise<ImportSummary> {
   const batch = store.importBatch();
@@ -156,6 +164,7 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
   const files = fileScan.files;
   const summary = emptyImportSummary(files.length);
   if (fileScan.truncated) markImportTruncated(summary, 'files');
+  noteUnreadFiles(summary, fileScan.unsupported);
   // Resolve each transcript cwd to its repository root once. A Claude Code
   // session is routinely started inside a package or a subdirectory, and the
   // basename of that directory is not the project — see createRepoResolver.
@@ -172,7 +181,13 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
       continue;
     }
     const truncationsBefore = truncationMark(summary);
-    await importTranscriptFile(file);
+    try {
+      await importTranscriptFile(file);
+    } catch (error) {
+      if (!isUnreadableLog(error)) throw error;
+      noteUnreadFiles(summary);
+      continue;
+    }
     noteFileImported(store, source, file, stamp, opts, truncationsBefore, summary);
   }
   return summary;
@@ -195,17 +210,18 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
     }
   }
 
+  // Only a model's answer carries usage. A dropped user line is a large pasted
+  // image or tool result, so losing it leaves the import complete.
+  function onOversizedLine(kind: string | null): void {
+    if (kind === null || !LINES_WITHOUT_USAGE.has(kind)) markImportTruncated(summary, 'lines');
+  }
+
   async function importTranscriptFile(file: string): Promise<void> {
-    // One API request = many transcript lines; first wins. A copy in ANOTHER file
-    // (a resumed session) goes to the store, which recognises the same charge as a
-    // duplicate and counts a different charge as a conflict instead of hiding it.
-    const seenInFile = new Set<string>();
-    const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-    for await (const line of rl) {
-      if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
-        markImportTruncated(summary, 'lines');
-        continue;
-      }
+    // Held until the file ends, because a request's last line is its finished one.
+    // A copy in ANOTHER file (a resumed session) goes to the store, which knows a
+    // duplicate from an unfinished record from a real disagreement.
+    const requests = new Map<string, TranscriptUsageEvent>();
+    for await (const line of readLogLines(file, onOversizedLine)) {
       recordCommitsIn(line);
       if (line.includes('"isApiErrorMessage":true')) {
         const ts = Date.parse(/"timestamp":"([^"]+)"/.exec(line)?.[1] ?? '');
@@ -214,13 +230,24 @@ async function importClaudeCodeRows(store: Store, opts: ImportOptions): Promise<
       }
       const ev = parseTranscriptLine(line);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
-      if (seenInFile.has(ev.requestId)) continue;
-      if (seenInFile.size >= RESOURCE_LIMITS.importDedupeKeys) {
-        markImportTruncated(summary, 'rows');
-        break;
+      const held = requests.get(ev.requestId);
+      if (held === undefined) {
+        if (requests.size >= RESOURCE_LIMITS.importDedupeKeys) {
+          markImportTruncated(summary, 'rows');
+          break;
+        }
+        requests.set(ev.requestId, ev);
+      } else if (usageTokens(ev) > usageTokens(held)) {
+        requests.set(ev.requestId, {
+          ...held,
+          inputTokens: ev.inputTokens, outputTokens: ev.outputTokens,
+          cacheWriteTokens: ev.cacheWriteTokens, cacheReadTokens: ev.cacheReadTokens,
+          cacheWriteTtl: ev.cacheWriteTtl, cacheWriteTtlObserved: ev.cacheWriteTtlObserved,
+        });
       }
-      seenInFile.add(ev.requestId);
+    }
 
+    for (const ev of requests.values()) {
       const attribution = await resolveProject(ev.cwd, 'claude-code');
       noteRelabel(summary, attribution);
 

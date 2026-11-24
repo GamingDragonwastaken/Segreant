@@ -63,6 +63,7 @@ test('a copy met in a later run is a duplicate, not a crash', async () => {
   store.close();
 });
 
+// Fewer input tokens but more output: neither the same usage again nor an earlier state of it.
 test('two logs that disagree about one request are counted and the first record stands', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-resume-conflict-'));
   mkdirSync(join(root, 'proj'));
@@ -71,7 +72,7 @@ test('two logs that disagree about one request are counted and the first record 
   const first = await importClaudeCode(store, { root });
   const recorded = first.costUsd;
 
-  writeFileSync(join(root, 'proj', 'other.jsonl'), line('req_1', 'sess-b', 900));
+  writeFileSync(join(root, 'proj', 'other.jsonl'), line('req_1', 'sess-b', 900).replace('"input_tokens":1000', '"input_tokens":400'));
   const second = await importClaudeCode(store, { root });
   assert.equal(second.inserted, 0);
   assert.equal(second.conflictingObservations, 1, 'the disagreement is disclosed, not swallowed');

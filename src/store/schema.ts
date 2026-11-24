@@ -117,6 +117,18 @@ CREATE TABLE IF NOT EXISTS request_price_events (
 
 CREATE INDEX IF NOT EXISTS idx_request_price_events_request ON request_price_events(request_id, event_id);
 
+-- What an unfinished log line had recorded before a later import completed the request. The matching
+-- price event carries the cost before and after.
+CREATE TABLE IF NOT EXISTS request_usage_corrections (
+  price_event_id              INTEGER PRIMARY KEY NOT NULL REFERENCES request_price_events(event_id),
+  request_id                  TEXT NOT NULL,
+  previous_input_tokens       INTEGER NOT NULL,
+  previous_output_tokens      INTEGER NOT NULL,
+  previous_cache_write_tokens INTEGER NOT NULL,
+  previous_cache_read_tokens  INTEGER NOT NULL,
+  previous_reasoning_tokens   INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS git_commits (
   commit_hash  TEXT PRIMARY KEY NOT NULL,
   project      TEXT NOT NULL,

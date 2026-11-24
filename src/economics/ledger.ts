@@ -245,6 +245,17 @@ function closeBalances(events: readonly EconomicEvent[]): CloseProjectionBalance
     .sort((a, b) => a.currency.localeCompare(b.currency) || a.basis.localeCompare(b.basis) || a.role.localeCompare(b.role));
 }
 
+/** Above this many charges at once, one scan of every correction link is cheaper than one query per charge. */
+const DIRECT_CORRECTION_LOOKUPS = 64;
+
+/** The event falls in a period somebody closed, so recording it would falsify that close. */
+export class EconomicPeriodClosedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EconomicPeriodClosedError';
+  }
+}
+
 export class EconomicLedger {
   private readonly db: DatabaseSync;
 
@@ -1096,14 +1107,14 @@ export class EconomicLedger {
       const state = this.periodCloseStatus(period.startMs, period.endMs);
       if (state.status === 'finalized' || state.status === 'conflicted') {
         if (inPeriod) {
-          throw new Error('economic period ' + period.startMs + '/' + period.endMs + ' is finalized; reopen it before recording an in-period event');
+          throw new EconomicPeriodClosedError('economic period ' + period.startMs + '/' + period.endMs + ' is finalized; reopen it before recording an in-period event');
         }
         continue;
       }
       const floor = closedThrough.get(period.subject);
       if (!inPeriod || floor === undefined) continue;
       if (Date.parse(value.recordedAt) <= floor) {
-        throw new Error(
+        throw new EconomicPeriodClosedError(
           'economic period ' + period.startMs + '/' + period.endMs + ' was closed through '
           + new Date(floor).toISOString() + '; an in-period event recorded at or before that instant would '
           + 'falsify a recorded close. Record it at the time Segreant observed it — occurredAt still carries '
@@ -1501,19 +1512,7 @@ export class EconomicLedger {
     }
     if (sources.size > 0) {
       const recordedClause = boundary === undefined ? '' : ' AND e.recorded_at <= ?';
-      const correctionRows = prepared(this.db, 
-        `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
-           FROM economic_events AS e
-          WHERE e.event_kind = 'price_corrected'${recordedClause}
-          ORDER BY e.recorded_at ASC, e.event_id ASC`,
-      ).all(...(boundary === undefined ? [] : [boundary])) as unknown as StoredEconomicRow[];
-      const correctionBySource = new Map<string, EconomicEvent>();
-      for (const rowValue of correctionRows) {
-        const correction = this.read(rowValue.event_id);
-        if (correction === null) continue;
-        const sourceId = correction.sourceEventIds[0];
-        if (sourceId !== undefined) correctionBySource.set(sourceId, correction);
-      }
+      const correctionBySource = this.correctionsBySource(sources.keys(), sources.size, recordedClause, boundary);
       for (const sourceId of sources.keys()) {
         const chain: EconomicEvent[] = [];
         const visited = new Set<string>();
@@ -1551,6 +1550,51 @@ export class EconomicLedger {
       }));
     }
     return result;
+  }
+
+  /**
+   * The corrections reachable from these sources, keyed by what each corrects.
+   * Only the links are listed for the whole ledger; an event is read and
+   * verified only when it belongs to a requested chain, so a ledger with many
+   * corrections does not make one request's figure slow.
+   */
+  private correctionsBySource(
+    sourceIds: Iterable<string>, sourceCount: number, recordedClause: string, boundary: string | undefined,
+  ): Map<string, EconomicEvent> {
+    const successor = (
+      `SELECT s.source_event_id AS sourceId, e.event_id AS eventId
+         FROM economic_events AS e JOIN economic_event_sources AS s ON s.event_id = e.event_id
+        WHERE e.event_kind = 'price_corrected'${recordedClause}`
+    );
+    const args = boundary === undefined ? [] : [boundary];
+    let next: (id: string) => string | undefined;
+    if (sourceCount <= DIRECT_CORRECTION_LOOKUPS) {
+      const one = prepared(this.db, `${successor} AND s.source_event_id = ? ORDER BY e.recorded_at DESC, e.event_id DESC LIMIT 1`);
+      next = (id) => (one.get(...args, id) as { eventId?: string } | undefined)?.eventId;
+    } else {
+      const links = new Map<string, string>();
+      for (const link of prepared(this.db, `${successor} ORDER BY e.recorded_at ASC, e.event_id ASC`).iterate(...args) as Iterable<{ sourceId: string; eventId: string }>) {
+        links.set(link.sourceId, link.eventId);
+      }
+      next = (id) => links.get(id);
+    }
+    const found = new Map<string, EconomicEvent>();
+    for (const start of sourceIds) {
+      for (let id = start, hop = next(id); hop !== undefined && !found.has(id); id = hop, hop = next(id)) {
+        const correction = this.read(hop);
+        if (correction === null || correction.sourceEventIds[0] !== id) break;
+        found.set(id, correction);
+      }
+    }
+    return found;
+  }
+
+  /** The last event in a charge's chain of price corrections: the charge itself when nothing corrected it. */
+  latestPriceEvent(charge: EconomicEvent): EconomicEvent {
+    let current = charge;
+    const chain = this.correctionsBySource([charge.id], 1, '', undefined);
+    for (let next = chain.get(current.id); next !== undefined; next = chain.get(current.id)) current = next;
+    return current;
   }
 
   /** Project one charge onto `effective`, or return null if it is not visible. */

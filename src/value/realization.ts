@@ -1294,7 +1294,9 @@ export interface DiscoveredResult extends DiscoveredProject {
   realizedUnits: number;
   /** False when the repository was not measured in this pass; `skipped` says why. */
   measured: boolean;
-  skipped?: 'deadline' | 'no-spend';
+  skipped?: 'deadline' | 'no-spend' | 'git-failed';
+  /** What git said, when it could not read this repository. */
+  gitError?: string;
   kept?: KeptSummary;
   /**
    * The repository's spend in the period, scoped by label AND commit evidence
@@ -1310,6 +1312,14 @@ export interface DiscoveredResult extends DiscoveredProject {
   coverage?: PeriodCoverage;
   /** Other checkouts of the same repository (same root commit) folded into this one. */
   otherCheckouts?: string[];
+}
+
+/** The first line git wrote when one of its commands failed, or null when the error came from elsewhere. */
+function gitFailure(error: unknown): string | null {
+  const e = error as { cmd?: unknown; stderr?: unknown } | null;
+  if (typeof e?.cmd !== 'string' || !/^git\b/.test(e.cmd)) return null;
+  const stderr = typeof e.stderr === 'string' ? e.stderr.trim() : '';
+  return (stderr.split('\n')[0] ?? '').slice(0, 200) || 'git could not read it';
 }
 
 export interface DiscoveredProject {
@@ -1465,17 +1475,28 @@ export async function realizeDiscoveredProjects(
         opts.onProgress?.(done, repos.length, r.project);
         continue;
       }
-      const rep = await computeRealization(store, r.repoPath, {
-        limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
-        sinceDays: opts.sinceDays,
-        gitScanBudgetMs: left === undefined ? opts.gitScanBudgetMs : Math.min(left, opts.gitScanBudgetMs ?? left),
-        windowDays: opts.windowDays,
-        persist: true,
-        ...(scopes.has(r.repoPath) ? { spendScope: scopes.get(r.repoPath)! } : {}),
-        // Stop git a little before the stage deadline: the scoring and the
-        // snapshot write after it still have to fit inside the promise.
-        ...(stageDeadline === undefined ? {} : { gitDeadlineAtMs: stageDeadline - STAGE_FINISH_RESERVE_MS }),
-      });
+      let rep: RealizationReport;
+      try {
+        rep = await computeRealization(store, r.repoPath, {
+          limit: opts.limit ?? (opts.sinceDays !== undefined ? undefined : 40),
+          sinceDays: opts.sinceDays,
+          gitScanBudgetMs: left === undefined ? opts.gitScanBudgetMs : Math.min(left, opts.gitScanBudgetMs ?? left),
+          windowDays: opts.windowDays,
+          persist: true,
+          ...(scopes.has(r.repoPath) ? { spendScope: scopes.get(r.repoPath)! } : {}),
+          // Stop git a little before the stage deadline: the scoring and the
+          // snapshot write after it still have to fit inside the promise.
+          ...(stageDeadline === undefined ? {} : { gitDeadlineAtMs: stageDeadline - STAGE_FINISH_RESERVE_MS }),
+        });
+      } catch (error) {
+        // One damaged or inaccessible repository must not cost the others their answer.
+        const said = gitFailure(error);
+        if (said === null) throw error;
+        results[i] = { ...r, units: 0, realizedUnits: 0, measured: false, skipped: 'git-failed', gitError: said, ...(spent === undefined ? {} : { periodCostUsd: spent }) };
+        done += 1;
+        opts.onProgress?.(done, repos.length, r.project);
+        continue;
+      }
       const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
       const periodCostUsd = rep.periodCoverage?.scopedCostUsd ?? spent;
       results[i] = {

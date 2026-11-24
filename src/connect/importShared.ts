@@ -10,12 +10,11 @@
  * exactly one place.
  */
 
-import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { RequestObservationConflictError, type Store, type RequestRow } from '../store/db.ts';
+import { statSync } from 'node:fs';
+import { RequestObservationConflictError, type ImportedRowIdentity, type ImportedRowOutcome, type Store, type RequestRow } from '../store/db.ts';
 import { repoToplevelOnDisk } from './repoRoot.ts';
 import { projectKey, projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
-import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
+import { type CaptureCoverage } from '../util/resource-limits.ts';
 
 export interface ImportSummary {
   /** Containers scanned: JSONL files for transcript feeds, 1 for a session DB. */
@@ -44,11 +43,17 @@ export interface ImportSummary {
   truncatedLines?: number;
   truncatedRows?: number;
   /**
-   * Rows whose request id was already recorded with a DIFFERENT charge. The
-   * first record stands and these are left out; a non-zero count is disclosed
-   * because it means two local logs disagree about one request.
+   * Rows whose request id was already recorded with usage that this one neither
+   * repeats nor completes. The first record stands and these are left out; a
+   * non-zero count is disclosed because two local logs disagree about one request.
    */
   conflictingObservations?: number;
+  /** Rows an earlier import took from an unfinished log line, now brought up to the finished usage. */
+  completedObservations?: number;
+  /** Rows an earlier import counted that repeat a request already counted in another log, now set to zero. */
+  retractedObservations?: number;
+  /** Log files found but not read to the end. Their remaining usage is missing from every total. */
+  unreadFiles?: number;
   /** Files skipped because they have not changed since their last complete import. */
   filesUnchanged?: number;
   /** Files left for a later pass because they were last modified before `modifiedSinceMs`. */
@@ -62,63 +67,16 @@ export function emptyImportSummary(files = 0): ImportSummary {
   };
 }
 
-/**
- * Enumerate JSONL files a directory tree without asking Node to materialize the
- * entire recursive listing. Symlinks are intentionally not followed: native
- * tool logs are local files, and following a link could unexpectedly expose a
- * second tree. Once the file/directory budget is reached the caller receives a
- * sticky truncation disclosure instead of a silently partial import.
- */
-export function boundedJsonlFiles(root: string): { files: string[]; truncated: boolean } {
-  const files: string[] = [];
-  const pending = [root];
-  let directories = 0;
-  let truncated = false;
-  while (pending.length > 0) {
-    const dir = pending.pop()!;
-    directories += 1;
-    if (directories > RESOURCE_LIMITS.importDirectories) {
-      truncated = true;
-      break;
-    }
-    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true }) as unknown as Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (directories + pending.length >= RESOURCE_LIMITS.importDirectories) {
-          truncated = true;
-          break;
-        }
-        pending.push(full);
-        continue;
-      }
-      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
-      if (files.length >= RESOURCE_LIMITS.importFiles) {
-        truncated = true;
-        break;
-      }
-      try {
-        if (statSync(full).isFile()) files.push(full);
-      } catch {
-        /* vanished mid-scan — skip */
-      }
-    }
-    if (truncated) break;
-  }
-  return { files, truncated };
-}
+export { boundedJsonlFiles, logBaseName, readLogLines } from './logFiles.ts';
 
 /**
  * The version of what the importers read from a log file. A file read in full
  * by an older reader is read once more: version 2 added commit observations;
- * version 4 finds them only where git's own output starts (see COMMIT_START).
+ * version 4 finds them only where git's own output starts (see COMMIT_START);
+ * version 5 reads a Claude Code request's finished usage, not its first line,
+ * and leaves out the parent's requests a forked Codex thread replays.
  */
-export const IMPORT_READER_VERSION = 4;
+export const IMPORT_READER_VERSION = 5;
 
 /** A commit git reported creating, found in a line of an agent's log. */
 export interface CommitObservationText {
@@ -239,6 +197,13 @@ export function markImportTruncated(summary: ImportSummary, field: 'files' | 'li
   else summary.truncatedRows = (summary.truncatedRows ?? 0) + amount;
 }
 
+/** Count log files whose usage is missing because they were not read to the end. */
+export function noteUnreadFiles(summary: ImportSummary, amount = 1): void {
+  if (amount <= 0) return;
+  summary.captureCoverage = 'truncated';
+  summary.unreadFiles = (summary.unreadFiles ?? 0) + amount;
+}
+
 /** Record a basename → repo-root relabel once, for the operator-facing alias hint. */
 export function noteRelabel(summary: ImportSummary, resolved: ResolvedAttribution): void {
   if (resolved.supersedes === null) return;
@@ -270,19 +235,20 @@ export interface ImportOptions {
  * summary can report how much of the total is a best-effort estimate. Returns
  * true when the row was newly inserted.
  */
-export function recordInsert(store: Store, summary: ImportSummary, row: RequestRow, estimated: boolean): boolean {
+export function recordInsert(store: Store, summary: ImportSummary, row: RequestRow, estimated: boolean, identity: ImportedRowIdentity = {}): boolean {
   summary.eventsSeen += 1;
   // Every imported row is stamped once here: sunk subscription cost, observed
   // after the fact — cap enforcement excludes it by default (budget.capIncludesImported).
-  let inserted: boolean;
+  let outcome: ImportedRowOutcome;
   try {
-    inserted = store.insertRequestIfNew({ ...row, via: 'import' });
+    outcome = store.recordImportedRequest({ ...row, via: 'import' }, identity);
   } catch (err) {
     if (!(err instanceof RequestObservationConflictError)) throw err;
     summary.conflictingObservations = (summary.conflictingObservations ?? 0) + 1;
     return false;
   }
-  if (!inserted) return false;
+  if (outcome === 'completed') summary.completedObservations = (summary.completedObservations ?? 0) + 1;
+  if (outcome !== 'inserted') return false;
   summary.inserted += 1;
   summary.costUsd += row.costUsd;
   if (estimated) summary.estimatedCostUsd += row.costUsd;
