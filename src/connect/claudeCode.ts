@@ -44,6 +44,7 @@ import {
   truncationMark,
   commitObservationsInLine,
 } from './importShared.ts';
+import { textField, tokenField } from './logFields.ts';
 import { isUnreadableLog } from './logFiles.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { claudeLimitEvent } from '../quota/limits.ts';
@@ -75,11 +76,11 @@ export function defaultClaudeCodeRoot(): string {
 }
 
 interface RawUsage {
-  input_tokens?: number;
-  output_tokens?: number;
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
-  cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number };
+  input_tokens?: unknown;
+  output_tokens?: unknown;
+  cache_creation_input_tokens?: unknown;
+  cache_read_input_tokens?: unknown;
+  cache_creation?: { ephemeral_5m_input_tokens?: unknown; ephemeral_1h_input_tokens?: unknown } | null;
 }
 
 /** Parse one transcript line into a usage event, or null for everything that is not billable traffic. */
@@ -92,41 +93,41 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
   }
   if (!o || typeof o !== 'object') return null;
   const e = o as {
-    type?: string;
-    uuid?: string;
-    requestId?: string;
-    timestamp?: string;
-    sessionId?: string;
-    cwd?: string;
-    message?: { model?: string; usage?: RawUsage };
+    type?: unknown;
+    uuid?: unknown;
+    requestId?: unknown;
+    timestamp?: unknown;
+    sessionId?: unknown;
+    cwd?: unknown;
+    message?: { model?: unknown; usage?: RawUsage | null } | null;
   };
-  if (e.type !== 'assistant' || !e.message?.usage) return null;
-  const model = e.message.model ?? '';
-  if (!model || model === '<synthetic>') return null;
-  const ts = Date.parse(e.timestamp ?? '');
+  const u = e.message?.usage;
+  if (e.type !== 'assistant' || !u || typeof u !== 'object') return null;
+  const model = textField(e.message?.model);
+  if (model === null || model === '<synthetic>') return null;
+  const ts = Date.parse(textField(e.timestamp) ?? '');
   if (Number.isNaN(ts)) return null;
-  const id = e.requestId ?? e.uuid;
-  if (!id) return null;
+  const id = textField(e.requestId) ?? textField(e.uuid);
+  if (id === null) return null;
 
-  const u = e.message.usage;
-  const cacheWrite = u.cache_creation_input_tokens ?? 0;
-  const ttl5m = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
-  const ttl1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
-  const cwd = e.cwd ?? '';
+  const cacheWrite = tokenField(u.cache_creation_input_tokens);
+  const ttl5m = tokenField(u.cache_creation?.ephemeral_5m_input_tokens);
+  const ttl1h = tokenField(u.cache_creation?.ephemeral_1h_input_tokens);
+  const cwd = textField(e.cwd) ?? '';
   const { project, basis: attributionBasis } = projectKeyWithBasis(cwd, 'claude-code');
 
   return {
     requestId: id,
-    sessionId: e.sessionId ?? null,
+    sessionId: textField(e.sessionId),
     tsEpochMs: ts,
     model,
     project,
     attributionBasis,
     cwd: cwd || null,
-    inputTokens: u.input_tokens ?? 0,
-    outputTokens: u.output_tokens ?? 0,
+    inputTokens: tokenField(u.input_tokens),
+    outputTokens: tokenField(u.output_tokens),
     cacheWriteTokens: cacheWrite,
-    cacheReadTokens: u.cache_read_input_tokens ?? 0,
+    cacheReadTokens: tokenField(u.cache_read_input_tokens),
     ...(cacheWrite > 0 ? (() => {
       const d = cacheWriteDuration(ttl5m, ttl1h);
       return { ...(d.ttl === undefined ? {} : { cacheWriteTtl: d.ttl }), cacheWriteTtlObserved: d.observed };

@@ -54,6 +54,7 @@ import {
   truncationMark,
   commitObservationsInLine,
 } from './importShared.ts';
+import { tokenField } from './logFields.ts';
 import { isUnreadableLog } from './logFiles.ts';
 import { EconomicPeriodClosedError } from '../economics/ledger.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
@@ -73,12 +74,12 @@ interface TokenTotals {
 }
 
 function totalsFrom(u: Record<string, number> | undefined): TokenTotals | null {
-  if (!u) return null;
+  if (!u || typeof u !== 'object') return null;
   return {
-    input: u.input_tokens ?? 0,
-    cachedInput: u.cached_input_tokens ?? 0,
-    output: u.output_tokens ?? 0,
-    reasoning: u.reasoning_output_tokens ?? 0,
+    input: tokenField(u.input_tokens),
+    cachedInput: tokenField(u.cached_input_tokens),
+    output: tokenField(u.output_tokens),
+    reasoning: tokenField(u.reasoning_output_tokens),
   };
 }
 
@@ -205,7 +206,8 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
     } catch {
       continue; // torn tail of a live session — next import gets it whole
     }
-    const p = o.payload ?? {};
+    if (o === null || typeof o !== 'object') continue; // JSON, but not a record
+    const p = o.payload !== null && typeof o.payload === 'object' ? o.payload : {};
     // A fork or subagent file opens with its parent's history replayed; its own
     // turns begin after its first token count. Commits in the replay are the
     // parent's, so they are not credited to this thread.
