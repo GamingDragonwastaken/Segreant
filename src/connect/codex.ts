@@ -55,6 +55,7 @@ import {
   commitObservationsInLine,
 } from './importShared.ts';
 import { isUnreadableLog } from './logFiles.ts';
+import { EconomicPeriodClosedError } from '../economics/ledger.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { codexRateLimitEvents, type QuotaEvent } from '../quota/limits.ts';
 
@@ -374,7 +375,12 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
         onTruncatedLine: () => markImportTruncated(summary, 'lines'),
         onTruncatedRow: () => markImportTruncated(summary, 'rows'),
         onReplayed: (requestId) => {
-          if (store.retractImportedRequest(requestId)) summary.retractedObservations = (summary.retractedObservations ?? 0) + 1;
+          try {
+            if (store.retractImportedRequest(requestId)) summary.retractedObservations = (summary.retractedObservations ?? 0) + 1;
+          } catch (error) {
+            if (!(error instanceof EconomicPeriodClosedError)) throw error;
+            summary.closedPeriodObservations = (summary.closedPeriodObservations ?? 0) + 1;
+          }
         },
         onCommit: (c) => {
           if (c.tsEpochMs >= sinceMs) store.recordObservedCommit({ source, ...c });

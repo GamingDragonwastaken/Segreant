@@ -11,6 +11,7 @@
  */
 
 import { statSync } from 'node:fs';
+import { EconomicPeriodClosedError } from '../economics/ledger.ts';
 import { RequestObservationConflictError, type ImportedRowIdentity, type ImportedRowOutcome, type Store, type RequestRow } from '../store/db.ts';
 import { repoToplevelOnDisk } from './repoRoot.ts';
 import { projectKey, projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
@@ -52,6 +53,8 @@ export interface ImportSummary {
   completedObservations?: number;
   /** Rows an earlier import counted that repeat a request already counted in another log, now set to zero. */
   retractedObservations?: number;
+  /** Corrections left unmade because their accounting period is closed. Each import tries them again. */
+  closedPeriodObservations?: number;
   /** Log files found but not read to the end. Their remaining usage is missing from every total. */
   unreadFiles?: number;
   /** Files skipped because they have not changed since their last complete import. */
@@ -164,15 +167,17 @@ export function noteFileUnchanged(store: Store, source: string, file: string, su
 export interface TruncationMark {
   readonly lines: number;
   readonly rows: number;
+  readonly closed: number;
 }
 
 export function truncationMark(summary: ImportSummary): TruncationMark {
-  return { lines: summary.truncatedLines ?? 0, rows: summary.truncatedRows ?? 0 };
+  return { lines: summary.truncatedLines ?? 0, rows: summary.truncatedRows ?? 0, closed: summary.closedPeriodObservations ?? 0 };
 }
 
 /**
  * Record a file as read in full, with the truncation that read saw. Nothing is
- * recorded for a --since read, which skipped rows on purpose.
+ * recorded for a --since read, which skipped rows on purpose, nor for a file
+ * holding a correction to closed books, so the import after a reopening makes it.
  */
 export function noteFileImported(
   store: Store, source: string, file: string, stamp: FileStamp | null,
@@ -180,6 +185,7 @@ export function noteFileImported(
 ): void {
   if (stamp === null || (opts.sinceMs ?? 0) > 0) return;
   const now = truncationMark(summary);
+  if (now.closed > before.closed) return;
   store.saveImportFileCursor(source, file, {
     size: stamp.size,
     mtimeMs: stamp.mtimeMs,
@@ -243,6 +249,10 @@ export function recordInsert(store: Store, summary: ImportSummary, row: RequestR
   try {
     outcome = store.recordImportedRequest({ ...row, via: 'import' }, identity);
   } catch (err) {
+    if (err instanceof EconomicPeriodClosedError) {
+      summary.closedPeriodObservations = (summary.closedPeriodObservations ?? 0) + 1;
+      return false;
+    }
     if (!(err instanceof RequestObservationConflictError)) throw err;
     summary.conflictingObservations = (summary.conflictingObservations ?? 0) + 1;
     return false;
