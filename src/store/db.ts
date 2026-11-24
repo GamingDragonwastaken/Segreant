@@ -29,7 +29,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
-import { addMoney, formatMoneyAmount, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
+import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
 import { serializeEconomicEvent } from '../economics/serialization.ts';
 import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
@@ -152,7 +152,7 @@ import type { DagEdge, DagNode } from '../epistemic/dag.ts';
 import type { Evidence, JsonValue } from '../epistemic/evidence.ts';
 import type { Witness } from '../epistemic/witness.ts';
 import type { Instant } from '../epistemic/time.ts';
-import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
+import { EconomicLedger, EconomicPeriodClosedError, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
 import { AppendMark, prepared } from '../util/statements.ts';
 import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
 
@@ -638,30 +638,26 @@ function presentKernelClaim(item: Claim, revokedIds: ReadonlySet<string>): Kerne
   });
 }
 
-/** An imported row whose request id is already recorded with a different charge. */
+/** What recording one imported request did. */
+export type ImportedRowOutcome = 'inserted' | 'duplicate' | 'completed';
+
+/** What an importer knows about the ids it gives rows. */
+export interface ImportedRowIdentity {
+  /** The id is the request's place in a log rather than the provider's own id, so other usage under it is another request. */
+  idIsPosition?: boolean;
+}
+
+/** How far apart two log lines of one request may be dated. A streamed response ends within this. */
+const ONE_REQUEST_SPAN_MS = 6 * 60 * 60 * 1000;
+
+/** An imported row whose request id is already recorded with usage this row neither repeats nor completes. */
 export class RequestObservationConflictError extends Error {
   readonly requestId: string;
   constructor(requestId: string) {
-    super(`request ${requestId} is already recorded with a different charge`);
+    super(`request ${requestId} is already recorded with different usage`);
     this.name = 'RequestObservationConflictError';
     this.requestId = requestId;
   }
-}
-
-function eventField(event: EconomicEvent, key: string): unknown {
-  const meta = event.metadata;
-  return meta !== null && typeof meta === 'object' && !Array.isArray(meta) ? (meta as Record<string, unknown>)[key] : undefined;
-}
-
-/** Same provider, model, instant and exact amount: one request observed twice. */
-function sameImportedCharge(a: EconomicEvent, b: EconomicEvent): boolean {
-  return (
-    a.kind === b.kind &&
-    a.occurredAt === b.occurredAt &&
-    JSON.stringify(a.amount && moneyToJson(a.amount)) === JSON.stringify(b.amount && moneyToJson(b.amount)) &&
-    eventField(a, 'provider') === eventField(b, 'provider') &&
-    eventField(a, 'model') === eventField(b, 'model')
-  );
 }
 
 /**
@@ -859,7 +855,7 @@ export class Store {
    * batch only removes the per-row commit. Always `end()` it, in a finally.
    */
   importBatch(opts?: { maxRows?: number; maxMs?: number }): WriteBatch {
-    const inner = writeBatch(this.db, opts);
+    const inner = writeBatch(this.db, { ...opts, beforeCommit: () => this.syncCompletedCosts() });
     const outer: WriteBatch = {
       tick: () => inner.tick(),
       end: () => {
@@ -964,7 +960,7 @@ export class Store {
     return projected;
   }
 
-  private persistRequest(row: RequestRow, idempotent: boolean): boolean {
+  private persistRequest(row: RequestRow, idempotent: boolean, identity: ImportedRowIdentity = {}): ImportedRowOutcome {
     const pricing = row.pricing ?? legacyPricingEvidence();
     const scope = scopeCaptureForInsert(row);
     const costUsd = this.compatibilityCostUsd(row);
@@ -1021,6 +1017,7 @@ export class Store {
         row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
       );
       const inserted = Number(info.changes ?? 0) > 0;
+      if (!inserted && row.via === 'import') return this.reconcileImportedRow(row, costUsd, pricing, identity);
       if (row.economicAmount !== undefined) {
         if (inserted) {
           const exactEvent = requestEconomicEvent({
@@ -1052,20 +1049,110 @@ export class Store {
             recordedAt: existing.recordedAt,
           });
           if (serializeEconomicEvent(existing).body !== serializeEconomicEvent(expected).body) {
-            // An imported feed can observe one provider request twice: resuming a
-            // Claude Code session copies earlier requests into the new transcript
-            // under the new session id. Same charge, model and instant is the same
-            // request seen again, so the first record stands. Anything else is a real
-            // conflict, raised as its own type so an importer can count and disclose
-            // it instead of aborting the whole import.
-            if (row.via === 'import' && sameImportedCharge(existing, expected)) return false;
-            if (row.via === 'import') throw new RequestObservationConflictError(row.requestId);
             throw new Error(`different economic event already exists for request ${row.requestId}`);
           }
         }
       }
-      return inserted;
+      return inserted ? 'inserted' : 'duplicate';
     });
+  }
+
+  /**
+   * A log showed a request that is already recorded. Tools rewrite and copy
+   * their own logs, so this is usually the same usage again (a resumed session
+   * copies earlier requests under a new id) or an earlier state of it (a line
+   * written while the response was still streaming). More usage completes the
+   * record; the same or less is a duplicate; anything else is a disagreement,
+   * raised as its own type so an importer can count it instead of stopping.
+   */
+  private reconcileImportedRow(row: RequestRow, costUsd: number, pricing: RequestPricingEvidence, identity: ImportedRowIdentity): ImportedRowOutcome {
+    const recorded = prepared(this.db,
+      `SELECT ts_epoch_ms AS tsEpochMs, provider, model, project, COALESCE(via, 'proxy') AS via,
+              input_tokens AS inputTokens, output_tokens AS outputTokens, cache_write_tokens AS cacheWriteTokens,
+              cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens
+         FROM requests WHERE request_id = ?`,
+    ).get(row.requestId) as {
+      tsEpochMs: number; provider: string; model: string; project: string; via: string; inputTokens: number; outputTokens: number;
+      cacheWriteTokens: number; cacheReadTokens: number; reasoningTokens: number;
+    };
+    const classes = ['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens'] as const;
+    const more = classes.some((k) => row[k] > recorded[k]);
+    const less = classes.some((k) => row[k] < recorded[k]);
+    const sameUsage = !more && !less;
+    if (recorded.provider !== row.provider || recorded.model !== row.model
+        || (!sameUsage && (identity.idIsPosition === true || Math.abs(recorded.tsEpochMs - row.tsEpochMs) > ONE_REQUEST_SPAN_MS))) {
+      throw new RequestObservationConflictError(row.requestId);
+    }
+    if (!more) {
+      // The exact ledger must hold the charge its request row claims to have.
+      if (row.economicAmount !== undefined && this.economicLedger.read(requestEconomicEventId(row.requestId)) === null) {
+        throw new Error(`exact economic event is missing for existing request ${row.requestId}`);
+      }
+      return 'duplicate';
+    }
+    if (less || recorded.via !== 'import') throw new RequestObservationConflictError(row.requestId);
+    if (row.economicAmount === undefined && this.economicLedger.read(requestEconomicEventId(row.requestId)) !== null) {
+      throw new RequestObservationConflictError(row.requestId);
+    }
+    realization.correctImportedUsage(this.db, this.economicLedger, {
+      requestId: row.requestId,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheWriteTokens: row.cacheWriteTokens,
+      cacheReadTokens: row.cacheReadTokens,
+      reasoningTokens: row.reasoningTokens,
+      cacheWriteTtl: row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
+      costUsd,
+      estimated: row.estimated,
+      pricing,
+      ...(row.economicAmount === undefined ? {} : { economicAmount: row.economicAmount }),
+    }, Date.now());
+    this.completedInBatch.push({ tsEpochMs: recorded.tsEpochMs, project: recorded.project });
+    if (this.activeBatch === null) this.syncCompletedCosts();
+    return 'completed';
+  }
+
+  /**
+   * An import recorded a request that turns out to repeat one counted elsewhere:
+   * it keeps its row and its history and counts for nothing. False when there is
+   * no such row or it already counts for nothing. Throws when its period's books
+   * are closed: they stay as closed.
+   */
+  retractImportedRequest(requestId: string): boolean {
+    return this.transaction(() => {
+      const recorded = prepared(this.db,
+        `SELECT ts_epoch_ms AS tsEpochMs, project, cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
+           FROM requests
+          WHERE request_id = ? AND via = 'import'
+            AND (input_tokens + output_tokens + cache_write_tokens + cache_read_tokens > 0 OR cost_usd <> 0)`,
+      ).get(requestId) as ({ tsEpochMs: number; project: string } & Record<string, unknown>) | undefined;
+      if (recorded === undefined) return false;
+      const charge = this.economicLedger.read(requestEconomicEventId(requestId));
+      realization.correctImportedUsage(this.db, this.economicLedger, {
+        requestId,
+        inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+        cacheWriteTtl: 'not_recorded',
+        costUsd: 0,
+        estimated: false,
+        pricing: pricingEvidenceFromRecord(recorded),
+        ...(charge === null ? {} : { economicAmount: money('0', charge.amount!.currency, charge.amount!.basis) }),
+      }, Date.now());
+      this.completedInBatch.push({ tsEpochMs: recorded.tsEpochMs, project: recorded.project });
+      if (this.activeBatch === null) this.syncCompletedCosts();
+      return true;
+    });
+  }
+
+  /** Requests corrected since the last commit, whose realized-value snapshots still carry the old cost. Both commit together. */
+  private completedInBatch: Array<{ tsEpochMs: number; project: string }> = [];
+
+  private syncCompletedCosts(): void {
+    const touched = this.completedInBatch;
+    if (touched.length === 0) return;
+    this.completedInBatch = [];
+    this.transaction(() => { realization.syncRealizationCosts(this.db, this.realizationDeps(), touched); });
   }
 
   /**
@@ -1309,8 +1396,13 @@ export class Store {
    * Returns true when the row was actually new.
    */
   insertRequestIfNew(r: RequestRow): boolean {
+    return this.recordImportedRequest(r) === 'inserted';
+  }
+
+  /** `insertRequestIfNew`, saying whether the row was new, already there, or finished an earlier record. */
+  recordImportedRequest(r: RequestRow, identity: ImportedRowIdentity = {}): ImportedRowOutcome {
     try {
-      return this.persistRequest(r, true);
+      return this.persistRequest(r, true, identity);
     } finally {
       // Ticked even for a duplicate or a conflict: the batch bounds how long a
       // transaction stays open, whatever each row turned out to be.

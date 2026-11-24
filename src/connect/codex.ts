@@ -2,7 +2,8 @@
  * Native metering for Codex CLI — reads its rollout session logs, no routing.
  *
  * Codex appends a JSONL "rollout" per session under ~/.codex/sessions/<Y>/<M>/
- * <D>/rollout-*.jsonl (older ones under ~/.codex/archived_sessions). Each
+ * <D>/rollout-*.jsonl (older ones under ~/.codex/archived_sessions) and later
+ * compresses a finished one in place, to rollout-*.jsonl.zst. Each
  * `token_count` event carries the session's CUMULATIVE usage. We record one row
  * per turn as the DELTA of that cumulative total, which telescopes to the exact
  * session total (Codex's own last_token_usage double-counts re-read context, so
@@ -18,10 +19,18 @@
  * first event counts only that turn (last_token_usage), never the carried total.
  * A subagent rollout instead opens with its own session_meta (forked_from_id
  * set) and then embeds the parent's, so the FIRST session_meta names the thread.
+ *
+ * A forked file may also replay the parent's last turns, token counts included.
+ * Those requests are in the parent's own file, so they are not counted again: a
+ * turn id is a UUIDv7, which sorts by time, and a replayed turn is older than
+ * the thread it is replayed into.
+ *
+ * A thread that was not forked can also open with a carried total: Codex shortens
+ * a long file to its recent history, and the total is then the only trace of the
+ * thread's earlier work. It is counted as one row.
  */
 
-import { createReadStream, existsSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
@@ -35,6 +44,9 @@ import {
   createRepoResolver,
   noteRelabel,
   boundedJsonlFiles,
+  logBaseName,
+  readLogLines,
+  noteUnreadFiles,
   markImportTruncated,
   fileStampForImport,
   noteFileImported,
@@ -42,6 +54,9 @@ import {
   truncationMark,
   commitObservationsInLine,
 } from './importShared.ts';
+import { tokenField } from './logFields.ts';
+import { isUnreadableLog } from './logFiles.ts';
+import { EconomicPeriodClosedError } from '../economics/ledger.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { codexRateLimitEvents, type QuotaEvent } from '../quota/limits.ts';
 
@@ -59,22 +74,24 @@ interface TokenTotals {
 }
 
 function totalsFrom(u: Record<string, number> | undefined): TokenTotals | null {
-  if (!u) return null;
+  if (!u || typeof u !== 'object') return null;
   return {
-    input: u.input_tokens ?? 0,
-    cachedInput: u.cached_input_tokens ?? 0,
-    output: u.output_tokens ?? 0,
-    reasoning: u.reasoning_output_tokens ?? 0,
+    input: tokenField(u.input_tokens),
+    cachedInput: tokenField(u.cached_input_tokens),
+    output: tokenField(u.output_tokens),
+    reasoning: tokenField(u.reasoning_output_tokens),
   };
 }
 
 /** All rollout JSONL files under a Codex home (live sessions + archived). */
-export function codexRolloutFileScan(root: string): { files: string[]; truncated: boolean } {
+export function codexRolloutFileScan(root: string): { files: string[]; truncated: boolean; unsupported: number } {
   const dirs = [join(root, 'sessions'), join(root, 'archived_sessions')];
   const out: string[] = [];
   let truncated = false;
+  let unsupported = 0;
   for (const dir of dirs) {
     const scan = boundedJsonlFiles(dir);
+    unsupported += scan.unsupported;
     for (const file of scan.files) {
       if (out.length >= RESOURCE_LIMITS.importFiles) {
         truncated = true;
@@ -85,7 +102,7 @@ export function codexRolloutFileScan(root: string): { files: string[]; truncated
     truncated ||= scan.truncated;
     if (truncated) break;
   }
-  return { files: out, truncated };
+  return { files: out, truncated, unsupported };
 }
 
 /** Compatibility adapter for transcript lookup and existing callers. */
@@ -111,12 +128,19 @@ export interface CodexUsageRow {
 
 /** The child thread id of a forked rollout file, or null for an ordinary one. */
 export function codexForkThreadId(file: string): string | null {
-  const m = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i.exec(file);
+  const m = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i.exec(logBaseName(file));
   return m ? m[1]!.toLowerCase() : null;
 }
 
+/** The model of the Codex versions whose logs never named one. */
+const MODEL_BEFORE_LOGS_NAMED_IT = 'gpt-5';
+
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-/i;
+
 export interface CodexParseOptions {
   onRow?: (row: CodexUsageRow) => void | Promise<void>;
+  /** A request replayed from the parent's log, under the id an earlier reader gave it in this file. */
+  onReplayed?: (requestId: string) => void;
   onTruncatedLine?: () => void;
   onTruncatedRow?: () => void;
   /** A commit git reported creating in this rollout's own turns (never a fork's replayed history). */
@@ -131,13 +155,18 @@ export interface CodexParseOptions {
  * total). Pure over the file's lines; the importer handles I/O and insertion.
  */
 export async function parseCodexRollout(file: string, options: CodexParseOptions = {}): Promise<CodexUsageRow[]> {
-  const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
   let sessionId: string | null = null;
   const forkId = codexForkThreadId(file);
   let forked = forkId !== null;
   let firstCount = true;
+  // A fork's replay ends at the first turn begun in this thread. A log whose
+  // turns carry no ids gives no way to tell, and is read as before.
+  let turnsNamed = false;
+  let ownTurnSeen = false;
+  let turnStartedMs = 0;
+  let resets = 0;
   let provider = 'openai';
-  let model = 'gpt-5';
+  let model: string | null = null;
   let project = 'codex';
   // A rollout that never emits a cwd keeps the tool-name placeholder, so the
   // basis starts as a fallback and is upgraded only when a real path arrives.
@@ -149,25 +178,48 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
   let emittedRows = 0;
   const maxRows = options.maxRows ?? RESOURCE_LIMITS.importRows;
 
+  // Usage can come before the first turn names its model (the carried total of a
+  // shortened log does). It waits for that name.
+  let unnamed: CodexUsageRow[] = [];
+  const emit = async (row: CodexUsageRow): Promise<void> => {
+    if (options.onRow) await options.onRow(row);
+    else rows.push(row);
+  };
+  const releaseUnnamed = async (): Promise<void> => {
+    const waiting = unnamed;
+    unnamed = [];
+    for (const row of waiting) await emit(model === null ? row : { ...row, model });
+  };
+
   const projFromCwd = (cwd: string) => projectKeyWithBasis(cwd, 'codex');
   const lastMeter = new Map<string, string>();
 
-  for await (const line of rl) {
-    if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
-      options.onTruncatedLine?.();
-      continue;
-    }
+  // Usage is in short lines of known types. A dropped tool output or snapshot
+  // holds none, so losing it leaves the import complete.
+  const onOversizedLine = (kind: string | null): void => {
+    if (kind === null || kind === 'session_meta' || kind === 'turn_context') options.onTruncatedLine?.();
+  };
+  for await (const line of readLogLines(file, onOversizedLine)) {
     let o: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
     try {
       o = JSON.parse(line);
     } catch {
       continue; // torn tail of a live session — next import gets it whole
     }
-    const p = o.payload ?? {};
+    if (o === null || typeof o !== 'object') continue; // JSON, but not a record
+    const p = o.payload !== null && typeof o.payload === 'object' ? o.payload : {};
     // A fork or subagent file opens with its parent's history replayed; its own
     // turns begin after its first token count. Commits in the replay are the
     // parent's, so they are not credited to this thread.
-    if (options.onCommit && o.type !== 'session_meta' && o.type !== 'turn_context' && !(forked && firstCount)) {
+    const turnId = p.turn_id;
+    if (typeof turnId === 'string' && (o.type === 'turn_context' || (o.type === 'event_msg' && p.type === 'task_started'))) {
+      const thread = forkId ?? sessionId;
+      if (thread !== null && UUID_V7.test(turnId) && turnId.toLowerCase() >= thread.toLowerCase()) ownTurnSeen = true;
+      turnsNamed = true;
+      if (p.type === 'task_started') turnStartedMs = typeof p.started_at === 'number' ? p.started_at * 1000 : 0;
+    }
+    const replaying = forked && turnsNamed && !ownTurnSeen;
+    if (options.onCommit && o.type !== 'session_meta' && o.type !== 'turn_context' && !(forked && firstCount) && !replaying) {
       const thread = forkId ?? sessionId;
       const ts = Date.parse(o.timestamp ?? '');
       if (thread && Number.isFinite(ts)) {
@@ -194,6 +246,7 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         cwd = p.cwd;
         ({ project, basis: attributionBasis } = projFromCwd(p.cwd));
       }
+      await releaseUnnamed();
       continue;
     }
     if (o.type === 'event_msg' && p.type === 'token_count' && options.onRateLimit && p.rate_limits !== undefined) {
@@ -225,26 +278,44 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
           : tot;
       }
       firstCount = false;
-      // Delta since the previous token_count; clamp at 0 across a compaction reset.
-      const dIn = Math.max(0, tot.input - prev.input);
-      const dCached = Math.max(0, tot.cachedInput - prev.cachedInput);
-      const dOut = Math.max(0, tot.output - prev.output);
-      const dReason = Math.max(0, tot.reasoning - prev.reasoning);
+      let dIn = Math.max(0, tot.input - prev.input);
+      let dCached = Math.max(0, tot.cachedInput - prev.cachedInput);
+      let dOut = Math.max(0, tot.output - prev.output);
+      let dReason = Math.max(0, tot.reasoning - prev.reasoning);
+      // The total went down: Codex restarted it, so the difference says nothing
+      // about this turn and the turn's own figure does.
+      const reset = tot.input < prev.input;
       prev = tot;
+      const clamped = dIn === 0 && dOut === 0 && dCached === 0;
+      if (reset) {
+        const last = totalsFrom(info?.last_token_usage);
+        if (last) ({ input: dIn, cachedInput: dCached, output: dOut, reasoning: dReason } = last);
+      }
       if (dIn === 0 && dOut === 0 && dCached === 0) continue; // no new work this event
-      const ts = Date.parse(o.timestamp ?? '');
-      if (Number.isNaN(ts)) continue;
+      const logged = Date.parse(o.timestamp ?? '');
+      if (Number.isNaN(logged)) continue;
+      // Shortening a file restamps every line with one time, so a turn can be
+      // logged before it began.
+      const ts = Math.max(logged, turnStartedMs);
+      // A turn that earlier readers clamped away takes an id of its own, so the
+      // ids after it stay what they were.
+      const place = reset && clamped ? `reset-${resets++}` : ordinal++;
+      const requestId = `codex:${forkId ?? sessionId ?? 'unknown'}:${place}`;
+      if (replaying) {
+        options.onReplayed?.(requestId);
+        continue;
+      }
       const uncachedIn = Math.max(0, dIn - dCached); // Codex counts cached inside input_tokens
       if (emittedRows >= maxRows) {
         options.onTruncatedRow?.();
         break;
       }
       const row: CodexUsageRow = {
-        requestId: `codex:${forkId ?? sessionId ?? 'unknown'}:${ordinal++}`,
+        requestId,
         sessionId: forkId ?? sessionId,
         tsEpochMs: ts,
         provider,
-        model,
+        model: model ?? MODEL_BEFORE_LOGS_NAMED_IT,
         project,
         attributionBasis,
         cwd,
@@ -254,10 +325,11 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         reasoningTokens: dReason,
       };
       emittedRows += 1;
-      if (options.onRow) await options.onRow(row);
-      else rows.push(row);
+      if (model === null) unnamed.push(row);
+      else await emit(row);
     }
   }
+  await releaseUnnamed();
   return rows;
 }
 
@@ -284,6 +356,7 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
   const files = fileScan.files;
   const summary = emptyImportSummary(files.length);
   if (fileScan.truncated) markImportTruncated(summary, 'files');
+  noteUnreadFiles(summary, fileScan.unsupported);
   // Same subdirectory/collision problem as the Claude Code transcripts: a rollout
   // records the cwd it ran in, which is often not the repository root.
   const resolveProject = createRepoResolver();
@@ -303,6 +376,14 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
       await parseCodexRollout(file, {
         onTruncatedLine: () => markImportTruncated(summary, 'lines'),
         onTruncatedRow: () => markImportTruncated(summary, 'rows'),
+        onReplayed: (requestId) => {
+          try {
+            if (store.retractImportedRequest(requestId)) summary.retractedObservations = (summary.retractedObservations ?? 0) + 1;
+          } catch (error) {
+            if (!(error instanceof EconomicPeriodClosedError)) throw error;
+            summary.closedPeriodObservations = (summary.closedPeriodObservations ?? 0) + 1;
+          }
+        },
         onCommit: (c) => {
           if (c.tsEpochMs >= sinceMs) store.recordObservedCommit({ source, ...c });
         },
@@ -349,11 +430,15 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
             cwd: ev.cwd,
           };
           if (ev.sessionId) store.upsertSession(ev.sessionId, attribution.project, source, ev.tsEpochMs);
-          recordInsert(store, summary, row, c.estimated);
+          recordInsert(store, summary, row, c.estimated, { idIsPosition: true });
         },
       });
-    } catch {
-      continue; // unreadable file — skip, never abort the whole import
+    } catch (error) {
+      if (!isUnreadableLog(error)) throw error;
+      // Unreadable or damaged: the rows before the damage stand, the rest is
+      // reported missing, and no cursor is kept, so the next import tries again.
+      noteUnreadFiles(summary);
+      continue;
     }
     noteFileImported(store, source, file, stamp, opts, truncationsBefore, summary);
   }

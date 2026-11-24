@@ -3,7 +3,7 @@
 ## Consumes
 
 - Claude Code JSONL transcripts;
-- Codex rollout JSONL files;
+- Codex rollout JSONL files, plain or compressed in place (`.jsonl.zst`, `.jsonl.gz`);
 - opencode's read-only SQLite session database;
 - Antigravity's per-conversation SQLite databases (`~/.gemini/antigravity*/conversations`),
   read-only, decoding the published protobuf fields with `protobuf.ts`.
@@ -11,9 +11,13 @@
 ## Guarantees
 
 - importers never route traffic or read provider credentials;
+- `logFiles.ts` finds and reads every line log; a log found but not read to the
+  end is counted in `ImportSummary.unreadFiles`, and no cursor is kept for it;
+- a Claude Code request is recorded with its finished usage, and a forked Codex
+  thread counts only its own turns, never the parent requests its log replays;
 - JSONL/file enumeration is incremental and capped by the shared resource policy;
-- oversized source lines and rows are skipped before JSON parsing and disclosed
-  as `ImportSummary.captureCoverage: "truncated"`;
+- oversized source lines and rows are skipped before JSON parsing, and any that
+  could hold usage are disclosed as `ImportSummary.captureCoverage: "truncated"`;
 - Codex rollout rows can be consumed incrementally, so a large session does not
   require retaining the complete normalized row array;
 - Antigravity counts each model call once, from its generator row; the same

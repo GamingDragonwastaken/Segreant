@@ -34,7 +34,8 @@ export interface PriceCorrectionEventInput {
   readonly occurredAt?: Instant;
 }
 
-function predecessorNextAmount(source: EconomicEvent): Money {
+/** The amount a price correction left its charge at. */
+export function priceCorrectionNextAmount(source: EconomicEvent): Money {
   const metadata = source.metadata;
   if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
     throw new Error('price correction predecessor metadata must contain typed previousAmount and nextAmount');
@@ -83,7 +84,7 @@ export function priceCorrectionEvent(input: PriceCorrectionEventInput): Economic
     }
     predecessorAmount = source.amount;
   } else if (source.kind === 'price_corrected') {
-    predecessorAmount = predecessorNextAmount(source);
+    predecessorAmount = priceCorrectionNextAmount(source);
   } else {
     throw new Error(`price correction source must be a local charge_estimated or prior price_corrected event (received ${source.kind})`);
   }

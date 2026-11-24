@@ -18,14 +18,12 @@
  * saying so rather than pretending. Widen deliberately, per source, with tests.
  */
 
-import { createReadStream, existsSync } from 'node:fs';
-import { createInterface } from 'node:readline';
-import { basename } from 'node:path';
+import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { defaultCodexRoot, codexRolloutFiles } from '../connect/codex.ts';
-import { boundedJsonlFiles } from '../connect/importShared.ts';
+import { boundedJsonlFiles, logBaseName, readLogLines } from '../connect/logFiles.ts';
 import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
 /** One conversational turn, already truncated to the caps below. */
@@ -68,7 +66,7 @@ export function findClaudeCodeTranscript(sessionId: string, root = defaultClaude
   const wanted = `${sessionId}.jsonl`;
   const scan = boundedJsonlFiles(root);
   for (const full of scan.files) {
-    if (basename(full) === wanted) return full;
+    if (logBaseName(full) === wanted) return full;
   }
   return null;
 }
@@ -122,12 +120,7 @@ export async function extractTranscriptTurns(sourcePath: string, sessionId: stri
   let truncatedLines = 0;
   let totalChars = 0;
 
-  const rl = createInterface({ input: createReadStream(sourcePath), crlfDelay: Infinity });
-  for await (const line of rl) {
-    if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
-      truncatedLines++;
-      continue;
-    }
+  for await (const line of readLogLines(sourcePath, () => { truncatedLines++; })) {
     let o: unknown;
     try {
       o = JSON.parse(line);
@@ -238,18 +231,16 @@ export function extractOpencodeTranscript(
  */
 async function findCodexRollout(sessionId: string, root: string): Promise<string | null> {
   const files = codexRolloutFiles(root);
-  const byName = files.find((f) => basename(f).endsWith(`-${sessionId}.jsonl`));
+  const byName = files.find((f) => logBaseName(f).endsWith(`-${sessionId}.jsonl`));
   if (byName) return byName;
   for (const f of files) {
-    const rl = createInterface({ input: createReadStream(f), crlfDelay: Infinity });
-    for await (const lineText of rl) {
+    for await (const lineText of readLogLines(f)) {
       let o: { type?: string; payload?: { id?: string } };
       try {
         o = JSON.parse(lineText);
       } catch {
         break;
       }
-      rl.close();
       if (o.type === 'session_meta' && o.payload?.id === sessionId) return f;
       break; // session_meta is the first line; anything else → next file
     }
@@ -287,12 +278,7 @@ export async function extractCodexTranscript(
     turns.push({ role, text });
   };
 
-  const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-  for await (const lineText of rl) {
-    if (Buffer.byteLength(lineText, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
-      truncatedLines++;
-      continue;
-    }
+  for await (const lineText of readLogLines(file, () => { truncatedLines++; })) {
     let o: { type?: string; payload?: Record<string, unknown> };
     try {
       o = JSON.parse(lineText);
