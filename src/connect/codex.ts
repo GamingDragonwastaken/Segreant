@@ -124,6 +124,8 @@ export interface CodexUsageRow {
   outputTokens: number;
   cacheReadTokens: number;
   reasoningTokens: number;
+  /** The count covers more than the request it names: a shortened log's carried total. */
+  severalRequests?: boolean;
 }
 
 /** The child thread id of a forked rollout file, or null for an ordinary one. */
@@ -285,12 +287,11 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
       // The total went down: Codex restarted it, so the difference says nothing
       // about this turn and the turn's own figure does.
       const reset = tot.input < prev.input;
+      const latest = totalsFrom(info?.last_token_usage);
+      const severalRequests = !reset && latest !== null && dIn > latest.input;
       prev = tot;
       const clamped = dIn === 0 && dOut === 0 && dCached === 0;
-      if (reset) {
-        const last = totalsFrom(info?.last_token_usage);
-        if (last) ({ input: dIn, cachedInput: dCached, output: dOut, reasoning: dReason } = last);
-      }
+      if (reset && latest) ({ input: dIn, cachedInput: dCached, output: dOut, reasoning: dReason } = latest);
       if (dIn === 0 && dOut === 0 && dCached === 0) continue; // no new work this event
       const logged = Date.parse(o.timestamp ?? '');
       if (Number.isNaN(logged)) continue;
@@ -323,6 +324,7 @@ export async function parseCodexRollout(file: string, options: CodexParseOptions
         outputTokens: dOut,
         cacheReadTokens: dCached,
         reasoningTokens: dReason,
+        ...(severalRequests ? { severalRequests } : {}),
       };
       emittedRows += 1;
       if (model === null) unnamed.push(row);
@@ -401,6 +403,7 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
                 outputTokens: ev.outputTokens,
                 cacheWriteTokens: 0,
                 cacheReadTokens: ev.cacheReadTokens,
+                severalRequests: ev.severalRequests,
               })
             : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence(), exact: undefined };
 
@@ -418,6 +421,7 @@ async function importCodexRows(store: Store, opts: ImportOptions): Promise<Impor
             cacheWriteTokens: 0,
             cacheReadTokens: ev.cacheReadTokens,
             reasoningTokens: ev.reasoningTokens,
+            ...(ev.severalRequests === true ? { severalRequests: true } : {}),
             costUsd: c.costUsd,
             economicAmount: prov ? c.exact?.total : undefined,
             estimated: c.estimated,

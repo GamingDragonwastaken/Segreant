@@ -246,6 +246,8 @@ export interface RequestRow {
   economicAmount?: Money;
   /** The cache-write duration this row was priced with, when the source said; absent is unknown. */
   cacheWriteTtl?: '5m' | '1h';
+  /** True when this row is known to add up several requests. */
+  severalRequests?: boolean;
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -317,7 +319,8 @@ const REQUEST_ROW_SELECT = `SELECT request_id AS requestId, session_id AS sessio
                 scope_capture_status AS scopeCaptureStatus,
                 provider_scope_declaration_id AS providerScopeDeclarationId,
                 attribution_basis AS attributionBasis,
-                capture_coverage AS captureCoverage, cache_write_ttl AS cacheWriteTtlRecorded
+                capture_coverage AS captureCoverage, cache_write_ttl AS cacheWriteTtlRecorded,
+                several_requests AS severalRequestsRecorded
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project`;
 
 /**
@@ -521,6 +524,7 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     rateMatchProvider,
     rateMatchModel,
     cacheWriteTtlRecorded,
+    severalRequestsRecorded,
     ...row
   } = record;
   // 'not_recorded' and 'legacy_unknown' read as absent; any other string is
@@ -529,6 +533,7 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   return {
     ...(row as unknown as RequestRow),
     ...(ttl === '5m' || ttl === '1h' ? { cacheWriteTtl: ttl } : {}),
+    ...(Number(severalRequestsRecorded) === 1 ? { severalRequests: true } : {}),
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
@@ -979,8 +984,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage, cache_write_ttl, several_requests
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
       const info = prepared(this.db, sql).run(
         row.requestId,
         row.sessionId,
@@ -1015,6 +1020,7 @@ export class Store {
         row.attributionBasis ?? 'legacy_unknown',
         row.captureCoverage ?? 'complete',
         row.cacheWriteTokens > 0 && (row.cacheWriteTtl === '5m' || row.cacheWriteTtl === '1h') ? row.cacheWriteTtl : 'not_recorded',
+        row.severalRequests === true ? 1 : 0,
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (!inserted && row.via === 'import') return this.reconcileImportedRow(row, costUsd, pricing, identity);
@@ -2805,6 +2811,7 @@ export class Store {
     cacheWriteTokens: number;
     cacheReadTokens: number;
     cacheWriteTtl: '5m' | '1h' | null;
+    severalRequests: boolean;
     costUsd: number;
     usageCaptured: boolean;
   }> {
