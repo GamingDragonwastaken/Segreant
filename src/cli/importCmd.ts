@@ -18,6 +18,7 @@ import { scanWithDiff, saveScan, type ScanDiff } from '../scan/scan.ts';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { IMPORT_REGISTRY, importerFor } from '../connect/registry.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
+import { importNotes } from '../connect/importNotes.ts';
 import { C, color, usd, num, printJson } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
 import { askPlanPrices } from './planCmd.ts';
@@ -159,27 +160,6 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
   };
 }
 
-/** What an import changed or could not read, in the words every import summary uses. */
-function importNotes(sum: ImportSummary): Array<{ label: string; text: string; missing: boolean }> {
-  const notes: Array<{ label: string; text: string; missing: boolean }> = [];
-  if (sum.unreadFiles) {
-    notes.push({ label: 'Not read', missing: true, text: `${num(sum.unreadFiles)} log file(s) could not be read to the end; their remaining usage is not counted. The next import tries again.` });
-  }
-  if (sum.completedObservations) {
-    notes.push({ label: 'Completed', missing: false, text: `${num(sum.completedObservations)} request(s) recorded earlier from an unfinished log line now carry their full usage.` });
-  }
-  if (sum.retractedObservations) {
-    notes.push({ label: 'Corrected', missing: false, text: `${num(sum.retractedObservations)} request(s) an earlier import counted a second time, from a forked session's copy of its parent's log, now count once.` });
-  }
-  if (sum.closedPeriodObservations) {
-    notes.push({ label: 'Closed books', missing: true, text: `${num(sum.closedPeriodObservations)} correction(s) fall in an accounting period you have closed and were not made. Reopen the period, then import again.` });
-  }
-  if (sum.conflictingObservations) {
-    notes.push({ label: 'Conflicts', missing: true, text: `${num(sum.conflictingObservations)} request(s) already recorded with different usage; kept the first record, left these out.` });
-  }
-  return notes;
-}
-
 /** "kept $1,643 · not kept $408": a project's answer from git, or why there is none yet. */
 function keptLine(tty: boolean, d: DiscoveredResult): string {
   if (!d.measured) return color(tty, C.gray, d.skipped === 'no-spend' ? 'no priced spend' : d.skipped === 'git-failed' ? `git could not read it: ${d.gitError ?? ''}` : 'not measured in this run');
@@ -230,31 +210,24 @@ function printUnmeasured(tty: boolean, discovered: DiscoveredResult[]): void {
   }
 }
 
-/** "3 files, 507 lines" — the parts of an import that hit a resource bound. */
-function truncationDetail(sum: ImportSummary): string {
-  return [
-    sum.truncatedFiles ? `${num(sum.truncatedFiles)} files` : '',
-    sum.truncatedLines ? `${num(sum.truncatedLines)} lines` : '',
-    sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
-  ].filter(Boolean).join(', ') || 'bounds reached';
-}
-
 function renderImportSummary(tty: boolean, id: string, location: string, sum: ImportSummary): void {
   const label = IMPORT_RUNNERS[id]!.label;
   console.log('');
   console.log(color(tty, C.bold, `  ${label} import — native, no routing`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  Source       ${color(tty, C.gray, location)}${sum.files > 1 ? color(tty, C.gray, `  (${num(sum.files)} files)`) : ''}`);
+  const notes = importNotes(sum);
+  const printNotes = (): void => {
+    for (const note of notes) console.log(color(tty, note.missing ? C.yellow : C.gray, `  ${note.label.padEnd(12)} ${note.text}`));
+  };
   if (sum.eventsSeen === 0) {
     if (sum.filesUnchanged) {
       // Every file was already imported in full: that is "nothing new", never "nothing found".
       console.log(color(tty, C.gray, `  Up to date   ${num(sum.filesUnchanged)} file(s) unchanged since they were last imported in full (--rescan reads them again)`));
-      if (sum.captureCoverage === 'truncated') {
-        console.log(color(tty, C.yellow, `  Coverage     TRUNCATED (${truncationDetail(sum)}) — imported values are not a complete source capture.`));
-      }
-    } else {
+    } else if (!notes.some((n) => n.missing)) {
       console.log(color(tty, C.gray, `  No usage entries found — has ${label} run on this machine?`));
     }
+    printNotes();
     console.log('');
     return;
   }
@@ -269,10 +242,7 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
   for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
-  if (sum.captureCoverage === 'truncated') {
-    console.log(color(tty, C.yellow, `  Coverage     TRUNCATED (${truncationDetail(sum)}) — imported values are not a complete source capture.`));
-  }
-  for (const note of importNotes(sum)) console.log(color(tty, note.missing ? C.yellow : C.gray, `  ${note.label.padEnd(12)} ${note.text}`));
+  printNotes();
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
   // over the merge — silently splitting a project's money is the worse failure.
