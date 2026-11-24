@@ -36,6 +36,7 @@ export interface BasisRow {
  */
 export const BASIS_COHORTS = [
   'list_exact',
+  'list_standard',
   'list_family',
   'user_declared',
   'user_free',
@@ -84,6 +85,10 @@ const TEXT: Record<BasisCohortId, { label: string; meaning: string }> = {
     label: 'list price',
     meaning: "priced at the model's own published API rate on the rate card",
   },
+  list_standard: {
+    label: 'list price, standard rate',
+    meaning: "the model's own rate on the rate card, where which of its rates the provider used is not known (a total of several requests hides each prompt's length)",
+  },
   list_family: {
     label: 'list price, nearest model',
     meaning: 'the model is not on the rate card by name; priced at the rate of the closest model that is',
@@ -127,7 +132,7 @@ export function cohortOf(row: Pick<BasisRow, 'costBasis' | 'rateMatchKind'>): Ba
     case 'local_list_price':
       return row.rateMatchKind === 'exact_provider' || row.rateMatchKind === 'exact_cross_provider'
         ? 'list_exact'
-        : 'list_family';
+        : row.rateMatchKind === 'standard_rate_assumed' ? 'list_standard' : 'list_family';
     case 'fallback_estimate': return 'fallback';
     case 'user_declared_price': return row.rateMatchKind === 'user_declared_free' ? 'user_free' : 'user_declared';
     case 'tool_reported_unverified': return 'tool_reported';

@@ -94,10 +94,11 @@ export function meteredBasisLine(basis: Basis | undefined): string {
       // makes the total an estimate: it is not a
       // published list price.
       const declared = basis.cohorts.find((c) => c.id === 'user_declared');
+      const standard = basis.cohorts.find((c) => c.id === 'list_standard' && c.costUsd >= 0.005);
       // With no weak or declared part, the "estimated" headline comes from the
       // mix itself (sample rows beside priced ones, or unpriced requests). It
       // used to print "0% priced without the model's own rate ()".
-      if (weak.length === 0 && !declared) {
+      if (weak.length === 0 && !declared && !standard) {
         if (basis.cohorts.some((c) => c.id === 'demo')) return 'mostly sample data, priced from the price list';
         // No rate card priced any of it: every charged request is on a model the
         // user marked free. It used to read "API list price".
@@ -112,6 +113,7 @@ export function meteredBasisLine(basis: Basis | undefined): string {
       const pct = (usd: number): number => (basis.totalUsd > 0 ? Math.round((usd / basis.totalUsd) * 100) : 0);
       const parts: string[] = [];
       if (weak.length > 0) parts.push(`${pct(weak.reduce((s, c) => s + c.costUsd, 0))}% priced without the model's own rate (${weak.map((c) => c.label).join(', ')})`);
+      if (standard) parts.push(`${pct(standard.costUsd)}% at a standard rate the provider may not have used`);
       if (declared) parts.push(`${pct(declared.costUsd)}% at prices you set`);
       return `estimated: ${parts.join('; ')}`;
     }

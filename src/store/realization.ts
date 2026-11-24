@@ -259,7 +259,9 @@ export function estimatedRequestRows(db: DatabaseSync): Array<{
       `SELECT request_id AS requestId, provider, model,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
-                CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl, several_requests AS severalRequests,
+                CASE WHEN cache_write_ttl IN ('5m', '1h') THEN cache_write_ttl END AS cacheWriteTtl,
+                -- Not recorded: only a log can hold a total of several requests; the proxy sees one.
+                COALESCE(several_requests, CASE WHEN via = 'import' THEN 1 ELSE 0 END) AS severalRequests,
                 cost_usd AS costUsd,
                 -- An unpriced row with no token counts has no captured usage to
                 -- price (a response cut off at the resource limit): repricing it
