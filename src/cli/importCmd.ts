@@ -139,6 +139,9 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
   const lo = [recent.earliestMs, rest.earliestMs].filter((v): v is number => v !== null);
   const hi = [recent.latestMs, rest.latestMs].filter((v): v is number => v !== null);
   const conflicts = (recent.conflictingObservations ?? 0) + (rest.conflictingObservations ?? 0);
+  const closed = (recent.closedPeriodObservations ?? 0) + (rest.closedPeriodObservations ?? 0);
+  const retracted = (recent.retractedObservations ?? 0) + (rest.retractedObservations ?? 0);
+  const completed = (recent.completedObservations ?? 0) + (rest.completedObservations ?? 0);
   return {
     ...rest,
     inserted: recent.inserted + rest.inserted,
@@ -150,12 +153,36 @@ function mergeImportSummaries(recent: ImportSummary | undefined, rest: ImportSum
     latestMs: hi.length > 0 ? Math.max(...hi) : null,
     relabelled: [...recent.relabelled, ...rest.relabelled],
     ...(conflicts > 0 ? { conflictingObservations: conflicts } : {}),
+    ...(completed > 0 ? { completedObservations: completed } : {}),
+    ...(closed > 0 ? { closedPeriodObservations: closed } : {}),
+    ...(retracted > 0 ? { retractedObservations: retracted } : {}),
   };
+}
+
+/** What an import changed or could not read, in the words every import summary uses. */
+function importNotes(sum: ImportSummary): Array<{ label: string; text: string; missing: boolean }> {
+  const notes: Array<{ label: string; text: string; missing: boolean }> = [];
+  if (sum.unreadFiles) {
+    notes.push({ label: 'Not read', missing: true, text: `${num(sum.unreadFiles)} log file(s) could not be read to the end; their remaining usage is not counted. The next import tries again.` });
+  }
+  if (sum.completedObservations) {
+    notes.push({ label: 'Completed', missing: false, text: `${num(sum.completedObservations)} request(s) recorded earlier from an unfinished log line now carry their full usage.` });
+  }
+  if (sum.retractedObservations) {
+    notes.push({ label: 'Corrected', missing: false, text: `${num(sum.retractedObservations)} request(s) an earlier import counted a second time, from a forked session's copy of its parent's log, now count once.` });
+  }
+  if (sum.closedPeriodObservations) {
+    notes.push({ label: 'Closed books', missing: true, text: `${num(sum.closedPeriodObservations)} correction(s) fall in an accounting period you have closed and were not made. Reopen the period, then import again.` });
+  }
+  if (sum.conflictingObservations) {
+    notes.push({ label: 'Conflicts', missing: true, text: `${num(sum.conflictingObservations)} request(s) already recorded with different usage; kept the first record, left these out.` });
+  }
+  return notes;
 }
 
 /** "kept $1,643 · not kept $408": a project's answer from git, or why there is none yet. */
 function keptLine(tty: boolean, d: DiscoveredResult): string {
-  if (!d.measured) return color(tty, C.gray, d.skipped === 'no-spend' ? 'no priced spend' : 'not measured in this run');
+  if (!d.measured) return color(tty, C.gray, d.skipped === 'no-spend' ? 'no priced spend' : d.skipped === 'git-failed' ? `git could not read it: ${d.gitError ?? ''}` : 'not measured in this run');
   const k = d.kept;
   if (k === undefined || k.kept.units + k.notKept.units + k.contested.units + k.unknown.units === 0) {
     return color(tty, C.gray, k !== undefined && k.maturing.units > 0 ? 'maturing (commits under 14 days)' : 'no commits to judge');
@@ -245,9 +272,7 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   if (sum.captureCoverage === 'truncated') {
     console.log(color(tty, C.yellow, `  Coverage     TRUNCATED (${truncationDetail(sum)}) — imported values are not a complete source capture.`));
   }
-  if (sum.conflictingObservations) {
-    console.log(color(tty, C.yellow, `  Conflicts    ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
-  }
+  for (const note of importNotes(sum)) console.log(color(tty, note.missing ? C.yellow : C.gray, `  ${note.label.padEnd(12)} ${note.text}`));
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
   // over the merge — silently splitting a project's money is the worse failure.
@@ -638,9 +663,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
         `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
           `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
       );
-      if (sum.conflictingObservations) {
-        console.log(color(tty, C.yellow, `      ${num(sum.conflictingObservations)} request(s) already recorded with a different charge — kept the first record, left these out.`));
-      }
+      for (const note of importNotes(sum)) console.log(color(tty, note.missing ? C.yellow : C.gray, `      ${note.text}`));
     }
   }
   if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));

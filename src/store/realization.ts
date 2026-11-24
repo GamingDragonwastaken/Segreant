@@ -18,13 +18,15 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { runScript } from './schema.ts';
+import { prepared } from '../util/statements.ts';
 import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { RequestRow, SpendBucket } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
-import { formatMoneyAmount, money, type Money } from '../economics/money.ts';
+import type { EconomicEvent } from '../economics/events.ts';
+import { compareMoney, formatMoneyAmount, money, type Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
-import { priceCorrectionEvent } from '../economics/corrections.ts';
+import { priceCorrectionEvent, priceCorrectionNextAmount } from '../economics/corrections.ts';
 import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
 import { canonicalModelAttribution, type EconomicModelUnit, type EffectiveRequestRow } from './economicReadModel.ts';
 import { evidenceMatcher, modelSpendFromRows, parseScopeEvidence } from './scopeEvidence.ts';
@@ -95,7 +97,7 @@ export interface RepriceUpdate {
 export interface RequestPriceEvent {
   eventId: number;
   requestId: string;
-  action: 'reprice';
+  action: 'reprice' | 'usage_corrected';
   appliedAtMs: number;
   previousCostUsd: number;
   previousEstimated: boolean;
@@ -354,18 +356,7 @@ export function applyRepricedCosts(
         // this, every fallback row on an exact ledger refused to reprice
         // (PR #146 review). Re-labelling the other way would claim more
         // certainty than the source event carries.
-        const source = exactSource.amount!;
-        const nextAmount = u.economicAmount.basis === source.basis
-          ? u.economicAmount
-          : money(formatMoneyAmount(u.economicAmount), u.economicAmount.currency, source.basis);
-        const correction = priceCorrectionEvent({
-          id: `economic:request:${u.requestId}:price-corrected`,
-          source: exactSource,
-          previousAmount: source,
-          nextAmount,
-          recordedAt,
-        });
-        deps.economicLedger!.appendWithinTransaction(correction);
+        appendPriceCorrection(deps.economicLedger!, exactSource, u.requestId, 'price-corrected', u.economicAmount, recordedAt);
       }
       const oldPricing = pricingEvidenceFromRecord(old);
       const written = update.run(
@@ -399,6 +390,98 @@ export function applyRepricedCosts(
 }
 
 /**
+ * Append the change from what a charge last stood at to a new exact amount. The
+ * charge may have been corrected before, so the change chains from the newest
+ * correction; nothing is written when the amount did not move.
+ */
+function appendPriceCorrection(
+  ledger: EconomicLedger, charge: EconomicEvent, requestId: string, reason: string, amount: Money, recordedAt: string,
+): void {
+  const source = ledger.latestPriceEvent(charge);
+  const basis = charge.amount!.basis;
+  const previousAmount = source === charge ? charge.amount! : priceCorrectionNextAmount(source);
+  const nextAmount = amount.basis === basis ? amount : money(formatMoneyAmount(amount), amount.currency, basis);
+  if (compareMoney(previousAmount, nextAmount) === 0) return;
+  const id = `economic:request:${requestId}:${reason}`;
+  let sequence = 1;
+  let unused = id;
+  while (ledger.read(unused) !== null) unused = `${id}:${++sequence}`;
+  ledger.appendWithinTransaction(priceCorrectionEvent({ id: unused, source, previousAmount, nextAmount, recordedAt }));
+}
+
+/** What a completed request used and cost, replacing what an unfinished log line said. */
+export interface CorrectedUsage {
+  requestId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+  cacheWriteTtl: string;
+  costUsd: number;
+  estimated: boolean;
+  pricing: RequestPricingEvidence;
+  economicAmount?: Money;
+}
+
+/**
+ * Bring one imported request up to its finished usage. The caller has checked
+ * that the new counts only add to the recorded ones, and holds a transaction.
+ * The previous cost, its pricing evidence and the previous token counts stay on
+ * record; the exact ledger keeps its original charge and gains the difference.
+ */
+export function correctImportedUsage(db: DatabaseSync, ledger: EconomicLedger, u: CorrectedUsage, appliedAtMs: number): void {
+  const old = prepared(db,
+    `SELECT input_tokens AS inputTokens, output_tokens AS outputTokens, cache_write_tokens AS cacheWriteTokens,
+            cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens,
+            cost_usd AS costUsd, estimated, cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+            rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+            rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
+       FROM requests WHERE request_id = ?`,
+  ).get(u.requestId) as Record<string, unknown>;
+  const charge = ledger.read(requestEconomicEventId(u.requestId));
+  if (charge !== null) {
+    if (u.economicAmount === undefined) throw new Error(`completed usage for request ${u.requestId} requires an exact amount`);
+    appendPriceCorrection(ledger, charge, u.requestId, 'usage-corrected', u.economicAmount, new Date(appliedAtMs).toISOString());
+  }
+  prepared(db,
+    `UPDATE requests SET input_tokens = ?, output_tokens = ?, cache_write_tokens = ?, cache_read_tokens = ?, reasoning_tokens = ?,
+            cache_write_ttl = ?, cost_usd = ?, estimated = ?, cost_basis = ?, rate_card_sha256 = ?, rate_card_source_kind = ?,
+            rate_match_kind = ?, rate_match_provider = ?, rate_match_model = ?
+      WHERE request_id = ?`,
+  ).run(
+    u.inputTokens, u.outputTokens, u.cacheWriteTokens, u.cacheReadTokens, u.reasoningTokens, u.cacheWriteTtl,
+    u.costUsd, u.estimated ? 1 : 0, u.pricing.costBasis, u.pricing.rateCardSha256, u.pricing.rateCardSourceKind,
+    u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel, u.requestId,
+  );
+  const oldPricing = pricingEvidenceFromRecord(old);
+  const event = prepared(db,
+    `INSERT INTO request_price_events (
+         request_id, action, applied_at_ms, previous_cost_usd, previous_estimated,
+         previous_cost_basis, previous_rate_card_sha256, previous_rate_card_source_kind,
+         previous_rate_match_kind, previous_rate_match_provider, previous_rate_match_model,
+         new_cost_usd, new_estimated, new_cost_basis, new_rate_card_sha256,
+         new_rate_card_source_kind, new_rate_match_kind, new_rate_match_provider, new_rate_match_model
+       ) VALUES (?,'usage_corrected',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    u.requestId, appliedAtMs, Number(old.costUsd), Number(old.estimated),
+    oldPricing.costBasis, oldPricing.rateCardSha256, oldPricing.rateCardSourceKind,
+    oldPricing.rateMatchKind, oldPricing.rateMatchProvider, oldPricing.rateMatchModel,
+    u.costUsd, u.estimated ? 1 : 0, u.pricing.costBasis, u.pricing.rateCardSha256,
+    u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
+  );
+  prepared(db,
+    `INSERT INTO request_usage_corrections (
+         price_event_id, request_id, previous_input_tokens, previous_output_tokens, previous_cache_write_tokens,
+         previous_cache_read_tokens, previous_reasoning_tokens
+       ) VALUES (?,?,?,?,?,?,?)`,
+  ).run(
+    event.lastInsertRowid, u.requestId, Number(old.inputTokens), Number(old.outputTokens), Number(old.cacheWriteTokens),
+    Number(old.cacheReadTokens), Number(old.reasoningTokens),
+  );
+}
+
+/**
  * Bring persisted realized-value snapshots back in step with repriced requests.
  *
  * A unit is affected when one of the repriced requests falls inside its
@@ -418,7 +501,7 @@ export function applyRepricedCosts(
  *
  * Caller must already be inside a transaction.
  */
-function syncRealizationCosts(
+export function syncRealizationCosts(
   db: DatabaseSync,
   deps: RealizationDeps,
   repriced: Array<{ tsEpochMs: number; project: string }>,
@@ -576,7 +659,7 @@ export function requestPriceEvents(db: DatabaseSync, requestId: string): Request
   return rows.map((row) => ({
     eventId: Number(row.eventId),
     requestId: String(row.requestId),
-    action: 'reprice',
+    action: row.action === 'usage_corrected' ? 'usage_corrected' : 'reprice',
     appliedAtMs: Number(row.appliedAtMs),
     previousCostUsd: Number(row.previousCostUsd),
     previousEstimated: Boolean(row.previousEstimated),

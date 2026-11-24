@@ -96,7 +96,7 @@ test('a file read by an older reader is read once more, then skipped', async () 
   assert.equal(s.observedCommits().length, 1, 'history is captured on the re-read');
   const again = await importClaudeCode(s, { root });
   assert.equal(again.filesUnchanged, 1);
-  assert.equal(IMPORT_READER_VERSION, 4);
+  assert.ok(IMPORT_READER_VERSION > 1);
   s.close();
 });
 

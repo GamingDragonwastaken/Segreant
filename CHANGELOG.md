@@ -14,6 +14,14 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **Codex sessions that Codex has compressed are counted.** Codex rewrites a finished session log as `.jsonl.zst`, and Segreant read only `.jsonl`, so most older Codex use was missing with nothing said. Both forms are read now (and `.gz`). A log that is damaged, unreadable or compressed some other way is reported as not read, never left out quietly.
+- **A Claude Code request is recorded with the usage it finished with.** Claude Code writes several lines for one request while the answer streams, and Segreant kept the first, which can hold a partial output count. It now keeps the finished one. A request an earlier import recorded from an unfinished line is brought up to its full usage by the next import; the figure it replaces stays in the price history.
+- **A forked Codex session no longer counts its parent's requests again.** A fork or subagent log can open with a replay of the parent's last turns. Those are left out, and any an earlier import counted are set to zero by the next one. A turn after Codex restarts a session's running total, which used to be lost, is counted; and a turn in a shortened log is dated when it began rather than when the log was rewritten.
+- **`segreant scan --setup` finishes when one repository cannot be read.** A folder with no commits, or one git refuses, stopped the whole run before any result was shown. It is now reported by name and the other repositories are measured.
+- **An import is no longer called incomplete because of a large tool result.** A line over 2 MB was reported as missing usage even when it was a pasted image or command output, which holds none, and its file was read again on every import. Only a line that could hold usage counts now.
+- **One odd record in a log no longer stops an import.** A line of valid JSON that was not the expected record, such as `null` or a number where text belongs, ended the whole Codex or Claude Code import. It is passed over, and the records and files around it are read.
+- **A price change between two imports is not reported as a disagreement.** Whether two logs describe the same request is decided by what it used, not by what it was priced at on the day.
+
 ## [0.2.1] - 2026-10-20
 
 - **Releases are published from GitHub Actions with npm provenance.** From this version on, each published version carries a provenance attestation naming the repository, the workflow and the exact commit it was built from, and no npm token exists that could be stolen to publish a fake version. Check it on the package page or with `npm audit signatures`.
