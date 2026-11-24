@@ -120,6 +120,7 @@ export class StreamUsageAccumulator {
   private frameCount = 0;
   private partial: NormalizedUsage = emptyUsage();
   private seenModel: string | null = null;
+  private sawUsage = false;
   private maxOutput = 0;
   private readonly provider: Provider;
 
@@ -133,6 +134,11 @@ export class StreamUsageAccumulator {
 
   get usage(): NormalizedUsage {
     return { ...this.partial, outputTokens: Math.max(this.partial.outputTokens, this.maxOutput) };
+  }
+
+  /** Whether the stream reported any usage. Without it, zero tokens is an absence, not a count. */
+  get usageSeen(): boolean {
+    return this.sawUsage;
   }
 
   get captureCoverage(): CaptureCoverage {
@@ -206,6 +212,7 @@ export class StreamUsageAccumulator {
     if (obj.type === 'message_start' && obj.message) {
       if (obj.message.model) this.seenModel = obj.message.model;
       if (obj.message.usage) {
+        this.sawUsage = true;
         const n = normalizeAnthropicUsage(obj.message.usage);
         // message_start carries the final input + cache figures.
         this.partial.inputTokens = n.inputTokens;
@@ -218,6 +225,7 @@ export class StreamUsageAccumulator {
       }
     } else if (obj.usage) {
       // message_delta carries cumulative output_tokens.
+      this.sawUsage = true;
       const out = obj.usage.output_tokens ?? 0;
       this.maxOutput = Math.max(this.maxOutput, out);
     }
@@ -240,6 +248,7 @@ export class StreamUsageAccumulator {
     if (model) this.seenModel = model;
     const usage = obj.usage ?? obj.response?.usage;
     if (usage) {
+      this.sawUsage = true;
       const n = normalizeOpenAIUsage(usage);
       this.partial = { ...n };
       this.maxOutput = Math.max(this.maxOutput, n.outputTokens);
