@@ -10,7 +10,9 @@ import { readFileSync, statSync } from 'node:fs';
  */
 
 export const RESOURCE_LIMITS = Object.freeze({
-  inboundRequestBytes: 8 * 1024 * 1024,
+  // Above what the providers accept themselves (Anthropic refuses a message over
+  // 32 MB), so a request they would answer is never refused here.
+  inboundRequestBytes: 64 * 1024 * 1024,
   dashboardRequestBytes: 16 * 1024,
   upstreamResponseBytes: 16 * 1024 * 1024,
   sseFrameBytes: 2 * 1024 * 1024,

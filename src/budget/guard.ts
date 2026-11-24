@@ -258,7 +258,9 @@ export function startOfLocalDay(now: number = Date.now()): number {
 }
 
 export function endOfLocalDay(now: number = Date.now()): number {
-  return startOfLocalDay(now) + 24 * 60 * 60 * 1000;
+  const d = new Date(startOfLocalDay(now));
+  d.setDate(d.getDate() + 1);
+  return d.getTime();
 }
 
 /**
