@@ -312,8 +312,7 @@ export function applyRepricedCosts(
   const prior = db.prepare(
     // camelCase, which is what pricingEvidenceFromRecord reads with no prefix.
     // These were aliased CostBasis/RateCardSha256/..., so every reprice event
-    // recorded legacy_unknown as the provenance it replaced (independent review,
-    // 2026-10-18).
+    // recorded legacy_unknown as the provenance it replaced.
     `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
               cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
               rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
@@ -338,7 +337,7 @@ export function applyRepricedCosts(
   );
   const touched: Array<{ tsEpochMs: number; project: string }> = [];
   // Which requests this transaction actually rewrote, so a caller reports
-  // those and not its plan (PR #146 review).
+  // those and not its plan.
   const writtenRequestIds: string[] = [];
   runScript(db, 'BEGIN');
   try {
@@ -355,8 +354,8 @@ export function applyRepricedCosts(
         // moves an amount from one kind of evidence to another. An estimate
         // repriced at a list rate is recorded as that estimate, corrected to the
         // exact figure; the request row itself says which rate priced it. Without
-        // this, every fallback row on an exact ledger refused to reprice
-        // (PR #146 review). Re-labelling the other way would claim more
+        // this, every fallback row on an exact ledger refused to reprice. Re-labelling the
+        // other way would claim more
         // certainty than the source event carries.
         appendPriceCorrection(deps.economicLedger!, exactSource, u.requestId, 'price-corrected', u.economicAmount, recordedAt);
       }

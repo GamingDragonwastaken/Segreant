@@ -206,7 +206,7 @@ export function excludedUsesFor(profile: ClaimProfile): readonly ClaimUse[] {
  * definitional bar the profile cannot express, such as a `mixed` comparison
  * being neither the metered figure nor the enforcement figure) united with
  * every use the vocabulary refuses the profile the surface's kernel adapter
- * issues (D-228). Both sides can only add a bar; nothing here removes one.
+ * issues. Both sides can only add a bar; nothing here removes one.
  * Returned in vocabulary order so a persisted list is canonical.
  */
 export function barredUses(profile: ClaimProfile, floor: readonly ClaimUse[]): readonly ClaimUse[] {

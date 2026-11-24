@@ -414,8 +414,7 @@ function connectGenericApi(cfg: SegreantConfig, flags: Flags, tty: boolean): voi
  * What forwarding to an upstream needs. Four cases: the official provider APIs
  * are built in; plain HTTP on this machine is always allowed; any other HTTPS
  * address needs the one rule printed; plain HTTP elsewhere cannot be allowed at
- * all. The last case used to be told it was the official API (independent
- * review, 2026-10-18).
+ * all. The last case used to be told it was the official API.
  */
 export function upstreamForwarding(url: string): { ok: boolean; text: string } {
   if (isBuiltInProviderUpstream(url)) return { ok: true, text: 'Requests to the official provider API go out with no extra step.' };

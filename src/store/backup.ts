@@ -184,7 +184,7 @@ function storedPayloadIntegrity(db: DatabaseSync): string | null {
       }
     }
   }
-  // The kernel's own tables (D-232). Each row's digest is over its canonical
+  // The kernel's own tables. Each row's digest is over its canonical
   // JSON exactly as `EpistemicLedger.nodePayload` recomputes it on read, so a
   // payload rewritten under a stale digest is refused here, before restore
   // publishes a destination, rather than on the first read of that node.

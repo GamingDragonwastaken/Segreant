@@ -3,7 +3,7 @@
  *
  * The CLI and the dashboard each kept their own list. The CLI's gained
  * Antigravity; the dashboard's did not, so "import all" from the dashboard
- * silently skipped a tool the CLI read and `scan` reported (H008). Every
+ * silently skipped a tool the CLI read and `scan` reported. Every
  * surface now builds from this list: adding a tool is adding one entry here.
  */
 

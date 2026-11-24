@@ -112,7 +112,7 @@ function panel(spec: ActionSpec): Node {
   const result = signal<{ ok: boolean; message: string } | null>(null);
   const typed = signal('');
 
-  // The preview is re-run whenever a field changes (H004). Before, it ran once
+  // The preview is re-run whenever a field changes. Before, it ran once
   // at open: a budget of -1 failed at commit, the failure disabled Apply, and
   // correcting the field to 25 changed nothing on screen; on Optional features
   // the preview kept describing the first switch while Apply wrote the one now

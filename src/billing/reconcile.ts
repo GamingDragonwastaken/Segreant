@@ -123,8 +123,7 @@ export type ProviderSourceKind =
  * `local_ledger_truncated_by_retention` is present when retention deleted
  * request rows from inside this period. It is the only condition on this list
  * that Segreant itself CAUSED and RECORDED rather than merely being unable to
- * exclude, which is why its countermodel is `realized` rather than `live`
- * (D-173).
+ * exclude, which is why its countermodel is `realized` rather than `live`.
  */
 export type ReconciliationCondition =
   | 'local_route_scope_is_not_provider_verified'
@@ -194,7 +193,7 @@ export interface ReconciliationRun {
   /** Permanent limits of this result. They are conditions, not defects. */
   conditions: readonly ReconciliationCondition[];
   trust: 'scope_conditional_reconciliation';
-  /** `barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR)` (D-228). */
+  /** `barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR)`. */
   excludedFrom: readonly ClaimUse[];
 }
 
@@ -210,7 +209,7 @@ export const RECONCILIATION_EXCLUDED_FLOOR: readonly ClaimUse[] = Object.freeze(
 /**
  * The profile `src/billing/epistemic.ts` issues for a reconciliation claim.
  * Constant by construction: every reconciliation is a partial-coverage,
- * mixed-basis comparison (D-115), so the derived exclusions are constant too.
+ * mixed-basis comparison, so the derived exclusions are constant too.
  */
 export function reconciliationClaimProfile(): ClaimProfile {
   return claimProfile({
@@ -242,8 +241,8 @@ export function reconciliationClaimProfile(): ClaimProfile {
  * -$3.10" and letting a reader conclude that nothing went off-path is inferring
  * absence from an observation that specifically undermines the inference.
  *
- * RETENTION BREAKS THE ONE QUANTITY THIS CAN OBSERVE, AND ONLY IN ONE DIRECTION
- * (D-173). `segreant prune` deletes request rows on the operator's own policy. It
+ * RETENTION BREAKS THE ONE QUANTITY THIS CAN OBSERVE, AND ONLY IN ONE DIRECTION. `segreant
+ * prune` deletes request rows on the operator's own policy. It
  * changes neither P, T nor O — it changes what can be COMPUTED for L. The
  * surviving ledger yields `L' = L - D` for a deleted on-path amount `D >= 0`
  * that no surviving row records, so the computed residual is `R' = R + D`.
@@ -690,7 +689,7 @@ export function signedUsd(micros: number): string {
 export interface ReconciliationCoverage {
   /**
    * The declaration these three buckets were split against, or null when no
-   * route was active at the time (D-187).
+   * route was active at the time.
    *
    * Hard rule 1: every figure carries its basis. Without this a null-basis
    * split — where nothing CAN be on the declared route — is indistinguishable
@@ -726,7 +725,7 @@ export interface ReconciliationReadiness {
    */
   coverage: ReconciliationCoverage | null;
   /**
-   * Whether a request prune is on record for this ledger (D-186).
+   * Whether a request prune is on record for this ledger.
    *
    * The predicate is deliberately not a window comparison. The query behind
    * `coverage` sums the entire ledger with no period bound, so the only honest

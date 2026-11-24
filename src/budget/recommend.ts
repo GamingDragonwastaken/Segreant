@@ -37,7 +37,7 @@ import { decideBudgetCap, type BudgetCapDecision } from './capDecision.ts';
 export interface BudgetInputs {
   dailySpends: number[]; // recent per-day spend totals (USD)
   realizedSpendShare: number | null; // share of attributed SPEND that reached a kept outcome (0..1) — not a value rate
-  /** Accepted for compatibility; never read into an action (D-248). */
+  /** Accepted for compatibility; never read into an action. */
   frontier?: FrontierCell[];
   /** The cap the proxy runs today; `null`/absent means no daily cap. The decision's `keep_current` action. */
   currentDailyCapUsd?: number | null;
@@ -73,7 +73,7 @@ export interface BudgetRecommendation {
   /** Always empty since D-248: frontier ranking is not converted into an action. */
   reallocations: Reallocation[];
   /**
-   * The cap as a decision problem (D-220): `null` exactly when there is no cap
+   * The cap as a decision problem: `null` exactly when there is no cap
    * to apply (`recommendedDailyUsd === null`), never an invented problem over
    * a cold-start or thin-history window.
    */
@@ -181,7 +181,7 @@ export function recommendBudget(
   // ranked into a trim/grow action: generic model×task cells can represent
   // unlike work, and a ranking is not allocation-grade evidence. Comparable
   // model guidance comes only from the within-task frontier trial, through the
-  // assurance gate (D-240, D-248). `reallocations` is therefore always empty.
+  // assurance gate. `reallocations` is therefore always empty.
   const reallocations: Reallocation[] = [];
 
   // The cap that can be applied is a decision with an alternative (keep the

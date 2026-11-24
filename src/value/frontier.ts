@@ -126,7 +126,7 @@ export interface ModelSwitchRecommendation {
   unitsExcludedStalePricing: number;
   /**
    * Units dropped because retention deleted request rows from inside their
-   * attribution window (D-177), so the dollars charged to the model are a known
+   * attribution window, so the dollars charged to the model are a known
    * undercount. Same objection as a superseded price, different cause: a model
    * whose spend was partly deleted reads as cheaper by exactly the deleted
    * amount, and the headroom moves for a reason that has nothing to do with the
@@ -758,7 +758,7 @@ function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[
     // it is why the number may not be about the model at all — so it goes in the
     // one-line summary rather than only in the detail payload.
     const confounded = item.confounders.length > 0 ? `  [confounded: ${item.confounders.join('; ')}]` : '';
-    // The derived level travels with the sentence (D-240): what this comparison
+    // The derived level travels with the sentence: what this comparison
     // supports is stated beside the number, and a routing change is never it.
     // When the advice bar is not met, the gate's own remedy is the minimal next
     // evidence (WP-R09, D-242): the shortfall names what to acquire, without a

@@ -200,7 +200,7 @@ export interface UsageReport {
   /** Exact effective usage coverage, separate from the legacy numeric ROI input. */
   economic?: UsageEconomicRollup;
   /**
-   * Whether this window reaches behind what retention deleted (D-174).
+   * Whether this window reaches behind what retention deleted.
    *
    * Required, not optional. An empty `units` list means two different things --
    * no session was tagged, or the tagged sessions were deleted -- and the

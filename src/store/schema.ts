@@ -1211,7 +1211,7 @@ function migrate(db: DatabaseSync): void {
     // The cache-write duration ('5m' or '1h') a request was priced with;
     // 'not_recorded' when its source did not say. No backfill: an older row
     // reads 'legacy_unknown', and a reprice says how many rows it priced at the
-    // 5-minute rate for that reason (PR #146 review).
+    // 5-minute rate for that reason.
     db.prepare("ALTER TABLE requests ADD COLUMN cache_write_ttl TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
   }
   if (!cols.some((c) => c.name === 'several_requests')) {

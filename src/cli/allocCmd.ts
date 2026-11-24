@@ -83,7 +83,7 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   console.log('');
 
   // A period whose rows retention deleted is not a period in which nothing
-  // reached a cost centre; the two must not print the same sentence (D-183).
+  // reached a cost centre; the two must not print the same sentence.
   const lost = result.retention?.truncated === true ? result.retention : null;
   if (result.byCostCentre.length === 0) {
     console.log(color(tty, C.gray, lost
@@ -135,7 +135,7 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   console.log(color(tty, C.dim, '                presenting it as settled cost is not. Reconcile before you charge anyone.'));
   // The strongest reassurance on this screen, and the one most likely to be
   // misread over a truncated period: it conserves what SURVIVES, and it was
-  // never able to detect a missing input (D-183).
+  // never able to detect a missing input.
   console.log(color(tty, C.dim, `  Conservation  ${result.conserves
     ? (lost
         ? 'exact over the SURVIVING rows — allocated + unallocated = the total above; it cannot see what was deleted'
@@ -175,7 +175,7 @@ export function cmdAlloc(flags: Flags): void {
           const iso = new Date(ms).toISOString();
           // Every nonzero part of the time is kept: allocation includes rows by
           // the exact millisecond, so a bound shown to the minute could not be
-          // copied back to reproduce the split (PR #142 review).
+          // copied back to reproduce the split.
           if (iso.slice(11, 23) === '00:00:00.000') return iso.slice(0, 10);
           const time = iso.slice(17, 23) === '00.000' ? iso.slice(11, 16) : iso.slice(20, 23) === '000' ? iso.slice(11, 19) : iso.slice(11, 23);
           return `${iso.slice(0, 10)} ${time}Z`;

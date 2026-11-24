@@ -336,7 +336,7 @@ async function main(): Promise<void> {
   // --help/-h and --version/-v stay commands of their own.
   // Only long options qualify: parseFlags reads `--name` alone, so a single-dash
   // token here would be swallowed as a positional and `segreant -bogus` would
-  // render the home view and exit 0 (PR #142 review).
+  // render the home view and exit 0.
   const flagsOnly = argv[0] !== undefined && argv[0].startsWith('--')
     && !['--help', '--version', '--'].includes(argv[0]);
   const cmd = flagsOnly ? 'home' : argv[0] ?? 'home';
@@ -577,7 +577,7 @@ async function main(): Promise<void> {
   // A command that already failed has said why; its exit code stays.
   // --watch and --serve count only when the command itself read them: read
   // here through the tracking proxy they would mark themselves used, and
-  // `segreant --watch` would render the home view and exit 0 (PR #142 review).
+  // `segreant --watch` would render the home view and exit 0.
   const consumed = (key: string) => parsed[key] === true && !tracked.unread().includes(key);
   const longRunning = cmd === 'start' || wraps || consumed('watch') || consumed('serve');
   const failed = typeof process.exitCode === 'number' && process.exitCode !== 0;

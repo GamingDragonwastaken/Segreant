@@ -540,7 +540,7 @@ export interface ArtifactPersistenceReport {
      * Matured commits whose attribution window lost request rows to retention,
      * or whose coverage is unknown. Their surviving cost understates the work,
      * so they are left out of every cost-based figure above rather than
-     * flattering it (PR #135 review).
+     * flattering it.
      */
     spendWindowTruncatedCommits: number;
   };

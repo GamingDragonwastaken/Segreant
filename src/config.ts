@@ -271,7 +271,7 @@ export interface PricingConfig {
    * When true, `segreant start` refreshes pricing on launch if the cache is
    * older than maxAgeDays. OFF by default so a normal local start has no
    * optional manifest request. The built-in public list is allowed without a rule; a
-   * manifest of your own does, and a denied refresh leaves the local table intact.
+   * manifest of your own needs one, and a denied refresh leaves the local table intact.
    */
   autoRefresh: boolean;
   /**
@@ -399,8 +399,7 @@ export interface EgressConfig {
    * Local mode refuses every non-loopback target except the built-in routes.
    * `invalid` is what a malformed persisted egress section loads as: it refuses
    * every non-loopback target, built-ins included, until the file is repaired.
-   * Loading it as `local_locked` would now let provider traffic through a typo
-   * (PR #148 review).
+   * Loading it as `local_locked` would now let provider traffic through a typo.
    */
   mode: 'local_locked' | 'controlled_cloud' | 'invalid';
   rules: EgressRule[];
@@ -908,8 +907,8 @@ function assertConfigMutationLock(lock: ConfigMutationLock): void {
  * write that does not touch egress (a cap, a plan price) keeps the section
  * exactly as it is on disk, so the user's rules survive to be repaired. Writing
  * the marker replaced the section with `{"mode":"invalid","rules":[]}`, and the
- * rules were gone once the next write rotated the backup (independent review,
- * 2026-10-18). A write that repairs egress sets a real mode and is written as is.
+ * rules were gone once the next write rotated the backup. A write that repairs egress sets
+ * a real mode and is written as is.
  */
 function withPersistedEgress(config: SegreantConfig, path: string): unknown {
   if (config.egress.mode !== 'invalid') return config;

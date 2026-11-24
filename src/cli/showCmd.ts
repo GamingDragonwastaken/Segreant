@@ -32,7 +32,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const byUser = store.byUser(startMs, endMs);
   const bySource = store.bySource(startMs, endMs);
   // Read for every window, not only the long ones: retention is operator
-  // configurable and a seven-day policy reaches `month` (D-171).
+  // configurable and a seven-day policy reaches `month`.
   const retention = store.windowCoverage(startMs);
 
   // Alerts are evaluated for `today` only, as they always were. What changed is
@@ -40,7 +40,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   // channel is dark -- caps opt-in, no baseline, value uninstrumented, nothing
   // to price -- so an empty alert list records that nothing was looked at, not
   // that nothing fired. `segreant ops` and the dashboard already read this
-  // producer (D-141); `show` was the one surface still printing silence over
+  // producer; `show` was the one surface still printing silence over
   // it. Same producer, same sentences, so the three cannot disagree.
   let alerts: Alert[] | null = null;
   let coverage: AlertCoverage | null = null;
@@ -292,7 +292,7 @@ export function cmdExport(flags: Flags): void {
 
   // The economic export leaves out requests refused before they were sent
   // (they cost nothing), so its count is its own rows, and the gap is named
-  // rather than left for the reader to discover (PR #145 review).
+  // rather than left for the reader to discover.
   const exportedCount = economicRows ? economicRows.length : rows.length;
   const notSent = economicRows ? rows.length - economicRows.length : 0;
   if (notSent > 0) {
@@ -384,7 +384,7 @@ export function cmdPrune(flags: Flags): void {
   console.log(`  Pruned ${proposalsRemoved} stored proposal rows older than ${cfg.proposalRetentionDays} days.`);
   console.log('  Database compacted.');
   // The boundary is now on the record, which is what stops a later reader from
-  // mistaking the deletion for an absence (D-170).
+  // mistaking the deletion for an absence.
   console.log(`  Retention boundary recorded: requests before ${new Date(requestsBefore).toISOString()} are deleted and will not appear in any total.`);
   store.close();
 }

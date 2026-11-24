@@ -118,7 +118,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
   const proxyUp = proxyStatus.kind === 'up';
   const proxyBlocked = proxyStatus.kind === 'blocked_by_egress';
 
-  // RETENTION IS READ BEFORE THE COUNT IS INTERPRETED (D-170).
+  // RETENTION IS READ BEFORE THE COUNT IS INTERPRETED.
   //
   // `requestsAllTime` counts rows that SURVIVED. With a recorded prune boundary
   // an empty ledger no longer means "no traffic yet": it means the evidence was

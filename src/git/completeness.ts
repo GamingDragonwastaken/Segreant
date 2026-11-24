@@ -9,7 +9,7 @@
  * nothing but a test ever passed one, so the machinery that lets absence become
  * a negative claim was correct and entirely unexercised — and the coding
  * `clean` gate could only ever be `unknown` in real use. That was the right
- * default (D-055) and it is not a resting place: a source that CAN report its
+ * default and it is not a resting place: a source that CAN report its
  * own coverage should do so.
  *
  * WHAT GIT CAN HONESTLY WITNESS. A revert of a commit is necessarily NEWER than

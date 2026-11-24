@@ -145,7 +145,7 @@ export function buildExactAllocationKernelIssuance(allocationRunId: string, resu
     grain: grain(['economic_period', 'cost_centre']),
     time: { validTime, asOf: computed },
     epistemic: 'supported',
-    // The same profile the run's `excludedFrom` was derived from (D-228).
+    // The same profile the run's `excludedFrom` was derived from.
     profile: exactAllocationClaimProfile(result.complete),
     measurementModelRef: null,
     evidenceIds: [evidenceValue.id],

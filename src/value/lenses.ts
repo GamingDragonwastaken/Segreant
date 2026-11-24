@@ -165,7 +165,7 @@ export interface RoIOptions {
   supervisionMinutes?: number | null; // measured human time-with-AI; priced into the honest denominator
   riskAversion?: number; // γ ∈ [0,1] for the Index certainty-equivalent (0 = the point estimate)
   /**
-   * What proposal retention deleted under this report's window (D-179).
+   * What proposal retention deleted under this report's window.
    *
    * The Acceptance lens goes dark when no proposal could be matched, and its
    * note used to give a CAUSE -- "no proposals captured (e.g. streaming-only)".
@@ -183,7 +183,7 @@ export interface RoIOptions {
   proposalRetention?: { truncated: boolean; prunedBeforeMs: number | null };
   /**
    * Set when this report's POPULATION excludes proposal-bearing work by
-   * construction, so Acceptance is not applicable rather than unmeasured (D-179).
+   * construction, so Acceptance is not applicable rather than unmeasured.
    *
    * `computeUsageRoI` filters to sessions with no captured proposals -- non-code
    * work, which has no diff to compare -- and then printed "no proposals

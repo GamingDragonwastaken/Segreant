@@ -90,7 +90,7 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   console.log(`  Provider rows ${coverage.observation.providerLineCount} (${coverage.observation.currencies.join(', ') || 'none'}); values intentionally not summed here`);
   console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local estimate, not the bill (${captured.estimatedRequestCount} priced by a guess; the rest at list prices or prices you set)`);
   // Directly under the number it falsifies, and not in `Blockers`, which lists
-  // the conditions that hold always (D-185). A zero here is what an operator
+  // the conditions that hold always. A zero here is what an operator
   // uses to decide whether minting an Admin credential is worth it.
   if (coverage.localLedgerRetention.truncated) {
     const before = recordedTime(coverage.localLedgerRetention.prunedBeforeMs, true);
@@ -114,7 +114,7 @@ function printReadiness(readiness: ReconciliationReadiness): void {
   // Said before the warning below, because on a pruned ledger the warning
   // cannot fire: every branch here is gated on `c`, and a deletion sets it to
   // null. A guard that goes quiet leaves nothing on the screen to be wrong,
-  // which is why the silence itself has to be reported (D-186).
+  // which is why the silence itself has to be reported.
   if (readiness.localLedgerRetention.truncated) {
     const before = recordedTime(readiness.localLedgerRetention.prunedBeforeMs, true);
     console.log('');
@@ -145,7 +145,7 @@ function printReadiness(readiness: ReconciliationReadiness): void {
       // The verdict above is right and its usual explanation would not be: these
       // rows carry the declaration that was made, and it is the ROUTE that was
       // withdrawn. Blaming the rows for a scope the operator cleared sends them
-      // to re-meter traffic that is already correctly attributed (D-187).
+      // to re-meter traffic that is already correctly attributed.
       console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) were metered, but NO SCOPE IS ACTIVE.`);
       console.log('           Nothing can be on a declared route while there is no declared route, so');
       console.log('           this is not a fact about those rows. Re-activate the scope first:');
@@ -822,7 +822,7 @@ function wrapText(text: string, width: number): string[] {
 /**
  * A part's share of a whole, as a percentage label. Only the whole itself
  * reads 100 and only nothing reads 0: rounding 99.6% up to 100% told the user
- * the comparison covered everything when it did not (PR #142 review).
+ * the comparison covered everything when it did not.
  */
 export function coveragePercent(part: number, whole: number): string {
   if (part >= whole) return '100';
@@ -935,7 +935,7 @@ export async function cmdBilling(flags: Flags): Promise<void> {
           // How much of what Segreant metered in that period the comparison
           // actually covers: one project's bill is not the month's spend.
           // Same day quantization as the comparison itself, so the share
-          // cannot exceed the whole (PR #142 review).
+          // cannot exceed the whole.
           const metered = store.meteredMicrosLikeReconciliation(run.periodStartMs, run.periodEndMs, run.declaredScopeId);
           if (metered !== null && metered.onRouteMicros !== run.localCapturedMicros) {
             console.log('                coverage withheld: the ledger has changed for that period since this comparison was recorded; re-run segreant billing reconcile');

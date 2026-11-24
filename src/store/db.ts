@@ -528,7 +528,7 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     ...row
   } = record;
   // 'not_recorded' and 'legacy_unknown' read as absent; any other string is
-  // damage (D-251) and refuses rather than passing through.
+  // damage and refuses rather than passing through.
   const ttl = vocabularyValue(cacheWriteTtlRecorded, CACHE_WRITE_TTLS, 'cacheWriteTtl', 'legacy_unknown');
   return {
     ...(row as unknown as RequestRow),
@@ -538,7 +538,7 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
     // A missing value reads as legacy_unknown; a string outside the vocabulary
-    // refuses (D-251): no writer produces one, so it is damage, and a label
+    // refuses: no writer produces one, so it is damage, and a label
     // nobody can interpret must neither pass through nor hide as "unknown".
     scopeCaptureStatus: vocabularyValue(record.scopeCaptureStatus, SCOPE_CAPTURE_STATUSES, 'scopeCaptureStatus', 'legacy_unknown') as ScopeCaptureStatus,
     attributionBasis: vocabularyValue(record.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown') as AttributionBasis,
@@ -589,7 +589,7 @@ export interface KernelClaimView extends Pick<Claim, 'id' | 'proposition' | 'pro
   readonly revoked: boolean;
 }
 
-/** One kernel node with its neighbourhood, as `kernelNodeView` presents it (D-257). */
+/** One kernel node with its neighbourhood, as `kernelNodeView` presents it. */
 export interface KernelNodeView {
   readonly asOf: Instant | null;
   readonly node: DagNode;
@@ -619,7 +619,7 @@ export interface KernelNodeView {
 }
 
 /**
- * The boundary a kernel read answers at (D-230). Live: the current projection.
+ * The boundary a kernel read answers at. Live: the current projection.
  * As of an instant: only what the ledger had learned by then — events recorded
  * later do not apply, and a node not yet available is not visible at all.
  */
@@ -969,8 +969,8 @@ export class Store {
     const pricing = row.pricing ?? legacyPricingEvidence();
     const scope = scopeCaptureForInsert(row);
     const costUsd = this.compatibilityCostUsd(row);
-    // The write boundary refuses a provenance label outside its vocabulary
-    // (D-251): a caller that could write one would make the read refusal look
+    // The write boundary refuses a provenance label outside its vocabulary: a caller that
+    // could write one would make the read refusal look
     // like data loss instead of the damage it detects.
     vocabularyValue(row.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown');
     vocabularyValue(row.captureCoverage, CAPTURE_COVERAGES, 'captureCoverage', 'legacy_unknown');
@@ -1754,7 +1754,7 @@ export class Store {
       )
       .get(startMs, endMs) as { blocked: number; estCost: number; declaredCost: number; total: number };
     // A declared price is resolved (so `estimated` is 0 and a reprice can write
-    // it) but it is not a list price; claim support counts it apart (PR #146 review).
+    // it) but it is not a list price; claim support counts it apart.
     return { blocked: row.blocked, estimatedCostUsd: row.estCost, declaredCostUsd: row.declaredCost, totalCostUsd: row.total };
   }
 
@@ -2045,7 +2045,7 @@ export class Store {
       // A null card is not a distinct revision — plenty of bases (tool-reported,
       // unpriced) legitimately have none. Only real revisions count as a span.
       // A declared `like` follows the card under the model it names, so a new
-      // target on the same card is a new price revision (PR #146 review).
+      // target on the same card is a new price revision.
       if (r.rateCardSha256) cards.add(r.costBasis === 'user_declared_price' && r.rateMatchModel ? `${r.rateCardSha256}:${r.rateMatchModel}` : r.rateCardSha256);
     }
     return { costBases: [...bases].sort(), rateCardShas: [...cards].sort() };
@@ -2273,7 +2273,7 @@ export class Store {
   ): EconomicRequestExportRow[] {
     // A request refused before it was sent cost nothing and has no economic
     // event; exporting it would print it as legacy_unknown with
-    // no_exact_economic_event. Same rule as the economic read model (PR #143 review).
+    // no_exact_economic_event. Same rule as the economic read model.
     const rows = this.requestsInRange(startMs, endMs).filter((row) => row.pricing?.costBasis !== 'not_sent');
     return buildEconomicRequestExportRows(rows, this.economicLedger, options);
   }
@@ -2331,7 +2331,7 @@ export class Store {
     const rows = this.requestsInRange(startMs, endMs).filter((row) => {
       // A request refused before it was sent has no economic event because it
       // cost nothing; reading it here marked it no_exact_economic_event and made
-      // attribution partial (PR #143 review). It is not spend, so it is skipped,
+      // attribution partial. It is not spend, so it is skipped,
       // as the exact spend projection skips it.
       if (row.pricing?.costBasis === 'not_sent') return false;
       if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
@@ -2982,8 +2982,8 @@ export class Store {
   }
 
   /**
-   * One kernel node with its neighbourhood, as the ledger had it at `asOf`
-   * (D-257): the record itself (evidence, claim, witness or derivation), the
+   * One kernel node with its neighbourhood, as the ledger had it at `asOf`: the record
+   * itself (evidence, claim, witness or derivation), the
    * edges into and out of it, the assumptions of any derivation that produced
    * it, and whether the revocation projection reaches it. `null` when the node
    * does not exist or was not yet available at the boundary — the two are the
@@ -3177,8 +3177,7 @@ export class Store {
       opts,
       (startMs, endMs) => this.reconciliationRequestsInRange(startMs, endMs),
       // What retention deleted. A reconciliation reads rows handed to it and
-      // cannot see the ones that are gone, so the boundary travels separately
-      // (D-173).
+      // cannot see the ones that are gone, so the boundary travels separately.
       this.retentionFloor().requestsPrunedBeforeMs,
     );
   }
@@ -3193,7 +3192,7 @@ export class Store {
     // Both figures from one read of the ledger as it is now. The on-route part
     // is what the comparison recorded as its local figure; when it no longer
     // matches the record, the ledger has moved (a prune, a repricing) and a
-    // share of the live total would mix two snapshots (PR #142 review).
+    // share of the live total would mix two snapshots.
     const rows = this.reconciliationRequestsInRange(startMs, endMs);
     const inPeriod = (row: RequestRow) => row.tsEpochMs >= startMs && row.tsEpochMs < endMs;
     const all = quantizeLocalDays(rows, inPeriod);
@@ -3518,7 +3517,7 @@ export class Store {
    * escalation on `claimAfterMultiplicity` rather than the raw single-look
    * `allowedClaim`: when multiplicity withholds the conclusion, only the
    * observational arm-difference Claim is issued, exactly as for a study that
-   * never earned claim language at all (D-254).
+   * never earned claim language at all.
    *
    * All five append on ONE transaction, which is why the kernel grew
    * `appendWitnessWithinTransaction` / `appendDerivationWithinTransaction`. The
@@ -3617,9 +3616,9 @@ export class Store {
    * The boundary is RECORDED before the vacuum, whether or not it removed
    * anything. Without that record a deleted history and a history that never
    * happened are the same thing to every later reader -- see `retentionFloor`
-   * and `retention_prunes` in the schema (D-170).
+   * and `retention_prunes` in the schema.
    *
-   * ATOMIC WITH THE RECORD (D-189). The delete and the record commit together
+   * ATOMIC WITH THE RECORD. The delete and the record commit together
    * or neither happens. Three unprotected statements could leave rows deleted
    * with no boundary on record -- the exact D-170 state, reconstructed by a
    * failure path instead of by a missing table. When the record cannot be
@@ -3744,7 +3743,7 @@ export class Store {
   }
 
   pruneProposals(beforeMs: number): number {
-    // Atomic with its record, for the reason stated on `prune` (D-189).
+    // Atomic with its record, for the reason stated on `prune`.
     const removed = this.transaction(() => {
       const info = prepared(this.db, `DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
       const rowsRemoved = Number(info.changes ?? 0);
@@ -3761,7 +3760,7 @@ export class Store {
   /**
    * Privacy control: delete every stored proposal immediately, regardless of age.
    *
-   * RECORDED, like every other deletion (D-179). This is the most total erasure
+   * RECORDED, like every other deletion. This is the most total erasure
    * Segreant offers, and until it was recorded it was the one erasure no consumer
    * could see: `retentionFloor()` reported "no prune on record" for a ledger
    * whose proposals had all been deleted, so the Acceptance lens told operators
@@ -3773,7 +3772,7 @@ export class Store {
    * manufacture a deletion claim over the whole ledger. Hiding a refutation is
    * survivable; inventing one is not.
    *
-   * ATOMIC WITH THAT RECORD (D-189), and this is the path where it matters
+   * ATOMIC WITH THAT RECORD, and this is the path where it matters
    * most: an erasure that took every proposal and wrote no boundary is exactly
    * the state D-179 was written to end.
    */
