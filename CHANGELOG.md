@@ -14,6 +14,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ## [Unreleased]
 
+- **The daily cap counts the whole day when the clocks go back.** It counted 24 hours from midnight, so on the 25-hour day spend in the last hour was not seen.
 - **A request the provider drops partway is recorded.** When the provider's connection failed in the middle of an answer, the proxy recorded nothing, so neither the ledger nor a cap saw what had been charged. A dropped stream now keeps the usage it had reported, and a dropped answer is recorded at an unknown cost. The caller sees a failed connection rather than a short answer that looks finished.
 - **An answer that reports no usage is recorded as unknown, not as $0.** It used to be a complete request of zero tokens at list price, which reads as measured.
 - **The proxy accepts requests up to 64 MB.** It refused anything over 8 MB with a 413, while Anthropic accepts 32 MB, so a long conversation with images failed only through Segreant.
