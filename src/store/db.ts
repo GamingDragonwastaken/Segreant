@@ -1083,11 +1083,11 @@ export class Store {
     const recorded = prepared(this.db,
       `SELECT ts_epoch_ms AS tsEpochMs, provider, model, project, COALESCE(via, 'proxy') AS via,
               input_tokens AS inputTokens, output_tokens AS outputTokens, cache_write_tokens AS cacheWriteTokens,
-              cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens, service_tier AS serviceTier
+              cache_read_tokens AS cacheReadTokens, reasoning_tokens AS reasoningTokens, service_tier AS serviceTier, cost_basis AS costBasis
          FROM requests WHERE request_id = ?`,
     ).get(row.requestId) as {
       tsEpochMs: number; provider: string; model: string; project: string; via: string; inputTokens: number; outputTokens: number;
-      cacheWriteTokens: number; cacheReadTokens: number; reasoningTokens: number; serviceTier: string;
+      cacheWriteTokens: number; cacheReadTokens: number; reasoningTokens: number; serviceTier: string; costBasis: string;
     };
     const classes = ['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens'] as const;
     const more = classes.some((k) => row[k] > recorded[k]);
@@ -1097,8 +1097,11 @@ export class Store {
         || (!sameUsage && (identity.idIsPosition === true || Math.abs(recorded.tsEpochMs - row.tsEpochMs) > ONE_REQUEST_SPAN_MS))) {
       throw new RequestObservationConflictError(row.requestId);
     }
-    // Recorded before the service level was read, and the log names one with a price of its own.
+    // Recorded at list price before the service level was read, and the log names one with a
+    // price of its own. An amount from the user's declaration keeps it: no level changes it,
+    // and today's declaration may not be the one it was priced with.
     const tierLearned = sameUsage && recorded.via === 'import' && recorded.serviceTier === 'legacy_unknown'
+      && recorded.costBasis === 'local_list_price' && pricing.costBasis === 'local_list_price'
       && row.serviceTier !== undefined && row.serviceTier !== 'standard';
     if (!more && !tierLearned) {
       // The exact ledger must hold the charge its request row claims to have.

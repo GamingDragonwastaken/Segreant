@@ -140,6 +140,16 @@ test('a request recorded before the level was read is corrected from its own log
   store.close();
 });
 
+test('a price the user declared is not replaced when a level is learned', async () => {
+  const root = codexRoot();
+  const store = new Store(':memory:');
+  await importCodex(store, { root });
+  store.raw().prepare("UPDATE requests SET service_tier = 'legacy_unknown', cost_usd = 0.1, cost_basis = 'user_declared_price', rate_match_kind = 'user_declared'").run();
+  assert.equal((await importCodex(store, { root, rescan: true })).completedObservations ?? 0, 0);
+  near(store.summary(0, Date.now()).costUsd, 0.4);
+  store.close();
+});
+
 test('a level with no price stays an estimate when repriced, and a stray stored one is refused', () => {
   const store = new Store(':memory:');
   const c = computeCost('openai', 'gpt-6-sol', usage(100_000, 1000, 'other'));
