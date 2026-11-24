@@ -118,7 +118,7 @@ export interface MeteredSupportInput {
   readonly totalCostUsd: number;
   readonly estimatedCostUsd: number;
   /**
-   * Whether retention deleted request rows from inside this window (D-175).
+   * Whether retention deleted request rows from inside this window.
    *
    * Required, because the axis it feeds cannot be computed without it and an
    * optional field would silently answer `complete` for a window that lost
@@ -138,8 +138,8 @@ export interface MeteredSupportInput {
  *   PRICING. How much of the surviving spend was priced from a rate card the
  *   matcher actually matched, rather than estimated.
  *
- *   DELETION. Whether retention removed request rows from inside the window
- *   (D-175). This used to be excluded by a sentence here saying coverage "says
+ *   DELETION. Whether retention removed request rows from inside the window. This used to
+ * be excluded by a sentence here saying coverage "says
  *   nothing about whether the ledger sees every request the organisation made,
  *   which no local evidence can establish". That is TRUE of traffic which never
  *   reached Segreant and FALSE of rows Segreant deleted itself: since D-170 the

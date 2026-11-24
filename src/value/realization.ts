@@ -276,7 +276,7 @@ export interface RealizationReport {
     realizationRate: number;
     totalCostUsd: number;
     /**
-     * Mature units whose spend window lost rows to retention (D-176).
+     * Mature units whose spend window lost rows to retention.
      *
      * The cost sums above are DENOMINATORS -- `realizedSpendShare` divides by
      * one, and the Return-on-Intelligence ratio divides value by another. A
@@ -371,7 +371,7 @@ export interface PeriodCoverage {
  * commit was not reverted. This is the definition the website publishes
  * ("passed every check you track"). Survival alone used to be enough, so work
  * that failed its tests and its ship check but stayed in the tree counted as
- * Kept (H015). Not kept: any tracked check failed, or a revert names it.
+ * Kept. Not kept: any tracked check failed, or a revert names it.
  * Unknown: matured, nothing failed, but survival was not measured. Maturing:
  * younger than the window, verdict due later. Dollars are the units'
  * attributed list cost; this is not realized value (the Standard's predicate)
@@ -604,7 +604,7 @@ export async function computeRealization(
 
   // Read ONCE. The proposal-retention boundary cannot change during this
   // computation, and a per-commit read would be one query per unit for a
-  // constant. Null is NO PRUNE ON RECORD, never "nothing was pruned" (D-170).
+  // constant. Null is NO PRUNE ON RECORD, never "nothing was pruned".
   const proposalsPrunedBeforeMs = store.retentionFloor().proposalsPrunedBeforeMs;
 
   // The clock starts HERE, not at the top. `attributeCommits` and `revertScan`
@@ -717,7 +717,7 @@ export async function computeRealization(
         } } => ({
           source: {
             id: proposal.proposalId,
-            // Tuple identity (D-241): a model name may carry ':'; the source of an
+            // Tuple identity: a model name may carry ':'; the source of an
             // attribution must not alias another provider/model pair.
             sourceId: `proxy:${JSON.stringify([proposal.provider, proposal.model])}`,
             files: proposal.files.map((file) => ({
@@ -767,7 +767,7 @@ export async function computeRealization(
         hadProposal ? 'supported' : 'unknown',
         hadProposal
           ? 'AI proposal captured'
-          // Ordered most-specific first, and the order is load-bearing (D-180).
+          // Ordered most-specific first, and the order is load-bearing.
           // The two branches above are claims about the CAPTURE and can both be
           // true of a unit whose window also lost rows -- a boundary INSIDE the
           // window deletes the earlier proposals and leaves the later ones. The
@@ -779,7 +779,7 @@ export async function computeRealization(
               // Otherwise this rung would say "no complete proposal captured"
               // about a proposal Segreant captured and then deleted on the
               // operator's own retention policy, sending them to fix
-              // instrumentation that was already working (D-179, D-180).
+              // instrumentation that was already working.
               : proposalsPrunedBeforeMs !== null && a.windowStartMs < proposalsPrunedBeforeMs
                 ? 'proposals in this window were deleted by retention; whether one was captured cannot be read from here'
                 : 'no complete proposal captured',
@@ -1153,7 +1153,7 @@ export interface ProjectValue {
  * just "did this project pay off" but "which tool coded it".
  */
 /**
- * What proposal retention deleted under a set of work units (D-179).
+ * What proposal retention deleted under a set of work units.
  *
  * The same predicate D-176 uses for the spend window, one stream over: a window
  * is truncated when its START lies strictly before a recorded prune boundary,
@@ -1176,8 +1176,8 @@ export function proposalRetentionForUnits(
 }
 
 /**
- * What a set of realization rollups can honestly claim about its spend coverage
- * (D-181), in the three values `RollupCoverage` already carries.
+ * What a set of realization rollups can honestly claim about its spend coverage, in the
+ * three values `RollupCoverage` already carries.
  *
  * The mapping is total and needs no new vocabulary, because this sweep has been
  * carrying the same three states since D-170. Any unit KNOWN truncated makes
@@ -1233,7 +1233,7 @@ export function projectValueBreakdown(
     if (rep.matured.units === 0) continue;
     // Per project, because a prune boundary can cover one project's window and
     // not another's -- and because a note nothing computes is the second
-    // recurring class of this program (D-179).
+    // recurring class of this program.
     const roi = computeReturnOnIntelligence(rep, {
       ...(opts.roiOptions ?? {}),
       proposalRetention: proposalRetentionForUnits(store, rep.units),
@@ -1307,7 +1307,7 @@ export interface DiscoveredResult extends DiscoveredProject {
   /**
    * Where the period's spend went relative to the measured commits. The Kept
    * buckets cover only spend inside a commit's window; this names the rest, so
-   * the first answer accounts for every dollar of `periodCostUsd` (H009).
+   * the first answer accounts for every dollar of `periodCostUsd`.
    */
   coverage?: PeriodCoverage;
   /** Other checkouts of the same repository (same root commit) folded into this one. */
@@ -1427,7 +1427,7 @@ export async function realizeDiscoveredProjects(
 ): Promise<DiscoveredResult[]> {
   // The deadline starts HERE, before discovery and scoping. It used to start
   // after them, so about 19 s of setup on a real ledger ran outside the budget
-  // and the stage that promised 120 s took 162 s (H010).
+  // and the stage that promised 120 s took 162 s.
   const stageDeadline = opts.stageBudgetMs === undefined ? undefined : Date.now() + opts.stageBudgetMs;
   const found = await oneCheckoutPerRepository(await discoverProjectRepos(store));
   // With a period and a shared deadline, rank by what each repository really

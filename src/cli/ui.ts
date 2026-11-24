@@ -84,7 +84,7 @@ export function noteSource(
   source: 'git' | 'store',
   projectScoped?: boolean,
   costStaleUnits = 0,
-  /** Mature units whose spend window lost rows to retention (D-176). */
+  /** Mature units whose spend window lost rows to retention. */
   spendWindowTruncatedUnits = 0,
   /** Mature units persisted before that coverage was recorded: unknown, not intact. */
   spendWindowUnknownUnits = 0,

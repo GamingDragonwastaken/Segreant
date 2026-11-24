@@ -587,7 +587,7 @@ export class EpistemicLedger {
     this.ensureKinds(item.inputEvidenceIds, 'evidence');
     this.ensureKinds(item.inputClaimIds, 'claim');
     this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
-    // A WITNESS DISCHARGES ONLY WHILE THE KERNEL ITSELF SUPPORTS IT (D-190).
+    // A WITNESS DISCHARGES ONLY WHILE THE KERNEL ITSELF SUPPORTS IT.
     // `assessDerivationLegality` matches a required obligation against the
     // derivation's inline references by KIND alone, and `DerivationWitness`
     // carries no epistemic state -- only the registered `Witness` node does. So
@@ -638,7 +638,7 @@ export class EpistemicLedger {
     for (const sourceId of item.inputClaimIds) {
       const source = this.readClaim(sourceId);
       if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
-      // A WITNESS DISCHARGES ONLY WHEN IT CONTAINS WHAT ITS KIND OBLIGES (D-201).
+      // A WITNESS DISCHARGES ONLY WHEN IT CONTAINS WHAT ITS KIND OBLIGES.
       // D-190 asked whether the registered record still holds; this asks
       // whether it is ABOUT this step. `assessDerivationLegality` matches kind
       // and `sameWitnessReference` matches identity, and neither can tell a
@@ -699,7 +699,7 @@ export class EpistemicLedger {
       }
     }
 
-    // THE CHAIN IS CHECKED HERE, AGAINST ITS LEAVES (D-222). The loop above
+    // THE CHAIN IS CHECKED HERE, AGAINST ITS LEAVES. The loop above
     // compares each hop with its neighbour and nothing else, and on the money
     // axis that reading is loose in one measured direction: `billed -> mixed`
     // is a "free weakening" per step, and `claim-uses.ts` admits `mixed` to
@@ -719,7 +719,7 @@ export class EpistemicLedger {
       this.assertChainWithinBound(chainWitnesses, output);
     }
 
-    // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE (D-192).
+    // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE.
     // Every input claim has just been assessed and allowed, so the output
     // claim is the product of a legal derivation and may carry a profile no
     // direct claim could. Only a derivation with at least one INPUT CLAIM
@@ -860,7 +860,7 @@ export class EpistemicLedger {
   }
 
   /**
-   * Every derivation whose output is `claimId`, validated on read (D-257). A
+   * Every derivation whose output is `claimId`, validated on read. A
    * derivation is not a DAG node — it is the record behind the `derives`,
    * `depends_on` and `witnesses` edges into its output — so a viewer that
    * wants the assumptions a claim was derived under reads them here.
@@ -1390,7 +1390,7 @@ export class EpistemicLedger {
    *   invoice close an unclosed one.
    *
    * - `measurement` above `proxy_unvalidated` only when some cited evidence
-   *   declares a `measurementModelRef` AND that reference RESOLVES (D-224).
+   *   declares a `measurementModelRef` AND that reference RESOLVES.
    *   The first half is implied by two other rules — `claim()` refuses a null
    *   ref above the bottom rung and D-168 refuses a ref no cited evidence
    *   declares — and is stated so the floor is one readable rule. The second
@@ -1448,8 +1448,8 @@ export class EpistemicLedger {
       if (!backed) {
         return `declares measurement ${item.profile.measurement} while no cited evidence declares a measurement model`;
       }
-      // The claim's own `asOf` is the instant the citation is made about
-      // (D-227). A claim that names none asks a windowed model a question it
+      // The claim's own `asOf` is the instant the citation is made about. A claim that
+      // names none asks a windowed model a question it
       // cannot answer, and the window check withholds rather than reads "now".
       const backing = assessMeasurementBacking(this.measurementModels, {
         measurementModelRef: item.measurementModelRef,
@@ -1498,7 +1498,7 @@ export class EpistemicLedger {
 
   /**
    * Refuse a derivation whose conclusion, or any stored conclusion it rests
-   * on, is not below what its chain licenses (D-222).
+   * on, is not below what its chain licenses.
    *
    * The chain is the candidate plus every stored derivation reachable
    * upstream from its input claims, with each claim in between. Leaves are
@@ -1511,7 +1511,7 @@ export class EpistemicLedger {
    * WHAT LIFTS THE MONEY AXIS. A `monetary_rebasing` witness carries no rung
    * to lift to; it declares a pair, and that pair is passed to the analysis as
    * the transition licensed for the step citing it -- only from a registered
-   * record that reads `supported` (D-190), on every step of the chain alike.
+   * record that reads `supported`, on every step of the chain alike.
    * D-201's per-source content check stays where it is; the chain applies the
    * declaration only where the step's meet holds the `from` basis, which is
    * what makes `mixed -> billed` insufficient for a leaf that was `estimated`.

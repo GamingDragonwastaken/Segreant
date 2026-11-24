@@ -358,7 +358,7 @@ function modelSwitchCoverageCard(frontier: ValuePayload['frontier']): Node | nul
             class: `pill ${recommendation.confidence === 'observational_separation' ? 'pill-ok' : 'pill-warn'}`,
             text: recommendation.confidence === 'observational_separation' ? 'separated' : 'trial',
           }),
-          // The derived assurance level beside the confidence word (D-240): what
+          // The derived assurance level beside the confidence word: what
           // this comparison supports, stated where the number is.
           h('span', {
             class: `pill ${recommendation.assurance.advisory.meetsRequirement ? 'pill-ok' : 'pill-warn'}`,
@@ -485,7 +485,7 @@ export function valueView(): Node {
                 ? `${count(d.realization?.costStaleUnits)} unit(s) carry stale cost attribution.`
                 : `${count(d.realization?.costStaleUnits)} of these have out-of-date cost information.`) })
             : null,
-          // THE DENOMINATOR THE PARAGRAPH ABOVE IS ABOUT (D-176, D-178). A unit
+          // THE DENOMINATOR THE PARAGRAPH ABOVE IS ABOUT. A unit
           // whose attribution window retention emptied contributes $0.00 and
           // still counts, so the return above it is flattering by an unknown
           // amount. `segreant roi` has said this since D-176; until the fields

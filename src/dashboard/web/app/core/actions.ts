@@ -30,7 +30,7 @@ function withNotes(message: string, notes: ReadonlyArray<{ tool: string; text: s
 /**
  * Sample data runs against a read-only configuration: the server refuses every
  * settings write. The preview says so before Apply is offered, instead of
- * enabling a button whose only outcome is a refusal (H005).
+ * enabling a button whose only outcome is a refusal.
  */
 const DEMO_SETTINGS_BLOCKED = 'This dashboard is showing sample data, so settings can\'t be changed here. Start Segreant without --demo to change your own.';
 
@@ -247,7 +247,7 @@ const BUILDERS: Record<string, Builder> = {
         const [settings, advice] = await Promise.all([api.settings(), adviceSoon()]);
         const current = settings.budget?.dailyUsd ?? null;
         // Validation is part of the preview, so a wrong amount is named before
-        // Apply and a corrected one re-enables it (H004).
+        // Apply and a corrected one re-enables it.
         const amount = enteredUsd(entered());
         const blockedReason = settings.demo
           ? DEMO_SETTINGS_BLOCKED
@@ -1075,7 +1075,7 @@ export function actionSpec(cap: Capability): ActionSpec {
       // Say what works now, not what might be built: "not built yet" is a
       // promise, and a shipped screen that promises is a placeholder (L1).
       // A command with <placeholders> is not runnable as shown: in a POSIX
-      // shell `<kind>` is an input redirection (PR #134 review).
+      // shell `<kind>` is an input redirection.
       blockedReason: `${cap.coverage === 'planned' ? 'This runs' : 'This part runs'} from the command line. ${
         cap.command.includes('<') ? 'Copy the command below, replace each part in angle brackets with your own value, then run it in a terminal.' : 'Copy the command below into a terminal.'}`,
       summary: cap.consequence === 'read'

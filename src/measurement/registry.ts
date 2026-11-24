@@ -57,7 +57,7 @@ export interface MeasurementBackingRequest {
   /** The strength the citing claim asserts on its measurement axis. */
   readonly assertedValidation: MeasurementValidation;
   /**
-   * The instant the citation is made about (D-227).
+   * The instant the citation is made about.
    *
    * Optional, and its ABSENCE is not "now". A model that declares a
    * `validTime` and is asked without an instant has been asked a question it

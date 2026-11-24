@@ -42,7 +42,7 @@ export interface EgressPolicyDecision {
  * query or fragment, so no caller can reach any other address through it. The
  * DNS answer must still be public and every attempt is in the receipt chain.
  * Like the providers' official APIs it holds in every mode, controlled_cloud
- * included (PR #148). `segreant pricing --auto off` stops Segreant
+ * included. `segreant pricing --auto off` stops Segreant
  * asking on its own; a manual `segreant pricing --refresh` is the user asking.
  */
 export const DEFAULT_PRICE_LIST_URL =
@@ -97,14 +97,14 @@ export function isBuiltInProviderUpstream(url: string): boolean {
 /**
  * A rule id the egress command accepts (a lowercase letter, then 2-63 of
  * a-z, 0-9, _ or -). The hostname alone was printed before, and its dots made
- * the printed command fail with "Rule refused" (PR #148 review).
+ * the printed command fail with "Rule refused".
  */
 export function providerRuleId(origin: string, method = 'POST'): string {
   // Rules are replaced by id, so the id must be unique per origin and method:
   // the method keeps a GET and a POST rule for one host apart, and a short hash
   // of the full canonical origin (scheme, host and port) keeps apart hosts whose
   // slugs collide (api.foo-bar.com / api.foo.bar.com), share a truncated
-  // prefix, or differ only by port (PR #148 review). The slug is the hostname,
+  // prefix, or differ only by port. The slug is the hostname,
   // for a readable id.
   let canonical: URL;
   try { canonical = new URL(origin.includes('://') ? origin : `https://${origin}`); } catch { canonical = new URL('https://invalid.invalid'); }
@@ -124,7 +124,7 @@ export function providerRuleCommand(url: string, method = 'POST'): string | null
   try { origin = new URL(new URL(url).origin); } catch { return null; }
   if (origin.protocol !== 'https:') return null;
   // Only methods a rule can name: printing `--method OPTIONS` would hand the
-  // user a command the rule validator refuses (PR #148 review).
+  // user a command the rule validator refuses.
   if (!RULE_METHODS.has(method.toUpperCase())) return null;
   return `segreant egress apply --apply --mode controlled_cloud --id ${providerRuleId(origin.origin, method)} --purpose provider_inference --data-class provider_request --method ${method.toUpperCase()} --origin ${origin.origin} --path-prefix /`;
 }

@@ -141,7 +141,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
     return;
   }
 
-  // Reconcile a receipt against THIS machine's economic ledger (D-231): does
+  // Reconcile a receipt against THIS machine's economic ledger: does
   // the ledger still say what the receipt says? Integrity is `--verify`'s
   // question and is not asked here; the two are printed as separate outcomes
   // by design, so a receipt can be intact and stale, or tampered and matching.
@@ -508,7 +508,7 @@ async function signAndPushRollup(
   // after the ledger had been read, so the body claimed a window that was not
   // quite the one measured.
   const period = opts.period;
-  // Coverage is REQUIRED of this function, not defaulted (D-181). Both mint
+  // Coverage is REQUIRED of this function, not defaulted. Both mint
   // helpers default it to `complete`, and both call sites used to omit it, so a
   // rollup over a window whose request rows retention had deleted was signed as
   // complete: one intact work unit at $0.00 that cost $6.00, in a body a

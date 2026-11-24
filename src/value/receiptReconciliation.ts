@@ -1,5 +1,5 @@
 /**
- * Reconcile a value receipt against the economic ledger it summarises (D-231).
+ * Reconcile a value receipt against the economic ledger it summarises.
  *
  * A v2 receipt carries the exact lineage it was signed over: the source and
  * correction event ids the effective projection retained, the effective

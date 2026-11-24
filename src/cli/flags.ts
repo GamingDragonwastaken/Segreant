@@ -102,8 +102,8 @@ export function suggestOption(name: string): string | null {
 
 /**
  * Wrap parsed flags so the options a command actually read are recorded.
- * `segreant budget --dayly 5` used to exit 0 having set nothing (H014), and a
- * command that ignores `--json` printed prose without saying so (H013). After
+ * `segreant budget --dayly 5` used to exit 0 having set nothing, and a
+ * command that ignores `--json` printed prose without saying so. After
  * a command finishes, every option it never read is reported and the exit code
  * is 2. A mistyped `--apply` is therefore caught after the default preview,
  * which writes nothing.

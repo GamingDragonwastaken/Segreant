@@ -43,8 +43,8 @@ const STATUSLINE_ABOUT = `  Claude Code then hands Segreant its live usage meter
 /**
  * The setup text for THIS install. It used to name the bare
  * segreant-statusline command, which exists only after a global install;
- * after a local install or npx, Claude Code ran a command that was not there
- * (H012). It now names the installed file by its absolute path, run with node,
+ * after a local install or npx, Claude Code ran a command that was not there. It now names
+ * the installed file by its absolute path, run with node,
  * so nothing has to be on PATH. Under npx the package lives in a cache that
  * can be cleared, so it asks for a lasting install first.
  *

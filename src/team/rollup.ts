@@ -213,7 +213,7 @@ export function buildRollupBody(
     // ALWAYS WRITTEN, and the default is the WEAKEST value the field can take.
     // `coverage` defaulted to `complete` while both call sites omitted it, and
     // that unwired default published the strongest possible claim over a
-    // pruned ledger (D-181). A builder handed a list of projects and no scope
+    // pruned ledger. A builder handed a list of projects and no scope
     // cannot know whether that list is the whole machine, so it says so.
     scope: canonicalRollupScope(basis?.scope ?? UNKNOWN_ROLLUP_SCOPE),
     projects,
@@ -448,7 +448,7 @@ export function rollupEconomicCoverage(body: RollupBody): 'exact' | 'partial' | 
  *   THE RETENTION FLOOR. A `complete` claim over a window that reaches behind a
  *   recorded deletion boundary is refused. This is D-170's class and this
  *   program's most-recorded defect: a signed rollup declaring complete coverage
- *   over spend that had been deleted (D-181) is a signature over an absence.
+ *   over spend that had been deleted is a signature over an absence.
  *   The floor can only REFUSE a claim, never grant one — `retentionTruncates-
  *   Window: false` is not evidence of completeness, and this check treats it as
  *   nothing at all.

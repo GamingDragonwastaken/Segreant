@@ -761,7 +761,7 @@ export function assessContributionEvidenceForCandidates(
 }
 
 // ---------------------------------------------------------------------------
-// Operator summary (D-246). Counts are observations over the assessed units;
+// Operator summary. Counts are observations over the assessed units;
 // the non-claim list is printed WITH them so a reader never takes an
 // association tally for an authorship, quality, outcome or value finding.
 // ---------------------------------------------------------------------------

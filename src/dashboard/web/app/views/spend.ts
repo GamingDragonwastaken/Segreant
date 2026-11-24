@@ -84,7 +84,7 @@ export function spendView(): Node {
       const d = data();
       if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Reading the ledger…' }));
 
-      // WHAT THE WINDOW LOST, BESIDE THE TOTAL IT LOST IT FROM (D-175). The
+      // WHAT THE WINDOW LOST, BESIDE THE TOTAL IT LOST IT FROM. The
       // server's claim support already reports coverage `partial` and carries
       // the reason in its note, but that note lives in the Claim Inspector
       // drawer, and the number a reader acts on is on this screen. The CLI puts

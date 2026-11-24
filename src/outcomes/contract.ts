@@ -89,7 +89,7 @@ export function evaluateOutcomeContract(contract: OutcomeContract, resolve: Pred
  * that are refuted without ambiguity; unresolved/conflicted outcomes remain
  * possible until evidence resolves them.
  *
- * ZERO EVALUATIONS BOUND THE SHARE AT [0, 1] (D-191). An upper bound of 0 is
+ * ZERO EVALUATIONS BOUND THE SHARE AT [0, 1]. An upper bound of 0 is
  * the strongest negative claim this function can make -- no more than zero
  * percent realized, and no evidence could raise it -- which is what an
  * all-refuted sample looks like. From no observations nothing has been

@@ -94,3 +94,30 @@ test('several requests added together take the short-prompt rate, as an estimate
   assert.deepEqual([plan.estimatedRows, plan.stillEstimated], [1, 1]);
   store.close();
 });
+
+test('an assumed standard rate is never shown as a known list price', async () => {
+  const { summarizeBasis } = await import('../src/cost/basis.ts');
+  const c = computeCost('openai', 'gpt-6.1-sol', { ...usage(500_000, 0, 0), severalRequests: true });
+  assert.deepEqual([c.estimated, c.pricing.rateMatchKind, c.pricing.rateMatchModel], [true, 'standard_rate_assumed', 'gpt-6.1-sol']);
+  const basis = summarizeBasis([{ provider: 'openai', model: 'gpt-6.1-sol', costBasis: c.pricing.costBasis, rateMatchKind: c.pricing.rateMatchKind, requests: 1, costUsd: c.costUsd }]);
+  assert.deepEqual([basis.headline, basis.exactShare, basis.cohorts[0]!.id], ['estimated_cost', 0, 'list_standard']);
+  assert.equal(computeCost('openai', 'gpt-6.1-sol', { ...usage(50_000, 0, 0), severalRequests: true }).pricing.rateMatchKind, 'exact_provider', 'too short for any of them to have been long');
+});
+
+test('a row from before this was recorded is not repriced on its size alone, unless the proxy saw it as one request', async () => {
+  const { previewReprice } = await import('../src/cost/reprice.ts');
+  const { Store } = await import('../src/store/db.ts');
+  const store = new Store(':memory:');
+  for (const via of ['import', 'proxy'] as const) {
+    store.insertRequest({
+      requestId: via, sessionId: null, tsEpochMs: 1000, provider: 'openai', model: 'gpt-6.1-sol', project: 'p', taskWeight: 1, via,
+      inputTokens: 500_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, costUsd: 1.5, estimated: true,
+      pricing: { costBasis: 'fallback_estimate', rateCardSha256: null, rateCardSourceKind: 'bundled', rateMatchKind: 'fallback', rateMatchProvider: null, rateMatchModel: null },
+      streamed: false, statusCode: 200, durationMs: null,
+    });
+  }
+  store.raw().prepare('UPDATE requests SET several_requests = NULL').run();
+  const plan = previewReprice(store);
+  assert.deepEqual([plan.estimatedRows, plan.stillEstimated, [...plan.meta.keys()]], [2, 1, ['proxy']]);
+  store.close();
+});

@@ -40,7 +40,7 @@
  * corrected, which is the moment to reconsider its queue position.
  *
  * IMPORTED AND INVOKED ARE DIFFERENT FACTS, AND THIS FILE USED TO CONFLATE
- * THEM (D-184). The paragraph above says authority class "says nothing about
+ * THEM. The paragraph above says authority class "says nothing about
  * whether anything RUNS it" and hands that question to `reach` -- but the check
  * walks IMPORTS, and a module can sit in the closure while no product path ever
  * calls into it. `alloc.exactRun` was exactly that: declared `product` because
@@ -79,7 +79,7 @@ export type IssuanceClass =
  * `imported_uninvoked` — the module IS in that closure and no product file
  * outside its own definition names the entry point that would run it. It ships,
  * and an operator still cannot meet it. This is the state `alloc.exactRun` was
- * in while declared `product` (D-184).
+ * in while declared `product`.
  *
  * `product` — imported AND named by a product file outside its own module.
  * A mention is not a call, so this is the weaker half of the pair on purpose:
@@ -99,8 +99,8 @@ export interface IssuanceBoundary {
   /** Declared here, checked against the import graph by the test. */
   readonly reach: IssuanceReach;
   /**
-   * The entry point a PRODUCT file must name for this boundary to actually run
-   * (D-184). Optional only because tracing seventeen call chains is work that
+   * The entry point a PRODUCT file must name for this boundary to actually run. Optional
+   * only because tracing seventeen call chains is work that
    * has been done for four of them so far; the test asserts that count out
    * loud, so the gap stays visible instead of reading as coverage.
    *
@@ -145,7 +145,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     module: 'src/alloc/epistemic.ts',
     asserts: 'An exact allocation run produced this distribution from these source events.',
     issuanceClass: 'canonical',
-    // Imported by `src/store/db.ts` and invoked by nothing (D-184). The exact
+    // Imported by `src/store/db.ts` and invoked by nothing. The exact
     // allocation path is the one AII-017/AII-018 are migrating everything
     // toward, so this is a boundary on the authoritative money path that no
     // operator can currently reach -- which lowers its urgency and raises the
@@ -306,7 +306,7 @@ export const UNREACHED_BOUNDARIES: readonly IssuanceBoundary[] = Object.freeze(
 );
 
 /**
- * Boundaries the product SHIPS and never calls (D-184).
+ * Boundaries the product SHIPS and never calls.
  *
  * Between the two lists above, and the reason there are three: a module in the
  * import closure that no product path invokes is shipped and unreachable at

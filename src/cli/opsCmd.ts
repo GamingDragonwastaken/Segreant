@@ -115,7 +115,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
 /**
  * How the last 30 days were priced, in one line. A price you set is not a list
  * price and was never checked against one, so it is named on its own rather
- * than folded into "each model's own list rate" (PR #146 review).
+ * than folded into "each model's own list rate".
  */
 export function doctorPricingLine(basis: BasisSummary): string {
   if (basis.cohorts.length === 0) return 'no priced requests in 30d';
@@ -128,7 +128,7 @@ export function doctorPricingLine(basis: BasisSummary): string {
   if (declared) parts.push(`${usd(declared.costUsd)} at prices you set (not checked against a price list)`);
   const free = basis.cohorts.find((c) => c.id === 'user_free');
   if (free && !basis.cohorts.some((c) => c.id === 'list_exact' || c.id === 'list_family')) {
-    // Only free models: no rate card priced any of it (PR #146 review).
+    // Only free models: no rate card priced any of it.
     parts.push(`${num(free.requests)} requests on models you marked free (no charge)`);
   }
   return parts.length > 0 ? parts.join('; ') : "30d spend priced at each model's own list rate (an estimate, not a bill)";
@@ -152,7 +152,7 @@ export async function cmdDoctor(flags: Flags = { _: [] }): Promise<void> {
 
   if (flags.json) {
     // The same checks as the text below, as data. `doctor --json` used to print
-    // the text (H013).
+    // the text.
     const price = pricingStatus(cfg.pricing.maxAgeDays);
     const base = baselineManifestStatus();
     const coverage = computeAlertCoverage(store, cfg);
@@ -207,7 +207,7 @@ export async function cmdDoctor(flags: Flags = { _: [] }): Promise<void> {
   // NOT `all clear`. Caps are opt-in and a fresh ledger has no baseline, so on a
   // default install not one of the six detectors can fire — and this line was
   // printing a green tick over an empty array that recorded nothing being looked
-  // at. It now states coverage, which is what the evidence supports (D-141).
+  // at. It now states coverage, which is what the evidence supports.
   const coverage = computeAlertCoverage(store, cfg);
   console.log(
     `  ${mark(criticals === 0 && coverage.complete)} Alerts      ${
@@ -265,7 +265,7 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
   const capBasis = capBasisSpend(store, cfg.budget, now - 30 * day, now + 1000);
   const realizationUnits = store.countRealizationUnits();
   // Read before the store closes: without it `requestsAllTime` is a count of
-  // survivors presented as a count of everything (D-170).
+  // survivors presented as a count of everything.
   const requestsRetention = store.retentionFloor();
   store.close();
 

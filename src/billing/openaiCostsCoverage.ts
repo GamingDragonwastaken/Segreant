@@ -55,8 +55,7 @@ export interface OpenAiCostsCaptureCoverage {
   allLocalLedgerRowsInPeriod: CapturedUsageSummary;
   trust: 'operator_declared_unverified';
   /**
-   * Whether retention deleted request rows from inside the OBSERVED period
-   * (D-185).
+   * Whether retention deleted request rows from inside the OBSERVED period.
    *
    * Every local-side bucket above is a count over rows that survive. A prune
    * whose boundary falls inside the provider's period empties them without
@@ -117,7 +116,7 @@ export function buildOpenAiCostsCaptureCoverage(input: {
   run: OpenAiCostsObservationRun;
   observations: readonly OpenAiCostsObservationLine[];
   requests: readonly RequestRow[];
-  /** The retention boundary in force; null is NO PRUNE ON RECORD (D-185). */
+  /** The retention boundary in force; null is NO PRUNE ON RECORD. */
   requestsPrunedBeforeMs?: number | null;
 }): OpenAiCostsCaptureCoverage {
   const capturedOnDeclaredRoute = emptyUsage();

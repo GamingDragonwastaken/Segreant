@@ -229,7 +229,7 @@ function coordinates(decisionId: string) {
 }
 
 /**
- * The three axes a claim cannot hold above the evidence it cites (D-221).
+ * The three axes a claim cannot hold above the evidence it cites.
  *
  * `EpistemicLedger.assertClaimWithinItsEvidence` bounds integrity, authenticity
  * and coverage by the WEAKEST cited evidence, and the adapter used to write

@@ -73,7 +73,7 @@ export interface ExactAllocationRunResult {
   readonly complete: boolean;
   readonly conserves: boolean;
   readonly trust: 'derived_allocation_of_exact_effective_charges';
-  /** `barredUses(exactAllocationClaimProfile(complete), EXACT_ALLOCATION_EXCLUDED_FLOOR)` (D-228). */
+  /** `barredUses(exactAllocationClaimProfile(complete), EXACT_ALLOCATION_EXCLUDED_FLOOR)`. */
   readonly excludedFrom: readonly ClaimUse[];
 }
 
@@ -112,7 +112,7 @@ function exactAllocationExcludedFrom(complete: boolean): readonly ClaimUse[] {
  * The one way to mark a result incomplete. `applyExactAllocation` allocates
  * only the rows it was handed and cannot see the requests that resolved to
  * none; the store discloses those here. The exclusions are re-derived from the
- * resulting coverage, so a partial run bars `outcome_attribution` (D-228) —
+ * resulting coverage, so a partial run bars `outcome_attribution` —
  * spreading `{ ...result, complete: false }` by hand kept the complete run's
  * list and was refused by the validator, which is the point of the validator.
  */

@@ -154,7 +154,7 @@ export function buildSessions(
   const tools = new Set<string>();
   // Spend is added once, as whole nanodollars, and every total below is read
   // from these integers. Summing floats in different groupings let the
-  // outcome breakdown round to 1,440 µ$ against a 1,439 µ$ total (PR #135 review).
+  // outcome breakdown round to 1,440 µ$ against a 1,439 µ$ total.
   const nano = (usd: number): number => Math.round(usd * 1e9);
   let totalNano = 0;
   let unsessionedNano = 0;
@@ -272,7 +272,7 @@ export function buildSessions(
     // Exact (fractional) microdollars here; each category is rounded once, at
     // the end, against the rounded total. Rounding every session first let a
     // thousand $0.0014008 sessions add up to $1.401 of outcomes for $1.4008 of
-    // spend (review 4, F1).
+    // spend.
     if (commits.length === 0) {
       noCommitMicros += costNano / 1000;
       outcomes.noCommit.sessions += 1;
