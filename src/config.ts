@@ -270,8 +270,8 @@ export interface PricingConfig {
   /**
    * When true, `segreant start` refreshes pricing on launch if the cache is
    * older than maxAgeDays. OFF by default so a normal local start has no
-   * optional manifest request. Any refresh still needs a matching controlled
-   * cloud egress rule; a denied refresh leaves the active local table intact.
+   * optional manifest request. The built-in public list needs no egress rule; a
+   * manifest of your own does, and a denied refresh leaves the local table intact.
    */
   autoRefresh: boolean;
   /**

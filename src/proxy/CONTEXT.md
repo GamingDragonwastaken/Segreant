@@ -15,6 +15,9 @@
   aggregate limits before retaining line arrays;
 - SSE remainder, frame, tool-argument, proposal-file, and proposal-line capture
   limits are centralized in `src/util/resource-limits.ts`;
+- every request the provider answered is recorded: one whose connection failed
+  partway keeps the usage seen so far, marked `truncated`, and one that reported
+  no usage keeps an unknown cost, never a measured zero;
 - a capture that reaches a bound continues only where safe and is marked
   `truncated`, never treated as a complete proposal or acceptance observation.
 
