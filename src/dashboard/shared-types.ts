@@ -1691,9 +1691,19 @@ export interface ScanPayload {
   diff?: Record<string, unknown>;
 }
 
+/** Something an import changed or could not read, for one tool. */
+export interface ImportNotePayload {
+  tool: string;
+  label: string;
+  text: string;
+  /** Usage is missing from the totals, or differs from what a log says. */
+  missing: boolean;
+}
+
 export interface ImportResult {
   ok: boolean;
   totalNew: number;
+  notes: ImportNotePayload[];
   results: Record<string, { inserted: number; costUsd?: number; available: boolean }>;
 }
 
@@ -1729,6 +1739,7 @@ export interface DiscoverPayload {
 export interface ScanSetupPayload {
   ok: boolean;
   totalNew: number;
+  notes: ImportNotePayload[];
   imported: Record<string, { inserted: number; costUsd: number; available: boolean }>;
   correlated: number;
   discovered: DiscoveredProjectPayload[];

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "2d5ed21981209fcc0668b240fa7fa29163a4e6de22acdfecaa298e88ee3f0b33";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "54e4933c7c4fca4ba91577aff1b2c33e844b7723a6126216261a735127defe72";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -3669,6 +3669,28 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "Record<string, unknown>"
     }
   ],
+  "ImportNotePayload": [
+    {
+      "name": "tool",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "label",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "text",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "missing",
+      "optional": false,
+      "type": "boolean"
+    }
+  ],
   "ImportResult": [
     {
       "name": "ok",
@@ -3679,6 +3701,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "totalNew",
       "optional": false,
       "type": "number"
+    },
+    {
+      "name": "notes",
+      "optional": false,
+      "type": "ImportNotePayload[]"
     },
     {
       "name": "results",
@@ -3774,6 +3801,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "totalNew",
       "optional": false,
       "type": "number"
+    },
+    {
+      "name": "notes",
+      "optional": false,
+      "type": "ImportNotePayload[]"
     },
     {
       "name": "imported",

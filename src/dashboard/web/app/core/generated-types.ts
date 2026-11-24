@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 2d5ed21981209fcc0668b240fa7fa29163a4e6de22acdfecaa298e88ee3f0b33 */
+/** Source SHA-256: 54e4933c7c4fca4ba91577aff1b2c33e844b7723a6126216261a735127defe72 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -1693,9 +1693,19 @@ export interface ScanPayload {
   diff?: Record<string, unknown>;
 }
 
+/** Something an import changed or could not read, for one tool. */
+export interface ImportNotePayload {
+  tool: string;
+  label: string;
+  text: string;
+  /** Usage is missing from the totals, or differs from what a log says. */
+  missing: boolean;
+}
+
 export interface ImportResult {
   ok: boolean;
   totalNew: number;
+  notes: ImportNotePayload[];
   results: Record<string, { inserted: number; costUsd?: number; available: boolean }>;
 }
 
@@ -1731,6 +1741,7 @@ export interface DiscoverPayload {
 export interface ScanSetupPayload {
   ok: boolean;
   totalNew: number;
+  notes: ImportNotePayload[];
   imported: Record<string, { inserted: number; costUsd: number; available: boolean }>;
   correlated: number;
   discovered: DiscoveredProjectPayload[];

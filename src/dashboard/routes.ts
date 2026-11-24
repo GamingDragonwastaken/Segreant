@@ -60,6 +60,7 @@ import { economicRequestsToCsv } from '../export/economic.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
 import { emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
+import { importNotes } from '../connect/importNotes.ts';
 import { IMPORT_REGISTRY } from '../connect/registry.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
@@ -75,7 +76,7 @@ import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { stringifyJson } from '../util/json.ts';
 import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
-import type { DashboardResponseFor, StatementRealized } from './shared-types.ts';
+import type { DashboardResponseFor, ImportNotePayload, StatementRealized } from './shared-types.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -354,7 +355,8 @@ export function handleImport({ req, res, url, store }: RouteContext): void {
         results[imp.id] = { ...sum, available };
       }
       const totalNew = Object.values(results).reduce((n, r) => n + r.inserted, 0);
-      return json(res, 200, { ok: true, totalNew, results });
+      const notes = targets.flatMap((imp) => importNotes(results[imp.id]!).map((note) => ({ tool: imp.label, ...note })));
+      return json(res, 200, { ok: true, totalNew, results, notes });
     } catch (err) {
       return json(res, 500, { error: String(err) });
     }
@@ -403,12 +405,14 @@ export function handleScan({ req, res, url, store }: RouteContext): void {
     void (async () => {
       try {
         const imported: Record<string, { inserted: number; costUsd: number; available: boolean }> = {};
+        const notes: ImportNotePayload[] = [];
         let totalNew = 0;
         for (const imp of DASH_IMPORTERS) {
           const available = imp.locate() !== null;
           const sum = available ? await imp.run(store, {}) : null;
           imported[imp.id] = { inserted: sum?.inserted ?? 0, costUsd: sum?.costUsd ?? 0, available };
           totalNew += sum?.inserted ?? 0;
+          if (sum !== null) notes.push(...importNotes(sum).map((note) => ({ tool: imp.label, ...note })));
         }
         const discovered = await realizeDiscoveredProjects(store, {});
         // Records what this deliberate step actually saw, so the next preview
@@ -416,7 +420,7 @@ export function handleScan({ req, res, url, store }: RouteContext): void {
         // some page they visited happened to trigger.
         const { plan } = scanWithDiff(store, { roots: path ? [path] : undefined });
         saveScan(store, plan);
-        return json(res, 200, { ok: true, totalNew, imported, correlated: discovered.length, discovered });
+        return json(res, 200, { ok: true, totalNew, imported, notes, correlated: discovered.length, discovered });
       } catch (err) {
         return json(res, 500, { error: String(err) });
       }
